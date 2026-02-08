@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <div class="bg-watermark" aria-hidden="true"></div>
     <div class="app">
       <header class="app-header">
         <div>
@@ -26,122 +27,224 @@
       </header>
 
       <main class="layout">
+        <!-- UI 关键类：.layout .panel.controls .add-student .seat-grid-wrap .seat-groups .seat -->
         <section class="panel controls">
-          <div class="panel-section">
-            <div class="panel-header">
-              <h2>学生搜索</h2>
-              <p>点击座位即可添加奖罚，也可在这里搜索</p>
-            </div>
-            <div class="add-student">
-              <input id="studentNameInput" type="text" placeholder="输入姓名，回车添加" maxlength="20" />
-              <select id="studentGenderSelect">
-                <option value="">未知</option>
-                <option value="男">男</option>
-                <option value="女">女</option>
-              </select>
-              <button id="addStudentBtn">添加</button>
-            </div>
-            <div class="search-bar">
-              <input id="studentSearchInput" type="text" placeholder="搜索姓名（支持模糊匹配）" />
-            </div>
-            <div id="searchResults" class="student-list"></div>
+          <div class="sidebar-quick-nav">
+            <button type="button" class="quick-pill" data-target="sec-common">常用</button>
+            <button type="button" class="quick-pill" data-target="sec-import">导入备份</button>
+            <button type="button" class="quick-pill" data-target="sec-scores">成绩</button>
+            <button type="button" class="quick-pill" data-target="sec-history">历史</button>
+            <button type="button" class="quick-pill" data-target="sec-advanced">高级</button>
           </div>
 
-          <div class="panel-section">
-            <div class="panel-header">
-              <h2>抽签</h2>
-              <p>可选去重模式，抽签结果自动保存</p>
-            </div>
-            <div class="draw-controls">
-              <label>
-                抽签人数
-                <input id="drawCount" type="number" min="1" value="1" />
-              </label>
-              <label class="checkbox">
-                <input id="noRepeat" type="checkbox" />
-                去重模式
-              </label>
-              <div class="draw-actions">
-                <button id="drawBtn" class="primary">开始抽签</button>
-                <button id="resetDrawBtn" class="ghost">重置抽签</button>
+          <details id="sec-common" class="sidebar-section" data-section-key="common" open>
+            <summary><span>常用功能</span><span class="summary-arrow">⌄</span></summary>
+            <div class="section-body">
+              <div class="panel-section">
+                <div class="panel-header">
+                  <h2 class="panel-title">学生搜索</h2>
+                  <p class="muted">点座位可加奖罚，也可在此搜索</p>
+                </div>
+                <div class="form-grid student-row-1">
+                  <input id="studentNameInput" class="input" type="text" placeholder="姓名" maxlength="20" />
+                  <select id="studentGenderSelect" class="select">
+                    <option value="">未知</option>
+                    <option value="男">男</option>
+                    <option value="女">女</option>
+                  </select>
+                  <button id="addStudentBtn" class="btn-primary">添加</button>
+                </div>
+                <div class="form-row">
+                  <input id="studentAliasInput" class="input" type="text" placeholder="别名/拼音（可选）" maxlength="40" />
+                </div>
+                <div class="form-row">
+                  <input id="studentSearchInput" class="input" type="text" placeholder="搜索学生" />
+                </div>
+                <div id="searchResults" class="student-list"></div>
+              </div>
+
+              <div class="panel-section">
+                <div class="panel-header">
+                  <h2 class="panel-title">抽签</h2>
+                  <p class="muted">支持去重，结果自动保存</p>
+                </div>
+                <div class="draw-inline">
+                  <label class="draw-count">抽签人数 <input id="drawCount" class="input" type="number" min="1" value="1" /></label>
+                  <label class="checkbox draw-repeat"><input id="noRepeat" type="checkbox" />去重模式</label>
+                </div>
+                <div class="draw-actions">
+                  <button id="drawBtn" class="btn-primary">开始抽签</button>
+                  <button id="resetDrawBtn" class="btn-secondary">重置抽签</button>
+                </div>
+                <div id="drawStatus" class="draw-status muted"></div>
+                <div id="drawResults" class="draw-results"></div>
+              </div>
+
+              <div class="panel-section">
+                <div class="panel-header">
+                  <h2 class="panel-title">座位调整</h2>
+                  <p class="muted">固定 8 列，自动扩展行数</p>
+                </div>
+                <div class="seat-actions">
+                  <button id="shuffleSeatsBtn" class="btn-primary">随机调整座位</button>
+                  <button id="resetSeatsBtn" class="btn-secondary">按名单顺序</button>
+                </div>
+                <label class="checkbox"><input id="pairByGender" type="checkbox" />随机时尽量男女同桌</label>
               </div>
             </div>
-            <div id="drawStatus" class="draw-status"></div>
-            <div id="drawResults" class="draw-results"></div>
-          </div>
+          </details>
 
-          <div class="panel-section">
-            <div class="panel-header">
-              <h2>座位调整</h2>
-              <p>固定 8 列，自动扩展行数</p>
-            </div>
-            <div class="seat-actions">
-              <button id="shuffleSeatsBtn" class="primary">随机调整座位</button>
-              <button id="resetSeatsBtn" class="ghost">按名单顺序</button>
-            </div>
-            <label class="checkbox">
-              <input id="pairByGender" type="checkbox" />
-              随机时尽量男女同桌
-            </label>
-          </div>
+          <details id="sec-import" class="sidebar-section" data-section-key="import">
+            <summary><span>导入与备份</span><span class="summary-arrow">⌄</span></summary>
+            <div class="section-body">
+              <div class="panel-section">
+                <div class="panel-header">
+                  <h2 class="panel-title">导入与备份</h2>
+                  <p class="muted">名单、座位表与备份恢复</p>
+                </div>
 
-          <div class="panel-section">
-            <div class="panel-header">
-              <h2>导入与导出</h2>
-              <p>支持 Excel / CSV 导入，导出座位表</p>
-            </div>
-            <div class="import-controls">
-              <input id="importFileInput" type="file" accept=".xlsx,.xls,.csv" />
-              <label class="checkbox">
-                <input id="importReplace" type="checkbox" checked />
-                导入后覆盖现有名单
-              </label>
-              <button id="importBtn" class="primary">导入名单</button>
-            </div>
-            <div id="importStatus" class="draw-status"></div>
-            <div class="seat-actions">
-              <button id="exportSeatsBtn" class="ghost">导出座位表 CSV</button>
-            </div>
-            <div class="backup-actions">
-              <button id="exportBackupBtn" class="ghost">导出备份 JSON</button>
-              <input id="importBackupInput" type="file" accept=".json" />
-              <button id="importBackupBtn" class="primary">导入备份 JSON</button>
-            </div>
-          </div>
+                <div class="io-stack">
+                  <div class="io-card">
+                    <div class="io-card-head">
+                      <div class="io-card-title">导入名单</div>
+                      <span class="io-tag">导入</span>
+                    </div>
+                    <div class="io-card-desc muted">支持 Excel/CSV；可选择是否覆盖现有名单</div>
+                    <div class="op-group">
+                      <label class="checkbox compact"><input id="importReplace" type="checkbox" checked />覆盖现有名单</label>
+                      <input id="importFileInput" type="file" accept=".xlsx,.xls,.csv" />
+                      <button id="importBtn" class="btn-primary">导入名单</button>
+                    </div>
+                    <div id="importStatus" class="draw-status muted"></div>
+                  </div>
 
-          <div class="panel-section">
-            <div class="panel-header">
-              <h2>成绩导入</h2>
-              <p>导入成绩表后可编辑考试名称与日期</p>
-            </div>
-            <div class="import-controls">
-              <input id="scoreFileInput" type="file" accept=".xlsx,.xls,.csv" />
-              <button id="parseScoreBtn" class="primary">解析成绩表</button>
-            </div>
-            <div class="score-edit">
-              <input id="scoreExamName" type="text" placeholder="考试名称" maxlength="30" />
-              <input id="scoreExamDate" type="date" />
-              <button id="saveScoreBtn" class="ghost" disabled>保存考试</button>
-            </div>
-            <div id="scoreStatus" class="draw-status"></div>
-          </div>
+                  <div class="io-card">
+                    <div class="io-card-head">
+                      <div class="io-card-title">导出</div>
+                      <span class="io-tag">导出</span>
+                    </div>
+                    <div class="op-group">
+                      <button id="exportSeatsBtn" class="btn-secondary full">导出座位表 CSV</button>
+                      <button id="exportBackupBtn" class="btn-secondary full">导出备份 JSON</button>
+                    </div>
+                  </div>
 
-          <div class="panel-section">
-            <div class="panel-header">
-              <h2>历史座位</h2>
-              <p>手动确认后保存为历史版本</p>
+                  <div class="io-card">
+                    <div class="io-card-head">
+                      <div class="io-card-title">恢复备份（JSON）</div>
+                      <span class="io-tag">恢复</span>
+                    </div>
+                    <div class="io-card-desc muted">用于换电脑或恢复数据</div>
+                    <div class="op-group">
+                      <input id="importBackupInput" type="file" accept=".json" />
+                      <button id="importBackupBtn" class="btn-primary">导入备份 JSON</button>
+                    </div>
+                    <div id="backupInfo" class="backup-info muted">上次备份：从未</div>
+                    <div id="backupReminder" class="backup-reminder hidden">
+                      <div id="backupReminderText"></div>
+                      <button id="backupReminderExportBtn" class="btn-secondary">立即备份</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="seat-actions">
-              <button id="saveHistoryBtn" class="primary">保存当前座位</button>
+          </details>
+
+          <details id="sec-scores" class="sidebar-section" data-section-key="scores">
+            <summary><span>成绩导入</span><span class="summary-arrow">⌄</span></summary>
+            <div class="section-body">
+              <div class="panel-section">
+                <div class="panel-header">
+                  <h2 class="panel-title">成绩导入</h2>
+                  <p class="muted">导入后编辑考试信息并保存</p>
+                </div>
+                <div class="op-group">
+                  <input id="scoreFileInput" type="file" accept=".xlsx,.xls,.csv" />
+                  <button id="parseScoreBtn" class="btn-primary">解析成绩表</button>
+                </div>
+                <div class="score-edit">
+                  <input id="scoreExamName" class="input" type="text" placeholder="考试名称" maxlength="30" />
+                  <input id="scoreExamDate" class="input" type="date" />
+                  <button id="saveScoreBtn" class="btn-secondary" disabled>保存考试</button>
+                </div>
+                <div id="scoreStatus" class="draw-status muted">格式：每行1名学生，每列1科目</div>
+              </div>
             </div>
-            <div id="historyList" class="history-list"></div>
-          </div>
+          </details>
+
+          <details id="sec-history" class="sidebar-section" data-section-key="history">
+            <summary><span>历史座位</span><span class="summary-arrow">⌄</span></summary>
+            <div class="section-body">
+              <div class="panel-section">
+                <div class="panel-header">
+                  <h2 class="panel-title">历史座位</h2>
+                  <p class="muted">手动确认后保存版本</p>
+                </div>
+                <button id="saveHistoryBtn" class="btn-primary full">保存当前座位</button>
+                <input id="historyFilterInput" class="input" type="text" placeholder="搜索历史备注" />
+                <div id="historyList" class="history-list"></div>
+              </div>
+            </div>
+          </details>
+
+          <details id="sec-advanced" class="sidebar-section" data-section-key="advanced">
+            <summary><span>高级约束</span><span class="summary-arrow">⌄</span></summary>
+            <div class="section-body">
+              <div class="panel-section">
+                <div class="constraint-box">
+                  <label class="checkbox"><input id="keepLockedEmpty" type="checkbox" />锁定空座位保持为空</label>
+                  <div class="constraint-row">
+                    <div class="suggest-wrap">
+                      <input id="lockPairAInput" class="input" type="text" placeholder="同桌锁定：学生A" />
+                      <div id="lockPairASuggest" class="name-suggest hidden"></div>
+                    </div>
+                    <div class="suggest-wrap">
+                      <input id="lockPairBInput" class="input" type="text" placeholder="学生B" />
+                      <div id="lockPairBSuggest" class="name-suggest hidden"></div>
+                    </div>
+                    <button id="addLockPairBtn" class="btn-secondary">添加</button>
+                  </div>
+                  <div id="lockPairList" class="constraint-list"></div>
+
+                  <div class="constraint-row">
+                    <div class="suggest-wrap">
+                      <input id="pairAInput" class="input" type="text" placeholder="不做同桌：学生A" />
+                      <div id="pairASuggest" class="name-suggest hidden"></div>
+                    </div>
+                    <div class="suggest-wrap">
+                      <input id="pairBInput" class="input" type="text" placeholder="学生B" />
+                      <div id="pairBSuggest" class="name-suggest hidden"></div>
+                    </div>
+                    <button id="addNoDeskPairBtn" class="btn-secondary">添加</button>
+                  </div>
+                  <div id="noDeskPairList" class="constraint-list"></div>
+
+                  <div class="constraint-row single-right">
+                    <div class="suggest-wrap">
+                      <input id="frontStudentInput" class="input" type="text" placeholder="必须前排学生" />
+                      <div id="frontStudentSuggest" class="name-suggest hidden"></div>
+                    </div>
+                    <button id="addFrontStudentBtn" class="btn-secondary">添加</button>
+                  </div>
+
+                  <label class="constraint-front-row">前排行数 <input id="frontRowsInput" class="input" type="number" min="1" max="5" value="2" /></label>
+                  <div id="frontStudentList" class="constraint-list"></div>
+                </div>
+              </div>
+            </div>
+          </details>
         </section>
 
         <section class="panel seating">
-          <div class="panel-header">
-            <h2>座位布局</h2>
-            <p>每两列为同桌一组，共 4 组 · 可拖动交换座位</p>
+          <div class="panel-header seating-header">
+            <div>
+              <h2>座位布局</h2>
+              <p>每两列为同桌一组，共 4 组 · 可拖动交换座位</p>
+            </div>
+            <div class="card-mode-switch" role="group" aria-label="座位卡片显示模式">
+              <button id="cardCompactBtn" type="button" class="mode-btn">简洁</button>
+              <button id="cardDetailBtn" type="button" class="mode-btn">详细</button>
+            </div>
           </div>
           <div class="seat-grid-wrap">
             <div class="row-labels" id="rowLabels"></div>
@@ -209,6 +312,7 @@
         <div class="draw-status">
           未能可靠识别列，请手动选择姓名列和各科列。
         </div>
+        <ul id="mappingConflicts" class="mapping-conflicts hidden"></ul>
         <div id="mappingList" class="mapping-list"></div>
         <div class="mapping-actions">
           <button id="mappingCancel" class="ghost">取消</button>

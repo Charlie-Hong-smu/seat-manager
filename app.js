@@ -2,8 +2,11 @@ const COLS = 8;
 const STORAGE_KEY = "homeroom-seat-manager-v1";
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
 const BACKUP_VERSION = 1;
+const SIDEBAR_SECTION_STATE_KEY = "sidebarSectionOpen-v1";
+const SEAT_CARD_MODE_KEY = "seatCardMode";
 
 const studentNameInput = document.getElementById("studentNameInput");
+const studentAliasInput = document.getElementById("studentAliasInput");
 const studentGenderSelect = document.getElementById("studentGenderSelect");
 const addStudentBtn = document.getElementById("addStudentBtn");
 const studentSearchInput = document.getElementById("studentSearchInput");
@@ -11,6 +14,8 @@ const searchResults = document.getElementById("searchResults");
 const studentCount = document.getElementById("studentCount");
 const seatTotal = document.getElementById("seatTotal");
 const toggleSidebarBtn = document.getElementById("toggleSidebarBtn");
+const cardCompactBtn = document.getElementById("cardCompactBtn");
+const cardDetailBtn = document.getElementById("cardDetailBtn");
 
 const drawCount = document.getElementById("drawCount");
 const noRepeat = document.getElementById("noRepeat");
@@ -31,6 +36,10 @@ const exportSeatsBtn = document.getElementById("exportSeatsBtn");
 const exportBackupBtn = document.getElementById("exportBackupBtn");
 const importBackupInput = document.getElementById("importBackupInput");
 const importBackupBtn = document.getElementById("importBackupBtn");
+const backupInfo = document.getElementById("backupInfo");
+const backupReminder = document.getElementById("backupReminder");
+const backupReminderText = document.getElementById("backupReminderText");
+const backupReminderExportBtn = document.getElementById("backupReminderExportBtn");
 
 const scoreFileInput = document.getElementById("scoreFileInput");
 const parseScoreBtn = document.getElementById("parseScoreBtn");
@@ -41,6 +50,7 @@ const scoreStatus = document.getElementById("scoreStatus");
 
 const saveHistoryBtn = document.getElementById("saveHistoryBtn");
 const historyList = document.getElementById("historyList");
+const historyFilterInput = document.getElementById("historyFilterInput");
 
 const rowLabels = document.getElementById("rowLabels");
 const seatGroups = document.getElementById("seatGroups");
@@ -71,6 +81,7 @@ const historyGridInner = document.getElementById("historyGridInner");
 
 const mappingModal = document.getElementById("mappingModal");
 const mappingList = document.getElementById("mappingList");
+const mappingConflicts = document.getElementById("mappingConflicts");
 const mappingClose = document.getElementById("mappingClose");
 const mappingCancel = document.getElementById("mappingCancel");
 const mappingApply = document.getElementById("mappingApply");
@@ -78,16 +89,37 @@ const toast = document.getElementById("toast");
 const easterModal = document.getElementById("easterModal");
 const easterText = document.getElementById("easterText");
 const easterClose = document.getElementById("easterClose");
+const keepLockedEmpty = document.getElementById("keepLockedEmpty");
+const lockPairAInput = document.getElementById("lockPairAInput");
+const lockPairBInput = document.getElementById("lockPairBInput");
+const lockPairASuggest = document.getElementById("lockPairASuggest");
+const lockPairBSuggest = document.getElementById("lockPairBSuggest");
+const addLockPairBtn = document.getElementById("addLockPairBtn");
+const lockPairList = document.getElementById("lockPairList");
+const pairAInput = document.getElementById("pairAInput");
+const pairBInput = document.getElementById("pairBInput");
+const pairASuggest = document.getElementById("pairASuggest");
+const pairBSuggest = document.getElementById("pairBSuggest");
+const addNoDeskPairBtn = document.getElementById("addNoDeskPairBtn");
+const noDeskPairList = document.getElementById("noDeskPairList");
+const frontStudentInput = document.getElementById("frontStudentInput");
+const frontStudentSuggest = document.getElementById("frontStudentSuggest");
+const addFrontStudentBtn = document.getElementById("addFrontStudentBtn");
+const frontRowsInput = document.getElementById("frontRowsInput");
+const frontStudentList = document.getElementById("frontStudentList");
 
 let state = loadState();
 let activeStudentId = null;
 let dragSourceIndex = null;
 let swapHighlight = new Set();
+let seatFlashHighlight = new Set();
 let activeWeekKey = getWeekKey(new Date());
 let examDraft = null;
 let mappingState = null;
 let applyTargets = new Set();
 let lastEasterAt = 0;
+let backupReminderChecked = false;
+const inputSuggestMap = new Map();
 
 function uid() {
   return `id-${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36)}`;
@@ -122,11 +154,174 @@ function normalizeHeader(text) {
   return value.trim();
 }
 
-function showToast(message) {
+function parseAliasInput(value) {
+  if (!value) {
+    return [];
+  }
+  const parts = value
+    .split(/[，,、;；\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return Array.from(new Set(parts));
+}
+
+function formatDateTimeLocal(value) {
+  if (!value) {
+    return "从未";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "从未";
+  }
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(
+    date.getMinutes()
+  ).padStart(2, "0")}`;
+}
+
+function showDuplicateNameWarning(sourceLabel = "名单") {
+  const groups = new Map();
+  state.students.forEach((student) => {
+    const key = normalizeName(student.name);
+    if (!key) {
+      return;
+    }
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(student.name);
+  });
+  const duplicates = Array.from(groups.values()).filter((items) => items.length > 1);
+  if (!duplicates.length) {
+    return;
+  }
+  const lines = duplicates.map((items) => `${items[0]} × ${items.length}`);
+  alert(`${sourceLabel}存在重名：\n${lines.join("\n")}\n建议在别名或备注中做区分。`);
+}
+
+function resolveStudentByKeyword(input) {
+  const key = normalizeName(input);
+  if (!key) {
+    return null;
+  }
+  const scored = state.students
+    .map((student) => {
+      const nameKey = normalizeName(student.name);
+      const aliasKeys = (student.aliases || []).map((alias) => normalizeName(alias));
+      let score = -1;
+      if (nameKey === key || aliasKeys.includes(key)) {
+        score = 100;
+      } else if (nameKey.startsWith(key) || aliasKeys.some((alias) => alias.startsWith(key))) {
+        score = 80;
+      } else if (nameKey.includes(key) || aliasKeys.some((alias) => alias.includes(key))) {
+        score = 60;
+      }
+      return { student, score };
+    })
+    .filter((item) => item.score >= 0)
+    .sort((a, b) => b.score - a.score);
+  return scored.length ? scored[0].student : null;
+}
+
+function findStudentsByKeyword(keyword, limit = 8) {
+  const key = normalizeName(keyword);
+  if (!key) {
+    return [];
+  }
+  return state.students
+    .map((student) => {
+      const nameKey = normalizeName(student.name);
+      const aliasKeys = (student.aliases || []).map((alias) => normalizeName(alias));
+      let score = -1;
+      if (nameKey === key || aliasKeys.includes(key)) {
+        score = 100;
+      } else if (nameKey.startsWith(key) || aliasKeys.some((alias) => alias.startsWith(key))) {
+        score = 85;
+      } else if (nameKey.includes(key) || aliasKeys.some((alias) => alias.includes(key))) {
+        score = 70;
+      }
+      return { student, score };
+    })
+    .filter((item) => item.score >= 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => item.student);
+}
+
+function hideInputSuggest(panel) {
+  if (!panel) {
+    return;
+  }
+  panel.classList.add("hidden");
+  panel.innerHTML = "";
+}
+
+function renderInputSuggest(input, panel) {
+  if (!input || !panel) {
+    return;
+  }
+  const query = input.value.trim();
+  const matches = findStudentsByKeyword(query);
+  inputSuggestMap.set(input, matches);
+  panel.innerHTML = "";
+  if (!query || !matches.length) {
+    hideInputSuggest(panel);
+    return;
+  }
+  matches.forEach((student) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "name-suggest-item";
+    item.innerHTML = `${student.name}${student.aliases?.length ? `<span>${student.aliases.join(" / ")}</span>` : ""}`;
+    item.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      input.value = student.name;
+      hideInputSuggest(panel);
+    });
+    panel.appendChild(item);
+  });
+  panel.classList.remove("hidden");
+}
+
+function setupNameSuggest(input, panel) {
+  if (!input || !panel) {
+    return;
+  }
+  input.addEventListener("input", () => {
+    renderInputSuggest(input, panel);
+  });
+  input.addEventListener("focus", () => {
+    renderInputSuggest(input, panel);
+  });
+  input.addEventListener("blur", () => {
+    setTimeout(() => hideInputSuggest(panel), 140);
+  });
+}
+
+function tryPickFirstSuggestion(input) {
+  const list = inputSuggestMap.get(input) || [];
+  if (!list.length) {
+    return false;
+  }
+  const first = list[0];
+  if (!first) {
+    return false;
+  }
+  if (normalizeName(input.value) === normalizeName(first.name)) {
+    return false;
+  }
+  input.value = first.name;
+  return true;
+}
+
+function showToast(message, type = "info") {
   if (!toast) {
     return;
   }
   toast.textContent = message;
+  toast.classList.remove("success", "error", "info");
+  toast.classList.add(type);
   toast.classList.add("show");
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => {
@@ -245,11 +440,21 @@ function loadState() {
   return {
     students: [],
     seatOrder: [],
+    lockedSeats: [],
     seatHistory: [],
     exams: [],
+    lastBackupAt: "",
     settings: {
       sidebarCollapsed: false,
-      pairByGender: false
+      pairByGender: false,
+      keepLockedEmpty: true,
+      constraints: {
+        lockedDeskmatePairs: [],
+        noDeskmatePairs: [],
+        frontRowStudentIds: [],
+        frontRows: 2,
+        maxRetries: 200
+      }
     },
     draw: {
       noRepeat: false,
@@ -268,14 +473,45 @@ function normalizeState() {
   state.students = state.students.map((student) => ({
     ...student,
     gender: student.gender || "",
+    aliases: Array.isArray(student.aliases) ? student.aliases.filter(Boolean).map((x) => x.toString().trim()).filter(Boolean) : [],
     exams: Array.isArray(student.exams) ? student.exams : []
   }));
   state.seatOrder = Array.isArray(state.seatOrder) ? state.seatOrder : [];
+  state.lockedSeats = Array.isArray(state.lockedSeats)
+    ? state.lockedSeats.map((value) => Number.parseInt(value, 10)).filter((value) => Number.isInteger(value) && value >= 0)
+    : [];
   state.seatHistory = Array.isArray(state.seatHistory) ? state.seatHistory : [];
   state.exams = Array.isArray(state.exams) ? state.exams : [];
-  state.settings = state.settings || { sidebarCollapsed: false, pairByGender: false };
+  state.lastBackupAt = state.lastBackupAt || "";
+  state.settings = state.settings || { sidebarCollapsed: false, pairByGender: false, keepLockedEmpty: true, constraints: {} };
   state.settings.sidebarCollapsed = Boolean(state.settings.sidebarCollapsed);
   state.settings.pairByGender = Boolean(state.settings.pairByGender);
+  state.settings.keepLockedEmpty =
+    state.settings.keepLockedEmpty === undefined ? true : Boolean(state.settings.keepLockedEmpty);
+  state.settings.constraints = state.settings.constraints || {};
+  state.settings.constraints.lockedDeskmatePairs = Array.isArray(
+    state.settings.constraints.lockedDeskmatePairs
+  )
+    ? state.settings.constraints.lockedDeskmatePairs
+        .map((pair) => ({ a: pair?.a || "", b: pair?.b || "" }))
+        .filter((pair) => pair.a && pair.b && pair.a !== pair.b)
+    : [];
+  state.settings.constraints.noDeskmatePairs = Array.isArray(state.settings.constraints.noDeskmatePairs)
+    ? state.settings.constraints.noDeskmatePairs
+        .map((pair) => ({ a: pair?.a || "", b: pair?.b || "" }))
+        .filter((pair) => pair.a && pair.b)
+    : [];
+  state.settings.constraints.frontRowStudentIds = Array.isArray(state.settings.constraints.frontRowStudentIds)
+    ? state.settings.constraints.frontRowStudentIds
+    : [];
+  state.settings.constraints.frontRows = Math.max(
+    1,
+    Number.parseInt(state.settings.constraints.frontRows, 10) || 2
+  );
+  state.settings.constraints.maxRetries = Math.max(
+    50,
+    Number.parseInt(state.settings.constraints.maxRetries, 10) || 200
+  );
   state.draw = state.draw || { noRepeat: false, used: [], history: [] };
   state.draw.used = Array.isArray(state.draw.used) ? state.draw.used : [];
   state.draw.history = Array.isArray(state.draw.history) ? state.draw.history : [];
@@ -284,6 +520,36 @@ function normalizeState() {
   migrateDrawPool();
   pruneDrawUsed();
   pruneSeatHistory();
+  normalizeLocks();
+  normalizeConstraints();
+}
+
+function normalizeLocks() {
+  const max = state.seatOrder.length;
+  const unique = new Set();
+  state.lockedSeats = state.lockedSeats
+    .filter((index) => Number.isInteger(index) && index >= 0 && index < max)
+    .filter((index) => {
+      if (unique.has(index)) {
+        return false;
+      }
+      unique.add(index);
+      return true;
+    });
+}
+
+function normalizeConstraints() {
+  const idSet = new Set(state.students.map((student) => student.id));
+  state.settings.constraints.frontRowStudentIds = state.settings.constraints.frontRowStudentIds.filter((id) =>
+    idSet.has(id)
+  );
+  state.settings.constraints.noDeskmatePairs = state.settings.constraints.noDeskmatePairs.filter(
+    (pair) => pair.a && pair.b && pair.a !== pair.b && idSet.has(pair.a) && idSet.has(pair.b)
+  );
+  state.settings.constraints.lockedDeskmatePairs =
+    state.settings.constraints.lockedDeskmatePairs.filter(
+      (pair) => pair.a && pair.b && pair.a !== pair.b && idSet.has(pair.a) && idSet.has(pair.b)
+    );
 }
 
 function normalizeSeatOrder() {
@@ -348,7 +614,7 @@ function pruneDrawUsed() {
   state.draw.used = state.draw.used.filter((id) => ids.has(id));
 }
 
-function addStudent(name, genderValue = "") {
+function addStudent(name, genderValue = "", aliases = []) {
   const trimmed = name.trim();
   if (!trimmed) {
     return;
@@ -358,11 +624,13 @@ function addStudent(name, genderValue = "") {
     id: uid(),
     name: trimmed,
     gender: genderValue || "",
+    aliases: parseAliasInput(Array.isArray(aliases) ? aliases.join(" ") : aliases),
     records: [],
     exams: []
   });
   normalizeSeatOrder();
   placeStudentInFirstEmpty(state.students[state.students.length - 1].id);
+  showDuplicateNameWarning("新增后");
   saveState();
   renderAll();
 }
@@ -383,6 +651,14 @@ function removeStudent(id) {
   state.students = state.students.filter((item) => item.id !== id);
   state.seatOrder = state.seatOrder.map((item) => (item === id ? null : item));
   state.draw.used = state.draw.used.filter((item) => item !== id);
+  state.settings.constraints.frontRowStudentIds = state.settings.constraints.frontRowStudentIds.filter(
+    (item) => item !== id
+  );
+  state.settings.constraints.noDeskmatePairs = state.settings.constraints.noDeskmatePairs.filter(
+    (pair) => pair.a !== id && pair.b !== id
+  );
+  state.settings.constraints.lockedDeskmatePairs =
+    state.settings.constraints.lockedDeskmatePairs.filter((pair) => pair.a !== id && pair.b !== id);
   saveState();
   renderAll();
 }
@@ -411,8 +687,20 @@ function renderSearchResults() {
   }
 
   const query = studentSearchInput.value.trim();
+  const normalizedQuery = normalizeName(query);
   const matched = query
-    ? state.students.filter((student) => student.name.includes(query))
+    ? state.students.filter((student) => {
+        if (student.name.includes(query)) {
+          return true;
+        }
+        if (normalizedQuery && normalizeName(student.name).includes(normalizedQuery)) {
+          return true;
+        }
+        return (student.aliases || []).some((alias) => {
+          const aliasText = alias.toString();
+          return aliasText.includes(query) || normalizeName(aliasText).includes(normalizedQuery);
+        });
+      })
     : [];
 
   if (!query) {
@@ -437,6 +725,12 @@ function renderSearchResults() {
 
     const name = document.createElement("div");
     name.textContent = student.name;
+    if (student.aliases?.length) {
+      const alias = document.createElement("div");
+      alias.className = "student-alias";
+      alias.textContent = `别名：${student.aliases.join(" / ")}`;
+      name.appendChild(alias);
+    }
 
     const meta = document.createElement("div");
     meta.className = "student-meta";
@@ -476,10 +770,25 @@ function renderRowLabels() {
   }
 }
 
+function getChangedSeatIndices(beforeOrder, afterOrder) {
+  const changed = [];
+  const len = Math.max(beforeOrder.length, afterOrder.length);
+  for (let i = 0; i < len; i += 1) {
+    if ((beforeOrder[i] || null) !== (afterOrder[i] || null)) {
+      changed.push(i);
+    }
+  }
+  return changed;
+}
+
+function queueSeatFlash(indices) {
+  seatFlashHighlight = new Set((indices || []).filter((index) => Number.isInteger(index) && index >= 0));
+}
+
 function renderSeatGrid() {
   seatGroups.innerHTML = "";
-
-  const getStudentById = (id) => state.students.find((student) => student.id === id);
+  const studentById = new Map(state.students.map((student) => [student.id, student]));
+  const lockedSet = new Set(state.lockedSeats);
   const rows = getRowCount();
 
   if (!rows) {
@@ -496,10 +805,14 @@ function renderSeatGrid() {
         const col = group * 2 + colInGroup + 1;
         const index = row * COLS + (col - 1);
         const studentId = state.seatOrder[index];
-        const student = studentId ? getStudentById(studentId) : null;
+        const student = studentId ? studentById.get(studentId) : null;
+        const isLocked = lockedSet.has(index);
 
         const seat = document.createElement("div");
         seat.className = "seat";
+        if (isLocked) {
+          seat.classList.add("locked");
+        }
         if (!student) {
           seat.classList.add("empty");
         }
@@ -534,17 +847,30 @@ function renderSeatGrid() {
         label.className = "seat-label";
         label.textContent = `${row + 1}-${col}`;
 
+        const lockBtn = document.createElement("button");
+        lockBtn.className = `seat-lock ${isLocked ? "active" : ""}`;
+        lockBtn.type = "button";
+        lockBtn.title = isLocked ? "取消锁定座位" : "锁定座位";
+        lockBtn.textContent = isLocked ? "🔒" : "🔓";
+        lockBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          toggleSeatLock(index);
+        });
+
         if (student && student.gender) {
           const gender = document.createElement("div");
           gender.className = "seat-meta gender";
           gender.textContent = `性别：${student.gender}`;
-          seat.append(name, meta, gender, label);
+          seat.append(name, meta, gender, label, lockBtn);
         } else {
-          seat.append(name, meta, label);
+          seat.append(name, meta, label, lockBtn);
         }
 
         if (swapHighlight.has(index)) {
           seat.classList.add("swap-animate");
+        }
+        if (seatFlashHighlight.has(index)) {
+          seat.classList.add("flash");
         }
         if (student) {
           seat.addEventListener("click", () => openRecordModal(student.id));
@@ -554,7 +880,7 @@ function renderSeatGrid() {
       }
     }
 
-  seatGroups.appendChild(groupEl);
+    seatGroups.appendChild(groupEl);
   }
 
   if (swapHighlight.size) {
@@ -568,6 +894,15 @@ function renderSeatGrid() {
         renderSeatGrid();
       }
     }, 360);
+  }
+
+  if (seatFlashHighlight.size) {
+    setTimeout(() => {
+      document.querySelectorAll(".seat.flash").forEach((item) => {
+        item.classList.remove("flash");
+      });
+      seatFlashHighlight.clear();
+    }, 760);
   }
 }
 
@@ -629,6 +964,19 @@ function swapSeats(sourceIndex, targetIndex) {
   next[targetIndex] = sourceValue;
   state.seatOrder = next;
   swapHighlight = new Set([sourceIndex, targetIndex]);
+  queueSeatFlash([sourceIndex, targetIndex]);
+  saveState();
+  renderSeatGrid();
+}
+
+function toggleSeatLock(index) {
+  const set = new Set(state.lockedSeats);
+  if (set.has(index)) {
+    set.delete(index);
+  } else {
+    set.add(index);
+  }
+  state.lockedSeats = Array.from(set).sort((a, b) => a - b);
   saveState();
   renderSeatGrid();
 }
@@ -759,22 +1107,207 @@ function shuffleArray(array) {
   }
 }
 
-function shuffleSeats() {
-  if (pairByGender.checked) {
-    state.seatOrder = buildSeatOrderWithGenderPairs();
-  } else {
-    const array = [...state.seatOrder];
-    for (let i = array.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
+function getDeskPairsForSeatCount(seatCount) {
+  const pairs = [];
+  const rows = getRowCountFromSeatCount(seatCount);
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < COLS; col += 2) {
+      pairs.push([row * COLS + col, row * COLS + col + 1]);
     }
-    state.seatOrder = array;
   }
-  saveState();
-  renderSeatGrid();
+  return pairs;
+}
+
+function areDeskmatesByIndex(indexA, indexB) {
+  if (indexA < 0 || indexB < 0) {
+    return false;
+  }
+  const rowA = Math.floor(indexA / COLS);
+  const rowB = Math.floor(indexB / COLS);
+  if (rowA !== rowB) {
+    return false;
+  }
+  return Math.abs(indexA - indexB) === 1 && Math.floor((indexA % COLS) / 2) === Math.floor((indexB % COLS) / 2);
+}
+
+function evaluateShuffleOrder(order) {
+  const issues = [];
+  const idToName = new Map(state.students.map((student) => [student.id, student.name]));
+  const idToGender = new Map(state.students.map((student) => [student.id, (student.gender || "").trim()]));
+  const normalizedNoDeskPairs = state.settings.constraints.noDeskmatePairs.map((pair) => {
+    const a = normalizeName(idToName.get(pair.a));
+    const b = normalizeName(idToName.get(pair.b));
+    return [a, b].sort().join("|");
+  });
+  const noDeskSet = new Set(normalizedNoDeskPairs.filter((item) => item !== "|"));
+
+  let softPenalty = 0;
+  getDeskPairsForSeatCount(order.length).forEach(([left, right]) => {
+    const leftId = order[left];
+    const rightId = order[right];
+    if (!leftId || !rightId) {
+      return;
+    }
+    const pairKey = [normalizeName(idToName.get(leftId)), normalizeName(idToName.get(rightId))]
+      .sort()
+      .join("|");
+    if (noDeskSet.has(pairKey)) {
+      issues.push(`不做同桌冲突：${idToName.get(leftId)} - ${idToName.get(rightId)}`);
+    }
+    if (state.settings.pairByGender) {
+      const leftGender = idToGender.get(leftId);
+      const rightGender = idToGender.get(rightId);
+      if (leftGender && rightGender && leftGender === rightGender) {
+        softPenalty += 1;
+      }
+    }
+  });
+
+  state.settings.constraints.lockedDeskmatePairs.forEach((pair) => {
+    const leftIndex = order.indexOf(pair.a);
+    const rightIndex = order.indexOf(pair.b);
+    if (leftIndex === -1 || rightIndex === -1) {
+      return;
+    }
+    if (!areDeskmatesByIndex(leftIndex, rightIndex)) {
+      issues.push(`同桌锁定未满足：${idToName.get(pair.a) || "未知"} - ${idToName.get(pair.b) || "未知"}`);
+    }
+  });
+
+  const frontRows = Math.max(1, Number.parseInt(state.settings.constraints.frontRows, 10) || 2);
+  state.settings.constraints.frontRowStudentIds.forEach((studentId) => {
+    const seatIndex = order.indexOf(studentId);
+    if (seatIndex === -1) {
+      return;
+    }
+    if (Math.floor(seatIndex / COLS) >= frontRows) {
+      issues.push(`必须前排未满足：${idToName.get(studentId) || "未知学生"}`);
+    }
+  });
+
+  return { hardViolations: issues.length, softPenalty, issues };
+}
+
+function generateCandidateOrderFromCurrent() {
+  const total = state.seatOrder.length;
+  const lockedSet = new Set(state.lockedSeats);
+  const allowLockedEmptyFill = !state.settings.keepLockedEmpty;
+  const fixedByIndex = new Map();
+  const movableIndices = [];
+  const movableStudents = [];
+  const movableSet = new Set();
+
+  for (let index = 0; index < total; index += 1) {
+    const value = state.seatOrder[index] ?? null;
+    const isLocked = lockedSet.has(index);
+    if (isLocked && !(allowLockedEmptyFill && !value)) {
+      fixedByIndex.set(index, value);
+      continue;
+    }
+    movableIndices.push(index);
+    movableSet.add(index);
+    if (value) {
+      movableStudents.push(value);
+    }
+  }
+
+  const next = [...state.seatOrder];
+  const movableIdsSet = new Set(movableStudents);
+  const lockedPairs = (state.settings.constraints.lockedDeskmatePairs || []).filter(
+    (pair) => movableIdsSet.has(pair.a) && movableIdsSet.has(pair.b)
+  );
+  const availableDeskPairs = getDeskPairsForSeatCount(total).filter(
+    ([left, right]) => movableSet.has(left) && movableSet.has(right)
+  );
+  shuffleArray(availableDeskPairs);
+
+  const usedIds = new Set();
+  const assignedIndices = new Set();
+  lockedPairs.forEach((pair) => {
+    if (usedIds.has(pair.a) || usedIds.has(pair.b)) {
+      return;
+    }
+    const deskPair = availableDeskPairs.find(
+      ([left, right]) => !assignedIndices.has(left) && !assignedIndices.has(right)
+    );
+    if (!deskPair) {
+      return;
+    }
+    const [leftIndex, rightIndex] = deskPair;
+    if (Math.random() < 0.5) {
+      next[leftIndex] = pair.a;
+      next[rightIndex] = pair.b;
+    } else {
+      next[leftIndex] = pair.b;
+      next[rightIndex] = pair.a;
+    }
+    assignedIndices.add(leftIndex);
+    assignedIndices.add(rightIndex);
+    usedIds.add(pair.a);
+    usedIds.add(pair.b);
+  });
+
+  // Keep empty seats clustered at the tail by shuffling only remaining students,
+  // then filling movable seats in row order and leaving the rest null.
+  const remainStudents = movableStudents.filter((id) => !usedIds.has(id));
+  shuffleArray(remainStudents);
+  const orderedMovableIndices = [...movableIndices].sort((a, b) => a - b);
+  let pointer = 0;
+  orderedMovableIndices.forEach((index) => {
+    if (assignedIndices.has(index)) {
+      return;
+    }
+    next[index] = pointer < remainStudents.length ? remainStudents[pointer] : null;
+    if (pointer < remainStudents.length) {
+      pointer += 1;
+    }
+  });
+
+  fixedByIndex.forEach((value, index) => {
+    next[index] = value;
+  });
+  return next;
+}
+
+function shuffleSeats() {
+  const beforeOrder = [...state.seatOrder];
+  const retries = Math.max(50, Number.parseInt(state.settings.constraints.maxRetries, 10) || 200);
+  let bestOrder = null;
+  let bestEval = null;
+  let bestScore = Infinity;
+
+  for (let i = 0; i < retries; i += 1) {
+    const candidate = generateCandidateOrderFromCurrent();
+    const result = evaluateShuffleOrder(candidate);
+    const score = result.hardViolations * 1000 + result.softPenalty;
+    if (score < bestScore) {
+      bestScore = score;
+      bestOrder = candidate;
+      bestEval = result;
+    }
+    if (score === 0) {
+      break;
+    }
+  }
+
+  if (bestOrder) {
+    state.seatOrder = bestOrder;
+    queueSeatFlash(getChangedSeatIndices(beforeOrder, state.seatOrder));
+    if (bestEval && bestEval.hardViolations > 0) {
+      showToast("约束过多，已给出最接近方案，请放宽约束。", "info");
+    } else {
+      showToast("随机调整已完成", "success");
+    }
+    saveState();
+    renderSeatGrid();
+  }
 }
 
 function resetSeats() {
+  let keepLocks = true;
+  if (state.lockedSeats.length) {
+    keepLocks = confirm("检测到锁定座位。点击“确定”保留锁定；点击“取消”清除锁定。");
+  }
   const seatCount = getSeatCapacityFromCount(state.students.length);
   const order = new Array(seatCount).fill(null);
   state.students.forEach((student, index) => {
@@ -783,6 +1316,11 @@ function resetSeats() {
     }
   });
   state.seatOrder = order;
+  if (!keepLocks) {
+    state.lockedSeats = [];
+  } else {
+    normalizeLocks();
+  }
   saveState();
   renderSeatGrid();
 }
@@ -833,9 +1371,8 @@ function drawNames() {
     state.draw.used = Array.from(new Set([...state.draw.used, ...result.picked]));
   }
 
-  const pickedStudents = result.picked
-    .map((id) => state.students.find((student) => student.id === id))
-    .filter(Boolean);
+  const studentById = new Map(state.students.map((student) => [student.id, student]));
+  const pickedStudents = result.picked.map((id) => studentById.get(id)).filter(Boolean);
 
   const names = pickedStudents.map((student) => student.name);
 
@@ -847,6 +1384,7 @@ function drawNames() {
 
   saveState();
   renderDrawResults();
+  showToast("抽签完成", "success");
 }
 
 function renderDrawResults() {
@@ -916,6 +1454,37 @@ function formatDateForFilename(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+function shouldShowBackupReminder() {
+  if (!state.lastBackupAt) {
+    return true;
+  }
+  const last = new Date(state.lastBackupAt).getTime();
+  if (Number.isNaN(last)) {
+    return true;
+  }
+  const delta = Date.now() - last;
+  return delta > 7 * 24 * 60 * 60 * 1000;
+}
+
+function renderBackupInfo() {
+  if (backupInfo) {
+    backupInfo.textContent = `上次备份：${formatDateTimeLocal(state.lastBackupAt)}`;
+  }
+  if (!backupReminder || !backupReminderText) {
+    return;
+  }
+  if (shouldShowBackupReminder()) {
+    backupReminder.classList.remove("hidden");
+    backupReminderText.textContent = `建议导出备份（上次备份：${formatDateTimeLocal(state.lastBackupAt)}）`;
+    if (!backupReminderChecked) {
+      showToast("建议导出备份", "info");
+      backupReminderChecked = true;
+    }
+  } else {
+    backupReminder.classList.add("hidden");
+  }
+}
+
 function pruneSeatHistory() {
   state.seatHistory = state.seatHistory
     .filter((item) => item && Array.isArray(item.seats))
@@ -931,6 +1500,7 @@ function pruneSeatHistory() {
       const rows = item.rows || getRowCountFromSeatCount(seatCount);
       return {
         ...item,
+        note: (item.note || "").toString().trim(),
         seats,
         rows
       };
@@ -942,13 +1512,16 @@ function saveCurrentSeatHistory() {
   if (state.students.length === 0) {
     return;
   }
+  const noteInput = prompt("请输入本次历史快照备注（可留空）：", "") || "";
+  const studentById = new Map(state.students.map((item) => [item.id, item]));
   const rowCount = getRowCount();
   const snapshot = {
     id: uid(),
     time: new Date().toISOString(),
+    note: noteInput.trim(),
     rows: rowCount,
     seats: state.seatOrder.map((id) => {
-      const student = state.students.find((item) => item.id === id);
+      const student = studentById.get(id);
       return student ? student.name : "";
     })
   };
@@ -956,26 +1529,32 @@ function saveCurrentSeatHistory() {
   pruneSeatHistory();
   saveState();
   renderHistoryList();
+  showToast("历史座位已保存", "success");
 }
 
 function renderHistoryList() {
   historyList.innerHTML = "";
-  if (!state.seatHistory.length) {
+  const keyword = (historyFilterInput?.value || "").trim();
+  const filtered = keyword
+    ? state.seatHistory.filter((item) => (item.note || "").includes(keyword))
+    : state.seatHistory;
+  if (!filtered.length) {
     const empty = document.createElement("div");
     empty.className = "draw-status";
-    empty.textContent = "暂无历史座位记录。";
+    empty.textContent = keyword ? "没有匹配备注的历史记录。" : "暂无历史座位记录。";
     historyList.appendChild(empty);
     return;
   }
 
-  state.seatHistory.forEach((item) => {
+  filtered.forEach((item) => {
     const row = document.createElement("div");
     row.className = "history-item";
 
     const meta = document.createElement("div");
     meta.className = "history-meta";
     const count = item.seats.filter((name) => name).length;
-    meta.textContent = `${formatDateTime(item.time)} · ${count} 人`;
+    const noteText = item.note ? item.note : "（无备注）";
+    meta.textContent = `${formatDateTime(item.time)} · ${noteText} · ${count} 人`;
 
     const actions = document.createElement("div");
     actions.className = "seat-actions";
@@ -1012,6 +1591,7 @@ function renderHistoryList() {
 }
 
 function applyHistorySnapshot(snapshot) {
+  const beforeOrder = [...state.seatOrder];
   const nameQueues = new Map();
   state.students.forEach((student) => {
     const key = normalizeName(student.name);
@@ -1034,12 +1614,15 @@ function applyHistorySnapshot(snapshot) {
   });
 
   state.seatOrder = order;
+  queueSeatFlash(getChangedSeatIndices(beforeOrder, state.seatOrder));
   saveState();
   renderAll();
+  showToast("已应用历史座位", "success");
 }
 
 function openHistoryModal(snapshot) {
-  historyTitle.textContent = `历史座位表 · ${formatDateTime(snapshot.time)}`;
+  const noteText = snapshot.note ? ` · ${snapshot.note}` : " · （无备注）";
+  historyTitle.textContent = `历史座位表 · ${formatDateTime(snapshot.time)}${noteText}`;
   renderHistoryGrid(snapshot.seats, snapshot.rows);
   historyModal.classList.remove("hidden");
   historyModal.setAttribute("aria-hidden", "false");
@@ -1241,7 +1824,7 @@ function applyImportData(data, replaceExisting) {
         return;
       }
       const gender = genders[index] || "";
-      const student = { id: uid(), name, gender, records: [], exams: [] };
+      const student = { id: uid(), name, gender, aliases: [], records: [], exams: [] };
       students.push(student);
       if (index < seatOrder.length) {
         seatOrder[index] = student.id;
@@ -1253,7 +1836,7 @@ function applyImportData(data, replaceExisting) {
         return;
       }
       const gender = genderList[index] || "";
-      const student = { id: uid(), name, gender, records: [], exams: [] };
+      const student = { id: uid(), name, gender, aliases: [], records: [], exams: [] };
       students.push(student);
       const emptyIndex = seatOrder.indexOf(null);
       if (emptyIndex !== -1) {
@@ -1283,7 +1866,7 @@ function applyImportData(data, replaceExisting) {
         return;
       }
       const gender = genderList[index] || "";
-      const student = { id: uid(), name, gender, records: [], exams: [] };
+      const student = { id: uid(), name, gender, aliases: [], records: [], exams: [] };
       state.students.push(student);
       placeStudentInFirstEmpty(student.id);
       added += 1;
@@ -1300,8 +1883,11 @@ function applyImportData(data, replaceExisting) {
   }
 
   normalizeSeatOrder();
+  normalizeLocks();
   saveState();
   renderAll();
+  showToast("名单导入成功", "success");
+  showDuplicateNameWarning("导入后");
   return true;
 }
 
@@ -1418,12 +2004,14 @@ function exportSeatsCsv() {
   const content = `\ufeff${lines.join("\n")}`;
   const filename = `座位表_${formatDateForFilename()}.csv`;
   downloadFile(filename, content);
+  showToast("座位表已导出", "success");
 }
 
 function exportBackupJson() {
+  const exportedAt = new Date().toISOString();
   const payload = {
     version: BACKUP_VERSION,
-    exportedAt: new Date().toISOString(),
+    exportedAt,
     data: state
   };
   const filename = `classroom_backup_${formatDateForFilename()}_${new Date()
@@ -1440,7 +2028,10 @@ function exportBackupJson() {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  showToast("备份已导出");
+  state.lastBackupAt = exportedAt;
+  saveState();
+  renderBackupInfo();
+  showToast("备份已导出", "success");
 }
 
 function importBackupJson(file) {
@@ -1451,6 +2042,9 @@ function importBackupJson(file) {
       const version = parsed.version ?? 0;
       const data = parsed.data || parsed;
       if (!data || typeof data !== "object") {
+        throw new Error("invalid");
+      }
+      if (!Array.isArray(data.students) || !Array.isArray(data.seatOrder)) {
         throw new Error("invalid");
       }
       const needsConfirm = true;
@@ -1465,17 +2059,26 @@ function importBackupJson(file) {
       state = data;
       normalizeState();
       saveState();
+      backupReminderChecked = false;
       renderAll();
-      showToast("备份已导入");
+      showToast("备份已导入", "success");
     })
     .catch(() => {
-      showToast("备份导入失败");
+      showToast("备份导入失败", "error");
     });
 }
 
 function detectScoreMapping(rows) {
   if (!rows.length) {
-    return { reliable: false, reason: "empty", headers: [], nameCol: -1, subjectCols: [] };
+    return {
+      reliable: false,
+      reason: "empty",
+      headers: [],
+      nameCol: -1,
+      subjectCols: [],
+      conflicts: ["文件为空，无法识别列"],
+      candidatesBySubject: {}
+    };
   }
 
   const rawHeaders = rows[0].map((cell) => cell.toString().trim());
@@ -1486,7 +2089,7 @@ function detectScoreMapping(rows) {
   });
 
   const excludePattern =
-    /总分|总成绩|排名|名次|位次|学号|班级|考号|准考证|考场|座位|组别|年级|性别/;
+    /总分|总成绩|排名|名次|位次|学号|班级|考号|准考证|考场|座位|组别|年级|性别|备注|缺考|缺席/;
 
   const subjectPatterns = [
     { key: "语文", patterns: [/语文/, /^语$/] },
@@ -1501,8 +2104,11 @@ function detectScoreMapping(rows) {
   ];
 
   const subjectCols = [];
-  const seenSubjects = new Map();
   const conflicts = [];
+  const candidatesBySubject = {};
+  subjectPatterns.forEach((item) => {
+    candidatesBySubject[item.key] = [];
+  });
 
   headers.forEach((header, index) => {
     if (!header || index === nameCol) {
@@ -1511,18 +2117,38 @@ function detectScoreMapping(rows) {
     if (excludePattern.test(header)) {
       return;
     }
-    const matched = subjectPatterns.find((subject) =>
-      subject.patterns.some((pattern) => pattern.test(header))
-    );
-    if (matched) {
-      if (seenSubjects.has(matched.key)) {
-        conflicts.push(matched.key);
-      } else {
-        seenSubjects.set(matched.key, index);
-        subjectCols.push({ index, subject: matched.key });
+    subjectPatterns.forEach((subject) => {
+      let score = 0;
+      subject.patterns.forEach((pattern) => {
+        if (pattern.test(header)) {
+          score += header === subject.key ? 100 : 40;
+          if (header.startsWith(subject.key)) {
+            score += 10;
+          }
+        }
+      });
+      if (score > 0) {
+        candidatesBySubject[subject.key].push({ index, score, header: rawHeaders[index] || `第${index + 1}列` });
       }
+    });
+  });
+
+  Object.entries(candidatesBySubject).forEach(([subject, candidates]) => {
+    candidates.sort((a, b) => b.score - a.score);
+    if (candidates.length > 1) {
+      conflicts.push(`${subject}列重复：${candidates.map((item) => item.header).join("、")}`);
+    }
+    if (candidates.length) {
+      subjectCols.push({ subject, index: candidates[0].index });
     }
   });
+
+  if (nameCol === -1) {
+    conflicts.push("未识别到姓名列");
+  }
+  if (subjectCols.length === 0) {
+    conflicts.push("未识别到可用科目列");
+  }
 
   const reliable = nameCol !== -1 && subjectCols.length > 0 && conflicts.length === 0;
   return {
@@ -1531,7 +2157,8 @@ function detectScoreMapping(rows) {
     headers: rawHeaders,
     nameCol,
     subjectCols,
-    conflicts
+    conflicts,
+    candidatesBySubject
   };
 }
 
@@ -1566,6 +2193,20 @@ function parseScoreRowsWithMapping(rows, mapping) {
 
 function openMappingModal(headers, suggestion) {
   mappingList.innerHTML = "";
+  if (mappingConflicts) {
+    mappingConflicts.innerHTML = "";
+    const conflicts = suggestion?.conflicts || [];
+    if (conflicts.length) {
+      conflicts.forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        mappingConflicts.appendChild(li);
+      });
+      mappingConflicts.classList.remove("hidden");
+    } else {
+      mappingConflicts.classList.add("hidden");
+    }
+  }
   const nameRow = document.createElement("div");
   nameRow.className = "mapping-row";
   const nameLabel = document.createElement("div");
@@ -1609,6 +2250,10 @@ function openMappingModal(headers, suggestion) {
       ) {
         option.selected = true;
       }
+      const candidate = suggestion?.candidatesBySubject?.[subject]?.find((item) => item.index === index);
+      if (candidate) {
+        option.textContent = `${option.textContent}（推荐）`;
+      }
       select.appendChild(option);
     });
     row.append(label, select);
@@ -1636,11 +2281,14 @@ function applyExamDraft() {
 
   const nameMap = new Map();
   state.students.forEach((student) => {
-    const key = normalizeName(student.name);
-    if (!nameMap.has(key)) {
-      nameMap.set(key, []);
-    }
-    nameMap.get(key).push(student);
+    const keys = [normalizeName(student.name), ...(student.aliases || []).map((alias) => normalizeName(alias))]
+      .filter(Boolean);
+    keys.forEach((key) => {
+      if (!nameMap.has(key)) {
+        nameMap.set(key, []);
+      }
+      nameMap.get(key).push(student);
+    });
   });
 
   let matched = 0;
@@ -1685,7 +2333,7 @@ function applyExamDraft() {
 
   scoreStatus.textContent =
     unmatched.length > 0
-      ? `已匹配 ${matched} 人，未匹配 ${unmatched.length} 人（姓名不一致）。`
+      ? `已匹配 ${matched} 人，未匹配 ${unmatched.length} 人（可能由重名、别名未设置或姓名格式差异导致）。`
       : `已匹配 ${matched} 人，成绩已保存。`;
   saveScoreBtn.disabled = true;
   examDraft = null;
@@ -1958,8 +2606,16 @@ function renderApplyList() {
   }
   applyList.innerHTML = "";
   const query = applySearchInput.value.trim();
+  const normalized = normalizeName(query);
   const candidates = state.students.filter((student) => student.id !== activeStudentId);
-  const filtered = query ? candidates.filter((student) => student.name.includes(query)) : candidates;
+  const filtered = query
+    ? candidates.filter(
+        (student) =>
+          student.name.includes(query) ||
+          normalizeName(student.name).includes(normalized) ||
+          (student.aliases || []).some((alias) => normalizeName(alias).includes(normalized))
+      )
+    : candidates;
 
   if (!filtered.length) {
     const empty = document.createElement("div");
@@ -2253,6 +2909,87 @@ function exportTrendsPdf() {
   }, 300);
 }
 
+function renderConstraintLists() {
+  if (!noDeskPairList || !frontStudentList || !lockPairList) {
+    return;
+  }
+  const idToName = new Map(state.students.map((student) => [student.id, student.name]));
+  lockPairList.innerHTML = "";
+  if (!state.settings.constraints.lockedDeskmatePairs.length) {
+    const empty = document.createElement("div");
+    empty.className = "draw-status";
+    empty.textContent = "暂无同桌锁定。";
+    lockPairList.appendChild(empty);
+  } else {
+    state.settings.constraints.lockedDeskmatePairs.forEach((pair, index) => {
+      const item = document.createElement("div");
+      item.className = "constraint-item";
+      const label = document.createElement("span");
+      label.textContent = `${idToName.get(pair.a) || "未知"} ↔ ${idToName.get(pair.b) || "未知"}`;
+      const del = document.createElement("button");
+      del.className = "ghost";
+      del.textContent = "删除";
+      del.addEventListener("click", () => {
+        state.settings.constraints.lockedDeskmatePairs.splice(index, 1);
+        saveState();
+        renderConstraintLists();
+      });
+      item.append(label, del);
+      lockPairList.appendChild(item);
+    });
+  }
+
+  noDeskPairList.innerHTML = "";
+  if (!state.settings.constraints.noDeskmatePairs.length) {
+    const empty = document.createElement("div");
+    empty.className = "draw-status";
+    empty.textContent = "暂无不做同桌限制。";
+    noDeskPairList.appendChild(empty);
+  } else {
+    state.settings.constraints.noDeskmatePairs.forEach((pair, index) => {
+      const item = document.createElement("div");
+      item.className = "constraint-item";
+      const label = document.createElement("span");
+      label.textContent = `${idToName.get(pair.a) || "未知"} - ${idToName.get(pair.b) || "未知"}`;
+      const del = document.createElement("button");
+      del.className = "ghost";
+      del.textContent = "删除";
+      del.addEventListener("click", () => {
+        state.settings.constraints.noDeskmatePairs.splice(index, 1);
+        saveState();
+        renderConstraintLists();
+      });
+      item.append(label, del);
+      noDeskPairList.appendChild(item);
+    });
+  }
+
+  frontStudentList.innerHTML = "";
+  if (!state.settings.constraints.frontRowStudentIds.length) {
+    const empty = document.createElement("div");
+    empty.className = "draw-status";
+    empty.textContent = "暂无前排限制。";
+    frontStudentList.appendChild(empty);
+  } else {
+    state.settings.constraints.frontRowStudentIds.forEach((id, index) => {
+      const item = document.createElement("div");
+      item.className = "constraint-item";
+      const label = document.createElement("span");
+      label.textContent = idToName.get(id) || "未知";
+      const del = document.createElement("button");
+      del.className = "ghost";
+      del.textContent = "删除";
+      del.addEventListener("click", () => {
+        state.settings.constraints.frontRowStudentIds.splice(index, 1);
+        saveState();
+        renderConstraintLists();
+      });
+      item.append(label, del);
+      frontStudentList.appendChild(item);
+    });
+  }
+}
+
 function renderAll() {
   normalizeState();
   renderSearchResults();
@@ -2262,7 +2999,15 @@ function renderAll() {
   renderHistoryList();
   noRepeat.checked = Boolean(state.draw.noRepeat);
   pairByGender.checked = Boolean(state.settings.pairByGender);
+  if (keepLockedEmpty) {
+    keepLockedEmpty.checked = Boolean(state.settings.keepLockedEmpty);
+  }
+  if (frontRowsInput) {
+    frontRowsInput.value = String(state.settings.constraints.frontRows || 2);
+  }
   renderDrawResults();
+  renderConstraintLists();
+  renderBackupInfo();
   if (!importStatus.textContent) {
     importStatus.textContent = "Excel 表建议包含「姓名」列，可选「行」「列」「性别」定位。";
   }
@@ -2270,6 +3015,105 @@ function renderAll() {
     scoreStatus.textContent = "成绩表格式：行=学生，列=科目（语数英物化地历政生）。";
   }
   applySidebarState();
+}
+
+function initSeatCardMode() {
+  if (!cardCompactBtn || !cardDetailBtn) {
+    return;
+  }
+  const applyMode = (mode) => {
+    const compact = mode === "compact";
+    document.body.classList.toggle("compact-cards", compact);
+    cardCompactBtn.classList.toggle("active", compact);
+    cardDetailBtn.classList.toggle("active", !compact);
+    localStorage.setItem(SEAT_CARD_MODE_KEY, compact ? "compact" : "detail");
+  };
+
+  const saved = localStorage.getItem(SEAT_CARD_MODE_KEY);
+  applyMode(saved === "detail" ? "detail" : "compact");
+
+  cardCompactBtn.addEventListener("click", () => applyMode("compact"));
+  cardDetailBtn.addEventListener("click", () => applyMode("detail"));
+}
+
+function initSidebarNavigation() {
+  const sidebar = document.querySelector(".panel.controls");
+  if (!sidebar) {
+    return;
+  }
+  const sections = Array.from(sidebar.querySelectorAll(".sidebar-section[data-section-key]"));
+  if (!sections.length) {
+    return;
+  }
+
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(SIDEBAR_SECTION_STATE_KEY) || "{}") || {};
+  } catch (error) {
+    saved = {};
+  }
+
+  sections.forEach((section) => {
+    const key = section.dataset.sectionKey;
+    const defaultOpen = key === "common";
+    if (Object.prototype.hasOwnProperty.call(saved, key)) {
+      section.open = Boolean(saved[key]);
+    } else {
+      section.open = defaultOpen;
+    }
+    section.addEventListener("toggle", () => {
+      const snapshot = {};
+      sections.forEach((item) => {
+        snapshot[item.dataset.sectionKey] = item.open;
+      });
+      localStorage.setItem(SIDEBAR_SECTION_STATE_KEY, JSON.stringify(snapshot));
+    });
+  });
+
+  const pills = Array.from(sidebar.querySelectorAll(".quick-pill[data-target]"));
+  const setActivePillById = (id) => {
+    pills.forEach((item) => {
+      item.classList.toggle("active", item.dataset.target === id);
+    });
+  };
+
+  setActivePillById("sec-common");
+
+  pills.forEach((pill) => {
+    pill.addEventListener("click", () => {
+      const targetId = pill.dataset.target;
+      const section = sidebar.querySelector(`#${targetId}`);
+      if (!section) {
+        return;
+      }
+      setActivePillById(targetId);
+      if (!section.open) {
+        section.open = true;
+      }
+      setTimeout(() => {
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+        section.classList.remove("flash-highlight");
+        void section.offsetWidth;
+        section.classList.add("flash-highlight");
+        setTimeout(() => section.classList.remove("flash-highlight"), 850);
+      }, 40);
+    });
+  });
+
+  sidebar.addEventListener("scroll", () => {
+    const sidebarRect = sidebar.getBoundingClientRect();
+    let bestId = "sec-common";
+    let bestDistance = Number.POSITIVE_INFINITY;
+    sections.forEach((section) => {
+      const rect = section.getBoundingClientRect();
+      const distance = Math.abs(rect.top - sidebarRect.top - 54);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestId = section.id;
+      }
+    });
+    setActivePillById(bestId);
+  });
 }
 
 function applySidebarState() {
@@ -2284,18 +3128,20 @@ function applySidebarState() {
 }
 
 addStudentBtn.addEventListener("click", () => {
-  addStudent(studentNameInput.value, studentGenderSelect.value);
+  addStudent(studentNameInput.value, studentGenderSelect.value, studentAliasInput.value);
   maybeShowEasterEgg(studentNameInput.value);
   studentNameInput.value = "";
+  studentAliasInput.value = "";
   studentGenderSelect.value = "";
   studentNameInput.focus();
 });
 
 studentNameInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
-    addStudent(studentNameInput.value, studentGenderSelect.value);
+    addStudent(studentNameInput.value, studentGenderSelect.value, studentAliasInput.value);
     maybeShowEasterEgg(studentNameInput.value);
     studentNameInput.value = "";
+    studentAliasInput.value = "";
     studentGenderSelect.value = "";
   }
 });
@@ -2342,12 +3188,18 @@ exportBackupBtn.addEventListener("click", () => {
 
 importBackupBtn.addEventListener("click", () => {
   if (!importBackupInput.files.length) {
-    showToast("请选择备份文件");
+    showToast("请选择备份文件", "error");
     return;
   }
   importBackupJson(importBackupInput.files[0]);
   importBackupInput.value = "";
 });
+
+if (backupReminderExportBtn) {
+  backupReminderExportBtn.addEventListener("click", () => {
+    exportBackupJson();
+  });
+}
 
 parseScoreBtn.addEventListener("click", () => {
   if (!scoreFileInput.files.length) {
@@ -2371,6 +3223,12 @@ saveHistoryBtn.addEventListener("click", () => {
   saveCurrentSeatHistory();
 });
 
+if (historyFilterInput) {
+  historyFilterInput.addEventListener("input", () => {
+    renderHistoryList();
+  });
+}
+
 drawBtn.addEventListener("click", () => {
   drawNames();
 });
@@ -2392,6 +3250,110 @@ noRepeat.addEventListener("change", (event) => {
 pairByGender.addEventListener("change", (event) => {
   state.settings.pairByGender = event.target.checked;
   saveState();
+});
+
+if (keepLockedEmpty) {
+  keepLockedEmpty.addEventListener("change", (event) => {
+    state.settings.keepLockedEmpty = event.target.checked;
+    saveState();
+  });
+}
+
+if (addNoDeskPairBtn) {
+  addNoDeskPairBtn.addEventListener("click", () => {
+    const studentA = resolveStudentByKeyword(pairAInput.value);
+    const studentB = resolveStudentByKeyword(pairBInput.value);
+    if (!studentA || !studentB || studentA.id === studentB.id) {
+      showToast("请正确填写两个不同学生", "error");
+      return;
+    }
+    const exists = state.settings.constraints.noDeskmatePairs.some(
+      (pair) =>
+        (pair.a === studentA.id && pair.b === studentB.id) ||
+        (pair.a === studentB.id && pair.b === studentA.id)
+    );
+    if (!exists) {
+      state.settings.constraints.noDeskmatePairs.push({ a: studentA.id, b: studentB.id });
+      saveState();
+      renderConstraintLists();
+    }
+    pairAInput.value = "";
+    pairBInput.value = "";
+  });
+}
+
+if (addLockPairBtn) {
+  addLockPairBtn.addEventListener("click", () => {
+    const studentA = resolveStudentByKeyword(lockPairAInput.value);
+    const studentB = resolveStudentByKeyword(lockPairBInput.value);
+    if (!studentA || !studentB || studentA.id === studentB.id) {
+      showToast("请正确填写两个不同学生", "error");
+      return;
+    }
+    const exists = state.settings.constraints.lockedDeskmatePairs.some(
+      (pair) =>
+        (pair.a === studentA.id && pair.b === studentB.id) ||
+        (pair.a === studentB.id && pair.b === studentA.id)
+    );
+    if (!exists) {
+      state.settings.constraints.lockedDeskmatePairs.push({ a: studentA.id, b: studentB.id });
+      saveState();
+      renderConstraintLists();
+    }
+    lockPairAInput.value = "";
+    lockPairBInput.value = "";
+  });
+}
+
+if (addFrontStudentBtn) {
+  addFrontStudentBtn.addEventListener("click", () => {
+    const student = resolveStudentByKeyword(frontStudentInput.value);
+    if (!student) {
+      showToast("未找到该学生", "error");
+      return;
+    }
+    if (!state.settings.constraints.frontRowStudentIds.includes(student.id)) {
+      state.settings.constraints.frontRowStudentIds.push(student.id);
+      saveState();
+      renderConstraintLists();
+    }
+    frontStudentInput.value = "";
+  });
+}
+
+if (frontRowsInput) {
+  frontRowsInput.addEventListener("change", (event) => {
+    state.settings.constraints.frontRows = Math.max(1, Number.parseInt(event.target.value, 10) || 2);
+    saveState();
+  });
+}
+
+setupNameSuggest(pairAInput, pairASuggest);
+setupNameSuggest(pairBInput, pairBSuggest);
+setupNameSuggest(lockPairAInput, lockPairASuggest);
+setupNameSuggest(lockPairBInput, lockPairBSuggest);
+setupNameSuggest(frontStudentInput, frontStudentSuggest);
+
+[pairAInput, pairBInput, frontStudentInput, lockPairAInput, lockPairBInput].forEach((input) => {
+  if (!input) {
+    return;
+  }
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    if (tryPickFirstSuggestion(input)) {
+      return;
+    }
+    if (input === pairAInput || input === pairBInput) {
+      addNoDeskPairBtn?.click();
+    } else if (input === frontStudentInput) {
+      addFrontStudentBtn?.click();
+    } else {
+      addLockPairBtn?.click();
+    }
+  });
 });
 
 recordClose.addEventListener("click", closeRecordModal);
@@ -2482,6 +3444,14 @@ mappingApply.addEventListener("click", () => {
     alert("请至少选择一科成绩列。");
     return;
   }
+  const usedCols = new Set();
+  for (const item of subjectCols) {
+    if (usedCols.has(item.index)) {
+      alert("同一列被映射到多个科目，请调整后再导入。");
+      return;
+    }
+    usedCols.add(item.index);
+  }
   const mapping = {
     nameCol: Number.parseInt(nameValue, 10),
     subjectCols
@@ -2522,4 +3492,6 @@ document.addEventListener("keydown", (event) => {
 });
 
 normalizeState();
+initSeatCardMode();
+initSidebarNavigation();
 renderAll();
