@@ -79,6 +79,13 @@ const historyTitle = document.getElementById("historyTitle");
 const historyClose = document.getElementById("historyClose");
 const historyGrid = document.getElementById("historyGrid");
 const historyGridInner = document.getElementById("historyGridInner");
+const exportModal = document.getElementById("exportModal");
+const exportModalClose = document.getElementById("exportModalClose");
+const exportModalCancel = document.getElementById("exportModalCancel");
+const exportModalConfirm = document.getElementById("exportModalConfirm");
+const exportOptScores = document.getElementById("exportOptScores");
+const exportOptRecords = document.getElementById("exportOptRecords");
+const exportOptNotes = document.getElementById("exportOptNotes");
 
 const mappingModal = document.getElementById("mappingModal");
 const mappingList = document.getElementById("mappingList");
@@ -1639,6 +1646,116 @@ function closeHistoryModal() {
   historyModal.setAttribute("aria-hidden", "true");
 }
 
+function openExportModal() {
+  if (!activeStudentId) {
+    return;
+  }
+  exportOptScores.checked = true;
+  exportOptRecords.checked = true;
+  exportOptNotes.checked = true;
+  exportModal.classList.remove("hidden");
+  exportModal.setAttribute("aria-hidden", "false");
+}
+
+function closeExportModal() {
+  exportModal.classList.add("hidden");
+  exportModal.setAttribute("aria-hidden", "true");
+}
+
+function exportStudentDataSelection() {
+  const student = state.students.find((item) => item.id === activeStudentId);
+  if (!student) {
+    showToast("未找到学生", "error");
+    return;
+  }
+  const includeScores = Boolean(exportOptScores.checked);
+  const includeRecords = Boolean(exportOptRecords.checked);
+  const includeNotes = Boolean(exportOptNotes.checked);
+  if (!includeScores && !includeRecords && !includeNotes) {
+    showToast("请至少选择一项导出内容", "error");
+    return;
+  }
+
+  const lines = [];
+  lines.push(`学生：${student.name}`);
+  lines.push(`导出时间：${new Date().toLocaleString()}`);
+  const selectedLabels = [];
+  if (includeScores) {
+    selectedLabels.push("成绩");
+  }
+  if (includeRecords) {
+    selectedLabels.push("奖惩");
+  }
+  if (includeNotes) {
+    selectedLabels.push("备注");
+  }
+  lines.push(`导出内容：${selectedLabels.join("、")}`);
+  lines.push("");
+
+  if (includeScores) {
+    lines.push("【成绩记录】");
+    const exams = Array.isArray(student.exams) ? [...student.exams] : [];
+    if (!exams.length) {
+      lines.push("无成绩记录");
+    } else {
+      exams.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+      exams.forEach((exam) => {
+        const title = `${exam.date || ""} ${exam.name || "考试"}`.trim();
+        lines.push(`- ${title}`);
+        const subjects = exam.subjects || [];
+        if (!subjects.length) {
+          lines.push("  (无科目成绩)");
+        } else {
+          subjects.forEach((subject) => {
+            lines.push(`  ${subject}：${exam.scores?.[subject] ?? "-"}`);
+          });
+        }
+      });
+    }
+    lines.push("");
+  }
+
+  const records = Array.isArray(student.records) ? student.records : [];
+  if (includeRecords) {
+    lines.push("【奖惩记录（奖/罚）】");
+    const rewardPunish = records.filter((record) => record.type === "奖" || record.type === "罚");
+    if (!rewardPunish.length) {
+      lines.push("无奖惩记录");
+    } else {
+      rewardPunish.forEach((record) => {
+        lines.push(
+          `${record.date || ""} [${record.type}] ${record.note || "（无内容）"}（${getWeekLabel(
+            record.weekKey || getWeekKey(record.date)
+          )}）`
+        );
+      });
+    }
+    lines.push("");
+  }
+
+  if (includeNotes) {
+    lines.push("【备注记录】");
+    const noteRecords = records.filter((record) => record.type === "备注");
+    if (!noteRecords.length) {
+      lines.push("无备注记录");
+    } else {
+      noteRecords.forEach((record) => {
+        lines.push(
+          `${record.date || ""} ${record.note || "（无内容）"}（${getWeekLabel(
+            record.weekKey || getWeekKey(record.date)
+          )}）`
+        );
+      });
+    }
+    lines.push("");
+  }
+
+  const filename = `${student.name}_导出_${formatDateForFilename()}.txt`;
+  downloadTextFile(filename, lines.join("\n"));
+  closeExportModal();
+  showToast("学生数据已导出", "success");
+}
+
 function renderHistoryGrid(seats, rowsOverride) {
   historyGridInner.innerHTML = "";
   const seatCount = seats.length;
@@ -1954,6 +2071,18 @@ function csvEscape(value) {
 
 function downloadFile(filename, content) {
   const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function downloadTextFile(filename, content) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -2660,7 +2789,7 @@ function renderExamList(student) {
     empty.textContent = "暂无成绩记录。";
     examList.appendChild(empty);
     examTrends.innerHTML = "";
-    exportTrendsBtn.disabled = true;
+    exportTrendsBtn.disabled = false;
     return;
   }
 
@@ -2699,7 +2828,7 @@ function renderExamList(student) {
   });
 
   const hasCharts = renderExamTrends(sorted);
-  exportTrendsBtn.disabled = !hasCharts;
+  exportTrendsBtn.disabled = false;
 }
 
 function renderExamTrends(exams) {
@@ -3421,6 +3550,23 @@ historyModal.addEventListener("click", (event) => {
   }
 });
 
+if (exportModalClose) {
+  exportModalClose.addEventListener("click", closeExportModal);
+}
+if (exportModalCancel) {
+  exportModalCancel.addEventListener("click", closeExportModal);
+}
+if (exportModalConfirm) {
+  exportModalConfirm.addEventListener("click", exportStudentDataSelection);
+}
+if (exportModal) {
+  exportModal.addEventListener("click", (event) => {
+    if (event.target === exportModal) {
+      closeExportModal();
+    }
+  });
+}
+
 mappingClose.addEventListener("click", closeMappingModal);
 mappingCancel.addEventListener("click", closeMappingModal);
 mappingModal.addEventListener("click", (event) => {
@@ -3485,7 +3631,7 @@ addPunishBtn.addEventListener("click", () => addRecord("罚"));
 addNoteBtn.addEventListener("click", () => addRecord("备注"));
 
 exportTrendsBtn.addEventListener("click", () => {
-  exportTrendsPdf();
+  openExportModal();
 });
 
 document.addEventListener("keydown", (event) => {
@@ -3495,6 +3641,9 @@ document.addEventListener("keydown", (event) => {
     }
     if (!historyModal.classList.contains("hidden")) {
       closeHistoryModal();
+    }
+    if (exportModal && !exportModal.classList.contains("hidden")) {
+      closeExportModal();
     }
     if (!mappingModal.classList.contains("hidden")) {
       closeMappingModal();

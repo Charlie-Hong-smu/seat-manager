@@ -1701,6 +1701,28 @@ body.compact-cards .seat-meta.gender {
   gap: 10px;
 }
 
+.export-modal-card {
+  width: min(520px, 94vw);
+}
+
+.export-options {
+  display: grid;
+  gap: 10px;
+  padding: 6px 2px;
+}
+
+.export-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  border: 1px solid var(--soft-border);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: #fafbff;
+  font-size: 14px;
+}
+
 .toast {
   position: fixed;
   bottom: 24px;

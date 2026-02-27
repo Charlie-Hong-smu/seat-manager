@@ -294,7 +294,7 @@
           <div id="examList" class="exam-list"></div>
           <div class="exam-trend-header">
             <div class="exam-title">成绩趋势</div>
-            <button id="exportTrendsBtn" class="ghost" disabled>导出趋势 PDF</button>
+            <button id="exportTrendsBtn" class="ghost">导出</button>
           </div>
           <div id="examTrends" class="exam-trends"></div>
         </div>
@@ -347,6 +347,27 @@
         </div>
         <div id="historyGrid" class="history-grid">
           <div id="historyGridInner" class="history-grid-inner"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="exportModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card export-modal-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">学生详情导出</div>
+            <h3>选择导出内容</h3>
+          </div>
+          <button id="exportModalClose" class="ghost">关闭</button>
+        </div>
+        <div class="export-options">
+          <label class="export-option"><input id="exportOptScores" type="checkbox" checked />成绩记录</label>
+          <label class="export-option"><input id="exportOptRecords" type="checkbox" checked />奖惩记录（奖/罚）</label>
+          <label class="export-option"><input id="exportOptNotes" type="checkbox" checked />备注记录</label>
+        </div>
+        <div class="mapping-actions">
+          <button id="exportModalCancel" class="ghost">取消</button>
+          <button id="exportModalConfirm" class="primary">确认导出</button>
         </div>
       </div>
     </div>
