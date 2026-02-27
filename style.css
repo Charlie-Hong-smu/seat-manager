@@ -767,8 +767,8 @@ textarea {
 }
 
 .history-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 8px 10px;
   padding: 10px 12px;
@@ -778,28 +778,45 @@ textarea {
 }
 
 .history-meta {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   line-height: 1.35;
   color: #666c76;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: keep-all;
 }
 
 .history-item .seat-actions {
-  display: grid;
-  grid-template-columns: repeat(2, auto);
+  flex: 0 0 auto;
+  min-width: 176px;
+  display: flex;
   gap: 8px;
-  justify-content: end;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
 }
 
 .history-item .seat-actions button {
-  min-height: 34px;
-  padding: 4px 10px;
+  min-height: 36px;
+  height: 36px;
+  padding: 4px 12px;
   font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .history-item .seat-actions button:nth-child(3) {
   color: #b44a45;
   border-color: #e8c9c7;
   background: #fff;
+  min-width: 56px;
+  padding: 4px 10px;
 }
 
 .panel-section .draw-controls label {
@@ -987,7 +1004,7 @@ button.ghost {
 
 .draw-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1918,11 +1935,11 @@ body.compact-cards .seat-meta.gender {
   }
 
   .history-item {
-    grid-template-columns: 1fr;
+    align-items: center;
   }
 
   .history-item .seat-actions {
-    justify-content: start;
+    justify-content: flex-end;
   }
 }
 
@@ -1952,5 +1969,25 @@ body.compact-cards .seat-meta.gender {
 
   .student-row-1 {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .history-item {
+    align-items: flex-start;
+  }
+
+  .history-item .seat-actions {
+    min-width: 150px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .history-item .seat-actions button {
+    min-width: 72px;
+  }
+
+  .history-item .seat-actions button:nth-child(3) {
+    min-width: 56px;
   }
 }

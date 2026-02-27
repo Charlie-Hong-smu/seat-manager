@@ -21,6 +21,7 @@ const drawCount = document.getElementById("drawCount");
 const noRepeat = document.getElementById("noRepeat");
 const drawBtn = document.getElementById("drawBtn");
 const resetDrawBtn = document.getElementById("resetDrawBtn");
+const clearDrawHistoryBtn = document.getElementById("clearDrawHistoryBtn");
 const drawStatus = document.getElementById("drawStatus");
 const drawResults = document.getElementById("drawResults");
 
@@ -1338,6 +1339,11 @@ function pickRandom(array, count) {
 
 function resetDrawPool() {
   state.draw.used = [];
+  saveState();
+}
+
+function clearDrawHistory() {
+  state.draw.history = [];
   saveState();
 }
 
@@ -3237,6 +3243,14 @@ resetDrawBtn.addEventListener("click", () => {
   resetDrawPool();
   renderDrawResults();
 });
+
+if (clearDrawHistoryBtn) {
+  clearDrawHistoryBtn.addEventListener("click", () => {
+    clearDrawHistory();
+    renderDrawResults();
+    showToast("抽签记录已清除", "success");
+  });
+}
 
 noRepeat.addEventListener("change", (event) => {
   state.draw.noRepeat = event.target.checked;
