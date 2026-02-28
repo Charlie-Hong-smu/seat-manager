@@ -3,6 +3,7 @@ const STORAGE_KEY = "homeroom-seat-manager-v1";
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
 const BACKUP_VERSION = 1;
 const SIDEBAR_SECTION_STATE_KEY = "sidebarSectionOpen-v1";
+const SIDEBAR_ACTIVE_TAB_KEY = "sidebarActiveTab-v1";
 const SEAT_CARD_MODE_KEY = "seatCardMode";
 const TAG_CATALOG = [
   { id: "cn_strong", labelZh: "语文强", kind: "academic", groupId: "lvl_cn", groupNameZh: "语文水平" },
@@ -38,6 +39,8 @@ const ACADEMIC_SUBJECT_GROUP = {
 };
 const COMPLEMENT_RULES = [
   { id: "talk_quiet", labelZh: "爱讲话 ↔ 沉默", leftTagId: "talkative", rightTagId: "quiet" },
+  { id: "focus_balance", labelZh: "容易分心 ↔ 专注", leftTagId: "distractible", rightTagId: "focused" },
+  { id: "role_balance", labelZh: "主动 ↔ 配合", leftTagId: "leader", rightTagId: "supporter" },
   { id: "cn_balance", labelZh: "语文强 ↔ 语文弱", leftTagId: "cn_strong", rightTagId: "cn_weak" },
   { id: "math_balance", labelZh: "数学强 ↔ 数学弱", leftTagId: "math_strong", rightTagId: "math_weak" },
   { id: "en_balance", labelZh: "英语强 ↔ 英语弱", leftTagId: "en_strong", rightTagId: "en_weak" }
@@ -118,6 +121,7 @@ const weekSelect = document.getElementById("weekSelect");
 const examList = document.getElementById("examList");
 const examTrends = document.getElementById("examTrends");
 const exportTrendsBtn = document.getElementById("exportTrendsBtn");
+const examTrendModeSelect = document.getElementById("examTrendModeSelect");
 const deleteStudentBtn = document.getElementById("deleteStudentBtn");
 const behaviorTagGroups = document.getElementById("behaviorTagGroups");
 const academicAutoTags = document.getElementById("academicAutoTags");
@@ -172,7 +176,12 @@ const frontStudentList = document.getElementById("frontStudentList");
 const shuffleByComplementBtn = document.getElementById("shuffleByComplementBtn");
 const complementModal = document.getElementById("complementModal");
 const complementClose = document.getElementById("complementClose");
+const complementRuleList = document.getElementById("complementRuleList");
 const complementRuleSelect = document.getElementById("complementRuleSelect");
+const complementPairByGender = document.getElementById("complementPairByGender");
+const complementRespectNoDesk = document.getElementById("complementRespectNoDesk");
+const complementRespectFrontRows = document.getElementById("complementRespectFrontRows");
+const complementRespectLockedPairs = document.getElementById("complementRespectLockedPairs");
 const complementRespectLocked = document.getElementById("complementRespectLocked");
 const complementKeepLockedEmpty = document.getElementById("complementKeepLockedEmpty");
 const complementStatus = document.getElementById("complementStatus");
@@ -192,6 +201,7 @@ let lastEasterAt = 0;
 let backupReminderChecked = false;
 let allowAcademicOverride = false;
 let complementPreviewOrder = null;
+let examTrendMode = "score";
 const inputSuggestMap = new Map();
 
 function uid() {
@@ -989,14 +999,38 @@ function getSeatDisplayTags(student) {
   return tags;
 }
 
+function estimateSeatTagRows(tags) {
+  if (!Array.isArray(tags) || !tags.length) {
+    return 0;
+  }
+  const usableWidth = 102;
+  let rows = 1;
+  let currentWidth = 0;
+  tags.forEach((tag) => {
+    const textLength = Array.from(tag?.labelZh || "").length;
+    const chipWidth = Math.max(40, textLength * 12 + 18);
+    if (currentWidth > 0 && currentWidth + 4 + chipWidth > usableWidth) {
+      rows += 1;
+      currentWidth = chipWidth;
+    } else {
+      currentWidth = currentWidth > 0 ? currentWidth + 4 + chipWidth : chipWidth;
+    }
+  });
+  return rows;
+}
+
 function getUniformSeatHeight() {
   if (document.body.classList.contains("compact-cards")) {
     return 112;
   }
-  const maxTagCount = state.students.reduce((max, student) => Math.max(max, getSeatDisplayTags(student).length), 0);
+  const maxTagRows = state.students.reduce(
+    (max, student) => Math.max(max, estimateSeatTagRows(getSeatDisplayTags(student))),
+    0
+  );
   const baseHeight = 132;
-  const perTagHeight = 24;
-  return baseHeight + maxTagCount * perTagHeight;
+  const perRowHeight = 24;
+  const extraHeight = maxTagRows > 0 ? maxTagRows * perRowHeight + 6 : 0;
+  return baseHeight + extraHeight;
 }
 
 function renderSeatGrid() {
@@ -1560,38 +1594,112 @@ function computeComplementScore(studentA, studentB, rule) {
   return direct || reverse ? 1 : 0;
 }
 
-function generateComplementPairs(studentIds, rule) {
+function getSelectedComplementRuleIds() {
+  if (!complementRuleList) {
+    return [];
+  }
+  return Array.from(complementRuleList.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
+}
+
+function getSelectedComplementRules() {
+  const ids = new Set(getSelectedComplementRuleIds());
+  return COMPLEMENT_RULES.filter((rule) => ids.has(rule.id));
+}
+
+function refreshComplementRequiredOptions(selectedIds = getSelectedComplementRuleIds()) {
+  if (!complementRuleSelect) {
+    return;
+  }
+  const current = complementRuleSelect.value;
+  complementRuleSelect.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "无（全部尽量满足）";
+  complementRuleSelect.appendChild(none);
+  COMPLEMENT_RULES.filter((rule) => selectedIds.includes(rule.id)).forEach((rule) => {
+    const option = document.createElement("option");
+    option.value = rule.id;
+    option.textContent = rule.labelZh;
+    complementRuleSelect.appendChild(option);
+  });
+  if (current && selectedIds.includes(current)) {
+    complementRuleSelect.value = current;
+  } else {
+    complementRuleSelect.value = "";
+  }
+}
+
+function generateComplementPairs(studentIds, rules, requiredRuleId = "") {
   const studentById = new Map(state.students.map((student) => [student.id, student]));
   const pairCandidates = [];
+  const selectedRules = Array.isArray(rules) ? rules : [];
+  const softRules = selectedRules.filter((rule) => rule.id !== requiredRuleId);
   for (let i = 0; i < studentIds.length; i += 1) {
     for (let j = i + 1; j < studentIds.length; j += 1) {
       const a = studentIds[i];
       const b = studentIds[j];
+      const requiredMatch = requiredRuleId
+        ? computeComplementScore(
+            studentById.get(a),
+            studentById.get(b),
+            selectedRules.find((rule) => rule.id === requiredRuleId)
+          )
+        : 0;
+      const softScore = softRules.reduce(
+        (sum, rule) => sum + computeComplementScore(studentById.get(a), studentById.get(b), rule),
+        0
+      );
       pairCandidates.push({
         a,
         b,
-        score: computeComplementScore(studentById.get(a), studentById.get(b), rule)
+        requiredMatch,
+        softScore,
+        totalScore: requiredMatch * 100 + softScore
       });
     }
   }
-  pairCandidates.sort((x, y) => y.score - x.score || (Math.random() < 0.5 ? -1 : 1));
   const used = new Set();
   const selected = [];
-  pairCandidates.forEach((pair) => {
-    if (used.has(pair.a) || used.has(pair.b)) {
-      return;
-    }
-    used.add(pair.a);
-    used.add(pair.b);
-    selected.push(pair);
-  });
+  const pickPairs = (candidates) => {
+    candidates.forEach((pair) => {
+      if (used.has(pair.a) || used.has(pair.b)) {
+        return;
+      }
+      used.add(pair.a);
+      used.add(pair.b);
+      selected.push(pair);
+    });
+  };
+  if (requiredRuleId) {
+    const requiredCandidates = pairCandidates
+      .filter((pair) => pair.requiredMatch > 0)
+      .sort((x, y) => y.softScore - x.softScore || (Math.random() < 0.5 ? -1 : 1));
+    pickPairs(requiredCandidates);
+  }
+  pairCandidates
+    .sort(
+      (x, y) =>
+        y.totalScore - x.totalScore ||
+        y.requiredMatch - x.requiredMatch ||
+        y.softScore - x.softScore ||
+        (Math.random() < 0.5 ? -1 : 1)
+    )
+    .forEach((pair) => {
+      if (used.has(pair.a) || used.has(pair.b)) {
+        return;
+      }
+      used.add(pair.a);
+      used.add(pair.b);
+      selected.push(pair);
+    });
   return {
     pairs: selected,
-    pairMatchedCount: selected.filter((item) => item.score > 0).length
+    requiredMatchedCount: selected.filter((item) => item.requiredMatch > 0).length,
+    softMatchedCount: selected.filter((item) => item.softScore > 0).length
   };
 }
 
-function buildComplementSeatOrder(rule, options = {}) {
+function buildComplementSeatOrder(rules, options = {}) {
   const respectLocked = options.respectLocked !== false;
   const keepLockedEmpty = options.keepLockedEmpty !== false;
   const total = state.seatOrder.length;
@@ -1612,10 +1720,18 @@ function buildComplementSeatOrder(rule, options = {}) {
   }
 
   const movableStudents = movableIndices.map((index) => state.seatOrder[index]).filter(Boolean);
-  const { pairs, pairMatchedCount } = generateComplementPairs(movableStudents, rule);
+  const sortedMovableIndices = [...movableIndices].sort((a, b) => a - b);
+  const studentSeatIndices = sortedMovableIndices.slice(0, movableStudents.length);
+  const emptySeatIndices = sortedMovableIndices.slice(movableStudents.length);
+  const {
+    pairs,
+    requiredMatchedCount,
+    softMatchedCount
+  } = generateComplementPairs(movableStudents, rules, options.requiredRuleId || "");
   const pairDeskSlots = getDeskPairsForSeatCount(total).filter(
-    ([left, right]) => movableIndices.includes(left) && movableIndices.includes(right)
+    ([left, right]) => studentSeatIndices.includes(left) && studentSeatIndices.includes(right)
   );
+  shuffleArray(pairDeskSlots);
 
   const assigned = new Set();
   let pairIndex = 0;
@@ -1640,13 +1756,19 @@ function buildComplementSeatOrder(rule, options = {}) {
     }
   });
   const remainingStudents = movableStudents.filter((id) => !usedStudents.has(id));
-  const restIndices = movableIndices.filter((index) => !assigned.has(index)).sort((a, b) => a - b);
+  const restIndices = studentSeatIndices.filter((index) => !assigned.has(index));
+  shuffleArray(restIndices);
+  shuffleArray(remainingStudents);
   let pointer = 0;
   restIndices.forEach((index) => {
     next[index] = pointer < remainingStudents.length ? remainingStudents[pointer] : null;
     if (pointer < remainingStudents.length) {
       pointer += 1;
     }
+  });
+
+  emptySeatIndices.forEach((index) => {
+    next[index] = null;
   });
 
   fixedByIndex.forEach((value, index) => {
@@ -1656,24 +1778,168 @@ function buildComplementSeatOrder(rule, options = {}) {
   return {
     order: next,
     pairCount: pairs.length,
-    matchedCount: pairMatchedCount
+    requiredMatchedCount,
+    softMatchedCount
   };
+}
+
+function evaluateComplementConstraints(order, options = {}) {
+  let softPenalty = 0;
+  let hardViolations = 0;
+
+  if (options.respectNoDesk) {
+    const noDeskSet = new Set(
+      state.settings.constraints.noDeskmatePairs.map((pair) => [pair.a, pair.b].sort().join("|"))
+    );
+    getDeskPairsForSeatCount(order.length).forEach(([left, right]) => {
+      const leftId = order[left];
+      const rightId = order[right];
+      if (!leftId || !rightId) {
+        return;
+      }
+      if (noDeskSet.has([leftId, rightId].sort().join("|"))) {
+        hardViolations += 1;
+      }
+    });
+  }
+
+  if (options.respectLockedPairs) {
+    (state.settings.constraints.lockedDeskmatePairs || []).forEach((pair) => {
+      const leftIndex = order.indexOf(pair.a);
+      const rightIndex = order.indexOf(pair.b);
+      if (leftIndex !== -1 && rightIndex !== -1 && !areDeskmatesByIndex(leftIndex, rightIndex)) {
+        hardViolations += 1;
+      }
+    });
+  }
+
+  if (options.respectFrontRows) {
+    const frontRows = Math.max(1, Number.parseInt(state.settings.constraints.frontRows, 10) || 2);
+    (state.settings.constraints.frontRowStudentIds || []).forEach((studentId) => {
+      const seatIndex = order.indexOf(studentId);
+      if (seatIndex !== -1 && Math.floor(seatIndex / COLS) >= frontRows) {
+        hardViolations += 1;
+      }
+    });
+  }
+
+  if (options.pairByGender) {
+    const idToGender = new Map(state.students.map((student) => [student.id, (student.gender || "").trim()]));
+    getDeskPairsForSeatCount(order.length).forEach(([left, right]) => {
+      const leftId = order[left];
+      const rightId = order[right];
+      if (!leftId || !rightId) {
+        return;
+      }
+      const leftGender = idToGender.get(leftId);
+      const rightGender = idToGender.get(rightId);
+      if (leftGender && rightGender && leftGender === rightGender) {
+        softPenalty += 1;
+      }
+    });
+  }
+
+  return { hardViolations, softPenalty };
+}
+
+function isBetterComplementCandidate(current, next) {
+  if (!current) {
+    return true;
+  }
+  if (next.eval.hardViolations !== current.eval.hardViolations) {
+    return next.eval.hardViolations < current.eval.hardViolations;
+  }
+  if (next.requiredMatchedCount !== current.requiredMatchedCount) {
+    return next.requiredMatchedCount > current.requiredMatchedCount;
+  }
+  if (next.softMatchedCount !== current.softMatchedCount) {
+    return next.softMatchedCount > current.softMatchedCount;
+  }
+  if (next.eval.softPenalty !== current.eval.softPenalty) {
+    return next.eval.softPenalty < current.eval.softPenalty;
+  }
+  return false;
+}
+
+function computeBestComplementPlacement() {
+  const rules = getSelectedComplementRules();
+  if (!rules.length) {
+    return { error: "请至少勾选一条互补规则。" };
+  }
+
+  const requiredRuleId = complementRuleSelect?.value || "";
+  const options = {
+    respectLocked: Boolean(complementRespectLocked?.checked),
+    keepLockedEmpty: Boolean(complementKeepLockedEmpty?.checked),
+    requiredRuleId
+  };
+  const evalOptions = {
+    respectNoDesk: Boolean(complementRespectNoDesk?.checked),
+    respectFrontRows: Boolean(complementRespectFrontRows?.checked),
+    respectLockedPairs: Boolean(complementRespectLockedPairs?.checked),
+    pairByGender: Boolean(complementPairByGender?.checked)
+  };
+
+  let best = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = buildComplementSeatOrder(rules, options);
+    const evaluation = evaluateComplementConstraints(result.order, evalOptions);
+    const candidate = {
+      ...result,
+      eval: evaluation
+    };
+    if (isBetterComplementCandidate(best, candidate)) {
+      best = candidate;
+      if (
+        best.eval.hardViolations === 0 &&
+        best.eval.softPenalty === 0 &&
+        (!requiredRuleId || best.requiredMatchedCount > 0)
+      ) {
+        break;
+      }
+    }
+  }
+
+  return best || { error: "未能生成排座结果。" };
 }
 
 function openComplementModal() {
   if (!complementModal) {
     return;
   }
-  complementRuleSelect.innerHTML = "";
-  COMPLEMENT_RULES.forEach((rule) => {
-    const option = document.createElement("option");
-    option.value = rule.id;
-    option.textContent = rule.labelZh;
-    complementRuleSelect.appendChild(option);
-  });
+  if (complementRuleList) {
+    complementRuleList.innerHTML = "";
+    COMPLEMENT_RULES.forEach((rule) => {
+      const label = document.createElement("label");
+      label.className = "complement-rule-item";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = rule.id;
+      checkbox.addEventListener("change", () => {
+        refreshComplementRequiredOptions();
+      });
+      const text = document.createElement("span");
+      text.textContent = rule.labelZh;
+      label.append(checkbox, text);
+      complementRuleList.appendChild(label);
+    });
+  }
+  refreshComplementRequiredOptions([]);
   complementRespectLocked.checked = true;
   complementKeepLockedEmpty.checked = Boolean(state.settings.keepLockedEmpty);
-  complementStatus.textContent = "选择规则后可生成预览并应用。";
+  if (complementPairByGender) {
+    complementPairByGender.checked = Boolean(state.settings.pairByGender);
+  }
+  if (complementRespectNoDesk) {
+    complementRespectNoDesk.checked = true;
+  }
+  if (complementRespectFrontRows) {
+    complementRespectFrontRows.checked = true;
+  }
+  if (complementRespectLockedPairs) {
+    complementRespectLockedPairs.checked = true;
+  }
+  complementStatus.textContent = "选择规则后直接应用。";
   complementPreviewOrder = null;
   complementModal.classList.remove("hidden");
   complementModal.setAttribute("aria-hidden", "false");
@@ -1689,38 +1955,35 @@ function closeComplementModal() {
 }
 
 function previewComplementPlacement() {
-  const rule = COMPLEMENT_RULES.find((item) => item.id === complementRuleSelect.value);
-  if (!rule) {
-    complementStatus.textContent = "请选择互补规则。";
+  const result = computeBestComplementPlacement();
+  if (result.error) {
+    complementStatus.textContent = result.error;
     return;
   }
-  const result = buildComplementSeatOrder(rule, {
-    respectLocked: complementRespectLocked.checked,
-    keepLockedEmpty: complementKeepLockedEmpty.checked
-  });
   complementPreviewOrder = result.order;
-  complementStatus.textContent = `预览完成：形成 ${result.pairCount} 对同桌，其中互补匹配 ${result.matchedCount} 对。`;
+  const requiredText = complementRuleSelect?.value ? `，必须规则命中 ${result.requiredMatchedCount} 对` : "";
+  const hint =
+    result.eval.hardViolations > 0 ? `；仍有 ${result.eval.hardViolations} 项约束未完全满足，已取最优结果` : "";
+  complementStatus.textContent = `已生成方案：形成 ${result.pairCount} 对同桌，互补匹配 ${result.softMatchedCount + result.requiredMatchedCount} 对${requiredText}${hint}。`;
 }
 
 function applyComplementPlacement() {
-  const rule = COMPLEMENT_RULES.find((item) => item.id === complementRuleSelect.value);
-  if (!rule) {
-    complementStatus.textContent = "请选择互补规则。";
+  const result = computeBestComplementPlacement();
+  if (result.error) {
+    complementStatus.textContent = result.error;
     return;
   }
   const before = [...state.seatOrder];
-  const result = complementPreviewOrder
-    ? { order: complementPreviewOrder }
-    : buildComplementSeatOrder(rule, {
-        respectLocked: complementRespectLocked.checked,
-        keepLockedEmpty: complementKeepLockedEmpty.checked
-      });
   state.seatOrder = [...result.order];
   queueSeatFlash(getChangedSeatIndices(before, state.seatOrder));
   saveState();
   renderSeatGrid();
   closeComplementModal();
-  showToast("互补标签排座已应用", "success");
+  if (result.eval.hardViolations > 0) {
+    showToast("互补标签排座已应用（部分约束未完全满足）", "info");
+  } else {
+    showToast("互补标签排座已应用", "success");
+  }
 }
 
 function resetSeats() {
@@ -3672,6 +3935,9 @@ function renderTagEditor(student) {
 
 function renderExamList(student) {
   examList.innerHTML = "";
+  if (examTrendModeSelect) {
+    examTrendModeSelect.value = examTrendMode;
+  }
   const exams = Array.isArray(student.exams) ? student.exams : [];
   if (!exams.length) {
     const empty = document.createElement("div");
@@ -3764,14 +4030,16 @@ function renderExamTrends(exams) {
 
   const chronological = [...exams].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const labels = chronological.map((exam) => exam.date || exam.name || "考试");
-  const totals = chronological.map((exam) => sumExamScores(exam.scores));
+  const rankMode = examTrendMode === "rankSchool";
+  const totals = chronological.map((exam) => (rankMode ? parseRankValue(exam.total?.rankSchool) : sumExamScores(exam.scores)));
   const totalValues = totals.filter((value) => Number.isFinite(value));
 
   if (totalValues.length >= 2) {
-    const card = createChartCard("总分趋势", labels, totals, {
+    const card = createChartCard(rankMode ? "年级排名趋势" : "总分趋势", labels, totals, {
       width: 360,
       height: 140,
-      color: "#1c6f5f"
+      color: "#1c6f5f",
+      reverseY: rankMode
     });
     examTrends.appendChild(card);
   }
@@ -3794,16 +4062,19 @@ function renderExamTrends(exams) {
   let hasSubjectChart = false;
 
   subjects.forEach((subject) => {
-    const values = chronological.map((exam) => parseScoreValue(exam.scores?.[subject]));
+    const values = chronological.map((exam) =>
+      rankMode ? parseRankValue(exam.scores?.[subject]?.rankSchool) : parseScoreValue(exam.scores?.[subject])
+    );
     const validValues = values.filter((value) => Number.isFinite(value));
     if (validValues.length < 2) {
       return;
     }
     hasSubjectChart = true;
-    const card = createChartCard(`${subject}趋势`, labels, values, {
+    const card = createChartCard(`${subject}${rankMode ? "年级排名趋势" : "趋势"}`, labels, values, {
       width: 240,
       height: 120,
-      color: "#f0b429"
+      color: "#f0b429",
+      reverseY: rankMode
     });
     subjectCards.appendChild(card);
   });
@@ -3813,7 +4084,7 @@ function renderExamTrends(exams) {
   } else if (!totalValues.length) {
     const empty = document.createElement("div");
     empty.className = "chart-empty";
-    empty.textContent = "暂无可用的成绩趋势数据。";
+    empty.textContent = rankMode ? "暂无可用的年级排名趋势数据。" : "暂无可用的成绩趋势数据。";
     examTrends.appendChild(empty);
   }
 
@@ -3842,6 +4113,17 @@ function parseScoreValue(value) {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseRankValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  if (typeof value === "object") {
+    return parseRankValue(value.rankSchool);
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function createChartCard(title, labels, values, options) {
@@ -3886,7 +4168,8 @@ function createLineChart(values, options) {
     if (value === null) {
       return { x, y: null };
     }
-    const y = height - padding - ((value - min) / range) * (height - padding * 2);
+    const normalized = options.reverseY ? (max - value) / range : (value - min) / range;
+    const y = height - padding - normalized * (height - padding * 2);
     return { x, y };
   });
 
@@ -4142,7 +4425,21 @@ function initSidebarNavigation() {
     });
   };
 
-  setActivePillById("sec-common");
+  const setActiveTab = (id) => {
+    let resolvedId = id;
+    if (!sections.some((section) => section.id === resolvedId)) {
+      resolvedId = "sec-common";
+    }
+    setActivePillById(resolvedId);
+    sections.forEach((section) => {
+      const isActive = section.id === resolvedId;
+      section.hidden = !isActive;
+      section.classList.toggle("is-active-tab", isActive);
+    });
+    localStorage.setItem(SIDEBAR_ACTIVE_TAB_KEY, resolvedId);
+  };
+
+  setActiveTab(localStorage.getItem(SIDEBAR_ACTIVE_TAB_KEY) || "sec-common");
 
   pills.forEach((pill) => {
     pill.addEventListener("click", () => {
@@ -4151,33 +4448,15 @@ function initSidebarNavigation() {
       if (!section) {
         return;
       }
-      setActivePillById(targetId);
       if (!section.open) {
         section.open = true;
       }
-      setTimeout(() => {
-        section.scrollIntoView({ behavior: "smooth", block: "start" });
-        section.classList.remove("flash-highlight");
-        void section.offsetWidth;
-        section.classList.add("flash-highlight");
-        setTimeout(() => section.classList.remove("flash-highlight"), 850);
-      }, 40);
+      setActiveTab(targetId);
+      section.classList.remove("flash-highlight");
+      void section.offsetWidth;
+      section.classList.add("flash-highlight");
+      setTimeout(() => section.classList.remove("flash-highlight"), 850);
     });
-  });
-
-  sidebar.addEventListener("scroll", () => {
-    const sidebarRect = sidebar.getBoundingClientRect();
-    let bestId = "sec-common";
-    let bestDistance = Number.POSITIVE_INFINITY;
-    sections.forEach((section) => {
-      const rect = section.getBoundingClientRect();
-      const distance = Math.abs(rect.top - sidebarRect.top - 54);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestId = section.id;
-      }
-    });
-    setActivePillById(bestId);
   });
 }
 
@@ -4598,6 +4877,15 @@ if (exportModal) {
   exportModal.addEventListener("click", (event) => {
     if (event.target === exportModal) {
       closeExportModal();
+    }
+  });
+}
+if (examTrendModeSelect) {
+  examTrendModeSelect.addEventListener("change", (event) => {
+    examTrendMode = event.target.value === "rankSchool" ? "rankSchool" : "score";
+    const student = state.students.find((item) => item.id === activeStudentId);
+    if (student) {
+      renderExamTrends(Array.isArray(student.exams) ? [...student.exams].sort((a, b) => (b.date || "").localeCompare(a.date || "")) : []);
     }
   });
 }

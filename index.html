@@ -34,16 +34,15 @@
             <button type="button" class="quick-pill" data-target="sec-import">导入备份</button>
             <button type="button" class="quick-pill" data-target="sec-scores">成绩</button>
             <button type="button" class="quick-pill" data-target="sec-history">历史</button>
-            <button type="button" class="quick-pill" data-target="sec-advanced">高级</button>
           </div>
 
-          <details id="sec-common" class="sidebar-section" data-section-key="common" open>
-            <summary><span>常用功能</span><span class="summary-arrow">⌄</span></summary>
+          <details id="sec-common" class="sidebar-section tab-panel" data-section-key="common" open>
+            <summary><span>常用</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
-              <div class="panel-section">
+              <div class="panel-section compact-panel">
                 <div class="panel-header">
-                  <h2 class="panel-title">学生搜索</h2>
-                  <p class="muted">点座位可加奖罚，也可在此搜索</p>
+                  <h2 class="panel-title">学生</h2>
+                  <p class="muted">添加、搜索都在这里处理。</p>
                 </div>
                 <div class="form-grid student-row-1">
                   <input id="studentNameInput" class="input" type="text" placeholder="姓名" maxlength="20" />
@@ -63,10 +62,10 @@
                 <div id="searchResults" class="student-list"></div>
               </div>
 
-              <div class="panel-section">
+              <div class="panel-section compact-panel">
                 <div class="panel-header">
                   <h2 class="panel-title">抽签</h2>
-                  <p class="muted">支持去重，结果自动保存</p>
+                  <p class="muted">课堂抽问用，支持去重。</p>
                 </div>
                 <div class="draw-inline">
                   <label class="draw-count">抽签人数 <input id="drawCount" class="input" type="number" min="1" value="1" /></label>
@@ -75,13 +74,16 @@
                 <div class="draw-actions">
                   <button id="drawBtn" class="btn-primary">开始抽签</button>
                   <button id="resetDrawBtn" class="btn-secondary">重置抽签</button>
-                  <button id="clearDrawHistoryBtn" class="btn-secondary">清除记录</button>
                 </div>
+                <details class="inline-more">
+                  <summary>更多操作</summary>
+                  <button id="clearDrawHistoryBtn" class="btn-text danger-text" type="button">清除记录</button>
+                </details>
                 <div id="drawStatus" class="draw-status muted"></div>
                 <div id="drawResults" class="draw-results"></div>
               </div>
 
-              <div class="panel-section">
+              <div class="panel-section compact-panel">
                 <div class="panel-header">
                   <h2 class="panel-title">座位调整</h2>
                   <p class="muted">固定 8 列，自动扩展行数</p>
@@ -91,20 +93,57 @@
                   <button id="resetSeatsBtn" class="btn-secondary">按名单顺序</button>
                 </div>
                 <label class="checkbox"><input id="pairByGender" type="checkbox" />随机时尽量男女同桌</label>
-                <button id="shuffleByComplementBtn" class="btn-secondary full">按互补标签排座（同桌）</button>
+                <details class="constraint-advanced">
+                  <summary>高级约束（可选）</summary>
+                  <div class="constraint-box">
+                    <button id="shuffleByComplementBtn" class="btn-secondary full">按互补标签排座（同桌）</button>
+                    <label class="checkbox"><input id="keepLockedEmpty" type="checkbox" />锁定空座位保持为空</label>
+                    <div class="constraint-row">
+                      <div class="suggest-wrap">
+                        <input id="lockPairAInput" class="input" type="text" placeholder="同桌锁定：学生A" />
+                        <div id="lockPairASuggest" class="name-suggest hidden"></div>
+                      </div>
+                      <div class="suggest-wrap">
+                        <input id="lockPairBInput" class="input" type="text" placeholder="学生B" />
+                        <div id="lockPairBSuggest" class="name-suggest hidden"></div>
+                      </div>
+                      <button id="addLockPairBtn" class="btn-secondary">添加</button>
+                    </div>
+                    <div id="lockPairList" class="constraint-list"></div>
+
+                    <div class="constraint-row">
+                      <div class="suggest-wrap">
+                        <input id="pairAInput" class="input" type="text" placeholder="不做同桌：学生A" />
+                        <div id="pairASuggest" class="name-suggest hidden"></div>
+                      </div>
+                      <div class="suggest-wrap">
+                        <input id="pairBInput" class="input" type="text" placeholder="学生B" />
+                        <div id="pairBSuggest" class="name-suggest hidden"></div>
+                      </div>
+                      <button id="addNoDeskPairBtn" class="btn-secondary">添加</button>
+                    </div>
+                    <div id="noDeskPairList" class="constraint-list"></div>
+
+                    <div class="constraint-row single-right">
+                      <div class="suggest-wrap">
+                        <input id="frontStudentInput" class="input" type="text" placeholder="必须前排学生" />
+                        <div id="frontStudentSuggest" class="name-suggest hidden"></div>
+                      </div>
+                      <button id="addFrontStudentBtn" class="btn-secondary">添加</button>
+                    </div>
+
+                    <label class="constraint-front-row">前排行数 <input id="frontRowsInput" class="input" type="number" min="1" max="5" value="2" /></label>
+                    <div id="frontStudentList" class="constraint-list"></div>
+                  </div>
+                </details>
               </div>
             </div>
           </details>
 
-          <details id="sec-import" class="sidebar-section" data-section-key="import">
+          <details id="sec-import" class="sidebar-section tab-panel" data-section-key="import">
             <summary><span>导入与备份</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
-              <div class="panel-section">
-                <div class="panel-header">
-                  <h2 class="panel-title">导入与备份</h2>
-                  <p class="muted">名单、座位表与备份恢复</p>
-                </div>
-
+              <div class="panel-section compact-panel">
                 <div class="io-stack">
                   <div class="io-card">
                     <div class="io-card-head">
@@ -152,14 +191,11 @@
             </div>
           </details>
 
-          <details id="sec-scores" class="sidebar-section" data-section-key="scores">
+          <details id="sec-scores" class="sidebar-section tab-panel" data-section-key="scores">
             <summary><span>成绩导入</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
-              <div class="panel-section">
-                <div class="panel-header">
-                  <h2 class="panel-title">成绩导入</h2>
-                  <p class="muted">导入后编辑考试信息并保存</p>
-                </div>
+              <div class="panel-section compact-panel">
+                <div class="muted panel-tip">先解析成绩表，再保存或替换到已有考试。</div>
                 <div class="op-group">
                   <input id="scoreFileInput" type="file" accept=".xlsx,.xls,.csv" />
                   <button id="parseScoreBtn" class="btn-primary">解析成绩表</button>
@@ -174,11 +210,14 @@
                   <select id="existingExamSelect" class="select">
                     <option value="">选择已保存考试</option>
                   </select>
+                </div>
+                <details class="inline-more score-more">
+                  <summary>已保存考试管理</summary>
                   <div class="score-manage-actions">
                     <button id="replaceExamBtn" class="btn-secondary">替换该次成绩</button>
-                    <button id="deleteExamBtn" class="btn-secondary">删除该次成绩</button>
+                    <button id="deleteExamBtn" class="btn-danger-soft">删除该次成绩</button>
                   </div>
-                </div>
+                </details>
                 <details class="auto-tag-settings">
                   <summary>自动学科标签设置</summary>
                   <div class="auto-tag-grid">
@@ -213,14 +252,11 @@
             </div>
           </details>
 
-          <details id="sec-history" class="sidebar-section" data-section-key="history">
+          <details id="sec-history" class="sidebar-section tab-panel" data-section-key="history">
             <summary><span>历史座位</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
-              <div class="panel-section">
-                <div class="panel-header">
-                  <h2 class="panel-title">历史座位</h2>
-                  <p class="muted">手动确认后保存版本</p>
-                </div>
+              <div class="panel-section compact-panel history-panel">
+                <div class="muted panel-tip">保存后可查看历史版本并按备注搜索。</div>
                 <button id="saveHistoryBtn" class="btn-primary full">保存当前座位</button>
                 <input id="historyFilterInput" class="input" type="text" placeholder="搜索历史备注" />
                 <div id="historyList" class="history-list"></div>
@@ -228,52 +264,6 @@
             </div>
           </details>
 
-          <details id="sec-advanced" class="sidebar-section" data-section-key="advanced">
-            <summary><span>高级约束</span><span class="summary-arrow">⌄</span></summary>
-            <div class="section-body">
-              <div class="panel-section">
-                <div class="constraint-box">
-                  <label class="checkbox"><input id="keepLockedEmpty" type="checkbox" />锁定空座位保持为空</label>
-                  <div class="constraint-row">
-                    <div class="suggest-wrap">
-                      <input id="lockPairAInput" class="input" type="text" placeholder="同桌锁定：学生A" />
-                      <div id="lockPairASuggest" class="name-suggest hidden"></div>
-                    </div>
-                    <div class="suggest-wrap">
-                      <input id="lockPairBInput" class="input" type="text" placeholder="学生B" />
-                      <div id="lockPairBSuggest" class="name-suggest hidden"></div>
-                    </div>
-                    <button id="addLockPairBtn" class="btn-secondary">添加</button>
-                  </div>
-                  <div id="lockPairList" class="constraint-list"></div>
-
-                  <div class="constraint-row">
-                    <div class="suggest-wrap">
-                      <input id="pairAInput" class="input" type="text" placeholder="不做同桌：学生A" />
-                      <div id="pairASuggest" class="name-suggest hidden"></div>
-                    </div>
-                    <div class="suggest-wrap">
-                      <input id="pairBInput" class="input" type="text" placeholder="学生B" />
-                      <div id="pairBSuggest" class="name-suggest hidden"></div>
-                    </div>
-                    <button id="addNoDeskPairBtn" class="btn-secondary">添加</button>
-                  </div>
-                  <div id="noDeskPairList" class="constraint-list"></div>
-
-                  <div class="constraint-row single-right">
-                    <div class="suggest-wrap">
-                      <input id="frontStudentInput" class="input" type="text" placeholder="必须前排学生" />
-                      <div id="frontStudentSuggest" class="name-suggest hidden"></div>
-                    </div>
-                    <button id="addFrontStudentBtn" class="btn-secondary">添加</button>
-                  </div>
-
-                  <label class="constraint-front-row">前排行数 <input id="frontRowsInput" class="input" type="number" min="1" max="5" value="2" /></label>
-                  <div id="frontStudentList" class="constraint-list"></div>
-                </div>
-              </div>
-            </div>
-          </details>
         </section>
 
         <section class="panel seating">
@@ -346,7 +336,13 @@
           <div id="examList" class="exam-list"></div>
           <div class="exam-trend-header">
             <div class="exam-title">成绩趋势</div>
-            <button id="exportTrendsBtn" class="ghost">导出</button>
+            <div class="exam-trend-actions">
+              <select id="examTrendModeSelect" class="select">
+                <option value="score">按绝对分数</option>
+                <option value="rankSchool">按年级排名</option>
+              </select>
+              <button id="exportTrendsBtn" class="ghost">导出</button>
+            </div>
           </div>
           <div id="examTrends" class="exam-trends"></div>
         </div>
@@ -433,15 +429,22 @@
           </div>
           <button id="complementClose" class="ghost">关闭</button>
         </div>
+        <div class="form-row">
+          <span class="muted">选择互补规则（可多选）</span>
+          <div id="complementRuleList" class="complement-rule-list"></div>
+        </div>
         <label class="form-row">
-          <span class="muted">配对规则</span>
+          <span class="muted">必须优先满足</span>
           <select id="complementRuleSelect" class="select"></select>
         </label>
+        <label class="checkbox compact"><input id="complementPairByGender" type="checkbox" />随机时尽量男女同桌</label>
+        <label class="checkbox compact"><input id="complementRespectNoDesk" type="checkbox" checked />遵守“不做同桌”限制</label>
+        <label class="checkbox compact"><input id="complementRespectFrontRows" type="checkbox" checked />尽量满足前排限制</label>
+        <label class="checkbox compact"><input id="complementRespectLockedPairs" type="checkbox" checked />保持已锁定同桌关系</label>
         <label class="checkbox compact"><input id="complementRespectLocked" type="checkbox" checked />尊重锁定座位</label>
         <label class="checkbox compact"><input id="complementKeepLockedEmpty" type="checkbox" checked />锁定空座位保持为空</label>
-        <div id="complementStatus" class="draw-status muted">选择规则后可生成预览并应用。</div>
+        <div id="complementStatus" class="draw-status muted">选择规则后直接应用。</div>
         <div class="mapping-actions">
-          <button id="complementPreviewBtn" class="ghost">生成预览</button>
           <button id="complementApplyBtn" class="primary">应用</button>
         </div>
       </div>
