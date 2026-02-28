@@ -91,6 +91,7 @@
                   <button id="resetSeatsBtn" class="btn-secondary">按名单顺序</button>
                 </div>
                 <label class="checkbox"><input id="pairByGender" type="checkbox" />随机时尽量男女同桌</label>
+                <button id="shuffleByComplementBtn" class="btn-secondary full">按互补标签排座（同桌）</button>
               </div>
             </div>
           </details>
@@ -169,6 +170,45 @@
                   <button id="saveScoreBtn" class="btn-secondary" disabled>保存考试</button>
                 </div>
                 <div id="scoreStatus" class="draw-status muted">格式：每行1名学生，每列1科目</div>
+                <div class="score-manage">
+                  <select id="existingExamSelect" class="select">
+                    <option value="">选择已保存考试</option>
+                  </select>
+                  <div class="score-manage-actions">
+                    <button id="replaceExamBtn" class="btn-secondary">替换该次成绩</button>
+                    <button id="deleteExamBtn" class="btn-secondary">删除该次成绩</button>
+                  </div>
+                </div>
+                <details class="auto-tag-settings">
+                  <summary>自动学科标签设置</summary>
+                  <div class="auto-tag-grid">
+                    <label class="checkbox compact"><input id="autoAcademicEnabled" type="checkbox" />启用自动学科标签</label>
+                    <label class="form-row">
+                      <span class="muted">依据成绩范围</span>
+                      <select id="autoAcademicRangeMode" class="select">
+                        <option value="all">全部历史考试</option>
+                        <option value="recent">最近 N 次考试</option>
+                      </select>
+                    </label>
+                    <label id="autoAcademicRecentWrap" class="form-row">
+                      <span class="muted">最近 N 次</span>
+                      <input id="autoAcademicRecentN" class="input" type="number" min="1" max="20" value="3" />
+                    </label>
+                    <div class="auto-tag-row">
+                      <label class="form-row">
+                        <span class="muted">Top N（strong）</span>
+                        <input id="autoAcademicTopN" class="input" type="number" min="1" max="50" value="10" />
+                      </label>
+                      <label class="form-row">
+                        <span class="muted">Bottom N（weak）</span>
+                        <input id="autoAcademicBottomN" class="input" type="number" min="1" max="50" value="10" />
+                      </label>
+                    </div>
+                    <label class="checkbox compact"><input id="autoAcademicIncludeMid" type="checkbox" />同时生成 mid 标签</label>
+                    <button id="recomputeAcademicBtn" class="btn-secondary full">重新计算学科标签</button>
+                    <div id="autoAcademicStatus" class="draw-status muted">无成绩学生不会自动获得学科标签。</div>
+                  </div>
+                </details>
               </div>
             </div>
           </details>
@@ -273,6 +313,18 @@
           <button id="addPunishBtn" class="danger">+ 罚</button>
           <button id="addNoteBtn" class="ghost">+ 备注</button>
         </div>
+        <div class="tag-editor">
+          <div class="tag-editor-block">
+            <div class="tag-editor-title">性格/行为标签（手动）</div>
+            <div id="behaviorTagGroups" class="tag-groups"></div>
+          </div>
+          <div class="tag-editor-block">
+            <div class="tag-editor-title">学科标签（自动）</div>
+            <div id="academicAutoTags" class="tag-chip-list"></div>
+            <label class="checkbox compact"><input id="allowAcademicManualOverride" type="checkbox" />允许手动覆盖学科标签</label>
+            <div id="academicTagGroups" class="tag-groups hidden"></div>
+          </div>
+        </div>
         <div class="apply-section">
           <div class="apply-controls">
             <div>同步到其他学生（可选）</div>
@@ -368,6 +420,29 @@
         <div class="mapping-actions">
           <button id="exportModalCancel" class="ghost">取消</button>
           <button id="exportModalConfirm" class="primary">确认导出</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="complementModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card complement-modal-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">座位调整</div>
+            <h3>按互补标签配对排座</h3>
+          </div>
+          <button id="complementClose" class="ghost">关闭</button>
+        </div>
+        <label class="form-row">
+          <span class="muted">配对规则</span>
+          <select id="complementRuleSelect" class="select"></select>
+        </label>
+        <label class="checkbox compact"><input id="complementRespectLocked" type="checkbox" checked />尊重锁定座位</label>
+        <label class="checkbox compact"><input id="complementKeepLockedEmpty" type="checkbox" checked />锁定空座位保持为空</label>
+        <div id="complementStatus" class="draw-status muted">选择规则后可生成预览并应用。</div>
+        <div class="mapping-actions">
+          <button id="complementPreviewBtn" class="ghost">生成预览</button>
+          <button id="complementApplyBtn" class="primary">应用</button>
         </div>
       </div>
     </div>

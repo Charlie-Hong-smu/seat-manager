@@ -4,6 +4,44 @@ const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理
 const BACKUP_VERSION = 1;
 const SIDEBAR_SECTION_STATE_KEY = "sidebarSectionOpen-v1";
 const SEAT_CARD_MODE_KEY = "seatCardMode";
+const TAG_CATALOG = [
+  { id: "cn_strong", labelZh: "语文强", kind: "academic", groupId: "lvl_cn", groupNameZh: "语文水平" },
+  { id: "cn_mid", labelZh: "语文中", kind: "academic", groupId: "lvl_cn", groupNameZh: "语文水平" },
+  { id: "cn_weak", labelZh: "语文弱", kind: "academic", groupId: "lvl_cn", groupNameZh: "语文水平" },
+  { id: "math_strong", labelZh: "数学强", kind: "academic", groupId: "lvl_math", groupNameZh: "数学水平" },
+  { id: "math_mid", labelZh: "数学中", kind: "academic", groupId: "lvl_math", groupNameZh: "数学水平" },
+  { id: "math_weak", labelZh: "数学弱", kind: "academic", groupId: "lvl_math", groupNameZh: "数学水平" },
+  { id: "en_strong", labelZh: "英语强", kind: "academic", groupId: "lvl_en", groupNameZh: "英语水平" },
+  { id: "en_mid", labelZh: "英语中", kind: "academic", groupId: "lvl_en", groupNameZh: "英语水平" },
+  { id: "en_weak", labelZh: "英语弱", kind: "academic", groupId: "lvl_en", groupNameZh: "英语水平" },
+  { id: "talkative", labelZh: "爱讲话", kind: "behavior", groupId: "trait_talk", groupNameZh: "课堂表达" },
+  { id: "quiet", labelZh: "沉默", kind: "behavior", groupId: "trait_talk", groupNameZh: "课堂表达" },
+  { id: "distractible", labelZh: "容易分心", kind: "behavior", groupId: "trait_focus", groupNameZh: "专注情况" },
+  { id: "focused", labelZh: "专注", kind: "behavior", groupId: "trait_focus", groupNameZh: "专注情况" },
+  { id: "leader", labelZh: "主动", kind: "behavior", groupId: "trait_role", groupNameZh: "课堂角色" },
+  { id: "supporter", labelZh: "配合", kind: "behavior", groupId: "trait_role", groupNameZh: "课堂角色" }
+];
+const TAG_BY_ID = new Map(TAG_CATALOG.map((tag) => [tag.id, tag]));
+const TAG_GROUPS = TAG_CATALOG.reduce((map, tag) => {
+  if (!map.has(tag.groupId)) {
+    map.set(tag.groupId, { id: tag.groupId, name: tag.groupNameZh, kind: tag.kind, tags: [] });
+  }
+  map.get(tag.groupId).tags.push(tag);
+  return map;
+}, new Map());
+const BEHAVIOR_TAG_GROUPS = Array.from(TAG_GROUPS.values()).filter((group) => group.kind === "behavior");
+const ACADEMIC_TAG_GROUPS = Array.from(TAG_GROUPS.values()).filter((group) => group.kind === "academic");
+const ACADEMIC_SUBJECT_GROUP = {
+  语文: "lvl_cn",
+  数学: "lvl_math",
+  英语: "lvl_en"
+};
+const COMPLEMENT_RULES = [
+  { id: "talk_quiet", labelZh: "爱讲话 ↔ 沉默", leftTagId: "talkative", rightTagId: "quiet" },
+  { id: "cn_balance", labelZh: "语文强 ↔ 语文弱", leftTagId: "cn_strong", rightTagId: "cn_weak" },
+  { id: "math_balance", labelZh: "数学强 ↔ 数学弱", leftTagId: "math_strong", rightTagId: "math_weak" },
+  { id: "en_balance", labelZh: "英语强 ↔ 英语弱", leftTagId: "en_strong", rightTagId: "en_weak" }
+];
 
 const studentNameInput = document.getElementById("studentNameInput");
 const studentAliasInput = document.getElementById("studentAliasInput");
@@ -48,6 +86,18 @@ const scoreExamName = document.getElementById("scoreExamName");
 const scoreExamDate = document.getElementById("scoreExamDate");
 const saveScoreBtn = document.getElementById("saveScoreBtn");
 const scoreStatus = document.getElementById("scoreStatus");
+const existingExamSelect = document.getElementById("existingExamSelect");
+const replaceExamBtn = document.getElementById("replaceExamBtn");
+const deleteExamBtn = document.getElementById("deleteExamBtn");
+const autoAcademicEnabled = document.getElementById("autoAcademicEnabled");
+const autoAcademicRangeMode = document.getElementById("autoAcademicRangeMode");
+const autoAcademicRecentWrap = document.getElementById("autoAcademicRecentWrap");
+const autoAcademicRecentN = document.getElementById("autoAcademicRecentN");
+const autoAcademicTopN = document.getElementById("autoAcademicTopN");
+const autoAcademicBottomN = document.getElementById("autoAcademicBottomN");
+const autoAcademicIncludeMid = document.getElementById("autoAcademicIncludeMid");
+const recomputeAcademicBtn = document.getElementById("recomputeAcademicBtn");
+const autoAcademicStatus = document.getElementById("autoAcademicStatus");
 
 const saveHistoryBtn = document.getElementById("saveHistoryBtn");
 const historyList = document.getElementById("historyList");
@@ -69,6 +119,10 @@ const examList = document.getElementById("examList");
 const examTrends = document.getElementById("examTrends");
 const exportTrendsBtn = document.getElementById("exportTrendsBtn");
 const deleteStudentBtn = document.getElementById("deleteStudentBtn");
+const behaviorTagGroups = document.getElementById("behaviorTagGroups");
+const academicAutoTags = document.getElementById("academicAutoTags");
+const allowAcademicManualOverride = document.getElementById("allowAcademicManualOverride");
+const academicTagGroups = document.getElementById("academicTagGroups");
 const applySearchInput = document.getElementById("applySearchInput");
 const applyList = document.getElementById("applyList");
 const applyAllBtn = document.getElementById("applyAllBtn");
@@ -115,6 +169,15 @@ const frontStudentSuggest = document.getElementById("frontStudentSuggest");
 const addFrontStudentBtn = document.getElementById("addFrontStudentBtn");
 const frontRowsInput = document.getElementById("frontRowsInput");
 const frontStudentList = document.getElementById("frontStudentList");
+const shuffleByComplementBtn = document.getElementById("shuffleByComplementBtn");
+const complementModal = document.getElementById("complementModal");
+const complementClose = document.getElementById("complementClose");
+const complementRuleSelect = document.getElementById("complementRuleSelect");
+const complementRespectLocked = document.getElementById("complementRespectLocked");
+const complementKeepLockedEmpty = document.getElementById("complementKeepLockedEmpty");
+const complementStatus = document.getElementById("complementStatus");
+const complementPreviewBtn = document.getElementById("complementPreviewBtn");
+const complementApplyBtn = document.getElementById("complementApplyBtn");
 
 let state = loadState();
 let activeStudentId = null;
@@ -127,6 +190,8 @@ let mappingState = null;
 let applyTargets = new Set();
 let lastEasterAt = 0;
 let backupReminderChecked = false;
+let allowAcademicOverride = false;
+let complementPreviewOrder = null;
 const inputSuggestMap = new Map();
 
 function uid() {
@@ -171,6 +236,110 @@ function parseAliasInput(value) {
     .map((item) => item.trim())
     .filter(Boolean);
   return Array.from(new Set(parts));
+}
+
+function sanitizeTags(tags) {
+  if (!Array.isArray(tags)) {
+    return [];
+  }
+  const seenGroups = new Set();
+  const sanitized = [];
+  tags.forEach((tagId) => {
+    const id = tagId?.toString().trim();
+    const tag = TAG_BY_ID.get(id);
+    if (!tag || seenGroups.has(tag.groupId)) {
+      return;
+    }
+    seenGroups.add(tag.groupId);
+    sanitized.push(id);
+  });
+  return sanitized;
+}
+
+function getTagByGroup(tags, groupId) {
+  for (let i = tags.length - 1; i >= 0; i -= 1) {
+    const tag = TAG_BY_ID.get(tags[i]);
+    if (tag && tag.groupId === groupId) {
+      return tag.id;
+    }
+  }
+  return "";
+}
+
+function ensureStudentTagFields(student) {
+  student.manualTags = sanitizeTags(student.manualTags);
+  student.autoTags = sanitizeTags(student.autoTags);
+  return student;
+}
+
+function getEffectiveTags(student) {
+  const manual = sanitizeTags(student.manualTags);
+  const auto = sanitizeTags(student.autoTags);
+  const picked = new Map();
+  auto.forEach((id) => {
+    const tag = TAG_BY_ID.get(id);
+    if (tag) {
+      picked.set(tag.groupId, id);
+    }
+  });
+  manual.forEach((id) => {
+    const tag = TAG_BY_ID.get(id);
+    if (tag) {
+      picked.set(tag.groupId, id);
+    }
+  });
+  return Array.from(picked.values());
+}
+
+function setStudentManualGroupTag(student, groupId, tagId) {
+  ensureStudentTagFields(student);
+  student.manualTags = student.manualTags.filter((id) => {
+    const tag = TAG_BY_ID.get(id);
+    return !tag || tag.groupId !== groupId;
+  });
+  if (tagId) {
+    const tag = TAG_BY_ID.get(tagId);
+    if (tag && tag.groupId === groupId) {
+      student.manualTags.push(tagId);
+    }
+  }
+}
+
+function setStudentAutoGroupTag(student, groupId, tagId) {
+  ensureStudentTagFields(student);
+  student.autoTags = student.autoTags.filter((id) => {
+    const tag = TAG_BY_ID.get(id);
+    return !tag || tag.groupId !== groupId;
+  });
+  if (tagId) {
+    const tag = TAG_BY_ID.get(tagId);
+    if (tag && tag.groupId === groupId) {
+      student.autoTags.push(tagId);
+    }
+  }
+}
+
+function getAutoAcademicSettings() {
+  const raw = state.settings?.autoAcademic || {};
+  return {
+    enabled: raw.enabled === undefined ? true : Boolean(raw.enabled),
+    rangeMode: raw.rangeMode === "recent" ? "recent" : "all",
+    recentN: Math.min(20, Math.max(1, Number.parseInt(raw.recentN, 10) || 3)),
+    topN: Math.min(50, Math.max(1, Number.parseInt(raw.topN, 10) || 10)),
+    bottomN: Math.min(50, Math.max(1, Number.parseInt(raw.bottomN, 10) || 10)),
+    includeMid: Boolean(raw.includeMid)
+  };
+}
+
+function getTagIdByLevel(subject, level) {
+  const groupId = ACADEMIC_SUBJECT_GROUP[subject];
+  const group = groupId ? TAG_GROUPS.get(groupId) : null;
+  if (!group) {
+    return "";
+  }
+  const suffix = level === "strong" ? "强" : level === "weak" ? "弱" : "中";
+  const tag = group.tags.find((item) => item.labelZh.endsWith(suffix));
+  return tag ? tag.id : "";
 }
 
 function formatDateTimeLocal(value) {
@@ -456,6 +625,14 @@ function loadState() {
       sidebarCollapsed: false,
       pairByGender: false,
       keepLockedEmpty: true,
+      autoAcademic: {
+        enabled: true,
+        rangeMode: "all",
+        recentN: 3,
+        topN: 10,
+        bottomN: 10,
+        includeMid: false
+      },
       constraints: {
         lockedDeskmatePairs: [],
         noDeskmatePairs: [],
@@ -482,6 +659,9 @@ function normalizeState() {
     ...student,
     gender: student.gender || "",
     aliases: Array.isArray(student.aliases) ? student.aliases.filter(Boolean).map((x) => x.toString().trim()).filter(Boolean) : [],
+    records: Array.isArray(student.records) ? student.records : [],
+    manualTags: sanitizeTags(student.manualTags),
+    autoTags: sanitizeTags(student.autoTags),
     exams: Array.isArray(student.exams) ? student.exams : []
   }));
   state.seatOrder = Array.isArray(state.seatOrder) ? state.seatOrder : [];
@@ -491,11 +671,18 @@ function normalizeState() {
   state.seatHistory = Array.isArray(state.seatHistory) ? state.seatHistory : [];
   state.exams = Array.isArray(state.exams) ? state.exams : [];
   state.lastBackupAt = state.lastBackupAt || "";
-  state.settings = state.settings || { sidebarCollapsed: false, pairByGender: false, keepLockedEmpty: true, constraints: {} };
+  state.settings = state.settings || {
+    sidebarCollapsed: false,
+    pairByGender: false,
+    keepLockedEmpty: true,
+    autoAcademic: {},
+    constraints: {}
+  };
   state.settings.sidebarCollapsed = Boolean(state.settings.sidebarCollapsed);
   state.settings.pairByGender = Boolean(state.settings.pairByGender);
   state.settings.keepLockedEmpty =
     state.settings.keepLockedEmpty === undefined ? true : Boolean(state.settings.keepLockedEmpty);
+  state.settings.autoAcademic = getAutoAcademicSettings();
   state.settings.constraints = state.settings.constraints || {};
   state.settings.constraints.lockedDeskmatePairs = Array.isArray(
     state.settings.constraints.lockedDeskmatePairs
@@ -634,6 +821,8 @@ function addStudent(name, genderValue = "", aliases = []) {
     gender: genderValue || "",
     aliases: parseAliasInput(Array.isArray(aliases) ? aliases.join(" ") : aliases),
     records: [],
+    manualTags: [],
+    autoTags: [],
     exams: []
   });
   normalizeSeatOrder();
@@ -793,11 +982,29 @@ function queueSeatFlash(indices) {
   seatFlashHighlight = new Set((indices || []).filter((index) => Number.isInteger(index) && index >= 0));
 }
 
+function getSeatDisplayTags(student) {
+  const tags = sortTagsForSeatDisplay(getEffectiveTags(student))
+    .map((id) => TAG_BY_ID.get(id))
+    .filter(Boolean);
+  return tags;
+}
+
+function getUniformSeatHeight() {
+  if (document.body.classList.contains("compact-cards")) {
+    return 112;
+  }
+  const maxTagCount = state.students.reduce((max, student) => Math.max(max, getSeatDisplayTags(student).length), 0);
+  const baseHeight = 132;
+  const perTagHeight = 24;
+  return baseHeight + maxTagCount * perTagHeight;
+}
+
 function renderSeatGrid() {
   seatGroups.innerHTML = "";
   const studentById = new Map(state.students.map((student) => [student.id, student]));
   const lockedSet = new Set(state.lockedSeats);
   const rows = getRowCount();
+  document.documentElement.style.setProperty("--seat-height", `${getUniformSeatHeight()}px`);
 
   if (!rows) {
     return;
@@ -865,13 +1072,44 @@ function renderSeatGrid() {
           toggleSeatLock(index);
         });
 
+        let tagRow = null;
+        if (student) {
+          const tags = getSeatDisplayTags(student);
+          if (tags.length) {
+            tagRow = document.createElement("div");
+            tagRow.className = "seat-tag-row";
+            tags.forEach((tag) => {
+              const chip = document.createElement("span");
+              let cls = "behavior";
+              if (tag.id.endsWith("_strong")) {
+                cls = "strong";
+              } else if (tag.id.endsWith("_weak")) {
+                cls = "weak";
+              } else if (tag.id.endsWith("_mid")) {
+                cls = "mid";
+              }
+              chip.className = `seat-tag-chip ${cls}`;
+              chip.textContent = tag.labelZh;
+              tagRow.appendChild(chip);
+            });
+          }
+        }
+
         if (student && student.gender) {
           const gender = document.createElement("div");
           gender.className = "seat-meta gender";
           gender.textContent = `性别：${student.gender}`;
-          seat.append(name, meta, gender, label, lockBtn);
+          if (tagRow) {
+            seat.append(name, meta, gender, tagRow, label, lockBtn);
+          } else {
+            seat.append(name, meta, gender, label, lockBtn);
+          }
         } else {
-          seat.append(name, meta, label, lockBtn);
+          if (tagRow) {
+            seat.append(name, meta, tagRow, label, lockBtn);
+          } else {
+            seat.append(name, meta, label, lockBtn);
+          }
         }
 
         if (swapHighlight.has(index)) {
@@ -1311,6 +1549,180 @@ function shuffleSeats() {
   }
 }
 
+function computeComplementScore(studentA, studentB, rule) {
+  if (!studentA || !studentB || !rule) {
+    return 0;
+  }
+  const tagsA = new Set(getEffectiveTags(studentA));
+  const tagsB = new Set(getEffectiveTags(studentB));
+  const direct = tagsA.has(rule.leftTagId) && tagsB.has(rule.rightTagId);
+  const reverse = tagsA.has(rule.rightTagId) && tagsB.has(rule.leftTagId);
+  return direct || reverse ? 1 : 0;
+}
+
+function generateComplementPairs(studentIds, rule) {
+  const studentById = new Map(state.students.map((student) => [student.id, student]));
+  const pairCandidates = [];
+  for (let i = 0; i < studentIds.length; i += 1) {
+    for (let j = i + 1; j < studentIds.length; j += 1) {
+      const a = studentIds[i];
+      const b = studentIds[j];
+      pairCandidates.push({
+        a,
+        b,
+        score: computeComplementScore(studentById.get(a), studentById.get(b), rule)
+      });
+    }
+  }
+  pairCandidates.sort((x, y) => y.score - x.score || (Math.random() < 0.5 ? -1 : 1));
+  const used = new Set();
+  const selected = [];
+  pairCandidates.forEach((pair) => {
+    if (used.has(pair.a) || used.has(pair.b)) {
+      return;
+    }
+    used.add(pair.a);
+    used.add(pair.b);
+    selected.push(pair);
+  });
+  return {
+    pairs: selected,
+    pairMatchedCount: selected.filter((item) => item.score > 0).length
+  };
+}
+
+function buildComplementSeatOrder(rule, options = {}) {
+  const respectLocked = options.respectLocked !== false;
+  const keepLockedEmpty = options.keepLockedEmpty !== false;
+  const total = state.seatOrder.length;
+  const next = [...state.seatOrder];
+  const lockedSet = new Set(state.lockedSeats);
+  const movableIndices = [];
+  const fixedByIndex = new Map();
+
+  for (let index = 0; index < total; index += 1) {
+    const value = state.seatOrder[index] ?? null;
+    if (respectLocked && lockedSet.has(index)) {
+      if (value || keepLockedEmpty) {
+        fixedByIndex.set(index, value);
+        continue;
+      }
+    }
+    movableIndices.push(index);
+  }
+
+  const movableStudents = movableIndices.map((index) => state.seatOrder[index]).filter(Boolean);
+  const { pairs, pairMatchedCount } = generateComplementPairs(movableStudents, rule);
+  const pairDeskSlots = getDeskPairsForSeatCount(total).filter(
+    ([left, right]) => movableIndices.includes(left) && movableIndices.includes(right)
+  );
+
+  const assigned = new Set();
+  let pairIndex = 0;
+  for (let i = 0; i < pairDeskSlots.length && pairIndex < pairs.length; i += 1) {
+    const [left, right] = pairDeskSlots[i];
+    if (assigned.has(left) || assigned.has(right)) {
+      continue;
+    }
+    const pair = pairs[pairIndex];
+    pairIndex += 1;
+    const swap = Math.random() < 0.5;
+    next[left] = swap ? pair.b : pair.a;
+    next[right] = swap ? pair.a : pair.b;
+    assigned.add(left);
+    assigned.add(right);
+  }
+
+  const usedStudents = new Set();
+  assigned.forEach((seatIndex) => {
+    if (next[seatIndex]) {
+      usedStudents.add(next[seatIndex]);
+    }
+  });
+  const remainingStudents = movableStudents.filter((id) => !usedStudents.has(id));
+  const restIndices = movableIndices.filter((index) => !assigned.has(index)).sort((a, b) => a - b);
+  let pointer = 0;
+  restIndices.forEach((index) => {
+    next[index] = pointer < remainingStudents.length ? remainingStudents[pointer] : null;
+    if (pointer < remainingStudents.length) {
+      pointer += 1;
+    }
+  });
+
+  fixedByIndex.forEach((value, index) => {
+    next[index] = value;
+  });
+
+  return {
+    order: next,
+    pairCount: pairs.length,
+    matchedCount: pairMatchedCount
+  };
+}
+
+function openComplementModal() {
+  if (!complementModal) {
+    return;
+  }
+  complementRuleSelect.innerHTML = "";
+  COMPLEMENT_RULES.forEach((rule) => {
+    const option = document.createElement("option");
+    option.value = rule.id;
+    option.textContent = rule.labelZh;
+    complementRuleSelect.appendChild(option);
+  });
+  complementRespectLocked.checked = true;
+  complementKeepLockedEmpty.checked = Boolean(state.settings.keepLockedEmpty);
+  complementStatus.textContent = "选择规则后可生成预览并应用。";
+  complementPreviewOrder = null;
+  complementModal.classList.remove("hidden");
+  complementModal.setAttribute("aria-hidden", "false");
+}
+
+function closeComplementModal() {
+  if (!complementModal) {
+    return;
+  }
+  complementModal.classList.add("hidden");
+  complementModal.setAttribute("aria-hidden", "true");
+  complementPreviewOrder = null;
+}
+
+function previewComplementPlacement() {
+  const rule = COMPLEMENT_RULES.find((item) => item.id === complementRuleSelect.value);
+  if (!rule) {
+    complementStatus.textContent = "请选择互补规则。";
+    return;
+  }
+  const result = buildComplementSeatOrder(rule, {
+    respectLocked: complementRespectLocked.checked,
+    keepLockedEmpty: complementKeepLockedEmpty.checked
+  });
+  complementPreviewOrder = result.order;
+  complementStatus.textContent = `预览完成：形成 ${result.pairCount} 对同桌，其中互补匹配 ${result.matchedCount} 对。`;
+}
+
+function applyComplementPlacement() {
+  const rule = COMPLEMENT_RULES.find((item) => item.id === complementRuleSelect.value);
+  if (!rule) {
+    complementStatus.textContent = "请选择互补规则。";
+    return;
+  }
+  const before = [...state.seatOrder];
+  const result = complementPreviewOrder
+    ? { order: complementPreviewOrder }
+    : buildComplementSeatOrder(rule, {
+        respectLocked: complementRespectLocked.checked,
+        keepLockedEmpty: complementKeepLockedEmpty.checked
+      });
+  state.seatOrder = [...result.order];
+  queueSeatFlash(getChangedSeatIndices(before, state.seatOrder));
+  saveState();
+  renderSeatGrid();
+  closeComplementModal();
+  showToast("互补标签排座已应用", "success");
+}
+
 function resetSeats() {
   let keepLocks = true;
   if (state.lockedSeats.length) {
@@ -1707,8 +2119,35 @@ function exportStudentDataSelection() {
           lines.push("  (无科目成绩)");
         } else {
           subjects.forEach((subject) => {
-            lines.push(`  ${subject}：${exam.scores?.[subject] ?? "-"}`);
+            const data = exam.scores?.[subject];
+            const parts = [];
+            const score = parseScoreValue(data);
+            if (Number.isFinite(score)) {
+              parts.push(`分数 ${score}`);
+            }
+            if (data && typeof data === "object") {
+              if (Number.isInteger(data.rankClass)) {
+                parts.push(`班排 ${data.rankClass}`);
+              }
+              if (Number.isInteger(data.rankSchool)) {
+                parts.push(`校排 ${data.rankSchool}`);
+              }
+            }
+            lines.push(`  ${subject}：${parts.length ? parts.join(" / ") : "-"}`);
           });
+        }
+        if (exam.total && (Number.isFinite(exam.total.score) || Number.isInteger(exam.total.rankClass) || Number.isInteger(exam.total.rankSchool))) {
+          const totalParts = [];
+          if (Number.isFinite(exam.total.score)) {
+            totalParts.push(`总分 ${exam.total.score}`);
+          }
+          if (Number.isInteger(exam.total.rankClass)) {
+            totalParts.push(`总班排 ${exam.total.rankClass}`);
+          }
+          if (Number.isInteger(exam.total.rankSchool)) {
+            totalParts.push(`总校排 ${exam.total.rankSchool}`);
+          }
+          lines.push(`  ${totalParts.join(" / ")}`);
         }
       });
     }
@@ -1947,7 +2386,7 @@ function applyImportData(data, replaceExisting) {
         return;
       }
       const gender = genders[index] || "";
-      const student = { id: uid(), name, gender, aliases: [], records: [], exams: [] };
+      const student = { id: uid(), name, gender, aliases: [], records: [], manualTags: [], autoTags: [], exams: [] };
       students.push(student);
       if (index < seatOrder.length) {
         seatOrder[index] = student.id;
@@ -1959,7 +2398,7 @@ function applyImportData(data, replaceExisting) {
         return;
       }
       const gender = genderList[index] || "";
-      const student = { id: uid(), name, gender, aliases: [], records: [], exams: [] };
+      const student = { id: uid(), name, gender, aliases: [], records: [], manualTags: [], autoTags: [], exams: [] };
       students.push(student);
       const emptyIndex = seatOrder.indexOf(null);
       if (emptyIndex !== -1) {
@@ -1989,7 +2428,7 @@ function applyImportData(data, replaceExisting) {
         return;
       }
       const gender = genderList[index] || "";
-      const student = { id: uid(), name, gender, aliases: [], records: [], exams: [] };
+      const student = { id: uid(), name, gender, aliases: [], records: [], manualTags: [], autoTags: [], exams: [] };
       state.students.push(student);
       placeStudentInFirstEmpty(student.id);
       added += 1;
@@ -2203,6 +2642,74 @@ function importBackupJson(file) {
     });
 }
 
+function normalizeScoreHeaderValue(text) {
+  return text
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\u3000/g, "")
+    .replace(/\s+/g, "")
+    .replace(/[()（）]/g, "");
+}
+
+function detectSubjectFromHeader(header) {
+  const normalized = normalizeScoreHeaderValue(header);
+  const mapping = [
+    { subject: "语文", pattern: /语文|chinese|^cn$/ },
+    { subject: "数学", pattern: /数学|math|mathematics/ },
+    { subject: "英语", pattern: /英语|英文|english|^en$/ },
+    { subject: "物理", pattern: /物理|physics/ },
+    { subject: "化学", pattern: /化学|chemistry/ },
+    { subject: "地理", pattern: /地理|geography/ },
+    { subject: "历史", pattern: /历史|history/ },
+    { subject: "政治", pattern: /政治|思政|道法|politics/ },
+    { subject: "生物", pattern: /生物|biology/ }
+  ];
+  const hit = mapping.find((item) => item.pattern.test(normalized));
+  return hit ? hit.subject : "";
+}
+
+function isScoreHeader(header) {
+  const normalized = normalizeScoreHeaderValue(header);
+  if (!normalized) {
+    return false;
+  }
+  const hasSubject = Boolean(detectSubjectFromHeader(normalized));
+  const isTotal = /总分|总成绩|totalscore|overall/.test(normalized);
+  if (!hasSubject && !isTotal) {
+    return false;
+  }
+  return !/班排|班级排名|班级名次|校排|校排名|校级排名|schoolrank|classrank|名次|位次/.test(normalized);
+}
+
+function isClassRankHeader(header) {
+  return /班名|班排|班级排名|班级名次|classrank/.test(normalizeScoreHeaderValue(header));
+}
+
+function isSchoolRankHeader(header) {
+  return /校名|校排|校级|校排名|校级排名|schoolrank/.test(normalizeScoreHeaderValue(header));
+}
+
+function parseScoreNumber(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const parsed = Number.parseFloat(value.toString().replace(/,/g, "").trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseRankNumber(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const match = value.toString().replace(/,/g, "").match(/-?\d+/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number.parseInt(match[0], 10);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 function detectScoreMapping(rows) {
   if (!rows.length) {
     return {
@@ -2210,88 +2717,103 @@ function detectScoreMapping(rows) {
       reason: "empty",
       headers: [],
       nameCol: -1,
-      subjectCols: [],
+      subjectMappings: [],
+      totalMapping: { scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 },
       conflicts: ["文件为空，无法识别列"],
       candidatesBySubject: {}
     };
   }
 
   const rawHeaders = rows[0].map((cell) => cell.toString().trim());
-  const headers = rawHeaders.map((cell) => normalizeHeader(cell));
+  const headers = rawHeaders.map((cell) => normalizeScoreHeaderValue(cell));
   const nameCol = rawHeaders.findIndex((cell, index) => {
     const normalized = headers[index];
     return /姓名|名字|学生/.test(normalized);
   });
-
-  const excludePattern =
-    /总分|总成绩|排名|名次|位次|学号|班级|考号|准考证|考场|座位|组别|年级|性别|备注|缺考|缺席/;
-
-  const subjectPatterns = [
-    { key: "语文", patterns: [/语文/, /^语$/] },
-    { key: "数学", patterns: [/数学/, /^数$/] },
-    { key: "英语", patterns: [/英语/, /^英$/] },
-    { key: "物理", patterns: [/物理/, /^物$/] },
-    { key: "化学", patterns: [/化学/, /^化$/] },
-    { key: "地理", patterns: [/地理/, /^地$/] },
-    { key: "历史", patterns: [/历史/, /^历$/] },
-    { key: "政治", patterns: [/政治|思政|道法/, /^政$/] },
-    { key: "生物", patterns: [/生物/, /^生$/] }
-  ];
-
-  const subjectCols = [];
   const conflicts = [];
   const candidatesBySubject = {};
-  subjectPatterns.forEach((item) => {
-    candidatesBySubject[item.key] = [];
+  SUBJECT_ORDER.forEach((item) => {
+    candidatesBySubject[item] = [];
   });
+  const subjectMappingsMap = new Map(
+    SUBJECT_ORDER.map((subject) => [subject, { subject, scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }])
+  );
+  const totalMapping = { scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 };
+  let currentScope = "";
 
-  headers.forEach((header, index) => {
+  rawHeaders.forEach((header, index) => {
     if (!header || index === nameCol) {
       return;
     }
-    if (excludePattern.test(header)) {
+    if (/学号|考号|准考证|考场|座位|组别|年级|性别|备注|缺考|缺席/.test(headers[index])) {
       return;
     }
-    subjectPatterns.forEach((subject) => {
-      let score = 0;
-      subject.patterns.forEach((pattern) => {
-        if (pattern.test(header)) {
-          score += header === subject.key ? 100 : 40;
-          if (header.startsWith(subject.key)) {
-            score += 10;
-          }
-        }
-      });
-      if (score > 0) {
-        candidatesBySubject[subject.key].push({ index, score, header: rawHeaders[index] || `第${index + 1}列` });
-      }
-    });
-  });
+    const subject = detectSubjectFromHeader(header);
+    const isTotal = /总分|总成绩|totalscore|overall/.test(headers[index]);
 
-  Object.entries(candidatesBySubject).forEach(([subject, candidates]) => {
-    candidates.sort((a, b) => b.score - a.score);
-    if (candidates.length > 1) {
-      conflicts.push(`${subject}列重复：${candidates.map((item) => item.header).join("、")}`);
+    if ((subject || isTotal) && isScoreHeader(header)) {
+      if (subject) {
+        const item = subjectMappingsMap.get(subject);
+        if (item.scoreCol !== -1) {
+          conflicts.push(`${subject}分数列重复：${rawHeaders[item.scoreCol]}、${header}`);
+        }
+        item.scoreCol = index;
+        candidatesBySubject[subject].push({ index, score: 100, header: rawHeaders[index] || `第${index + 1}列` });
+        currentScope = subject;
+      } else {
+        if (totalMapping.scoreCol !== -1) {
+          conflicts.push(`总分列重复：${rawHeaders[totalMapping.scoreCol]}、${header}`);
+        }
+        totalMapping.scoreCol = index;
+        currentScope = "__total__";
+      }
+      return;
     }
-    if (candidates.length) {
-      subjectCols.push({ subject, index: candidates[0].index });
+
+    if (isClassRankHeader(header)) {
+      if (currentScope === "__total__") {
+        if (totalMapping.rankClassCol === -1) {
+          totalMapping.rankClassCol = index;
+        }
+      } else if (currentScope && subjectMappingsMap.has(currentScope)) {
+        const item = subjectMappingsMap.get(currentScope);
+        if (item.rankClassCol === -1) {
+          item.rankClassCol = index;
+        }
+      }
+      return;
+    }
+
+    if (isSchoolRankHeader(header)) {
+      if (currentScope === "__total__") {
+        if (totalMapping.rankSchoolCol === -1) {
+          totalMapping.rankSchoolCol = index;
+        }
+      } else if (currentScope && subjectMappingsMap.has(currentScope)) {
+        const item = subjectMappingsMap.get(currentScope);
+        if (item.rankSchoolCol === -1) {
+          item.rankSchoolCol = index;
+        }
+      }
     }
   });
+  const subjectMappings = Array.from(subjectMappingsMap.values()).filter((item) => item.scoreCol !== -1);
 
   if (nameCol === -1) {
     conflicts.push("未识别到姓名列");
   }
-  if (subjectCols.length === 0) {
+  if (subjectMappings.length === 0) {
     conflicts.push("未识别到可用科目列");
   }
 
-  const reliable = nameCol !== -1 && subjectCols.length > 0 && conflicts.length === 0;
+  const reliable = nameCol !== -1 && subjectMappings.length > 0 && conflicts.length === 0;
   return {
     reliable,
     reason: reliable ? "ok" : "unreliable",
     headers: rawHeaders,
     nameCol,
-    subjectCols,
+    subjectMappings,
+    totalMapping,
     conflicts,
     candidatesBySubject
   };
@@ -2299,9 +2821,10 @@ function detectScoreMapping(rows) {
 
 function parseScoreRowsWithMapping(rows, mapping) {
   const entries = [];
-  const subjectCols = mapping.subjectCols || [];
-  const subjects = subjectCols.map((item) => item.subject);
+  const subjectMappings = mapping.subjectMappings || [];
+  const subjects = subjectMappings.map((item) => item.subject);
   const nameCol = mapping.nameCol;
+  const totalMapping = mapping.totalMapping || { scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 };
   const startIndex = rows.length ? 1 : 0;
 
   for (let i = startIndex; i < rows.length; i += 1) {
@@ -2313,17 +2836,188 @@ function parseScoreRowsWithMapping(rows, mapping) {
     }
 
     const scores = {};
-    subjectCols.forEach(({ index, subject }) => {
-      const value = row[index];
-      if (value !== undefined && value !== null && value !== "") {
-        scores[subject] = value.toString().trim();
-      }
+    subjectMappings.forEach(({ subject, scoreCol, rankClassCol, rankSchoolCol }) => {
+      scores[subject] = {
+        score: scoreCol >= 0 ? parseScoreNumber(row[scoreCol]) : null,
+        rankClass: rankClassCol >= 0 ? parseRankNumber(row[rankClassCol]) : null,
+        rankSchool: rankSchoolCol >= 0 ? parseRankNumber(row[rankSchoolCol]) : null
+      };
     });
 
-    entries.push({ name, scores });
+    const total = {
+      score: totalMapping.scoreCol >= 0 ? parseScoreNumber(row[totalMapping.scoreCol]) : null,
+      rankClass: totalMapping.rankClassCol >= 0 ? parseRankNumber(row[totalMapping.rankClassCol]) : null,
+      rankSchool: totalMapping.rankSchoolCol >= 0 ? parseRankNumber(row[totalMapping.rankSchoolCol]) : null
+    };
+
+    entries.push({ name, scores, total });
   }
 
   return { subjects, entries };
+}
+
+function getStudentExamsForAutoTag(student, settings) {
+  const exams = Array.isArray(student.exams) ? [...student.exams] : [];
+  exams.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (settings.rangeMode === "recent") {
+    return exams.slice(0, settings.recentN);
+  }
+  return exams;
+}
+
+function computeSubjectAverages(settings) {
+  const averagesBySubject = {};
+  Object.keys(ACADEMIC_SUBJECT_GROUP).forEach((subject) => {
+    averagesBySubject[subject] = [];
+  });
+
+  state.students.forEach((student) => {
+    const exams = getStudentExamsForAutoTag(student, settings);
+    const scoreBucket = {};
+    Object.keys(ACADEMIC_SUBJECT_GROUP).forEach((subject) => {
+      scoreBucket[subject] = [];
+    });
+    exams.forEach((exam) => {
+      Object.keys(ACADEMIC_SUBJECT_GROUP).forEach((subject) => {
+        const val = parseScoreValue(exam.scores?.[subject]);
+        if (Number.isFinite(val)) {
+          scoreBucket[subject].push(val);
+        }
+      });
+    });
+
+    Object.keys(scoreBucket).forEach((subject) => {
+      const list = scoreBucket[subject];
+      if (!list.length) {
+        return;
+      }
+      const avg = list.reduce((sum, item) => sum + item, 0) / list.length;
+      averagesBySubject[subject].push({ studentId: student.id, avg });
+    });
+  });
+  return averagesBySubject;
+}
+
+function recomputeAcademicAutoTags(showToastMessage = false) {
+  const settings = getAutoAcademicSettings();
+  state.settings.autoAcademic = settings;
+
+  state.students.forEach((student) => {
+    ensureStudentTagFields(student);
+    ACADEMIC_TAG_GROUPS.forEach((group) => {
+      setStudentAutoGroupTag(student, group.id, "");
+    });
+  });
+
+  const bySubject = computeSubjectAverages(settings);
+  Object.entries(bySubject).forEach(([subject, list]) => {
+    if (!list.length) {
+      return;
+    }
+    list.sort((a, b) => b.avg - a.avg);
+    const strongCount = Math.min(settings.topN, list.length);
+    const strongIds = new Set(list.slice(0, strongCount).map((item) => item.studentId));
+    const weakIds = new Set();
+    for (let i = list.length - 1; i >= 0 && weakIds.size < settings.bottomN; i -= 1) {
+      const candidate = list[i].studentId;
+      if (!strongIds.has(candidate)) {
+        weakIds.add(candidate);
+      }
+    }
+
+    list.forEach((item) => {
+      const student = state.students.find((entry) => entry.id === item.studentId);
+      if (!student) {
+        return;
+      }
+      if (strongIds.has(item.studentId)) {
+        setStudentAutoGroupTag(student, ACADEMIC_SUBJECT_GROUP[subject], getTagIdByLevel(subject, "strong"));
+        return;
+      }
+      if (weakIds.has(item.studentId)) {
+        setStudentAutoGroupTag(student, ACADEMIC_SUBJECT_GROUP[subject], getTagIdByLevel(subject, "weak"));
+        return;
+      }
+      if (settings.includeMid) {
+        setStudentAutoGroupTag(student, ACADEMIC_SUBJECT_GROUP[subject], getTagIdByLevel(subject, "mid"));
+      }
+    });
+  });
+
+  saveState();
+  renderSeatGrid();
+  renderSearchResults();
+  if (activeStudentId) {
+    const student = state.students.find((item) => item.id === activeStudentId);
+    if (student) {
+      renderTagEditor(student);
+    }
+  }
+  if (autoAcademicStatus) {
+    autoAcademicStatus.textContent = "学科自动标签已更新。";
+  }
+  if (showToastMessage) {
+    showToast("学科标签已重新计算", "success");
+  }
+}
+
+function renderAutoAcademicSettings() {
+  if (!autoAcademicEnabled) {
+    return;
+  }
+  const settings = getAutoAcademicSettings();
+  autoAcademicEnabled.checked = settings.enabled;
+  autoAcademicRangeMode.value = settings.rangeMode;
+  autoAcademicRecentN.value = String(settings.recentN);
+  autoAcademicTopN.value = String(settings.topN);
+  autoAcademicBottomN.value = String(settings.bottomN);
+  autoAcademicIncludeMid.checked = settings.includeMid;
+  autoAcademicRecentWrap.classList.toggle("hidden", settings.rangeMode !== "recent");
+}
+
+function renderExamManager() {
+  if (!existingExamSelect) {
+    return;
+  }
+  const currentValue = existingExamSelect.value;
+  existingExamSelect.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "选择已保存考试";
+  existingExamSelect.appendChild(placeholder);
+
+  const exams = Array.isArray(state.exams) ? [...state.exams] : [];
+  exams
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+    .forEach((exam) => {
+      const option = document.createElement("option");
+      option.value = exam.id;
+      option.textContent = `${exam.date || ""} ${exam.name || "考试"}`.trim();
+      existingExamSelect.appendChild(option);
+    });
+
+  if (currentValue && exams.some((exam) => exam.id === currentValue)) {
+    existingExamSelect.value = currentValue;
+  }
+}
+
+function removeExamGlobally(examId) {
+  if (!examId) {
+    return false;
+  }
+  let removed = false;
+  state.students.forEach((student) => {
+    if (!Array.isArray(student.exams)) {
+      return;
+    }
+    const before = student.exams.length;
+    student.exams = student.exams.filter((exam) => exam.id !== examId);
+    if (student.exams.length !== before) {
+      removed = true;
+    }
+  });
+  state.exams = (state.exams || []).filter((exam) => exam.id !== examId);
+  return removed;
 }
 
 function openMappingModal(headers, suggestion) {
@@ -2343,7 +3037,7 @@ function openMappingModal(headers, suggestion) {
     }
   }
   const nameRow = document.createElement("div");
-  nameRow.className = "mapping-row";
+  nameRow.className = "mapping-row mapping-row-name";
   const nameLabel = document.createElement("div");
   nameLabel.textContent = "姓名列";
   const nameSelect = document.createElement("select");
@@ -2366,34 +3060,74 @@ function openMappingModal(headers, suggestion) {
 
   SUBJECT_ORDER.forEach((subject) => {
     const row = document.createElement("div");
-    row.className = "mapping-row";
+    row.className = "mapping-row mapping-row-subject";
     const label = document.createElement("div");
     label.textContent = subject;
-    const select = document.createElement("select");
-    select.dataset.subject = subject;
+    const scoreSelect = document.createElement("select");
+    scoreSelect.dataset.subject = subject;
+    scoreSelect.dataset.field = "score";
+    const classSelect = document.createElement("select");
+    classSelect.dataset.subject = subject;
+    classSelect.dataset.field = "rankClass";
+    const schoolSelect = document.createElement("select");
+    schoolSelect.dataset.subject = subject;
+    schoolSelect.dataset.field = "rankSchool";
+
+    const makeOptions = (select, emptyLabel, selectedIndex) => {
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = emptyLabel;
+      select.appendChild(none);
+      headers.forEach((header, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = header || `第${index + 1}列`;
+        if (selectedIndex === index) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
+    };
+
+    const item = suggestion?.subjectMappings?.find((entry) => entry.subject === subject);
+    makeOptions(scoreSelect, "分数列", item?.scoreCol);
+    makeOptions(classSelect, "班排列（可选）", item?.rankClassCol);
+    makeOptions(schoolSelect, "校排列（可选）", item?.rankSchoolCol);
+
+    row.append(label, scoreSelect, classSelect, schoolSelect);
+    mappingList.appendChild(row);
+  });
+
+  const totalRow = document.createElement("div");
+  totalRow.className = "mapping-row mapping-row-subject";
+  const totalLabel = document.createElement("div");
+  totalLabel.textContent = "总分";
+  const totalScoreSelect = document.createElement("select");
+  totalScoreSelect.dataset.role = "total-score";
+  const totalClassSelect = document.createElement("select");
+  totalClassSelect.dataset.role = "total-class";
+  const totalSchoolSelect = document.createElement("select");
+  totalSchoolSelect.dataset.role = "total-school";
+  const buildSelect = (select, emptyLabel, selectedIndex) => {
     const none = document.createElement("option");
     none.value = "";
-    none.textContent = "无";
+    none.textContent = emptyLabel;
     select.appendChild(none);
     headers.forEach((header, index) => {
       const option = document.createElement("option");
       option.value = index;
       option.textContent = header || `第${index + 1}列`;
-      if (
-        suggestion &&
-        suggestion.subjectCols?.some((item) => item.subject === subject && item.index === index)
-      ) {
+      if (selectedIndex === index) {
         option.selected = true;
-      }
-      const candidate = suggestion?.candidatesBySubject?.[subject]?.find((item) => item.index === index);
-      if (candidate) {
-        option.textContent = `${option.textContent}（推荐）`;
       }
       select.appendChild(option);
     });
-    row.append(label, select);
-    mappingList.appendChild(row);
-  });
+  };
+  buildSelect(totalScoreSelect, "总分列（可选）", suggestion?.totalMapping?.scoreCol);
+  buildSelect(totalClassSelect, "总班排（可选）", suggestion?.totalMapping?.rankClassCol);
+  buildSelect(totalSchoolSelect, "总校排（可选）", suggestion?.totalMapping?.rankSchoolCol);
+  totalRow.append(totalLabel, totalScoreSelect, totalClassSelect, totalSchoolSelect);
+  mappingList.appendChild(totalRow);
 
   mappingModal.classList.remove("hidden");
   mappingModal.setAttribute("aria-hidden", "false");
@@ -2410,9 +3144,17 @@ function applyExamDraft() {
     return;
   }
 
-  const examName = scoreExamName.value.trim() || "考试";
-  const examDate = scoreExamDate.value || new Date().toISOString().slice(0, 10);
-  const examId = uid();
+  const replacingExam =
+    scoreImportContext.mode === "replace" && scoreImportContext.examId
+      ? (state.exams || []).find((exam) => exam.id === scoreImportContext.examId)
+      : null;
+  const examName = scoreExamName.value.trim() || replacingExam?.name || "考试";
+  const examDate = scoreExamDate.value || replacingExam?.date || new Date().toISOString().slice(0, 10);
+  const examId = replacingExam?.id || uid();
+
+  if (replacingExam) {
+    removeExamGlobally(replacingExam.id);
+  }
 
   const nameMap = new Map();
   state.students.forEach((student) => {
@@ -2443,7 +3185,8 @@ function applyExamDraft() {
       name: examName,
       date: examDate,
       subjects: examDraft.subjects,
-      scores: entry.scores
+      scores: entry.scores,
+      total: entry.total || { score: null, rankClass: null, rankSchool: null }
     });
     matched += 1;
   });
@@ -2455,23 +3198,33 @@ function applyExamDraft() {
     subjects: examDraft.subjects
   });
 
-  saveState();
-  renderSearchResults();
-  renderSeatGrid();
+  const autoSettings = getAutoAcademicSettings();
+  if (autoSettings.enabled) {
+    recomputeAcademicAutoTags(false);
+  } else {
+    saveState();
+    renderSearchResults();
+    renderSeatGrid();
+  }
 
   if (activeStudentId) {
     const student = state.students.find((item) => item.id === activeStudentId);
     if (student) {
       renderExamList(student);
+      renderTagEditor(student);
     }
   }
 
   scoreStatus.textContent =
     unmatched.length > 0
       ? `已匹配 ${matched} 人，未匹配 ${unmatched.length} 人（可能由重名、别名未设置或姓名格式差异导致）。`
-      : `已匹配 ${matched} 人，成绩已保存。`;
+      : replacingExam
+        ? `已匹配 ${matched} 人，考试成绩已替换。`
+        : `已匹配 ${matched} 人，成绩已保存。`;
   saveScoreBtn.disabled = true;
   examDraft = null;
+  scoreImportContext = { mode: "new", examId: null };
+  renderExamManager();
 }
 
 function parseScoreFile(file) {
@@ -2549,6 +3302,7 @@ function openRecordModal(studentId) {
   applyTargets = new Set();
   applySearchInput.value = "";
   activeWeekKey = getWeekKey(new Date());
+  allowAcademicOverride = false;
   renderWeekSelect(student);
   recordStudentName.textContent = `${student.name} · ${getWeekLabel(activeWeekKey)}`;
   recordNoteInput.value = "";
@@ -2556,6 +3310,7 @@ function openRecordModal(studentId) {
   recordModal.setAttribute("aria-hidden", "false");
   renderRecordList();
   renderExamList(student);
+  renderTagEditor(student);
   renderApplyList();
 }
 
@@ -2564,6 +3319,7 @@ function closeRecordModal() {
   recordModal.setAttribute("aria-hidden", "true");
   activeStudentId = null;
   applyTargets = new Set();
+  allowAcademicOverride = false;
 }
 
 function addRecord(type) {
@@ -2633,6 +3389,26 @@ function removeRecord(recordId) {
   renderRecordList();
   renderSearchResults();
   renderSeatGrid();
+}
+
+function afterGlobalExamChange() {
+  const autoSettings = getAutoAcademicSettings();
+  if (autoSettings.enabled) {
+    recomputeAcademicAutoTags(false);
+  } else {
+    saveState();
+    renderSearchResults();
+    renderSeatGrid();
+  }
+
+  if (activeStudentId) {
+    const activeStudent = state.students.find((item) => item.id === activeStudentId);
+    if (activeStudent) {
+      renderExamList(activeStudent);
+      renderTagEditor(activeStudent);
+    }
+  }
+  renderExamManager();
 }
 
 function renderRecordList() {
@@ -2780,6 +3556,120 @@ function renderApplyList() {
   });
 }
 
+function sortTagsForSeatDisplay(tagIds) {
+  const priority = (tagId) => {
+    if (/_strong$/.test(tagId) || /_weak$/.test(tagId)) {
+      return 0;
+    }
+    const tag = TAG_BY_ID.get(tagId);
+    if (tag?.kind === "behavior") {
+      return 1;
+    }
+    if (/_mid$/.test(tagId)) {
+      return 2;
+    }
+    return 3;
+  };
+  return [...tagIds].sort((a, b) => priority(a) - priority(b));
+}
+
+function renderTagEditor(student) {
+  if (!behaviorTagGroups || !academicAutoTags || !academicTagGroups || !allowAcademicManualOverride) {
+    return;
+  }
+  ensureStudentTagFields(student);
+  const manual = sanitizeTags(student.manualTags);
+  const auto = sanitizeTags(student.autoTags);
+
+  behaviorTagGroups.innerHTML = "";
+  BEHAVIOR_TAG_GROUPS.forEach((group) => {
+    const row = document.createElement("div");
+    row.className = "tag-group-row";
+    const title = document.createElement("div");
+    title.className = "tag-group-title";
+    title.textContent = group.name;
+    const chips = document.createElement("div");
+    chips.className = "tag-chip-list";
+    const selectedId = getTagByGroup(manual, group.id);
+    group.tags.forEach((tag) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = `tag-chip behavior ${selectedId === tag.id ? "active" : ""}`;
+      chip.textContent = tag.labelZh;
+      chip.addEventListener("click", () => {
+        const currentStudent = state.students.find((item) => item.id === student.id);
+        if (!currentStudent) {
+          return;
+        }
+        const nextTagId = selectedId === tag.id ? "" : tag.id;
+        setStudentManualGroupTag(currentStudent, group.id, nextTagId);
+        saveState();
+        renderTagEditor(currentStudent);
+        renderSeatGrid();
+      });
+      chips.appendChild(chip);
+    });
+    row.append(title, chips);
+    behaviorTagGroups.appendChild(row);
+  });
+
+  academicAutoTags.innerHTML = "";
+  const effectiveAuto = sortTagsForSeatDisplay(auto)
+    .map((id) => TAG_BY_ID.get(id))
+    .filter(Boolean);
+  if (!effectiveAuto.length) {
+    const empty = document.createElement("div");
+    empty.className = "draw-status";
+    empty.textContent = "暂无自动学科标签。";
+    academicAutoTags.appendChild(empty);
+  } else {
+    effectiveAuto.forEach((tag) => {
+      const chip = document.createElement("span");
+      chip.className = `tag-chip ${tag.id.endsWith("_strong") ? "strong" : tag.id.endsWith("_weak") ? "weak" : "mid"}`;
+      chip.textContent = tag.labelZh;
+      academicAutoTags.appendChild(chip);
+    });
+  }
+
+  allowAcademicManualOverride.checked = allowAcademicOverride;
+  academicTagGroups.classList.toggle("hidden", !allowAcademicOverride);
+  academicTagGroups.innerHTML = "";
+  if (!allowAcademicOverride) {
+    return;
+  }
+
+  ACADEMIC_TAG_GROUPS.forEach((group) => {
+    const row = document.createElement("div");
+    row.className = "tag-group-row";
+    const title = document.createElement("div");
+    title.className = "tag-group-title";
+    title.textContent = group.name;
+    const chips = document.createElement("div");
+    chips.className = "tag-chip-list";
+    const selectedId = getTagByGroup(manual, group.id);
+    group.tags.forEach((tag) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = `tag-chip academic ${selectedId === tag.id ? "active" : ""}`;
+      chip.textContent = tag.labelZh;
+      chip.addEventListener("click", () => {
+        const currentStudent = state.students.find((item) => item.id === student.id);
+        if (!currentStudent) {
+          return;
+        }
+        const nextTagId = selectedId === tag.id ? "" : tag.id;
+        setStudentManualGroupTag(currentStudent, group.id, nextTagId);
+        saveState();
+        renderTagEditor(currentStudent);
+        renderSeatGrid();
+      });
+      chips.appendChild(chip);
+    });
+    row.append(title, chips);
+    academicTagGroups.appendChild(row);
+  });
+}
+
 function renderExamList(student) {
   examList.innerHTML = "";
   const exams = Array.isArray(student.exams) ? student.exams : [];
@@ -2806,7 +3696,6 @@ function renderExamList(student) {
 
     const date = document.createElement("div");
     date.textContent = exam.date || "";
-
     header.append(name, date);
 
     const scores = document.createElement("div");
@@ -2818,16 +3707,52 @@ function renderExamList(student) {
       const label = document.createElement("span");
       label.textContent = subject;
       const value = document.createElement("span");
-      value.textContent = exam.scores?.[subject] ?? "-";
+      const subjectData = exam.scores?.[subject];
+      const bits = [];
+      const score = parseScoreValue(subjectData);
+      if (Number.isFinite(score)) {
+        bits.push(`${score}`);
+      }
+      if (subjectData && typeof subjectData === "object") {
+        if (Number.isInteger(subjectData.rankClass)) {
+          bits.push(`班${subjectData.rankClass}`);
+        }
+        if (Number.isInteger(subjectData.rankSchool)) {
+          bits.push(`校${subjectData.rankSchool}`);
+        }
+      }
+      value.textContent = bits.length ? bits.join(" / ") : "-";
       item.append(label, value);
       scores.appendChild(item);
     });
 
-    card.append(header, scores);
+    if (
+      exam.total &&
+      (Number.isFinite(exam.total.score) ||
+        Number.isInteger(exam.total.rankClass) ||
+        Number.isInteger(exam.total.rankSchool))
+    ) {
+      const totalMeta = document.createElement("div");
+      totalMeta.className = "draw-status";
+      const parts = [];
+      if (Number.isFinite(exam.total.score)) {
+        parts.push(`总分 ${exam.total.score}`);
+      }
+      if (Number.isInteger(exam.total.rankClass)) {
+        parts.push(`总班排 ${exam.total.rankClass}`);
+      }
+      if (Number.isInteger(exam.total.rankSchool)) {
+        parts.push(`总校排 ${exam.total.rankSchool}`);
+      }
+      totalMeta.textContent = parts.join(" · ");
+      card.append(header, scores, totalMeta);
+    } else {
+      card.append(header, scores);
+    }
     examList.appendChild(card);
   });
 
-  const hasCharts = renderExamTrends(sorted);
+  renderExamTrends(sorted);
   exportTrendsBtn.disabled = false;
 }
 
@@ -2911,6 +3836,9 @@ function sumExamScores(scores = {}) {
 function parseScoreValue(value) {
   if (value === null || value === undefined || value === "") {
     return null;
+  }
+  if (typeof value === "object") {
+    return parseScoreValue(value.score);
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -3140,6 +4068,8 @@ function renderAll() {
   if (frontRowsInput) {
     frontRowsInput.value = String(state.settings.constraints.frontRows || 2);
   }
+  renderAutoAcademicSettings();
+  renderExamManager();
   renderDrawResults();
   renderConstraintLists();
   renderBackupInfo();
@@ -3351,8 +4281,64 @@ saveScoreBtn.addEventListener("click", () => {
     scoreStatus.textContent = "请先解析成绩表。";
     return;
   }
+  scoreImportContext = { mode: "new", examId: null };
   applyExamDraft();
 });
+
+if (existingExamSelect) {
+  existingExamSelect.addEventListener("change", () => {
+    const exam = (state.exams || []).find((item) => item.id === existingExamSelect.value);
+    if (!exam) {
+      return;
+    }
+    scoreExamName.value = exam.name || "";
+    scoreExamDate.value = exam.date || "";
+  });
+}
+
+if (deleteExamBtn) {
+  deleteExamBtn.addEventListener("click", () => {
+    const examId = existingExamSelect?.value || "";
+    if (!examId) {
+      scoreStatus.textContent = "请先选择要删除的考试。";
+      return;
+    }
+    const exam = (state.exams || []).find((item) => item.id === examId);
+    const label = `${exam?.name || "考试"} ${exam?.date || ""}`.trim();
+    if (!confirm(`确定整体删除「${label}」这次考试吗？这会删除所有学生的该次成绩。`)) {
+      return;
+    }
+    if (!removeExamGlobally(examId)) {
+      scoreStatus.textContent = "未找到该次考试。";
+      renderExamManager();
+      return;
+    }
+    afterGlobalExamChange();
+    scoreStatus.textContent = "该次考试已整体删除。";
+    showToast("该次考试已整体删除", "success");
+  });
+}
+
+if (replaceExamBtn) {
+  replaceExamBtn.addEventListener("click", () => {
+    const examId = existingExamSelect?.value || "";
+    if (!examId) {
+      scoreStatus.textContent = "请先选择要替换的考试。";
+      return;
+    }
+    if (!examDraft) {
+      scoreStatus.textContent = "请先解析新的成绩表，再执行替换。";
+      return;
+    }
+    const exam = (state.exams || []).find((item) => item.id === examId);
+    const label = `${exam?.name || "考试"} ${exam?.date || ""}`.trim();
+    if (!confirm(`确定用当前已解析的成绩表替换「${label}」吗？这会覆盖全班该次考试记录。`)) {
+      return;
+    }
+    scoreImportContext = { mode: "replace", examId };
+    applyExamDraft();
+  });
+}
 
 saveHistoryBtn.addEventListener("click", () => {
   saveCurrentSeatHistory();
@@ -3394,6 +4380,55 @@ pairByGender.addEventListener("change", (event) => {
   state.settings.pairByGender = event.target.checked;
   saveState();
 });
+
+if (shuffleByComplementBtn) {
+  shuffleByComplementBtn.addEventListener("click", () => {
+    if (!state.students.length) {
+      showToast("暂无学生可排座", "error");
+      return;
+    }
+    openComplementModal();
+  });
+}
+
+function saveAutoAcademicSettingsFromInputs() {
+  if (!autoAcademicEnabled) {
+    return;
+  }
+  state.settings.autoAcademic = {
+    enabled: autoAcademicEnabled.checked,
+    rangeMode: autoAcademicRangeMode.value === "recent" ? "recent" : "all",
+    recentN: Math.min(20, Math.max(1, Number.parseInt(autoAcademicRecentN.value, 10) || 3)),
+    topN: Math.min(50, Math.max(1, Number.parseInt(autoAcademicTopN.value, 10) || 10)),
+    bottomN: Math.min(50, Math.max(1, Number.parseInt(autoAcademicBottomN.value, 10) || 10)),
+    includeMid: autoAcademicIncludeMid.checked
+  };
+  saveState();
+  renderAutoAcademicSettings();
+}
+
+if (autoAcademicEnabled) {
+  [autoAcademicEnabled, autoAcademicRangeMode, autoAcademicRecentN, autoAcademicTopN, autoAcademicBottomN, autoAcademicIncludeMid].forEach((el) => {
+    el.addEventListener("change", saveAutoAcademicSettingsFromInputs);
+  });
+}
+
+if (recomputeAcademicBtn) {
+  recomputeAcademicBtn.addEventListener("click", () => {
+    saveAutoAcademicSettingsFromInputs();
+    recomputeAcademicAutoTags(true);
+  });
+}
+
+if (allowAcademicManualOverride) {
+  allowAcademicManualOverride.addEventListener("change", (event) => {
+    allowAcademicOverride = event.target.checked;
+    const student = state.students.find((item) => item.id === activeStudentId);
+    if (student) {
+      renderTagEditor(student);
+    }
+  });
+}
 
 if (keepLockedEmpty) {
   keepLockedEmpty.addEventListener("change", (event) => {
@@ -3566,6 +4601,22 @@ if (exportModal) {
     }
   });
 }
+if (complementClose) {
+  complementClose.addEventListener("click", closeComplementModal);
+}
+if (complementPreviewBtn) {
+  complementPreviewBtn.addEventListener("click", previewComplementPlacement);
+}
+if (complementApplyBtn) {
+  complementApplyBtn.addEventListener("click", applyComplementPlacement);
+}
+if (complementModal) {
+  complementModal.addEventListener("click", (event) => {
+    if (event.target === complementModal) {
+      closeComplementModal();
+    }
+  });
+}
 
 mappingClose.addEventListener("click", closeMappingModal);
 mappingCancel.addEventListener("click", closeMappingModal);
@@ -3593,28 +4644,61 @@ mappingApply.addEventListener("click", () => {
     alert("请选择姓名列。");
     return;
   }
-  const subjectCols = [];
-  mappingList.querySelectorAll("select[data-subject]").forEach((select) => {
-    const subject = select.dataset.subject;
-    if (select.value !== "") {
-      subjectCols.push({ subject, index: Number.parseInt(select.value, 10) });
+  const subjectMappings = [];
+  SUBJECT_ORDER.forEach((subject) => {
+    const scoreSelect = mappingList.querySelector(`select[data-subject="${subject}"][data-field="score"]`);
+    const classSelect = mappingList.querySelector(`select[data-subject="${subject}"][data-field="rankClass"]`);
+    const schoolSelect = mappingList.querySelector(`select[data-subject="${subject}"][data-field="rankSchool"]`);
+    if (scoreSelect && scoreSelect.value !== "") {
+      subjectMappings.push({
+        subject,
+        scoreCol: Number.parseInt(scoreSelect.value, 10),
+        rankClassCol: classSelect && classSelect.value !== "" ? Number.parseInt(classSelect.value, 10) : -1,
+        rankSchoolCol: schoolSelect && schoolSelect.value !== "" ? Number.parseInt(schoolSelect.value, 10) : -1
+      });
     }
   });
-  if (!subjectCols.length) {
+  if (!subjectMappings.length) {
     alert("请至少选择一科成绩列。");
     return;
   }
   const usedCols = new Set();
-  for (const item of subjectCols) {
-    if (usedCols.has(item.index)) {
-      alert("同一列被映射到多个科目，请调整后再导入。");
+  const totalMapping = {
+    scoreCol: Number.parseInt(mappingList.querySelector('select[data-role="total-score"]')?.value || "-1", 10),
+    rankClassCol: Number.parseInt(mappingList.querySelector('select[data-role="total-class"]')?.value || "-1", 10),
+    rankSchoolCol: Number.parseInt(mappingList.querySelector('select[data-role="total-school"]')?.value || "-1", 10)
+  };
+  try {
+    for (const item of subjectMappings) {
+      [item.scoreCol, item.rankClassCol, item.rankSchoolCol].forEach((col) => {
+        if (col < 0) {
+          return;
+        }
+        if (usedCols.has(col)) {
+          throw new Error("duplicate-column");
+        }
+        usedCols.add(col);
+      });
+    }
+    [totalMapping.scoreCol, totalMapping.rankClassCol, totalMapping.rankSchoolCol].forEach((col) => {
+      if (col < 0) {
+        return;
+      }
+      if (usedCols.has(col)) {
+        throw new Error("duplicate-column");
+      }
+      usedCols.add(col);
+    });
+  } catch (error) {
+    if (error.message === "duplicate-column") {
+      alert("同一列被重复映射，请调整后再导入。");
       return;
     }
-    usedCols.add(item.index);
   }
   const mapping = {
     nameCol: Number.parseInt(nameValue, 10),
-    subjectCols
+    subjectMappings,
+    totalMapping
   };
   const data = parseScoreRowsWithMapping(mappingState.rows, mapping);
   examDraft = data;
@@ -3644,6 +4728,9 @@ document.addEventListener("keydown", (event) => {
     }
     if (exportModal && !exportModal.classList.contains("hidden")) {
       closeExportModal();
+    }
+    if (complementModal && !complementModal.classList.contains("hidden")) {
+      closeComplementModal();
     }
     if (!mappingModal.classList.contains("hidden")) {
       closeMappingModal();
