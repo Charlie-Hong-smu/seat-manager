@@ -1,5 +1,11 @@
 const COLS = 8;
 const STORAGE_KEY = "homeroom-seat-manager-v1";
+const AUTH_PERSIST_KEY = "seat-manager-authenticated";
+const AUTH_SESSION_KEY = "seat-manager-session-authenticated";
+const CUSTOM_PASSWORD_HASH_KEY = "seat-manager-password-hash";
+// 前端简易登录：仅用于防止普通用户误入，不是真正安全认证；以后修改账号密码就在这里。
+const LOGIN_ACCOUNT = "cheongqp";
+const LOGIN_PASSWORD = "951120";
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
 const BACKUP_VERSION = 1;
 const SIDEBAR_SECTION_STATE_KEY = "sidebarSectionOpen-v1";
@@ -15,6 +21,24 @@ const TAG_CATALOG = [
   { id: "en_strong", labelZh: "英语强", kind: "academic", groupId: "lvl_en", groupNameZh: "英语水平" },
   { id: "en_mid", labelZh: "英语中", kind: "academic", groupId: "lvl_en", groupNameZh: "英语水平" },
   { id: "en_weak", labelZh: "英语弱", kind: "academic", groupId: "lvl_en", groupNameZh: "英语水平" },
+  { id: "physics_strong", labelZh: "物理强", kind: "academic", groupId: "lvl_physics", groupNameZh: "物理水平" },
+  { id: "physics_mid", labelZh: "物理中", kind: "academic", groupId: "lvl_physics", groupNameZh: "物理水平" },
+  { id: "physics_weak", labelZh: "物理弱", kind: "academic", groupId: "lvl_physics", groupNameZh: "物理水平" },
+  { id: "chemistry_strong", labelZh: "化学强", kind: "academic", groupId: "lvl_chemistry", groupNameZh: "化学水平" },
+  { id: "chemistry_mid", labelZh: "化学中", kind: "academic", groupId: "lvl_chemistry", groupNameZh: "化学水平" },
+  { id: "chemistry_weak", labelZh: "化学弱", kind: "academic", groupId: "lvl_chemistry", groupNameZh: "化学水平" },
+  { id: "geo_strong", labelZh: "地理强", kind: "academic", groupId: "lvl_geo", groupNameZh: "地理水平" },
+  { id: "geo_mid", labelZh: "地理中", kind: "academic", groupId: "lvl_geo", groupNameZh: "地理水平" },
+  { id: "geo_weak", labelZh: "地理弱", kind: "academic", groupId: "lvl_geo", groupNameZh: "地理水平" },
+  { id: "history_strong", labelZh: "历史强", kind: "academic", groupId: "lvl_history", groupNameZh: "历史水平" },
+  { id: "history_mid", labelZh: "历史中", kind: "academic", groupId: "lvl_history", groupNameZh: "历史水平" },
+  { id: "history_weak", labelZh: "历史弱", kind: "academic", groupId: "lvl_history", groupNameZh: "历史水平" },
+  { id: "politics_strong", labelZh: "政治强", kind: "academic", groupId: "lvl_politics", groupNameZh: "政治水平" },
+  { id: "politics_mid", labelZh: "政治中", kind: "academic", groupId: "lvl_politics", groupNameZh: "政治水平" },
+  { id: "politics_weak", labelZh: "政治弱", kind: "academic", groupId: "lvl_politics", groupNameZh: "政治水平" },
+  { id: "biology_strong", labelZh: "生物强", kind: "academic", groupId: "lvl_biology", groupNameZh: "生物水平" },
+  { id: "biology_mid", labelZh: "生物中", kind: "academic", groupId: "lvl_biology", groupNameZh: "生物水平" },
+  { id: "biology_weak", labelZh: "生物弱", kind: "academic", groupId: "lvl_biology", groupNameZh: "生物水平" },
   { id: "talkative", labelZh: "爱讲话", kind: "behavior", groupId: "trait_talk", groupNameZh: "课堂表达" },
   { id: "quiet", labelZh: "沉默", kind: "behavior", groupId: "trait_talk", groupNameZh: "课堂表达" },
   { id: "distractible", labelZh: "容易分心", kind: "behavior", groupId: "trait_focus", groupNameZh: "专注情况" },
@@ -35,7 +59,13 @@ const ACADEMIC_TAG_GROUPS = Array.from(TAG_GROUPS.values()).filter((group) => gr
 const ACADEMIC_SUBJECT_GROUP = {
   语文: "lvl_cn",
   数学: "lvl_math",
-  英语: "lvl_en"
+  英语: "lvl_en",
+  物理: "lvl_physics",
+  化学: "lvl_chemistry",
+  地理: "lvl_geo",
+  历史: "lvl_history",
+  政治: "lvl_politics",
+  生物: "lvl_biology"
 };
 const COMPLEMENT_RULES = [
   { id: "talk_quiet", labelZh: "爱讲话 ↔ 沉默", leftTagId: "talkative", rightTagId: "quiet" },
@@ -46,6 +76,23 @@ const COMPLEMENT_RULES = [
   { id: "en_balance", labelZh: "英语强 ↔ 英语弱", leftTagId: "en_strong", rightTagId: "en_weak" }
 ];
 
+const appRoot = document.getElementById("appRoot");
+const loginScreen = document.getElementById("loginScreen");
+const loginForm = document.getElementById("loginForm");
+const loginAccount = document.getElementById("loginAccount");
+const loginPassword = document.getElementById("loginPassword");
+const loginRemember = document.getElementById("loginRemember");
+const loginError = document.getElementById("loginError");
+const changePasswordBtn = document.getElementById("changePasswordBtn");
+const changePasswordModal = document.getElementById("changePasswordModal");
+const changePasswordForm = document.getElementById("changePasswordForm");
+const changePasswordClose = document.getElementById("changePasswordClose");
+const changePasswordCancel = document.getElementById("changePasswordCancel");
+const currentPasswordInput = document.getElementById("currentPasswordInput");
+const newPasswordInput = document.getElementById("newPasswordInput");
+const confirmPasswordInput = document.getElementById("confirmPasswordInput");
+const changePasswordError = document.getElementById("changePasswordError");
+const logoutBtn = document.getElementById("logoutBtn");
 const studentNameInput = document.getElementById("studentNameInput");
 const studentAliasInput = document.getElementById("studentAliasInput");
 const studentGenderSelect = document.getElementById("studentGenderSelect");
@@ -92,6 +139,7 @@ const scoreStatus = document.getElementById("scoreStatus");
 const existingExamSelect = document.getElementById("existingExamSelect");
 const replaceExamBtn = document.getElementById("replaceExamBtn");
 const deleteExamBtn = document.getElementById("deleteExamBtn");
+const savedExamList = document.getElementById("savedExamList");
 const autoAcademicEnabled = document.getElementById("autoAcademicEnabled");
 const autoAcademicRangeMode = document.getElementById("autoAcademicRangeMode");
 const autoAcademicRecentWrap = document.getElementById("autoAcademicRecentWrap");
@@ -151,6 +199,19 @@ const mappingConflicts = document.getElementById("mappingConflicts");
 const mappingClose = document.getElementById("mappingClose");
 const mappingCancel = document.getElementById("mappingCancel");
 const mappingApply = document.getElementById("mappingApply");
+const savedExamTableModal = document.getElementById("savedExamTableModal");
+const savedExamTableTitle = document.getElementById("savedExamTableTitle");
+const savedExamTableMeta = document.getElementById("savedExamTableMeta");
+const savedExamSearchInput = document.getElementById("savedExamSearchInput");
+const savedExamSearchBtn = document.getElementById("savedExamSearchBtn");
+const savedExamSearchStatus = document.getElementById("savedExamSearchStatus");
+const savedExamTableWrap = document.getElementById("savedExamTableWrap");
+const savedExamTableClose = document.getElementById("savedExamTableClose");
+const trendDetailModal = document.getElementById("trendDetailModal");
+const trendDetailTitle = document.getElementById("trendDetailTitle");
+const trendDetailMeta = document.getElementById("trendDetailMeta");
+const trendDetailList = document.getElementById("trendDetailList");
+const trendDetailClose = document.getElementById("trendDetailClose");
 const toast = document.getElementById("toast");
 const easterModal = document.getElementById("easterModal");
 const easterText = document.getElementById("easterText");
@@ -191,6 +252,9 @@ const complementApplyBtn = document.getElementById("complementApplyBtn");
 let state = loadState();
 let activeStudentId = null;
 let dragSourceIndex = null;
+let dragAutoScrollFrame = null;
+let dragAutoScrollY = 0;
+let dragAutoScrollX = 0;
 let swapHighlight = new Set();
 let seatFlashHighlight = new Set();
 let activeWeekKey = getWeekKey(new Date());
@@ -202,7 +266,78 @@ let backupReminderChecked = false;
 let allowAcademicOverride = false;
 let complementPreviewOrder = null;
 let examTrendMode = "score";
+let expandedSavedExamIds = new Set();
+let activeSavedExamTableId = "";
 const inputSuggestMap = new Map();
+
+function isAuthenticated() {
+  return localStorage.getItem(AUTH_PERSIST_KEY) === "true" || sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
+}
+
+function setAuthenticated(remember) {
+  if (remember) {
+    localStorage.setItem(AUTH_PERSIST_KEY, "true");
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+  } else {
+    sessionStorage.setItem(AUTH_SESSION_KEY, "true");
+    localStorage.removeItem(AUTH_PERSIST_KEY);
+  }
+}
+
+function showLogin() {
+  loginScreen?.classList.remove("hidden");
+  appRoot?.classList.add("hidden");
+  loginForm?.reset();
+  if (loginError) {
+    loginError.textContent = "";
+  }
+  setTimeout(() => loginAccount?.focus(), 0);
+}
+
+function showApp() {
+  loginScreen?.classList.add("hidden");
+  appRoot?.classList.remove("hidden");
+}
+
+function clearAuth() {
+  localStorage.removeItem(AUTH_PERSIST_KEY);
+  sessionStorage.removeItem(AUTH_SESSION_KEY);
+}
+
+async function hashPassword(password) {
+  const bytes = new TextEncoder().encode(password);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function verifyPassword(password) {
+  const customHash = localStorage.getItem(CUSTOM_PASSWORD_HASH_KEY);
+  if (customHash) {
+    return (await hashPassword(password)) === customHash;
+  }
+  return password === LOGIN_PASSWORD;
+}
+
+function openChangePasswordModal() {
+  changePasswordModal?.classList.remove("hidden");
+  changePasswordModal?.setAttribute("aria-hidden", "false");
+  changePasswordForm?.reset();
+  if (changePasswordError) {
+    changePasswordError.textContent = "";
+  }
+  setTimeout(() => currentPasswordInput?.focus(), 0);
+}
+
+function closeChangePasswordModal() {
+  changePasswordModal?.classList.add("hidden");
+  changePasswordModal?.setAttribute("aria-hidden", "true");
+  changePasswordForm?.reset();
+  if (changePasswordError) {
+    changePasswordError.textContent = "";
+  }
+}
 
 function uid() {
   return `id-${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36)}`;
@@ -630,6 +765,7 @@ function loadState() {
     lockedSeats: [],
     seatHistory: [],
     exams: [],
+    savedExams: [],
     lastBackupAt: "",
     settings: {
       sidebarCollapsed: false,
@@ -680,6 +816,7 @@ function normalizeState() {
     : [];
   state.seatHistory = Array.isArray(state.seatHistory) ? state.seatHistory : [];
   state.exams = Array.isArray(state.exams) ? state.exams : [];
+  state.savedExams = Array.isArray(state.savedExams) ? state.savedExams.map(normalizeSavedExamRecord).filter(Boolean) : [];
   state.lastBackupAt = state.lastBackupAt || "";
   state.settings = state.settings || {
     sidebarCollapsed: false,
@@ -970,11 +1107,16 @@ function renderRowLabels() {
   rowLabels.innerHTML = "";
   const rows = getRowCount();
   rowLabels.style.gridTemplateRows = rows ? `repeat(${rows}, var(--seat-height))` : "none";
-  for (let row = 1; row <= rows; row += 1) {
+  for (let displayRow = 0; displayRow < rows; displayRow += 1) {
+    const seatRow = rows - displayRow;
     const label = document.createElement("div");
-    label.textContent = `第 ${row} 行`;
+    label.textContent = `第 ${seatRow} 行`;
     rowLabels.appendChild(label);
   }
+}
+
+function getSeatDataRowFromDisplayRow(displayRow, rows) {
+  return rows - 1 - displayRow;
 }
 
 function getChangedSeatIndices(beforeOrder, afterOrder) {
@@ -1003,12 +1145,12 @@ function estimateSeatTagRows(tags) {
   if (!Array.isArray(tags) || !tags.length) {
     return 0;
   }
-  const usableWidth = 102;
+  const usableWidth = 112;
   let rows = 1;
   let currentWidth = 0;
   tags.forEach((tag) => {
     const textLength = Array.from(tag?.labelZh || "").length;
-    const chipWidth = Math.max(40, textLength * 12 + 18);
+    const chipWidth = Math.max(34, textLength * 10 + 14);
     if (currentWidth > 0 && currentWidth + 4 + chipWidth > usableWidth) {
       rows += 1;
       currentWidth = chipWidth;
@@ -1027,9 +1169,9 @@ function getUniformSeatHeight() {
     (max, student) => Math.max(max, estimateSeatTagRows(getSeatDisplayTags(student))),
     0
   );
-  const baseHeight = 132;
-  const perRowHeight = 24;
-  const extraHeight = maxTagRows > 0 ? maxTagRows * perRowHeight + 6 : 0;
+  const baseHeight = 128;
+  const perRowHeight = 19;
+  const extraHeight = maxTagRows > 0 ? maxTagRows * perRowHeight + 2 : 0;
   return baseHeight + extraHeight;
 }
 
@@ -1049,7 +1191,8 @@ function renderSeatGrid() {
     groupEl.className = "seat-group";
     groupEl.style.gridTemplateRows = `repeat(${rows}, var(--seat-height))`;
 
-    for (let row = 0; row < rows; row += 1) {
+    for (let displayRow = 0; displayRow < rows; displayRow += 1) {
+      const row = getSeatDataRowFromDisplayRow(displayRow, rows);
       for (let colInGroup = 0; colInGroup < 2; colInGroup += 1) {
         const col = group * 2 + colInGroup + 1;
         const index = row * COLS + (col - 1);
@@ -1059,6 +1202,11 @@ function renderSeatGrid() {
 
         const seat = document.createElement("div");
         seat.className = "seat";
+        if (student?.gender === "男") {
+          seat.classList.add("male");
+        } else if (student?.gender === "女") {
+          seat.classList.add("female");
+        }
         if (isLocked) {
           seat.classList.add("locked");
         }
@@ -1186,6 +1334,90 @@ function renderSeatGrid() {
   }
 }
 
+function getEdgeScrollSpeed(distance, threshold, maxSpeed) {
+  if (distance >= threshold) {
+    return 0;
+  }
+  const clamped = Math.max(0, Math.min(threshold, distance));
+  const intensity = 1 - clamped / threshold;
+  return Math.max(2, Math.round(maxSpeed * intensity));
+}
+
+function runDragAutoScroll() {
+  if (!dragAutoScrollY && !dragAutoScrollX) {
+    dragAutoScrollFrame = null;
+    return;
+  }
+  if (dragAutoScrollY) {
+    window.scrollBy({ top: dragAutoScrollY, left: 0, behavior: "auto" });
+  }
+  if (dragAutoScrollX) {
+    const wrap = document.querySelector(".seat-grid-wrap");
+    if (wrap) {
+      wrap.scrollLeft += dragAutoScrollX;
+    }
+  }
+  dragAutoScrollFrame = requestAnimationFrame(runDragAutoScroll);
+}
+
+function startDragAutoScroll() {
+  if (dragAutoScrollFrame === null) {
+    dragAutoScrollFrame = requestAnimationFrame(runDragAutoScroll);
+  }
+}
+
+function stopDragAutoScroll() {
+  dragAutoScrollY = 0;
+  dragAutoScrollX = 0;
+  if (dragAutoScrollFrame !== null) {
+    cancelAnimationFrame(dragAutoScrollFrame);
+    dragAutoScrollFrame = null;
+  }
+}
+
+function updateDragAutoScroll(clientX, clientY) {
+  const verticalThreshold = 96;
+  const horizontalThreshold = 76;
+  const maxVerticalSpeed = 18;
+  const maxHorizontalSpeed = 16;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+  if (clientY < verticalThreshold) {
+    dragAutoScrollY = -getEdgeScrollSpeed(clientY, verticalThreshold, maxVerticalSpeed);
+  } else if (viewportHeight - clientY < verticalThreshold) {
+    dragAutoScrollY = getEdgeScrollSpeed(viewportHeight - clientY, verticalThreshold, maxVerticalSpeed);
+  } else {
+    dragAutoScrollY = 0;
+  }
+
+  dragAutoScrollX = 0;
+  const wrap = document.querySelector(".seat-grid-wrap");
+  if (wrap) {
+    const rect = wrap.getBoundingClientRect();
+    if (clientX - rect.left < horizontalThreshold) {
+      dragAutoScrollX = -getEdgeScrollSpeed(clientX - rect.left, horizontalThreshold, maxHorizontalSpeed);
+    } else if (rect.right - clientX < horizontalThreshold) {
+      dragAutoScrollX = getEdgeScrollSpeed(rect.right - clientX, horizontalThreshold, maxHorizontalSpeed);
+    }
+  }
+
+  if (dragAutoScrollY || dragAutoScrollX) {
+    startDragAutoScroll();
+  } else {
+    stopDragAutoScroll();
+  }
+}
+
+document.addEventListener("dragover", (event) => {
+  if (dragSourceIndex === null) {
+    return;
+  }
+  updateDragAutoScroll(event.clientX, event.clientY);
+});
+
+document.addEventListener("drop", stopDragAutoScroll);
+document.addEventListener("dragend", stopDragAutoScroll);
+
 function attachSeatDragHandlers(seat, index, hasStudent) {
   seat.addEventListener("dragstart", (event) => {
     if (!hasStudent) {
@@ -1200,6 +1432,7 @@ function attachSeatDragHandlers(seat, index, hasStudent) {
 
   seat.addEventListener("dragend", () => {
     dragSourceIndex = null;
+    stopDragAutoScroll();
     seat.classList.remove("dragging");
     document.querySelectorAll(".seat.drag-over").forEach((item) => {
       item.classList.remove("drag-over");
@@ -1208,9 +1441,11 @@ function attachSeatDragHandlers(seat, index, hasStudent) {
 
   seat.addEventListener("dragover", (event) => {
     if (dragSourceIndex === null) {
+      stopDragAutoScroll();
       return;
     }
     event.preventDefault();
+    updateDragAutoScroll(event.clientX, event.clientY);
     seat.classList.add("drag-over");
     event.dataTransfer.dropEffect = "move";
   });
@@ -1221,9 +1456,11 @@ function attachSeatDragHandlers(seat, index, hasStudent) {
 
   seat.addEventListener("drop", (event) => {
     if (dragSourceIndex === null) {
+      stopDragAutoScroll();
       return;
     }
     event.preventDefault();
+    stopDragAutoScroll();
     seat.classList.remove("drag-over");
     const source = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
     if (Number.isNaN(source)) {
@@ -2475,7 +2712,8 @@ function renderHistoryGrid(seats, rowsOverride) {
     historyGridInner.appendChild(header);
   }
 
-  for (let row = 1; row <= rows; row += 1) {
+  for (let displayRow = 0; displayRow < rows; displayRow += 1) {
+    const row = getSeatDataRowFromDisplayRow(displayRow, rows) + 1;
     const rowLabel = document.createElement("div");
     rowLabel.className = "history-row-label";
     rowLabel.textContent = `第${row}行`;
@@ -3120,7 +3358,9 @@ function parseScoreRowsWithMapping(rows, mapping) {
 }
 
 function getStudentExamsForAutoTag(student, settings) {
-  const exams = Array.isArray(student.exams) ? [...student.exams] : [];
+  const exams = Array.isArray(student.exams)
+    ? student.exams.filter((exam) => exam?.source !== "savedExamRecord")
+    : [];
   exams.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   if (settings.rangeMode === "recent") {
     return exams.slice(0, settings.recentN);
@@ -3238,7 +3478,505 @@ function renderAutoAcademicSettings() {
   autoAcademicRecentWrap.classList.toggle("hidden", settings.rangeMode !== "recent");
 }
 
+function normalizeSavedExamRecord(record) {
+  if (!record || typeof record !== "object") {
+    return null;
+  }
+  const subjects = Array.isArray(record.subjects) ? record.subjects.filter(Boolean).map(String) : [];
+  const entries = Array.isArray(record.entries)
+    ? record.entries
+        .map((entry) => ({
+          name: (entry?.name || "").toString().trim(),
+          scores: entry?.scores && typeof entry.scores === "object" ? entry.scores : {},
+          total: entry?.total && typeof entry.total === "object" ? entry.total : { score: null, rankClass: null, rankSchool: null }
+        }))
+        .filter((entry) => entry.name)
+    : [];
+  return {
+    id: record.id || uid(),
+    name: (record.name || "考试").toString(),
+    date: record.date || "",
+    savedAt: record.savedAt || new Date().toISOString(),
+    studentCount: Number.isInteger(record.studentCount) ? record.studentCount : entries.length,
+    subjectCount: Number.isInteger(record.subjectCount) ? record.subjectCount : subjects.length,
+    subjects,
+    entries
+  };
+}
+
+function getSavedExamRecords() {
+  state.savedExams = Array.isArray(state.savedExams) ? state.savedExams.map(normalizeSavedExamRecord).filter(Boolean) : [];
+  return state.savedExams;
+}
+
+function getExamContentSignature(exam) {
+  if (!exam) {
+    return "";
+  }
+  const subjects = Array.isArray(exam.subjects) ? [...exam.subjects].sort() : [];
+  const scores = subjects.map((subject) => {
+    const data = exam.scores?.[subject] || {};
+    return [
+      subject,
+      parseScoreValue(data),
+      parseRankValue(data?.rankClass),
+      parseRankValue(data?.rankSchool)
+    ].join(":");
+  });
+  const total = exam.total || {};
+  return JSON.stringify({
+    subjects,
+    scores,
+    total: [parseScoreValue(total.score), parseRankValue(total.rankClass), parseRankValue(total.rankSchool)]
+  });
+}
+
+function syncSavedExamsToStudentDetails() {
+  const records = getSavedExamRecords();
+  state.students.forEach((student) => {
+    student.exams = Array.isArray(student.exams)
+      ? student.exams.filter((exam) => exam?.source !== "savedExamRecord")
+      : [];
+  });
+  if (!records.length || !state.students.length) {
+    return;
+  }
+
+  records.forEach((record) => {
+    const nameMap = new Map();
+    state.students.forEach((student) => {
+      const keys = [normalizeName(student.name), ...(student.aliases || []).map((alias) => normalizeName(alias))]
+        .filter(Boolean);
+      keys.forEach((key) => {
+        if (!nameMap.has(key)) {
+          nameMap.set(key, []);
+        }
+        nameMap.get(key).push(student);
+      });
+    });
+
+    record.entries.forEach((entry) => {
+      const key = normalizeName(entry.name);
+      const candidates = nameMap.get(key) || [];
+      const student = candidates.shift();
+      if (!student) {
+        return;
+      }
+      const syncedExam = {
+        id: record.id,
+        name: record.name || "考试",
+        date: record.date || "",
+        subjects: record.subjects || [],
+        scores: entry.scores || {},
+        total: entry.total || { score: null, rankClass: null, rankSchool: null },
+        source: "savedExamRecord"
+      };
+      const syncedSignature = getExamContentSignature(syncedExam);
+      student.exams = student.exams.filter((exam) => {
+        if (exam?.id === record.id) {
+          return false;
+        }
+        if ((exam?.name || "") === syncedExam.name && (exam?.date || "") === syncedExam.date) {
+          return false;
+        }
+        return getExamContentSignature(exam) !== syncedSignature;
+      });
+      student.exams.push(syncedExam);
+    });
+  });
+}
+
+function makeSavedExamRecordFromDraft() {
+  const name = scoreExamName.value.trim();
+  if (!name) {
+    scoreStatus.textContent = "请填写考试名称。";
+    scoreExamName.focus();
+    return null;
+  }
+  if (!examDraft) {
+    scoreStatus.textContent = "请先上传并解析成绩表";
+    return null;
+  }
+  const date = scoreExamDate.value || new Date().toISOString().slice(0, 10);
+  const subjects = Array.isArray(examDraft.subjects) ? [...examDraft.subjects] : [];
+  const entries = (Array.isArray(examDraft.entries) ? examDraft.entries : []).map((entry) => ({
+    name: entry.name || "",
+    scores: entry.scores ? JSON.parse(JSON.stringify(entry.scores)) : {},
+    total: entry.total ? JSON.parse(JSON.stringify(entry.total)) : { score: null, rankClass: null, rankSchool: null }
+  }));
+  return {
+    id: uid(),
+    name,
+    date,
+    savedAt: new Date().toISOString(),
+    studentCount: entries.length,
+    subjectCount: subjects.length,
+    subjects,
+    entries
+  };
+}
+
+function saveExamRecord() {
+  const record = makeSavedExamRecordFromDraft();
+  if (!record) {
+    return;
+  }
+  state.savedExams = getSavedExamRecords();
+  state.savedExams.unshift(record);
+  syncSavedExamsToStudentDetails();
+  expandedSavedExamIds.add(record.id);
+  saveState();
+  renderExamManager();
+  if (activeStudentId) {
+    const student = state.students.find((item) => item.id === activeStudentId);
+    if (student) {
+      renderExamList(student);
+    }
+  }
+  scoreStatus.textContent = `已保存「${record.name}」考试记录，共 ${record.studentCount} 名学生、${record.subjectCount} 个科目。`;
+  saveScoreBtn.disabled = true;
+  examDraft = null;
+  showToast("考试记录已保存", "success");
+}
+
 function renderExamManager() {
+  renderSavedExamList();
+  renderLegacyExamManager();
+}
+
+function renderSavedExamList() {
+  if (!savedExamList) {
+    return;
+  }
+  savedExamList.innerHTML = "";
+  const exams = getSavedExamRecords().sort((a, b) => {
+    const dateCompare = (b.date || "").localeCompare(a.date || "");
+    return dateCompare || (b.savedAt || "").localeCompare(a.savedAt || "");
+  });
+  if (!exams.length) {
+    const empty = document.createElement("div");
+    empty.className = "saved-exam-empty muted";
+    empty.textContent = "暂无已保存考试。";
+    savedExamList.appendChild(empty);
+    return;
+  }
+
+  exams.forEach((exam) => {
+    const item = document.createElement("div");
+    item.className = "saved-exam-item";
+    const isExpanded = expandedSavedExamIds.has(exam.id);
+    if (isExpanded) {
+      item.classList.add("expanded");
+    }
+
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "saved-exam-row";
+    row.dataset.examId = exam.id;
+    row.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+
+    const main = document.createElement("div");
+    main.className = "saved-exam-main";
+    const title = document.createElement("div");
+    title.className = "saved-exam-name";
+    title.textContent = exam.name || "考试";
+    const date = document.createElement("div");
+    date.className = "saved-exam-date";
+    date.textContent = exam.date || "未填写日期";
+    main.append(title, date);
+
+    const meta = document.createElement("div");
+    meta.className = "saved-exam-meta";
+    meta.textContent = `${exam.studentCount || 0} 人 · ${exam.subjectCount || 0} 科`;
+
+    const arrow = document.createElement("span");
+    arrow.className = "saved-exam-arrow";
+    arrow.textContent = "⌄";
+    row.append(main, meta, arrow);
+    item.appendChild(row);
+
+    if (isExpanded) {
+      const detail = document.createElement("div");
+      detail.className = "saved-exam-detail";
+      const nameLine = document.createElement("label");
+      nameLine.className = "saved-exam-detail-line saved-exam-edit-line";
+      const nameLabel = document.createElement("span");
+      nameLabel.textContent = "考试名称";
+      const nameInput = document.createElement("input");
+      nameInput.className = "input";
+      nameInput.type = "text";
+      nameInput.maxLength = 30;
+      nameInput.value = exam.name || "考试";
+      nameInput.dataset.examField = "name";
+      nameInput.dataset.examId = exam.id;
+      nameLine.append(nameLabel, nameInput);
+      detail.appendChild(nameLine);
+
+      const dateLine = document.createElement("label");
+      dateLine.className = "saved-exam-detail-line saved-exam-edit-line";
+      const dateLabel = document.createElement("span");
+      dateLabel.textContent = "考试日期";
+      const dateInput = document.createElement("input");
+      dateInput.className = "input";
+      dateInput.type = "date";
+      dateInput.value = exam.date || "";
+      dateInput.dataset.examField = "date";
+      dateInput.dataset.examId = exam.id;
+      dateLine.append(dateLabel, dateInput);
+      detail.appendChild(dateLine);
+
+      [
+        ["保存时间", formatDateTimeLocal(exam.savedAt)],
+        ["学生数量", `${exam.studentCount || 0} 人`],
+        ["科目数量", `${exam.subjectCount || 0} 科`]
+      ].forEach(([label, value]) => {
+        const line = document.createElement("div");
+        line.className = "saved-exam-detail-line";
+        const labelEl = document.createElement("span");
+        labelEl.textContent = label;
+        const valueEl = document.createElement("strong");
+        valueEl.textContent = value;
+        line.append(labelEl, valueEl);
+        detail.appendChild(line);
+      });
+
+      const actions = document.createElement("div");
+      actions.className = "saved-exam-actions";
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "btn-secondary";
+      saveBtn.dataset.action = "save-saved-exam";
+      saveBtn.dataset.examId = exam.id;
+      saveBtn.textContent = "保存修改";
+      const viewBtn = document.createElement("button");
+      viewBtn.type = "button";
+      viewBtn.className = "btn-secondary";
+      viewBtn.dataset.action = "view-saved-exam";
+      viewBtn.dataset.examId = exam.id;
+      viewBtn.textContent = "查看表格";
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-danger-soft";
+      deleteBtn.dataset.action = "delete-saved-exam";
+      deleteBtn.dataset.examId = exam.id;
+      deleteBtn.textContent = "删除考试";
+      actions.append(saveBtn, viewBtn, deleteBtn);
+      detail.appendChild(actions);
+      item.appendChild(detail);
+    }
+
+    savedExamList.appendChild(item);
+  });
+}
+
+function openSavedExamTable(examId) {
+  const exam = getSavedExamRecords().find((item) => item.id === examId);
+  if (!exam || !savedExamTableModal || !savedExamTableWrap) {
+    return;
+  }
+  activeSavedExamTableId = exam.id;
+  savedExamTableTitle.textContent = exam.name || "完整成绩表";
+  savedExamTableMeta.textContent = `${exam.date || "未填写日期"} · 保存于 ${formatDateTimeLocal(exam.savedAt)} · ${exam.studentCount || 0} 人 · ${exam.subjectCount || 0} 科`;
+  savedExamTableWrap.innerHTML = "";
+  if (savedExamSearchInput) {
+    savedExamSearchInput.value = "";
+  }
+  if (savedExamSearchStatus) {
+    savedExamSearchStatus.textContent = "可输入学生姓名或部分姓名快速定位。";
+  }
+
+  const table = document.createElement("table");
+  table.className = "saved-exam-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const columns = [{ label: "学生姓名", type: "name" }];
+  exam.subjects.forEach((subject) => {
+    columns.push({ label: subject, type: "score", subject });
+    columns.push({ label: `${subject}班排`, type: "rank", subject, field: "rankClass" });
+    columns.push({ label: `${subject}校排`, type: "rank", subject, field: "rankSchool" });
+  });
+  const hasTotalScore = exam.entries.some((entry) => Number.isFinite(parseScoreValue(entry.total?.score)));
+  const hasTotalClassRank = exam.entries.some((entry) => Number.isInteger(parseRankValue(entry.total?.rankClass)));
+  const hasTotalSchoolRank = exam.entries.some((entry) => Number.isInteger(parseRankValue(entry.total?.rankSchool)));
+  if (hasTotalScore) {
+    columns.push({ label: "总分", type: "score", totalField: "score" });
+  }
+  if (hasTotalClassRank) {
+    columns.push({ label: "总班排", type: "rank", totalField: "rankClass" });
+  }
+  if (hasTotalSchoolRank) {
+    columns.push({ label: "总校排", type: "rank", totalField: "rankSchool" });
+  }
+  columns.forEach((column) => {
+    const th = document.createElement("th");
+    th.textContent = column.label;
+    if (column.type === "score") {
+      th.classList.add("score-cell");
+    }
+    if (column.type === "rank") {
+      th.classList.add("rank-cell");
+    }
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  exam.entries.forEach((entry, index) => {
+    const row = document.createElement("tr");
+    row.dataset.studentName = entry.name || "";
+    row.dataset.normalizedName = normalizeName(entry.name);
+    row.dataset.rowIndex = String(index + 1);
+    const nameCell = document.createElement("td");
+    nameCell.textContent = entry.name || "";
+    row.appendChild(nameCell);
+    exam.subjects.forEach((subject) => {
+      const cell = document.createElement("td");
+      cell.className = "score-cell";
+      const score = parseScoreValue(entry.scores?.[subject]);
+      cell.textContent = Number.isFinite(score) ? String(score) : "";
+      row.appendChild(cell);
+      ["rankClass", "rankSchool"].forEach((field) => {
+        const rankCell = document.createElement("td");
+        rankCell.className = "rank-cell";
+        const rank = parseRankValue(entry.scores?.[subject]?.[field]);
+        rankCell.textContent = Number.isInteger(rank) ? String(rank) : "";
+        row.appendChild(rankCell);
+      });
+    });
+    if (hasTotalScore) {
+      const totalScoreCell = document.createElement("td");
+      totalScoreCell.className = "score-cell";
+      const totalScore = parseScoreValue(entry.total?.score);
+      totalScoreCell.textContent = Number.isFinite(totalScore) ? String(totalScore) : "";
+      row.appendChild(totalScoreCell);
+    }
+    if (hasTotalClassRank) {
+      const totalClassRankCell = document.createElement("td");
+      totalClassRankCell.className = "rank-cell";
+      const totalClassRank = parseRankValue(entry.total?.rankClass);
+      totalClassRankCell.textContent = Number.isInteger(totalClassRank) ? String(totalClassRank) : "";
+      row.appendChild(totalClassRankCell);
+    }
+    if (hasTotalSchoolRank) {
+      const totalSchoolRankCell = document.createElement("td");
+      totalSchoolRankCell.className = "rank-cell";
+      const totalSchoolRank = parseRankValue(entry.total?.rankSchool);
+      totalSchoolRankCell.textContent = Number.isInteger(totalSchoolRank) ? String(totalSchoolRank) : "";
+      row.appendChild(totalSchoolRankCell);
+    }
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  savedExamTableWrap.appendChild(table);
+  savedExamTableModal.classList.remove("hidden");
+  savedExamTableModal.setAttribute("aria-hidden", "false");
+  setTimeout(() => savedExamSearchInput?.focus(), 0);
+}
+
+function closeSavedExamTable() {
+  if (!savedExamTableModal) {
+    return;
+  }
+  activeSavedExamTableId = "";
+  savedExamTableModal.classList.add("hidden");
+  savedExamTableModal.setAttribute("aria-hidden", "true");
+}
+
+function searchSavedExamStudent() {
+  if (!savedExamTableWrap || !savedExamSearchInput) {
+    return;
+  }
+  const query = savedExamSearchInput.value.trim();
+  const normalized = normalizeName(query);
+  savedExamTableWrap.querySelectorAll(".saved-exam-highlight").forEach((row) => {
+    row.classList.remove("saved-exam-highlight");
+  });
+  if (!normalized) {
+    if (savedExamSearchStatus) {
+      savedExamSearchStatus.textContent = "请输入要查找的学生姓名。";
+    }
+    return;
+  }
+  const rows = [...savedExamTableWrap.querySelectorAll("tbody tr")];
+  const exact = rows.find((row) => row.dataset.normalizedName === normalized);
+  const fuzzy = rows.find((row) => {
+    const name = row.dataset.studentName || "";
+    const normalizedName = row.dataset.normalizedName || "";
+    return name.includes(query) || normalizedName.includes(normalized) || normalized.includes(normalizedName);
+  });
+  const row = exact || fuzzy;
+  if (!row) {
+    if (savedExamSearchStatus) {
+      savedExamSearchStatus.textContent = `未找到「${query}」。`;
+    }
+    return;
+  }
+  row.classList.add("saved-exam-highlight");
+  const targetTop = row.offsetTop - savedExamTableWrap.clientHeight / 2 + row.offsetHeight / 2;
+  savedExamTableWrap.scrollTo({
+    top: Math.max(0, targetTop),
+    left: 0,
+    behavior: "smooth"
+  });
+  if (savedExamSearchStatus) {
+    savedExamSearchStatus.textContent = `已定位到第 ${row.dataset.rowIndex || ""} 行：${row.dataset.studentName || ""}`;
+  }
+}
+
+function deleteSavedExamRecord(examId) {
+  const exam = getSavedExamRecords().find((item) => item.id === examId);
+  if (!exam) {
+    return;
+  }
+  const label = `${exam.date || ""} ${exam.name || "考试"}`.trim();
+  if (!confirm(`确定删除「${label}」这条历史考试记录吗？这不会影响学生、座位和当前标签。`)) {
+    return;
+  }
+  state.savedExams = getSavedExamRecords().filter((item) => item.id !== examId);
+  syncSavedExamsToStudentDetails();
+  expandedSavedExamIds.delete(examId);
+  saveState();
+  renderExamManager();
+  if (activeStudentId) {
+    const student = state.students.find((item) => item.id === activeStudentId);
+    if (student) {
+      renderExamList(student);
+    }
+  }
+  scoreStatus.textContent = "该历史考试已删除。";
+  showToast("历史考试已删除", "success");
+}
+
+function saveSavedExamEdits(examId) {
+  const exam = getSavedExamRecords().find((item) => item.id === examId);
+  if (!exam || !savedExamList) {
+    return;
+  }
+  const nameInput = savedExamList.querySelector(`input[data-exam-id="${examId}"][data-exam-field="name"]`);
+  const dateInput = savedExamList.querySelector(`input[data-exam-id="${examId}"][data-exam-field="date"]`);
+  const nextName = nameInput ? nameInput.value.trim() : exam.name;
+  if (!nextName) {
+    scoreStatus.textContent = "请填写考试名称。";
+    nameInput?.focus();
+    return;
+  }
+  exam.name = nextName;
+  exam.date = dateInput ? dateInput.value : exam.date;
+  syncSavedExamsToStudentDetails();
+  saveState();
+  renderExamManager();
+  if (activeStudentId) {
+    const student = state.students.find((item) => item.id === activeStudentId);
+    if (student) {
+      renderExamList(student);
+    }
+  }
+  scoreStatus.textContent = "历史考试信息已更新。";
+  showToast("考试信息已更新", "success");
+}
+
+function renderLegacyExamManager() {
   if (!existingExamSelect) {
     return;
   }
@@ -3249,7 +3987,26 @@ function renderExamManager() {
   placeholder.textContent = "选择已保存考试";
   existingExamSelect.appendChild(placeholder);
 
-  const exams = Array.isArray(state.exams) ? [...state.exams] : [];
+  const examMap = new Map();
+  (Array.isArray(state.exams) ? state.exams : []).forEach((exam) => {
+    if (exam?.id) {
+      examMap.set(exam.id, { ...exam });
+    }
+  });
+  state.students.forEach((student) => {
+    (Array.isArray(student.exams) ? student.exams : []).forEach((exam) => {
+      if (!exam?.id || examMap.has(exam.id)) {
+        return;
+      }
+      examMap.set(exam.id, {
+        id: exam.id,
+        name: exam.name || "考试",
+        date: exam.date || "",
+        subjects: exam.subjects || []
+      });
+    });
+  });
+  const exams = [...examMap.values()];
   exams
     .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
     .forEach((exam) => {
@@ -3264,7 +4021,7 @@ function renderExamManager() {
   }
 }
 
-function removeExamGlobally(examId) {
+function removeExamGlobally(examId, fallbackExam = null) {
   if (!examId) {
     return false;
   }
@@ -3274,12 +4031,32 @@ function removeExamGlobally(examId) {
       return;
     }
     const before = student.exams.length;
-    student.exams = student.exams.filter((exam) => exam.id !== examId);
+    student.exams = student.exams.filter((exam) => {
+      const sameId = exam.id === examId;
+      const sameFallback =
+        fallbackExam &&
+        !sameId &&
+        (exam.name || "") === (fallbackExam.name || "") &&
+        (exam.date || "") === (fallbackExam.date || "");
+      return !sameId && !sameFallback;
+    });
     if (student.exams.length !== before) {
       removed = true;
     }
   });
-  state.exams = (state.exams || []).filter((exam) => exam.id !== examId);
+  const beforeGlobalExamCount = (state.exams || []).length;
+  state.exams = (state.exams || []).filter((exam) => {
+    const sameId = exam.id === examId;
+    const sameFallback =
+      fallbackExam &&
+      !sameId &&
+      (exam.name || "") === (fallbackExam.name || "") &&
+      (exam.date || "") === (fallbackExam.date || "");
+    return !sameId && !sameFallback;
+  });
+  if ((state.exams || []).length !== beforeGlobalExamCount) {
+    removed = true;
+  }
   return removed;
 }
 
@@ -3402,6 +4179,15 @@ function closeMappingModal() {
   mappingState = null;
 }
 
+function prepareScoreMapping(rows, filename) {
+  const mapping = detectScoreMapping(rows);
+  mappingState = { rows, headers: mapping.headers, suggestion: mapping, filename };
+  openMappingModal(mapping.headers, mapping);
+  scoreStatus.textContent = mapping.reliable
+    ? "已自动识别列，请确认或手动调整映射。"
+    : "未能可靠识别列，请手动选择映射。";
+}
+
 function applyExamDraft() {
   if (!examDraft) {
     return;
@@ -3500,19 +4286,11 @@ function parseScoreFile(file) {
       .text()
       .then((text) => {
         const rows = parseCSV(text);
-        const mapping = detectScoreMapping(rows);
-        if (!mapping.reliable) {
-          mappingState = { rows, headers: mapping.headers, suggestion: mapping, filename: file.name };
-          openMappingModal(mapping.headers, mapping);
-          scoreStatus.textContent = "未能可靠识别列，请手动选择映射。";
-          return;
-        }
-        const data = parseScoreRowsWithMapping(rows, mapping);
-        examDraft = data;
         scoreExamName.value = file.name.replace(/\.[^/.]+$/, "") || "考试";
         scoreExamDate.value = new Date().toISOString().slice(0, 10);
-        saveScoreBtn.disabled = false;
-        scoreStatus.textContent = `已解析 ${data.entries.length} 名学生成绩，请确认考试名称与日期。`;
+        saveScoreBtn.disabled = true;
+        examDraft = null;
+        prepareScoreMapping(rows, file.name);
       })
       .catch(() => {
         scoreStatus.textContent = "读取成绩文件失败，请重试。";
@@ -3532,19 +4310,11 @@ function parseScoreFile(file) {
         const firstSheet = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheet];
         const rows = window.XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-        const mapping = detectScoreMapping(rows);
-        if (!mapping.reliable) {
-          mappingState = { rows, headers: mapping.headers, suggestion: mapping, filename: file.name };
-          openMappingModal(mapping.headers, mapping);
-          scoreStatus.textContent = "未能可靠识别列，请手动选择映射。";
-          return;
-        }
-        const data = parseScoreRowsWithMapping(rows, mapping);
-        examDraft = data;
         scoreExamName.value = file.name.replace(/\.[^/.]+$/, "") || "考试";
         scoreExamDate.value = new Date().toISOString().slice(0, 10);
-        saveScoreBtn.disabled = false;
-        scoreStatus.textContent = `已解析 ${data.entries.length} 名学生成绩，请确认考试名称与日期。`;
+        saveScoreBtn.disabled = true;
+        examDraft = null;
+        prepareScoreMapping(rows, file.name);
       })
       .catch(() => {
         scoreStatus.textContent = "读取成绩文件失败，请重试。";
@@ -4030,16 +4800,29 @@ function renderExamTrends(exams) {
 
   const chronological = [...exams].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const labels = chronological.map((exam) => exam.date || exam.name || "考试");
-  const rankMode = examTrendMode === "rankSchool";
-  const totals = chronological.map((exam) => (rankMode ? parseRankValue(exam.total?.rankSchool) : sumExamScores(exam.scores)));
+  const rankField = examTrendMode === "rankClass" ? "rankClass" : examTrendMode === "rankSchool" ? "rankSchool" : "";
+  const rankMode = Boolean(rankField);
+  const rankLabel = rankField === "rankClass" ? "班级排名" : "年级排名";
+  const totals = chronological.map((exam) => (rankMode ? parseRankValue(exam.total?.[rankField]) : sumExamScores(exam.scores)));
+  const totalDetails = chronological.map((exam, index) => ({
+    name: exam.name || "考试",
+    date: exam.date || "",
+    value: totals[index],
+    scoreValue: parseScoreValue(exam.total?.score) ?? sumExamScores(exam.scores),
+    rankClass: parseRankValue(exam.total?.rankClass),
+    rankSchool: parseRankValue(exam.total?.rankSchool)
+  }));
   const totalValues = totals.filter((value) => Number.isFinite(value));
 
   if (totalValues.length >= 2) {
-    const card = createChartCard(rankMode ? "年级排名趋势" : "总分趋势", labels, totals, {
+    const card = createChartCard(rankMode ? `${rankLabel}趋势` : "总分趋势", labels, totals, {
       width: 360,
       height: 140,
       color: "#1c6f5f",
-      reverseY: rankMode
+      reverseY: rankMode,
+      details: totalDetails,
+      valueLabel: rankMode ? rankLabel : "总分",
+      scoreLabel: "总分"
     });
     examTrends.appendChild(card);
   }
@@ -4063,18 +4846,29 @@ function renderExamTrends(exams) {
 
   subjects.forEach((subject) => {
     const values = chronological.map((exam) =>
-      rankMode ? parseRankValue(exam.scores?.[subject]?.rankSchool) : parseScoreValue(exam.scores?.[subject])
+      rankMode ? parseRankValue(exam.scores?.[subject]?.[rankField]) : parseScoreValue(exam.scores?.[subject])
     );
+    const details = chronological.map((exam, index) => ({
+      name: exam.name || "考试",
+      date: exam.date || "",
+      value: values[index],
+      scoreValue: parseScoreValue(exam.scores?.[subject]),
+      rankClass: parseRankValue(exam.scores?.[subject]?.rankClass),
+      rankSchool: parseRankValue(exam.scores?.[subject]?.rankSchool)
+    }));
     const validValues = values.filter((value) => Number.isFinite(value));
     if (validValues.length < 2) {
       return;
     }
     hasSubjectChart = true;
-    const card = createChartCard(`${subject}${rankMode ? "年级排名趋势" : "趋势"}`, labels, values, {
+    const card = createChartCard(`${subject}${rankMode ? rankLabel : ""}趋势`, labels, values, {
       width: 240,
       height: 120,
       color: "#f0b429",
-      reverseY: rankMode
+      reverseY: rankMode,
+      details,
+      valueLabel: rankMode ? `${subject}${rankLabel}` : `${subject}分数`,
+      scoreLabel: `${subject}分数`
     });
     subjectCards.appendChild(card);
   });
@@ -4084,7 +4878,7 @@ function renderExamTrends(exams) {
   } else if (!totalValues.length) {
     const empty = document.createElement("div");
     empty.className = "chart-empty";
-    empty.textContent = rankMode ? "暂无可用的年级排名趋势数据。" : "暂无可用的成绩趋势数据。";
+    empty.textContent = rankMode ? `暂无可用的${rankLabel}趋势数据。` : "暂无可用的成绩趋势数据。";
     examTrends.appendChild(empty);
   }
 
@@ -4129,6 +4923,9 @@ function parseRankValue(value) {
 function createChartCard(title, labels, values, options) {
   const card = document.createElement("div");
   card.className = "chart-card";
+  card.tabIndex = 0;
+  card.role = "button";
+  card.setAttribute("aria-label", `查看${title}详情`);
 
   const header = document.createElement("div");
   header.className = "chart-title";
@@ -4142,7 +4939,199 @@ function createChartCard(title, labels, values, options) {
   svg.classList.add("chart-svg");
 
   card.append(header, subtitle, svg);
+  card.addEventListener("click", () => {
+    openTrendDetail(title, options?.details || [], options?.scoreLabel || "分数");
+  });
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openTrendDetail(title, options?.details || [], options?.scoreLabel || "分数");
+    }
+  });
   return card;
+}
+
+function openTrendDetail(title, details, scoreLabel) {
+  if (!trendDetailModal || !trendDetailList) {
+    return;
+  }
+  trendDetailTitle.textContent = title;
+  const validCount = details.filter((item) => Number.isFinite(item.scoreValue)).length;
+  trendDetailMeta.textContent = `${scoreLabel} · ${details.length} 次考试 · ${validCount} 个有效分数`;
+  trendDetailList.innerHTML = "";
+  trendDetailList.appendChild(createTrendDetailChart(details, scoreLabel));
+
+  trendDetailModal.classList.remove("hidden");
+  trendDetailModal.setAttribute("aria-hidden", "false");
+}
+
+function createTrendDetailChart(details, scoreLabel) {
+  const wrap = document.createElement("div");
+  wrap.className = "trend-detail-chart-wrap";
+  const width = Math.max(680, details.length * 150);
+  const height = 360;
+  const padding = { top: 34, right: 34, bottom: 96, left: 54 };
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("trend-detail-chart");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const scores = details.map((item) => (Number.isFinite(item.scoreValue) ? item.scoreValue : null));
+  const numericScores = scores.filter((value) => value !== null);
+  if (!numericScores.length) {
+    const empty = document.createElement("div");
+    empty.className = "chart-empty";
+    empty.textContent = "暂无可绘制的分数数据。";
+    wrap.appendChild(empty);
+    return wrap;
+  }
+
+  const minRaw = Math.min(...numericScores);
+  const maxRaw = Math.max(...numericScores);
+  const rangeRaw = maxRaw - minRaw || 1;
+  const min = Math.max(0, Math.floor(minRaw - rangeRaw * 0.12));
+  const max = Math.ceil(maxRaw + rangeRaw * 0.12);
+  const range = max - min || 1;
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const getX = (index) => padding.left + (index / Math.max(details.length - 1, 1)) * chartWidth;
+  const getY = (value) => padding.top + (1 - (value - min) / range) * chartHeight;
+
+  const axis = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  axis.setAttribute("d", `M${padding.left} ${padding.top} V${padding.top + chartHeight} H${padding.left + chartWidth}`);
+  axis.setAttribute("fill", "none");
+  axis.setAttribute("stroke", "#e9edf3");
+  axis.setAttribute("stroke-width", "1");
+  svg.appendChild(axis);
+
+  [min, (min + max) / 2, max].forEach((tick) => {
+    const y = getY(tick);
+    const grid = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    grid.setAttribute("x1", padding.left);
+    grid.setAttribute("x2", padding.left + chartWidth);
+    grid.setAttribute("y1", y);
+    grid.setAttribute("y2", y);
+    grid.setAttribute("stroke", "#f0f2f5");
+    grid.setAttribute("stroke-width", "1");
+    svg.appendChild(grid);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", padding.left - 10);
+    label.setAttribute("y", y + 4);
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("class", "trend-axis-label");
+    label.textContent = Number.isInteger(tick) ? String(tick) : tick.toFixed(1);
+    svg.appendChild(label);
+  });
+
+  const points = scores.map((score, index) => ({
+    score,
+    x: getX(index),
+    y: score === null ? null : getY(score),
+    detail: details[index]
+  }));
+  const validPoints = points.filter((point) => point.y !== null);
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  line.setAttribute("points", validPoints.map((point) => `${point.x},${point.y}`).join(" "));
+  line.setAttribute("fill", "none");
+  line.setAttribute("stroke", "#1c6f5f");
+  line.setAttribute("stroke-width", "3");
+  line.setAttribute("stroke-linecap", "round");
+  line.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(line);
+
+  details.forEach((item, index) => {
+    const x = getX(index);
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", x);
+    label.setAttribute("y", height - 58);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("class", "trend-x-label");
+    const nameLine = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+    nameLine.setAttribute("x", x);
+    nameLine.textContent = truncateChartLabel(item.name || "考试", 8);
+    const dateLine = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+    dateLine.setAttribute("x", x);
+    dateLine.setAttribute("dy", "16");
+    dateLine.textContent = item.date || "未填写日期";
+    label.append(nameLine, dateLine);
+    svg.appendChild(label);
+  });
+
+  validPoints.forEach((point, index) => {
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", point.x);
+    circle.setAttribute("cy", point.y);
+    circle.setAttribute("r", "5");
+    circle.setAttribute("fill", "#1c6f5f");
+    svg.appendChild(circle);
+
+    const value = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    value.setAttribute("x", point.x);
+    value.setAttribute("y", point.y - 10);
+    value.setAttribute("text-anchor", "middle");
+    value.setAttribute("class", "trend-point-score");
+    value.textContent = String(point.score);
+    svg.appendChild(value);
+
+    const rankParts = [];
+    if (Number.isFinite(point.detail.rankClass)) {
+      rankParts.push(`班${point.detail.rankClass}`);
+    }
+    if (Number.isFinite(point.detail.rankSchool)) {
+      rankParts.push(`年${point.detail.rankSchool}`);
+    }
+    if (!rankParts.length) {
+      return;
+    }
+    const text = rankParts.join(" · ");
+    const rankWidth = Math.max(52, text.length * 8 + 14);
+    const preferRight = index % 2 === 0;
+    let rankX = preferRight ? point.x + 12 : point.x - rankWidth - 12;
+    rankX = Math.max(padding.left + 4, Math.min(width - padding.right - rankWidth, rankX));
+    let rankY = point.y > padding.top + 38 ? point.y - 34 : point.y + 18;
+    rankY = Math.max(padding.top + 4, Math.min(padding.top + chartHeight - 22, rankY));
+
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", rankX);
+    bg.setAttribute("y", rankY);
+    bg.setAttribute("width", rankWidth);
+    bg.setAttribute("height", "22");
+    bg.setAttribute("rx", "11");
+    bg.setAttribute("fill", "rgba(255,255,255,0.92)");
+    bg.setAttribute("stroke", "#dfe8f1");
+    const rankText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    rankText.setAttribute("x", rankX + rankWidth / 2);
+    rankText.setAttribute("y", rankY + 15);
+    rankText.setAttribute("text-anchor", "middle");
+    rankText.setAttribute("class", "trend-rank-label");
+    rankText.textContent = text;
+    group.append(bg, rankText);
+    svg.appendChild(group);
+  });
+
+  const yTitle = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  yTitle.setAttribute("x", padding.left);
+  yTitle.setAttribute("y", 18);
+  yTitle.setAttribute("class", "trend-axis-title");
+  yTitle.textContent = scoreLabel;
+  svg.appendChild(yTitle);
+
+  wrap.appendChild(svg);
+  return wrap;
+}
+
+function truncateChartLabel(value, maxLength) {
+  const text = value.toString();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function closeTrendDetail() {
+  if (!trendDetailModal) {
+    return;
+  }
+  trendDetailModal.classList.add("hidden");
+  trendDetailModal.setAttribute("aria-hidden", "true");
 }
 
 function createLineChart(values, options) {
@@ -4338,6 +5327,7 @@ function renderConstraintLists() {
 
 function renderAll() {
   normalizeState();
+  syncSavedExamsToStudentDetails();
   renderSearchResults();
   seatTotal.textContent = getSeatCapacity().toString();
   renderRowLabels();
@@ -4372,6 +5362,7 @@ function initSeatCardMode() {
   const applyMode = (mode) => {
     const compact = mode === "compact";
     document.body.classList.toggle("compact-cards", compact);
+    document.documentElement.style.setProperty("--seat-height", `${getUniformSeatHeight()}px`);
     cardCompactBtn.classList.toggle("active", compact);
     cardDetailBtn.classList.toggle("active", !compact);
     localStorage.setItem(SEAT_CARD_MODE_KEY, compact ? "compact" : "detail");
@@ -4382,6 +5373,126 @@ function initSeatCardMode() {
 
   cardCompactBtn.addEventListener("click", () => applyMode("compact"));
   cardDetailBtn.addEventListener("click", () => applyMode("detail"));
+}
+
+function initAnimatedDetails() {
+  const animatedDetails = Array.from(
+    document.querySelectorAll(".inline-more, .constraint-advanced, .auto-tag-settings")
+  );
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const easing = "cubic-bezier(0.22, 1, 0.36, 1)";
+  const duration = 360;
+  const contentDuration = 240;
+
+  const getSummaryHeight = (details) => details.querySelector("summary")?.offsetHeight || 0;
+  const getContentNodes = (details) => Array.from(details.children).filter((node) => node.tagName !== "SUMMARY");
+
+  const resetDetailsStyles = (details) => {
+    details.style.height = "";
+    details.style.overflow = "";
+    details.classList.remove("is-expanding", "is-collapsing", "is-animating-details");
+    getContentNodes(details).forEach((node) => {
+      node.style.opacity = "";
+      node.style.transform = "";
+    });
+  };
+
+  const finishDetailsAnimation = (details, finalHeight, callback) => {
+    details.style.height = `${finalHeight}px`;
+    requestAnimationFrame(() => {
+      callback?.();
+      resetDetailsStyles(details);
+    });
+  };
+
+  animatedDetails.forEach((details) => {
+    const summary = details.querySelector("summary");
+    if (!summary || details.dataset.animatedDetails === "true") {
+      return;
+    }
+    details.dataset.animatedDetails = "true";
+
+    summary.addEventListener("click", (event) => {
+      event.preventDefault();
+
+      if (reduceMotion.matches) {
+        details.open = !details.open;
+        resetDetailsStyles(details);
+        return;
+      }
+
+      details.getAnimations().forEach((animation) => animation.cancel());
+      const contentNodes = getContentNodes(details);
+      contentNodes.forEach((node) => {
+        node.getAnimations().forEach((animation) => animation.cancel());
+      });
+
+      if (details.open) {
+        const startHeight = details.offsetHeight;
+        const endHeight = getSummaryHeight(details);
+        details.classList.add("is-collapsing", "is-animating-details");
+        details.style.height = `${startHeight}px`;
+        details.style.overflow = "hidden";
+
+        contentNodes.forEach((node) => {
+          node.animate(
+            [
+              { opacity: 1, transform: "translateY(0)" },
+              { opacity: 0, transform: "translateY(-6px)" }
+            ],
+            { duration: contentDuration, easing, fill: "forwards" }
+          );
+        });
+
+        const animation = details.animate(
+          [
+            { height: `${startHeight}px` },
+            { height: `${endHeight}px` }
+          ],
+          { duration, easing }
+        );
+
+        animation.onfinish = () => {
+          finishDetailsAnimation(details, endHeight, () => {
+            details.open = false;
+          });
+        };
+        animation.oncancel = () => resetDetailsStyles(details);
+        return;
+      }
+
+      const startHeight = getSummaryHeight(details);
+      details.open = true;
+      details.classList.add("is-expanding", "is-animating-details");
+      details.style.height = `${startHeight}px`;
+      details.style.overflow = "hidden";
+
+      requestAnimationFrame(() => {
+        const endHeight = details.scrollHeight;
+
+        contentNodes.forEach((node) => {
+          node.animate(
+            [
+              { opacity: 0, transform: "translateY(-6px)" },
+              { opacity: 1, transform: "translateY(0)" }
+            ],
+            { duration: contentDuration, easing, fill: "forwards" }
+          );
+        });
+
+        const animation = details.animate(
+          [
+            { height: `${startHeight}px` },
+            { height: `${endHeight}px` }
+          ],
+          { duration, easing }
+        );
+
+        animation.onfinish = () => finishDetailsAnimation(details, endHeight);
+        animation.oncancel = () => resetDetailsStyles(details);
+      });
+    });
+  });
 }
 
 function initSidebarNavigation() {
@@ -4433,6 +5544,9 @@ function initSidebarNavigation() {
     setActivePillById(resolvedId);
     sections.forEach((section) => {
       const isActive = section.id === resolvedId;
+      if (isActive && !section.open) {
+        section.open = true;
+      }
       section.hidden = !isActive;
       section.classList.toggle("is-active-tab", isActive);
     });
@@ -4465,9 +5579,11 @@ function applySidebarState() {
   if (state.settings.sidebarCollapsed) {
     app.classList.add("sidebar-collapsed");
     toggleSidebarBtn.textContent = "展开侧栏";
+    toggleSidebarBtn.setAttribute("aria-expanded", "false");
   } else {
     app.classList.remove("sidebar-collapsed");
     toggleSidebarBtn.textContent = "收起侧栏";
+    toggleSidebarBtn.setAttribute("aria-expanded", "true");
   }
 }
 
@@ -4479,6 +5595,78 @@ addStudentBtn.addEventListener("click", () => {
   studentGenderSelect.value = "";
   studentNameInput.focus();
 });
+
+if (loginForm) {
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const account = loginAccount.value.trim();
+    const password = loginPassword.value;
+    if (account === LOGIN_ACCOUNT && await verifyPassword(password)) {
+      setAuthenticated(loginRemember.checked);
+      showApp();
+      return;
+    }
+    loginError.textContent = "账号或密码不正确，请重试。";
+    loginPassword.value = "";
+    loginPassword.focus();
+  });
+}
+
+if (changePasswordBtn) {
+  changePasswordBtn.addEventListener("click", openChangePasswordModal);
+}
+
+if (changePasswordClose) {
+  changePasswordClose.addEventListener("click", closeChangePasswordModal);
+}
+
+if (changePasswordCancel) {
+  changePasswordCancel.addEventListener("click", closeChangePasswordModal);
+}
+
+if (changePasswordModal) {
+  changePasswordModal.addEventListener("click", (event) => {
+    if (event.target === changePasswordModal) {
+      closeChangePasswordModal();
+    }
+  });
+}
+
+if (changePasswordForm) {
+  changePasswordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const currentPassword = currentPasswordInput.value;
+    const newPassword = newPasswordInput.value;
+    const confirmPassword = confirmPasswordInput.value;
+    if (!await verifyPassword(currentPassword)) {
+      changePasswordError.textContent = "当前密码不正确，请重试。";
+      currentPasswordInput.focus();
+      return;
+    }
+    if (newPassword.length < 4) {
+      changePasswordError.textContent = "新密码至少需要 4 位。";
+      newPasswordInput.focus();
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      changePasswordError.textContent = "两次输入的新密码不一致。";
+      confirmPasswordInput.focus();
+      return;
+    }
+    localStorage.setItem(CUSTOM_PASSWORD_HASH_KEY, await hashPassword(newPassword));
+    clearAuth();
+    closeChangePasswordModal();
+    showLogin();
+    loginError.textContent = "密码已修改，请使用新密码重新登录。";
+  });
+}
+
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", () => {
+    clearAuth();
+    showLogin();
+  });
+}
 
 studentNameInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -4557,11 +5745,10 @@ parseScoreBtn.addEventListener("click", () => {
 
 saveScoreBtn.addEventListener("click", () => {
   if (!examDraft) {
-    scoreStatus.textContent = "请先解析成绩表。";
+    scoreStatus.textContent = "请先上传并解析成绩表";
     return;
   }
-  scoreImportContext = { mode: "new", examId: null };
-  applyExamDraft();
+  saveExamRecord();
 });
 
 if (existingExamSelect) {
@@ -4582,12 +5769,14 @@ if (deleteExamBtn) {
       scoreStatus.textContent = "请先选择要删除的考试。";
       return;
     }
-    const exam = (state.exams || []).find((item) => item.id === examId);
+    const exam =
+      (state.exams || []).find((item) => item.id === examId) ||
+      state.students.flatMap((student) => (Array.isArray(student.exams) ? student.exams : [])).find((item) => item.id === examId);
     const label = `${exam?.name || "考试"} ${exam?.date || ""}`.trim();
     if (!confirm(`确定整体删除「${label}」这次考试吗？这会删除所有学生的该次成绩。`)) {
       return;
     }
-    if (!removeExamGlobally(examId)) {
+    if (!removeExamGlobally(examId, exam)) {
       scoreStatus.textContent = "未找到该次考试。";
       renderExamManager();
       return;
@@ -4616,6 +5805,77 @@ if (replaceExamBtn) {
     }
     scoreImportContext = { mode: "replace", examId };
     applyExamDraft();
+  });
+}
+
+if (savedExamList) {
+  savedExamList.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) {
+      return;
+    }
+    const actionButton = target.closest("[data-action]");
+    if (actionButton) {
+      const examId = actionButton.dataset.examId || "";
+      if (actionButton.dataset.action === "view-saved-exam") {
+        openSavedExamTable(examId);
+      }
+      if (actionButton.dataset.action === "save-saved-exam") {
+        saveSavedExamEdits(examId);
+      }
+      if (actionButton.dataset.action === "delete-saved-exam") {
+        deleteSavedExamRecord(examId);
+      }
+      return;
+    }
+    const row = target.closest(".saved-exam-row");
+    if (!row) {
+      return;
+    }
+    const examId = row.dataset.examId || "";
+    if (expandedSavedExamIds.has(examId)) {
+      expandedSavedExamIds.delete(examId);
+    } else {
+      expandedSavedExamIds.add(examId);
+    }
+    renderSavedExamList();
+  });
+}
+
+if (savedExamTableClose) {
+  savedExamTableClose.addEventListener("click", closeSavedExamTable);
+}
+
+if (trendDetailClose) {
+  trendDetailClose.addEventListener("click", closeTrendDetail);
+}
+
+if (trendDetailModal) {
+  trendDetailModal.addEventListener("click", (event) => {
+    if (event.target === trendDetailModal) {
+      closeTrendDetail();
+    }
+  });
+}
+
+if (savedExamSearchBtn) {
+  savedExamSearchBtn.addEventListener("click", searchSavedExamStudent);
+}
+
+if (savedExamSearchInput) {
+  savedExamSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      searchSavedExamStudent();
+    }
+  });
+}
+
+if (savedExamTableModal) {
+  savedExamTableModal.addEventListener("click", (event) => {
+    if (event.target === savedExamTableModal) {
+      closeSavedExamTable();
+    }
   });
 }
 
@@ -4882,7 +6142,9 @@ if (exportModal) {
 }
 if (examTrendModeSelect) {
   examTrendModeSelect.addEventListener("change", (event) => {
-    examTrendMode = event.target.value === "rankSchool" ? "rankSchool" : "score";
+    examTrendMode = ["score", "rankClass", "rankSchool"].includes(event.target.value)
+      ? event.target.value
+      : "score";
     const student = state.students.find((item) => item.id === activeStudentId);
     if (student) {
       renderExamTrends(Array.isArray(student.exams) ? [...student.exams].sort((a, b) => (b.date || "").localeCompare(a.date || "")) : []);
@@ -4990,9 +6252,12 @@ mappingApply.addEventListener("click", () => {
   };
   const data = parseScoreRowsWithMapping(mappingState.rows, mapping);
   examDraft = data;
-  scoreExamName.value =
-    mappingState.filename?.replace(/\.[^/.]+$/, "")?.trim() || scoreExamName.value || "考试";
-  scoreExamDate.value = new Date().toISOString().slice(0, 10);
+  if (!scoreExamName.value.trim()) {
+    scoreExamName.value = mappingState.filename?.replace(/\.[^/.]+$/, "")?.trim() || "考试";
+  }
+  if (!scoreExamDate.value) {
+    scoreExamDate.value = new Date().toISOString().slice(0, 10);
+  }
   saveScoreBtn.disabled = false;
   scoreStatus.textContent = `已解析 ${data.entries.length} 名学生成绩，请确认考试名称与日期。`;
   closeMappingModal();
@@ -5017,11 +6282,20 @@ document.addEventListener("keydown", (event) => {
     if (exportModal && !exportModal.classList.contains("hidden")) {
       closeExportModal();
     }
+    if (changePasswordModal && !changePasswordModal.classList.contains("hidden")) {
+      closeChangePasswordModal();
+    }
     if (complementModal && !complementModal.classList.contains("hidden")) {
       closeComplementModal();
     }
     if (!mappingModal.classList.contains("hidden")) {
       closeMappingModal();
+    }
+    if (savedExamTableModal && !savedExamTableModal.classList.contains("hidden")) {
+      closeSavedExamTable();
+    }
+    if (trendDetailModal && !trendDetailModal.classList.contains("hidden")) {
+      closeTrendDetail();
     }
     if (!easterModal.classList.contains("hidden")) {
       closeEasterModal();
@@ -5031,5 +6305,11 @@ document.addEventListener("keydown", (event) => {
 
 normalizeState();
 initSeatCardMode();
+initAnimatedDetails();
 initSidebarNavigation();
 renderAll();
+if (isAuthenticated()) {
+  showApp();
+} else {
+  showLogin();
+}

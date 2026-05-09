@@ -8,7 +8,30 @@
   </head>
   <body>
     <div class="bg-watermark" aria-hidden="true"></div>
-    <div class="app">
+    <section id="loginScreen" class="login-screen" aria-labelledby="loginTitle">
+      <form id="loginForm" class="login-card" novalidate>
+        <div class="login-brand">
+          <div class="login-kicker">Seat Manager</div>
+          <h1 id="loginTitle">小张专用座位管理器</h1>
+          <p>请输入账号密码后继续使用。</p>
+        </div>
+        <div class="login-fields">
+          <label class="login-field">
+            <span>账号</span>
+            <input id="loginAccount" class="input" type="text" autocomplete="username" placeholder="请输入账号" />
+          </label>
+          <label class="login-field">
+            <span>密码</span>
+            <input id="loginPassword" class="input" type="password" autocomplete="current-password" placeholder="请输入密码" />
+          </label>
+        </div>
+        <label class="checkbox login-remember"><input id="loginRemember" type="checkbox" />记住我</label>
+        <div id="loginError" class="login-error" aria-live="polite"></div>
+        <button class="btn-primary login-submit" type="submit">登录</button>
+      </form>
+    </section>
+
+    <div id="appRoot" class="app hidden">
       <header class="app-header">
         <div>
           <h1>小张专用座位管理器</h1>
@@ -23,7 +46,11 @@
             <div class="stat-value" id="seatTotal">0</div>
           </div>
         </div>
-        <button id="toggleSidebarBtn" class="ghost">收起侧栏</button>
+        <div class="header-actions">
+          <button id="toggleSidebarBtn" class="ghost">收起侧栏</button>
+          <button id="changePasswordBtn" class="ghost change-password-btn" type="button">修改密码</button>
+          <button id="logoutBtn" class="ghost logout-btn" type="button">退出登录</button>
+        </div>
       </header>
 
       <main class="layout">
@@ -75,10 +102,6 @@
                   <button id="drawBtn" class="btn-primary">开始抽签</button>
                   <button id="resetDrawBtn" class="btn-secondary">重置抽签</button>
                 </div>
-                <details class="inline-more">
-                  <summary>更多操作</summary>
-                  <button id="clearDrawHistoryBtn" class="btn-text danger-text" type="button">清除记录</button>
-                </details>
                 <div id="drawStatus" class="draw-status muted"></div>
                 <div id="drawResults" class="draw-results"></div>
               </div>
@@ -136,6 +159,14 @@
                     <div id="frontStudentList" class="constraint-list"></div>
                   </div>
                 </details>
+              </div>
+
+              <div class="panel-section compact-panel">
+                <div class="panel-header">
+                  <h2 class="panel-title">更多操作</h2>
+                  <p class="muted">清理课堂抽签相关记录。</p>
+                </div>
+                <button id="clearDrawHistoryBtn" class="btn-text danger-text" type="button">清除抽签记录</button>
               </div>
             </div>
           </details>
@@ -195,29 +226,38 @@
             <summary><span>成绩导入</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
               <div class="panel-section compact-panel">
-                <div class="muted panel-tip">先解析成绩表，再保存或替换到已有考试。</div>
+                <div class="panel-header">
+                  <h2 class="panel-title">成绩导入</h2>
+                  <p class="muted">先解析成绩表，再确认考试名称和日期。</p>
+                </div>
                 <div class="op-group">
                   <input id="scoreFileInput" type="file" accept=".xlsx,.xls,.csv" />
                   <button id="parseScoreBtn" class="btn-primary">解析成绩表</button>
+                </div>
+                <div id="scoreStatus" class="draw-status muted">格式：每行1名学生，每列1科目</div>
+              </div>
+
+              <div class="panel-section compact-panel">
+                <div class="panel-header">
+                  <h2 class="panel-title">考试保存与管理</h2>
+                  <p class="muted">保存已解析的成绩表，方便之后回看。</p>
                 </div>
                 <div class="score-edit">
                   <input id="scoreExamName" class="input" type="text" placeholder="考试名称" maxlength="30" />
                   <input id="scoreExamDate" class="input" type="date" />
                   <button id="saveScoreBtn" class="btn-secondary" disabled>保存考试</button>
                 </div>
-                <div id="scoreStatus" class="draw-status muted">格式：每行1名学生，每列1科目</div>
-                <div class="score-manage">
-                  <select id="existingExamSelect" class="select">
-                    <option value="">选择已保存考试</option>
-                  </select>
+                <div class="score-history-block">
+                  <div class="score-history-title">历史考试</div>
+                  <div id="savedExamList" class="saved-exam-list"></div>
                 </div>
-                <details class="inline-more score-more">
-                  <summary>已保存考试管理</summary>
-                  <div class="score-manage-actions">
-                    <button id="replaceExamBtn" class="btn-secondary">替换该次成绩</button>
-                    <button id="deleteExamBtn" class="btn-danger-soft">删除该次成绩</button>
-                  </div>
-                </details>
+              </div>
+
+              <div class="panel-section compact-panel">
+                <div class="panel-header">
+                  <h2 class="panel-title">标签设置</h2>
+                  <p class="muted">按成绩自动生成学科标签，用于座位调整参考。</p>
+                </div>
                 <details class="auto-tag-settings">
                   <summary>自动学科标签设置</summary>
                   <div class="auto-tag-grid">
@@ -256,9 +296,26 @@
             <summary><span>历史座位</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
               <div class="panel-section compact-panel history-panel">
-                <div class="muted panel-tip">保存后可查看历史版本并按备注搜索。</div>
+                <div class="panel-header">
+                  <h2 class="panel-title">保存当前座位</h2>
+                  <p class="muted">保存后可在历史列表中查看和恢复。</p>
+                </div>
                 <button id="saveHistoryBtn" class="btn-primary full">保存当前座位</button>
+              </div>
+
+              <div class="panel-section compact-panel history-panel">
+                <div class="panel-header">
+                  <h2 class="panel-title">搜索历史</h2>
+                  <p class="muted">按备注快速筛选保存过的座位表。</p>
+                </div>
                 <input id="historyFilterInput" class="input" type="text" placeholder="搜索历史备注" />
+              </div>
+
+              <div class="panel-section compact-panel history-panel">
+                <div class="panel-header">
+                  <h2 class="panel-title">历史列表</h2>
+                  <p class="muted">查看历史版本并按需恢复。</p>
+                </div>
                 <div id="historyList" class="history-list"></div>
               </div>
             </div>
@@ -337,10 +394,11 @@
           <div class="exam-trend-header">
             <div class="exam-title">成绩趋势</div>
             <div class="exam-trend-actions">
-              <select id="examTrendModeSelect" class="select">
-                <option value="score">按绝对分数</option>
-                <option value="rankSchool">按年级排名</option>
-              </select>
+                <select id="examTrendModeSelect" class="select">
+                  <option value="score">按绝对分数</option>
+                  <option value="rankClass">按班级排名</option>
+                  <option value="rankSchool">按年级排名</option>
+                </select>
               <button id="exportTrendsBtn" class="ghost">导出</button>
             </div>
           </div>
@@ -370,7 +428,69 @@
       </div>
     </div>
 
+    <div id="savedExamTableModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card saved-exam-table-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">历史考试</div>
+            <h3 id="savedExamTableTitle">完整成绩表</h3>
+          </div>
+          <button id="savedExamTableClose" class="ghost">关闭</button>
+        </div>
+        <div id="savedExamTableMeta" class="saved-exam-table-meta muted"></div>
+        <div class="saved-exam-search">
+          <input id="savedExamSearchInput" class="input" type="text" placeholder="搜索学生姓名" />
+          <button id="savedExamSearchBtn" class="btn-secondary">搜索</button>
+        </div>
+        <div id="savedExamSearchStatus" class="saved-exam-search-status muted"></div>
+        <div id="savedExamTableWrap" class="saved-exam-table-wrap"></div>
+      </div>
+    </div>
+
+    <div id="trendDetailModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card trend-detail-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">成绩趋势</div>
+            <h3 id="trendDetailTitle">趋势详情</h3>
+          </div>
+          <button id="trendDetailClose" class="ghost">关闭</button>
+        </div>
+        <div id="trendDetailMeta" class="trend-detail-meta muted"></div>
+        <div id="trendDetailList" class="trend-detail-list"></div>
+      </div>
+    </div>
+
     <div id="toast" class="toast" aria-live="polite"></div>
+
+    <div id="changePasswordModal" class="modal hidden" aria-hidden="true">
+      <form id="changePasswordForm" class="modal-card change-password-card" novalidate>
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">账号安全</div>
+            <h3>修改登录密码</h3>
+          </div>
+          <button id="changePasswordClose" class="ghost" type="button">关闭</button>
+        </div>
+        <label class="login-field">
+          <span>当前密码</span>
+          <input id="currentPasswordInput" class="input" type="password" autocomplete="current-password" placeholder="请输入当前密码" />
+        </label>
+        <label class="login-field">
+          <span>新密码</span>
+          <input id="newPasswordInput" class="input" type="password" autocomplete="new-password" placeholder="请输入新密码" />
+        </label>
+        <label class="login-field">
+          <span>确认新密码</span>
+          <input id="confirmPasswordInput" class="input" type="password" autocomplete="new-password" placeholder="请再次输入新密码" />
+        </label>
+        <div id="changePasswordError" class="login-error" aria-live="polite"></div>
+        <div class="mapping-actions">
+          <button id="changePasswordCancel" class="ghost" type="button">取消</button>
+          <button class="primary" type="submit">保存新密码</button>
+        </div>
+      </form>
+    </div>
 
     <div id="easterModal" class="modal hidden" aria-hidden="true">
       <div class="modal-card">
