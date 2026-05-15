@@ -188,6 +188,7 @@
                     <div class="io-card-desc muted">支持 Excel/CSV；可选择是否覆盖现有名单</div>
                     <div class="op-group">
                       <label class="checkbox compact"><input id="importReplace" type="checkbox" checked />覆盖现有名单</label>
+                      <label class="checkbox compact"><input id="importKeepHistory" type="checkbox" checked />覆盖时保留历史数据</label>
                       <input id="importFileInput" type="file" accept=".xlsx,.xls,.csv" />
                       <button id="importBtn" class="btn-primary">导入名单</button>
                     </div>
@@ -574,7 +575,7 @@
       </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="vendor/xlsx.full.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

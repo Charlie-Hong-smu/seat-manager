@@ -120,6 +120,7 @@ const pairByGender = document.getElementById("pairByGender");
 
 const importFileInput = document.getElementById("importFileInput");
 const importReplace = document.getElementById("importReplace");
+const importKeepHistory = document.getElementById("importKeepHistory");
 const importBtn = document.getElementById("importBtn");
 const importStatus = document.getElementById("importStatus");
 const exportSeatsBtn = document.getElementById("exportSeatsBtn");
@@ -815,7 +816,18 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
+  } catch (error) {
+    console.error("无法保存本地数据", error);
+    showToast("保存失败，请立即导出备份", "error");
+    if (backupReminder && backupReminderText) {
+      backupReminder.classList.remove("hidden");
+      backupReminderText.textContent = "浏览器本地存储可能已满，请立即导出备份 JSON。";
+    }
+    return false;
+  }
 }
 
 function normalizeState() {
@@ -2882,7 +2894,54 @@ function parseSpreadsheetRows(rows) {
   return { names, placements, genders, genderList, hasPlacement, hasGender };
 }
 
-function applyImportData(data, replaceExisting) {
+function cloneJson(value, fallback) {
+  if (value === undefined) {
+    return fallback;
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function makeStudentFromImport(name, gender, preservedStudent = null) {
+  return {
+    id: preservedStudent?.id || uid(),
+    name,
+    gender: gender || preservedStudent?.gender || "",
+    aliases: preservedStudent ? cloneJson(preservedStudent.aliases, []) : [],
+    records: preservedStudent ? cloneJson(preservedStudent.records, []) : [],
+    manualTags: preservedStudent ? cloneJson(preservedStudent.manualTags, []) : [],
+    autoTags: preservedStudent ? cloneJson(preservedStudent.autoTags, []) : [],
+    exams: preservedStudent ? cloneJson(preservedStudent.exams, []) : []
+  };
+}
+
+function buildPreservedStudentLookup() {
+  const lookup = new Map();
+  state.students.forEach((student) => {
+    const keys = [student.name, ...(student.aliases || [])].map((value) => normalizeName(value)).filter(Boolean);
+    keys.forEach((key) => {
+      if (!lookup.has(key)) {
+        lookup.set(key, []);
+      }
+      lookup.get(key).push(student);
+    });
+  });
+  return lookup;
+}
+
+function takePreservedStudent(lookup, name) {
+  const key = normalizeName(name);
+  if (!key || !lookup.has(key)) {
+    return null;
+  }
+  const list = lookup.get(key);
+  return list.shift() || null;
+}
+
+function applyImportData(data, replaceExisting, keepHistory = true) {
   const { names, placements, genders, genderList, hasPlacement } = data;
   const incomingNames = [...names];
 
@@ -2894,6 +2953,11 @@ function applyImportData(data, replaceExisting) {
   }
 
   if (replaceExisting) {
+    const preservedLookup = keepHistory ? buildPreservedStudentLookup() : new Map();
+    const preservedDraw = keepHistory ? cloneJson(state.draw, { noRepeat: false, used: [], history: [] }) : null;
+    const preservedSeatHistory = keepHistory ? cloneJson(state.seatHistory, []) : [];
+    const preservedExams = keepHistory ? cloneJson(state.exams, []) : [];
+    const preservedSavedExams = keepHistory ? cloneJson(state.savedExams, []) : [];
     const students = [];
     const sourceNames = hasPlacement ? placements : [];
     const placementCount = sourceNames.filter((name) => name).length;
@@ -2906,7 +2970,7 @@ function applyImportData(data, replaceExisting) {
         return;
       }
       const gender = genders[index] || "";
-      const student = { id: uid(), name, gender, aliases: [], records: [], manualTags: [], autoTags: [], exams: [] };
+      const student = makeStudentFromImport(name, gender, takePreservedStudent(preservedLookup, name));
       students.push(student);
       if (index < seatOrder.length) {
         seatOrder[index] = student.id;
@@ -2918,7 +2982,7 @@ function applyImportData(data, replaceExisting) {
         return;
       }
       const gender = genderList[index] || "";
-      const student = { id: uid(), name, gender, aliases: [], records: [], manualTags: [], autoTags: [], exams: [] };
+      const student = makeStudentFromImport(name, gender, takePreservedStudent(preservedLookup, name));
       students.push(student);
       const emptyIndex = seatOrder.indexOf(null);
       if (emptyIndex !== -1) {
@@ -2928,10 +2992,20 @@ function applyImportData(data, replaceExisting) {
 
     state.students = students;
     state.seatOrder = seatOrder;
-    state.draw.used = [];
-    state.draw.history = [];
-    state.seatHistory = [];
-    state.exams = [];
+    if (keepHistory) {
+      const idSet = new Set(students.map((student) => student.id));
+      state.draw = preservedDraw;
+      state.draw.used = (state.draw.used || []).filter((id) => idSet.has(id));
+      state.seatHistory = preservedSeatHistory;
+      state.exams = preservedExams;
+      state.savedExams = preservedSavedExams;
+    } else {
+      state.draw.used = [];
+      state.draw.history = [];
+      state.seatHistory = [];
+      state.exams = [];
+      state.savedExams = [];
+    }
   } else {
     if (hasPlacement) {
       importStatus.textContent = "检测到行列信息：追加模式下将忽略座位位置，仅追加名单。";
@@ -2977,6 +3051,8 @@ function importFile(file) {
   const name = file.name.toLowerCase();
   const isCsv = name.endsWith(".csv");
   const isExcel = name.endsWith(".xlsx") || name.endsWith(".xls");
+  const replaceExisting = Boolean(importReplace?.checked);
+  const keepHistory = replaceExisting ? Boolean(importKeepHistory?.checked) : true;
 
   if (isCsv) {
     file
@@ -2984,7 +3060,7 @@ function importFile(file) {
       .then((text) => {
         const rows = parseCSV(text);
         const data = parseSpreadsheetRows(rows);
-        if (applyImportData(data, importReplace.checked)) {
+        if (applyImportData(data, replaceExisting, keepHistory)) {
           importStatus.textContent = "导入成功。";
         }
       })
@@ -3007,7 +3083,7 @@ function importFile(file) {
         const worksheet = workbook.Sheets[firstSheet];
         const rows = window.XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
         const data = parseSpreadsheetRows(rows);
-        if (applyImportData(data, importReplace.checked)) {
+        if (applyImportData(data, replaceExisting, keepHistory)) {
           importStatus.textContent = "导入成功。";
         }
       })
@@ -3052,6 +3128,18 @@ function downloadTextFile(filename, content) {
   URL.revokeObjectURL(url);
 }
 
+function downloadJsonFile(filename, content) {
+  const blob = new Blob([content], { type: "application/json;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function exportSeatsCsv() {
   const header = [
     "行",
@@ -3072,7 +3160,8 @@ function exportSeatsCsv() {
   lines.push(header.map(csvEscape).join(","));
 
   const rows = getRowCount();
-  for (let row = 0; row < rows; row += 1) {
+  for (let displayRow = 0; displayRow < rows; displayRow += 1) {
+    const row = getSeatDataRowFromDisplayRow(displayRow, rows);
     const rowNames = [];
     for (let col = 0; col < COLS; col += 1) {
       const index = row * COLS + col;
@@ -3113,19 +3202,26 @@ function exportBackupJson() {
     .slice(0, 5)
     .replace(":", "")}.json`;
   const content = JSON.stringify(payload, null, 2);
-  const blob = new Blob([content], { type: "application/json;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  downloadJsonFile(filename, content);
   state.lastBackupAt = exportedAt;
   saveState();
   renderBackupInfo();
   showToast("备份已导出", "success");
+}
+
+function exportPreImportBackup() {
+  const exportedAt = new Date().toISOString();
+  const payload = {
+    version: BACKUP_VERSION,
+    exportedAt,
+    reason: "before-import",
+    data: state
+  };
+  const filename = `before_import_backup_${formatDateForFilename()}_${new Date()
+    .toTimeString()
+    .slice(0, 5)
+    .replace(":", "")}.json`;
+  downloadJsonFile(filename, JSON.stringify(payload, null, 2));
 }
 
 function importBackupJson(file) {
@@ -3150,6 +3246,7 @@ function importBackupJson(file) {
       if (needsConfirm && !confirm(confirmMsg.trim())) {
         return;
       }
+      exportPreImportBackup();
       state = data;
       normalizeState();
       saveState();
@@ -5734,6 +5831,20 @@ shuffleSeatsBtn.addEventListener("click", () => {
 resetSeatsBtn.addEventListener("click", () => {
   resetSeats();
 });
+
+function updateImportHistoryOption() {
+  if (!importKeepHistory) {
+    return;
+  }
+  const isReplace = Boolean(importReplace?.checked);
+  importKeepHistory.disabled = !isReplace;
+  importKeepHistory.parentElement?.classList.toggle("muted", !isReplace);
+}
+
+if (importReplace) {
+  importReplace.addEventListener("change", updateImportHistoryOption);
+  updateImportHistoryOption();
+}
 
 importBtn.addEventListener("click", () => {
   if (!importFileInput.files.length) {
