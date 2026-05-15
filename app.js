@@ -215,6 +215,8 @@ const trendDetailMeta = document.getElementById("trendDetailMeta");
 const trendDetailList = document.getElementById("trendDetailList");
 const trendDetailClose = document.getElementById("trendDetailClose");
 const toast = document.getElementById("toast");
+const updatePrompt = document.getElementById("updatePrompt");
+const updateNowBtn = document.getElementById("updateNowBtn");
 const easterModal = document.getElementById("easterModal");
 const easterText = document.getElementById("easterText");
 const easterClose = document.getElementById("easterClose");
@@ -669,6 +671,59 @@ function showToast(message, type = "info") {
   showToast.timer = setTimeout(() => {
     toast.classList.remove("show");
   }, 2200);
+}
+
+function registerOfflineApp() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  let refreshing = false;
+  let waitingWorker = null;
+
+  const showUpdatePrompt = (worker) => {
+    waitingWorker = worker;
+    updatePrompt?.classList.remove("hidden");
+  };
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) {
+      return;
+    }
+    refreshing = true;
+    window.location.reload();
+  });
+
+  navigator.serviceWorker
+    .register("./sw.js")
+    .then((registration) => {
+      if (registration.waiting) {
+        showUpdatePrompt(registration.waiting);
+      }
+
+      registration.addEventListener("updatefound", () => {
+        const nextWorker = registration.installing;
+        if (!nextWorker) {
+          return;
+        }
+        nextWorker.addEventListener("statechange", () => {
+          if (nextWorker.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdatePrompt(nextWorker);
+          }
+        });
+      });
+    })
+    .catch((error) => {
+      console.warn("离线功能注册失败", error);
+    });
+
+  updateNowBtn?.addEventListener("click", () => {
+    if (!waitingWorker) {
+      window.location.reload();
+      return;
+    }
+    waitingWorker.postMessage({ type: "SKIP_WAITING" });
+  });
 }
 
 function maybeShowEasterEgg(triggerText) {
@@ -6450,6 +6505,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 normalizeState();
+registerOfflineApp();
 initSeatCardMode();
 initAnimatedDetails();
 initSidebarNavigation();

@@ -2619,6 +2619,49 @@ button.tag-chip.mid.active {
   background: #25406d;
 }
 
+.update-prompt {
+  position: fixed;
+  right: 24px;
+  bottom: 82px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid rgba(10, 132, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.14);
+  color: var(--text);
+  font-size: 14px;
+  z-index: 45;
+}
+
+.update-prompt button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.update-prompt button:hover {
+  background: var(--accent-strong);
+}
+
+@media (max-width: 640px) {
+  .update-prompt {
+    right: 16px;
+    bottom: 76px;
+    left: 16px;
+    justify-content: space-between;
+  }
+}
+
 .easter-text {
   font-size: 16px;
   line-height: 1.6;

@@ -1,0 +1,18 @@
+{
+  "name": "班主任座位管理",
+  "short_name": "座位管理",
+  "description": "适合班主任使用的座位、成绩与课堂记录管理工具。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#f5f5f7",
+  "icons": [
+    {
+      "src": "avatar.jpg",
+      "sizes": "1081x1080",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
