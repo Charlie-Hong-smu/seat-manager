@@ -3,9 +3,6 @@ const STORAGE_KEY = "homeroom-seat-manager-v1";
 const AUTH_PERSIST_KEY = "seat-manager-authenticated";
 const AUTH_SESSION_KEY = "seat-manager-session-authenticated";
 const CUSTOM_PASSWORD_HASH_KEY = "seat-manager-password-hash";
-// 前端简易登录：仅用于防止普通用户误入，不是真正安全认证；以后修改账号密码就在这里。
-const LOGIN_ACCOUNT = "cheongqp";
-const LOGIN_PASSWORD = "951120";
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
 const BACKUP_VERSION = 1;
 const SIDEBAR_SECTION_STATE_KEY = "sidebarSectionOpen-v1";
@@ -79,8 +76,12 @@ const COMPLEMENT_RULES = [
 const appRoot = document.getElementById("appRoot");
 const loginScreen = document.getElementById("loginScreen");
 const loginForm = document.getElementById("loginForm");
+const loginHint = document.getElementById("loginHint");
+const loginAccountField = document.getElementById("loginAccountField");
 const loginAccount = document.getElementById("loginAccount");
 const loginPassword = document.getElementById("loginPassword");
+const loginSetupConfirmField = document.getElementById("loginSetupConfirmField");
+const loginSetupConfirm = document.getElementById("loginSetupConfirm");
 const loginRemember = document.getElementById("loginRemember");
 const loginError = document.getElementById("loginError");
 const changePasswordBtn = document.getElementById("changePasswordBtn");
@@ -274,6 +275,26 @@ function isAuthenticated() {
   return localStorage.getItem(AUTH_PERSIST_KEY) === "true" || sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
 }
 
+function hasLoginPassword() {
+  return Boolean(localStorage.getItem(CUSTOM_PASSWORD_HASH_KEY));
+}
+
+function updateLoginMode() {
+  const isSetup = !hasLoginPassword();
+  loginAccountField?.classList.add("hidden");
+  loginSetupConfirmField?.classList.toggle("hidden", !isSetup);
+  if (loginHint) {
+    loginHint.textContent = isSetup ? "首次使用请设置本机登录密码。" : "请输入密码后继续使用。";
+  }
+  if (loginPassword) {
+    loginPassword.placeholder = isSetup ? "请设置密码" : "请输入密码";
+    loginPassword.autocomplete = isSetup ? "new-password" : "current-password";
+  }
+  if (loginRemember) {
+    loginRemember.checked = false;
+  }
+}
+
 function setAuthenticated(remember) {
   if (remember) {
     localStorage.setItem(AUTH_PERSIST_KEY, "true");
@@ -288,10 +309,11 @@ function showLogin() {
   loginScreen?.classList.remove("hidden");
   appRoot?.classList.add("hidden");
   loginForm?.reset();
+  updateLoginMode();
   if (loginError) {
     loginError.textContent = "";
   }
-  setTimeout(() => loginAccount?.focus(), 0);
+  setTimeout(() => loginPassword?.focus(), 0);
 }
 
 function showApp() {
@@ -314,10 +336,7 @@ async function hashPassword(password) {
 
 async function verifyPassword(password) {
   const customHash = localStorage.getItem(CUSTOM_PASSWORD_HASH_KEY);
-  if (customHash) {
-    return (await hashPassword(password)) === customHash;
-  }
-  return password === LOGIN_PASSWORD;
+  return Boolean(customHash) && (await hashPassword(password)) === customHash;
 }
 
 function openChangePasswordModal() {
@@ -654,7 +673,7 @@ function showToast(message, type = "info") {
 function maybeShowEasterEgg(triggerText) {
   const normalized = normalizeName(triggerText);
   const triggersA = new Set([normalizeName("洪丞林")]);
-  const triggersB = new Set([normalizeName("张秋萍"), normalizeName("cheongqp")]);
+  const triggersB = new Set([normalizeName("张秋萍")]);
   let mode = "";
   if (triggersA.has(normalized)) {
     mode = "A";
@@ -5599,14 +5618,30 @@ addStudentBtn.addEventListener("click", () => {
 if (loginForm) {
   loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const account = loginAccount.value.trim();
     const password = loginPassword.value;
-    if (account === LOGIN_ACCOUNT && await verifyPassword(password)) {
+    const setupConfirm = loginSetupConfirm?.value || "";
+    if (!hasLoginPassword()) {
+      if (password.length < 4) {
+        loginError.textContent = "密码至少需要 4 位。";
+        loginPassword.focus();
+        return;
+      }
+      if (password !== setupConfirm) {
+        loginError.textContent = "两次输入的密码不一致。";
+        loginSetupConfirm?.focus();
+        return;
+      }
+      localStorage.setItem(CUSTOM_PASSWORD_HASH_KEY, await hashPassword(password));
       setAuthenticated(loginRemember.checked);
       showApp();
       return;
     }
-    loginError.textContent = "账号或密码不正确，请重试。";
+    if (await verifyPassword(password)) {
+      setAuthenticated(loginRemember.checked);
+      showApp();
+      return;
+    }
+    loginError.textContent = "密码不正确，请重试。";
     loginPassword.value = "";
     loginPassword.focus();
   });

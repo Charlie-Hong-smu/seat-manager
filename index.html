@@ -13,16 +13,20 @@
         <div class="login-brand">
           <div class="login-kicker">Seat Manager</div>
           <h1 id="loginTitle">小张专用座位管理器</h1>
-          <p>请输入账号密码后继续使用。</p>
+          <p id="loginHint">请输入密码后继续使用。</p>
         </div>
         <div class="login-fields">
-          <label class="login-field">
+          <label id="loginAccountField" class="login-field hidden">
             <span>账号</span>
             <input id="loginAccount" class="input" type="text" autocomplete="username" placeholder="请输入账号" />
           </label>
           <label class="login-field">
             <span>密码</span>
             <input id="loginPassword" class="input" type="password" autocomplete="current-password" placeholder="请输入密码" />
+          </label>
+          <label id="loginSetupConfirmField" class="login-field hidden">
+            <span>确认密码</span>
+            <input id="loginSetupConfirm" class="input" type="password" autocomplete="new-password" placeholder="请再次输入密码" />
           </label>
         </div>
         <label class="checkbox login-remember"><input id="loginRemember" type="checkbox" />记住我</label>
