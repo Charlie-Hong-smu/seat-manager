@@ -206,6 +206,11 @@
                       <button id="exportSeatsBtn" class="btn-secondary full">导出座位表 CSV</button>
                       <button id="exportBackupBtn" class="btn-secondary full">导出备份 JSON</button>
                     </div>
+                    <div id="backupInfo" class="backup-info muted">上次备份：从未</div>
+                    <div id="backupReminder" class="backup-reminder hidden">
+                      <div id="backupReminderText"></div>
+                      <button id="backupReminderExportBtn" class="btn-secondary">立即备份</button>
+                    </div>
                   </div>
 
                   <div class="io-card">
@@ -217,11 +222,6 @@
                     <div class="op-group">
                       <input id="importBackupInput" type="file" accept=".json" />
                       <button id="importBackupBtn" class="btn-primary">导入备份 JSON</button>
-                    </div>
-                    <div id="backupInfo" class="backup-info muted">上次备份：从未</div>
-                    <div id="backupReminder" class="backup-reminder hidden">
-                      <div id="backupReminderText"></div>
-                      <button id="backupReminderExportBtn" class="btn-secondary">立即备份</button>
                     </div>
                   </div>
                 </div>
