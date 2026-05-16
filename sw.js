@@ -1,4 +1,4 @@
-const CACHE_VERSION = "seat-manager-v2026-05-15-02";
+const CACHE_VERSION = "seat-manager-v2026-05-16-ui-polish";
 const APP_SHELL = [
   "./",
   "./index.html",

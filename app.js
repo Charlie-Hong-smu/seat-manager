@@ -113,6 +113,8 @@ const resetDrawBtn = document.getElementById("resetDrawBtn");
 const clearDrawHistoryBtn = document.getElementById("clearDrawHistoryBtn");
 const drawStatus = document.getElementById("drawStatus");
 const drawResults = document.getElementById("drawResults");
+const drawHistoryDetails = document.getElementById("drawHistoryDetails");
+const drawHistorySummary = document.getElementById("drawHistorySummary");
 
 const shuffleSeatsBtn = document.getElementById("shuffleSeatsBtn");
 const resetSeatsBtn = document.getElementById("resetSeatsBtn");
@@ -158,6 +160,7 @@ const historyFilterInput = document.getElementById("historyFilterInput");
 
 const rowLabels = document.getElementById("rowLabels");
 const seatGroups = document.getElementById("seatGroups");
+const seatEmptyState = document.getElementById("seatEmptyState");
 
 const recordModal = document.getElementById("recordModal");
 const recordStudentName = document.getElementById("recordStudentName");
@@ -206,6 +209,7 @@ const savedExamTableTitle = document.getElementById("savedExamTableTitle");
 const savedExamTableMeta = document.getElementById("savedExamTableMeta");
 const savedExamSearchInput = document.getElementById("savedExamSearchInput");
 const savedExamSearchBtn = document.getElementById("savedExamSearchBtn");
+const savedExamSearchResults = document.getElementById("savedExamSearchResults");
 const savedExamSearchStatus = document.getElementById("savedExamSearchStatus");
 const savedExamTableWrap = document.getElementById("savedExamTableWrap");
 const savedExamTableClose = document.getElementById("savedExamTableClose");
@@ -377,6 +381,469 @@ function normalizeName(name) {
     .replace(/\s+/g, "")
     .replace(/[·•・、，,。.\\\-—_~`!@#$%^&*+=:;"'<>?？【】\[\]{}]/g, "")
     .trim();
+}
+
+const PINYIN_CHAR_GROUPS = {
+  a: "阿啊呵吖腌锕",
+  ai: "爱矮挨哎艾碍哀癌隘蔼皑埃嗳嫒瑷暧",
+  an: "安按暗岸俺案鞍氨胺庵谙铵鹌黯",
+  ang: "昂盎肮",
+  ao: "奥傲熬凹敖澳袄懊翱鳌嗷拗",
+  ba: "八把爸巴吧拔罢霸坝芭叭疤扒靶跋",
+  bai: "白百柏败摆拜佰伯稗",
+  ban: "半办班般板伴搬斑版扮拌瓣颁扳绊",
+  bang: "帮棒邦榜膀绑傍磅蚌镑",
+  bao: "包宝报保抱暴胞薄堡饱爆鲍褒刨豹瀑曝",
+  bei: "北被备背杯贝倍悲碑辈卑呗蓓惫焙",
+  ben: "本奔苯笨贲",
+  beng: "崩蹦绷甭泵蚌迸",
+  bi: "比必笔毕闭避鼻彼碧币逼壁臂弊陛璧彬斌宾滨冰兵秉柄炳并病屏",
+  bian: "边变便遍编辩扁贬鞭辨卞辫匾",
+  biao: "表标彪膘镖飙裱",
+  bie: "别憋鳖瘪",
+  bin: "宾斌彬滨濒缤",
+  bing: "并病兵冰饼柄丙秉炳屏",
+  bo: "波博伯播泊玻薄勃拨柏驳搏脖卜帛舶渤钵",
+  bu: "不部步布补捕卜簿怖哺埠",
+  ca: "擦嚓",
+  cai: "才菜财采材彩蔡裁猜睬",
+  can: "参残餐灿惭惨蚕璨",
+  cang: "藏仓苍舱沧",
+  cao: "草操曹槽糙嘈",
+  ce: "册侧测策厕",
+  cen: "岑涔",
+  ceng: "曾层蹭噌",
+  cha: "查差茶插察叉茬刹诧岔碴",
+  chai: "柴拆差豺钗",
+  chan: "产单缠禅蝉搀颤铲馋阐婵",
+  chang: "长常场厂唱昌畅尝肠偿敞倡昶",
+  chao: "朝超潮吵炒抄巢钞嘲",
+  che: "车彻撤扯澈掣",
+  chen: "陈晨辰沉尘臣称琛宸趁衬忱",
+  cheng: "成程城承呈诚乘盛澄橙逞惩秤丞",
+  chi: "吃持迟池赤尺齿驰痴翅斥耻炽",
+  chong: "冲重充崇虫宠",
+  chou: "抽愁仇臭筹酬丑绸畴",
+  chu: "出处初除楚触础储厨畜雏橱",
+  chuai: "揣踹啜",
+  chuan: "传船穿川串喘椽",
+  chuang: "创床窗闯疮",
+  chui: "吹垂锤炊",
+  chun: "春纯唇醇淳蠢",
+  chuo: "戳绰辍",
+  ci: "此次词刺辞慈磁瓷茨赐",
+  cong: "从聪丛葱匆囱",
+  cou: "凑",
+  cu: "粗促醋簇",
+  cuan: "窜篡攒蹿",
+  cui: "崔脆翠催摧粹淬",
+  cun: "村存寸",
+  cuo: "错措搓撮挫",
+  da: "大达答打搭哒妲沓",
+  dai: "代带待戴袋呆贷逮怠歹黛岱",
+  dan: "但单蛋淡担丹胆旦弹氮耽诞郸",
+  dang: "当党档挡荡堂趟",
+  dao: "到道导岛倒刀盗稻悼蹈",
+  de: "的得德地",
+  deng: "等登邓灯澄瞪凳蹬",
+  di: "地点第低底弟帝敌递抵滴迪蒂笛狄棣",
+  dian: "点电店典殿淀垫颠滇甸",
+  diao: "调掉雕吊钓刁貂",
+  die: "爹跌叠蝶碟谍迭",
+  ding: "定顶丁订盯鼎钉叮",
+  diu: "丢",
+  dong: "东动懂冬董洞栋冻侗",
+  dou: "都斗豆逗抖兜陡窦",
+  du: "度都读独毒杜督堵渡肚赌睹",
+  duan: "段短端断缎锻",
+  dui: "对队堆兑",
+  dun: "吨顿盾蹲敦墩钝",
+  duo: "多夺朵躲舵堕跺惰铎",
+  e: "饿俄额恶鹅娥峨鄂扼遏蛾",
+  en: "恩嗯",
+  er: "而二儿尔耳洱饵贰",
+  fa: "发法罚伐乏筏阀",
+  fan: "反饭范凡番犯翻烦返泛帆繁樊梵",
+  fang: "方放房防芳访纺坊仿妨",
+  fei: "非飞费肥废菲肺匪斐啡沸",
+  fen: "分份粉芬奋愤纷坟汾",
+  feng: "风封峰丰锋凤冯逢奉疯枫蜂",
+  fo: "佛",
+  fou: "否",
+  fu: "服副府富福夫父复负付附符傅浮妇扶幅伏赴腹抚芙甫辅",
+  ga: "噶咖尬",
+  gai: "该改概盖钙丐",
+  gan: "感干敢赶甘杆肝赣竿柑",
+  gang: "刚港钢岗纲缸冈杠",
+  gao: "高告搞稿膏糕皋",
+  ge: "个各格歌哥革隔葛阁戈鸽割胳",
+  gei: "给",
+  gen: "跟根亘艮",
+  geng: "更耕庚耿梗羹",
+  gong: "公共工功供宫攻恭巩龚拱",
+  gou: "够沟狗构购勾苟钩",
+  gu: "古故股顾谷鼓固姑孤骨估菇辜沽",
+  gua: "挂刮瓜寡卦",
+  guai: "怪乖拐",
+  guan: "关管官观馆冠惯贯罐灌莞",
+  guang: "光广逛",
+  gui: "规贵归鬼桂柜轨硅瑰圭",
+  gun: "滚棍",
+  guo: "国过果郭锅裹帼",
+  ha: "哈蛤",
+  hai: "还海孩害骇亥",
+  han: "汉韩寒含汗涵喊函翰罕憾瀚",
+  hang: "行航杭巷沆",
+  hao: "好号浩豪毫昊皓耗郝灏",
+  he: "和何河合喝赫荷贺盒鹤禾核呵",
+  hei: "黑",
+  hen: "很狠恨痕",
+  heng: "横衡恒哼亨",
+  hong: "红洪宏鸿虹弘哄烘泓",
+  hou: "后候厚侯猴喉",
+  hu: "湖户胡虎护呼忽互壶狐沪乎",
+  hua: "化华花画话滑桦哗",
+  huai: "怀坏淮槐",
+  huan: "欢环换还缓幻焕桓唤宦",
+  huang: "黄荒皇煌慌凰晃璜",
+  hui: "会回灰辉慧惠汇毁恢晖徽绘",
+  hun: "混婚魂昏浑",
+  huo: "或活火货获伙霍祸惑",
+  ji: "及机几己记基即极计集级急技纪际季既济鸡吉寄绩激继姬积籍肌疾寂佳嘉家稽",
+  jia: "家加价假架甲佳嘉贾嫁夹驾颊珈迦",
+  jian: "见间件建简坚检减剑健肩兼键箭尖鉴荐践俭舰柬茧",
+  jiang: "将江讲奖降姜蒋疆匠浆",
+  jiao: "教交叫较角脚焦娇校骄郊椒蕉缴",
+  jie: "接节界姐解结街杰借介洁捷截阶揭皆届",
+  jin: "进今金近尽仅紧锦晋津劲谨瑾",
+  jing: "经京精静景竟敬镜晶井竞净惊靖璟",
+  jiong: "炯迥窘",
+  jiu: "就九酒久旧救舅纠究玖",
+  ju: "局据举具句剧居巨聚拒菊矩俱距炬",
+  juan: "卷捐娟倦眷绢",
+  jue: "决绝觉角掘爵诀珏",
+  jun: "军君均俊峻钧骏郡",
+  ka: "卡咖喀",
+  kai: "开凯慨楷恺",
+  kan: "看砍刊堪坎",
+  kang: "康抗扛慷亢",
+  kao: "考靠烤拷",
+  ke: "可克科课客刻颗柯壳渴珂恪",
+  ken: "肯恳啃垦",
+  keng: "坑吭",
+  kong: "空孔控恐",
+  kou: "口扣寇",
+  ku: "苦库哭酷裤窟",
+  kua: "夸跨垮挎",
+  kuai: "快块会筷侩",
+  kuan: "宽款",
+  kuang: "况矿狂框旷匡眶",
+  kui: "亏奎魁馈愧窥葵",
+  kun: "困昆坤琨捆",
+  kuo: "扩阔括廓",
+  la: "拉啦辣蜡腊喇",
+  lai: "来赖莱徕",
+  lan: "兰蓝览烂拦懒篮澜岚",
+  lang: "浪郎朗狼廊琅",
+  lao: "老劳牢捞姥烙",
+  le: "了乐勒",
+  lei: "类累雷泪蕾磊垒擂",
+  leng: "冷楞棱",
+  li: "里理力利立李丽离礼莉黎例厉励璃梨俐荔",
+  lia: "俩",
+  lian: "连联练莲恋脸炼链廉怜帘",
+  liang: "两量良亮梁凉粮辆谅靓",
+  liao: "了料疗聊辽廖寥",
+  lie: "列烈裂猎劣",
+  lin: "林临琳淋邻麟霖磷凛",
+  ling: "领令另灵零玲凌岭铃龄陵",
+  liu: "六流留刘柳溜琉榴",
+  long: "龙隆弄笼聋拢",
+  lou: "楼漏露娄陋",
+  lu: "路录陆鲁卢鹿露炉芦禄璐",
+  lv: "吕绿律旅率虑履侣",
+  luan: "乱卵峦栾",
+  lue: "略掠",
+  lun: "论轮伦仑",
+  luo: "罗落洛络裸骆萝螺",
+  ma: "吗妈马麻骂码玛",
+  mai: "买卖麦埋迈",
+  man: "满慢曼漫蛮馒瞒",
+  mang: "忙芒盲莽",
+  mao: "毛冒贸帽貌猫茂矛卯",
+  me: "么麽",
+  mei: "没美每妹梅眉煤玫枚媚魅",
+  men: "们门闷",
+  meng: "梦孟蒙猛萌盟",
+  mi: "米密迷秘蜜弥谜",
+  mian: "面免棉眠绵缅",
+  miao: "秒苗妙庙描瞄淼",
+  mie: "灭蔑",
+  min: "民敏闵皿珉",
+  ming: "名明命鸣铭冥",
+  miu: "谬",
+  mo: "莫末模魔摸磨墨默膜漠沫茉",
+  mou: "某谋牟",
+  mu: "目木母幕亩牧穆慕沐",
+  na: "那拿哪纳娜钠",
+  nai: "乃奶耐奈",
+  nan: "南难男楠喃",
+  nang: "囊",
+  nao: "脑闹恼挠瑙",
+  ne: "呢讷",
+  nei: "内馁",
+  nen: "嫩",
+  neng: "能",
+  ni: "你尼呢泥拟逆妮",
+  nian: "年念黏碾",
+  niang: "娘酿",
+  niao: "鸟尿",
+  nie: "捏聂涅",
+  nin: "您",
+  ning: "宁凝拧柠甯",
+  niu: "牛扭纽妞",
+  nong: "农浓弄",
+  nu: "努怒奴",
+  nv: "女",
+  nuan: "暖",
+  nuo: "诺挪懦糯娜",
+  o: "哦噢",
+  ou: "欧偶呕藕鸥",
+  pa: "怕爬帕趴",
+  pai: "派排牌拍徘",
+  pan: "盘判潘盼攀畔",
+  pang: "旁胖庞乓",
+  pao: "跑炮泡抛袍",
+  pei: "配陪培赔佩沛裴",
+  pen: "喷盆",
+  peng: "朋鹏彭碰捧蓬棚膨",
+  pi: "批皮披匹脾疲僻辟屁霹",
+  pian: "片篇偏骗翩",
+  piao: "票飘漂朴嫖",
+  pie: "撇瞥",
+  pin: "品贫拼频聘",
+  ping: "平评瓶凭萍屏苹坪",
+  po: "破坡婆迫颇泼魄",
+  pou: "剖",
+  pu: "普铺谱浦朴扑葡蒲璞",
+  qi: "其起期气七器奇齐企启骑弃琪祺琦棋旗岂妻栖",
+  qia: "恰卡掐",
+  qian: "前千钱浅签欠牵潜倩乾谦茜",
+  qiang: "强枪墙抢腔羌",
+  qiao: "桥巧乔悄敲瞧俏侨翘",
+  qie: "切且怯窃茄",
+  qin: "亲秦琴勤沁钦芹",
+  qing: "请清情青轻庆倾晴卿擎",
+  qiong: "穷琼穹",
+  qiu: "求球秋邱丘囚",
+  qu: "去区取曲趣趋屈渠瞿",
+  quan: "全权圈泉拳劝犬",
+  que: "却确缺雀鹊",
+  qun: "群裙",
+  ran: "然染燃冉",
+  rang: "让嚷壤",
+  rao: "绕扰饶",
+  re: "热惹",
+  ren: "人任认仁忍刃韧",
+  reng: "仍扔",
+  ri: "日",
+  rong: "荣容融蓉榕绒",
+  rou: "肉柔揉",
+  ru: "如入乳茹儒汝",
+  ruan: "软阮",
+  rui: "瑞锐睿蕊芮",
+  run: "润闰",
+  ruo: "若弱偌",
+  sa: "撒洒萨",
+  sai: "赛塞腮",
+  san: "三散伞叁",
+  sang: "桑嗓丧",
+  sao: "扫嫂骚",
+  se: "色瑟涩",
+  sen: "森",
+  seng: "僧",
+  sha: "沙杀纱傻厦莎",
+  shai: "晒筛",
+  shan: "山善闪衫扇珊杉陕姗",
+  shang: "上商伤尚赏裳",
+  shao: "少绍烧稍邵哨",
+  she: "社设射舍蛇摄舌奢",
+  shen: "什身深神沈甚申伸慎肾参",
+  sheng: "生声省胜升盛圣剩绳晟",
+  shi: "是时十事实使世师市始式识史士石诗室试适视施氏思",
+  shou: "手受收首守寿瘦授",
+  shu: "书数树属术叔输熟舒述暑束淑蜀",
+  shua: "刷耍",
+  shuai: "帅摔甩率",
+  shuan: "栓拴",
+  shuang: "双爽霜",
+  shui: "水谁税睡",
+  shun: "顺瞬舜",
+  shuo: "说硕朔烁",
+  si: "四思死斯司私丝寺似嗣",
+  song: "送松宋诵颂嵩",
+  sou: "搜艘嗖",
+  su: "苏素速诉俗宿肃粟",
+  suan: "算酸蒜",
+  sui: "岁随虽碎穗遂隋",
+  sun: "孙损笋",
+  suo: "所索锁缩梭",
+  ta: "他她它塔踏塌",
+  tai: "太台态泰抬胎钛",
+  tan: "谈探坦叹滩弹谭坛檀",
+  tang: "堂唐糖汤趟塘棠",
+  tao: "套讨逃桃涛陶掏滔",
+  te: "特忒",
+  teng: "疼腾藤滕",
+  ti: "体题提替踢梯啼",
+  tian: "天田填甜添恬",
+  tiao: "条跳调挑迢",
+  tie: "铁贴帖",
+  ting: "听停庭挺亭婷廷",
+  tong: "同通统童痛铜桐彤瞳",
+  tou: "头投透偷",
+  tu: "土图突途徒吐兔涂屠",
+  tuan: "团湍",
+  tui: "推退腿褪",
+  tun: "吞屯臀",
+  tuo: "托脱拖妥拓陀驼",
+  wa: "哇瓦挖娃洼",
+  wai: "外歪",
+  wan: "完万晚玩湾弯碗丸宛婉",
+  wang: "王网往望忘亡汪旺",
+  wei: "为位未微伟维卫威围委味魏唯惟炜薇玮",
+  wen: "问文温闻稳纹雯",
+  weng: "翁嗡",
+  wo: "我握窝卧沃",
+  wu: "无五物务武舞吴吾伍悟午雾乌巫",
+  xi: "西系喜细习希息席洗戏吸惜溪熙锡曦夕兮",
+  xia: "下夏吓霞峡侠厦暇",
+  xian: "先现线县显限仙鲜贤宪险献闲咸弦娴",
+  xiang: "想向象项乡相香湘祥翔享响",
+  xiao: "小笑校消效晓萧肖孝潇霄",
+  xie: "写些谢协鞋斜邪携械歇泄",
+  xin: "新心信欣辛鑫馨芯昕",
+  xing: "行性形星兴醒幸杏姓邢",
+  xiong: "兄雄熊胸",
+  xiu: "修秀休袖绣宿",
+  xu: "需许续须徐序虚旭绪",
+  xuan: "选宣旋玄轩萱璇",
+  xue: "学雪血薛穴靴",
+  xun: "寻讯训迅巡勋逊熏询",
+  ya: "呀压亚牙雅押鸭丫崖",
+  yan: "眼言研严演烟验颜燕岩沿炎彦艳延",
+  yang: "样阳养杨洋央扬羊仰漾",
+  yao: "要摇药腰姚咬耀遥尧瑶",
+  ye: "也业夜爷叶野液页烨晔",
+  yi: "一以已意义易亿衣医艺依移益异伊仪宜逸怡毅",
+  yin: "因音引银印阴饮殷尹隐茵",
+  ying: "应英影营迎硬赢颖映莹瑛樱",
+  yo: "哟唷",
+  yong: "用永勇拥泳咏雍",
+  you: "有又由友右游优幼尤邮佑悠",
+  yu: "于与语育玉雨余鱼遇予域宇羽瑜钰昱煜",
+  yuan: "原员远元院愿园源袁圆缘媛苑",
+  yue: "月越约乐悦岳跃阅粤玥",
+  yun: "云运允韵孕匀芸",
+  za: "杂砸咋",
+  zai: "在再载灾仔宰",
+  zan: "赞暂咱攒",
+  zang: "脏藏葬",
+  zao: "早造遭糟澡燥灶枣",
+  ze: "则责择泽仄",
+  zei: "贼",
+  zen: "怎",
+  zeng: "曾增赠憎",
+  zha: "查扎炸眨渣榨乍札",
+  zhai: "摘窄债宅寨",
+  zhan: "站战展占沾斩瞻盏湛",
+  zhang: "张章长掌账丈涨障彰",
+  zhao: "找照赵招朝着召昭罩",
+  zhe: "这着者折哲浙遮",
+  zhen: "真阵镇针震珍振圳贞臻",
+  zheng: "正政证整争郑征蒸睁铮峥",
+  zhi: "之只知制至指直治志质支纸智织职止值芷",
+  zhong: "中种重终钟众忠仲衷",
+  zhou: "周州洲舟骤轴昼宙",
+  zhu: "主住注助朱珠竹祝著筑逐柱",
+  zhua: "抓爪",
+  zhuai: "拽",
+  zhuan: "专转传赚砖撰",
+  zhuang: "装庄壮状撞妆",
+  zhui: "追坠缀锥",
+  zhun: "准谆",
+  zhuo: "着桌卓捉浊灼琢",
+  zi: "子自字资紫仔姿梓滋",
+  zong: "总宗纵踪棕",
+  zou: "走邹奏",
+  zu: "组足族祖阻",
+  zuan: "钻纂",
+  zui: "最嘴罪醉",
+  zun: "尊遵",
+  zuo: "作做坐左座昨佐"
+};
+
+const PINYIN_BY_CHAR = (() => {
+  const map = new Map();
+  Object.entries(PINYIN_CHAR_GROUPS).forEach(([pinyin, chars]) => {
+    Array.from(chars).forEach((char) => {
+      if (!map.has(char)) {
+        map.set(char, []);
+      }
+      map.get(char).push(pinyin);
+    });
+  });
+  return map;
+})();
+
+function getNamePinyinParts(value) {
+  const text = normalizeName(value);
+  if (!text) {
+    return [];
+  }
+  return Array.from(text).map((char) => {
+    const lower = char.toLowerCase();
+    if (/^[a-z0-9]$/.test(lower)) {
+      return [lower];
+    }
+    return PINYIN_BY_CHAR.get(char) || [lower];
+  });
+}
+
+function buildPinyinSearchKeys(value) {
+  const parts = getNamePinyinParts(value);
+  if (!parts.length) {
+    return [];
+  }
+  const keys = new Set();
+  const combinations = [[]];
+  parts.forEach((items) => {
+    const current = combinations.splice(0, combinations.length);
+    current.forEach((combo) => {
+      items.slice(0, 4).forEach((pinyin) => {
+        if (combinations.length < 32) {
+          combinations.push([...combo, pinyin]);
+        }
+      });
+    });
+  });
+  combinations.forEach((combo) => {
+    keys.add(combo.join(""));
+    keys.add(combo.map((item) => item[0]).join(""));
+    for (let index = 1; index < combo.length; index += 1) {
+      const tail = combo.slice(index);
+      keys.add(tail.join(""));
+      keys.add(tail.map((item) => item[0]).join(""));
+    }
+  });
+  parts.forEach((items) => {
+    items.forEach((pinyin) => {
+      if (pinyin.length > 1) {
+        keys.add(pinyin);
+      }
+    });
+  });
+  return [...keys].filter(Boolean);
 }
 
 function normalizeHeader(text) {
@@ -1267,6 +1734,12 @@ function renderSeatGrid() {
   const lockedSet = new Set(state.lockedSeats);
   const rows = getRowCount();
   document.documentElement.style.setProperty("--seat-height", `${getUniformSeatHeight()}px`);
+  document.documentElement.style.setProperty("--seat-cols", COLS.toString());
+  document.documentElement.style.setProperty("--seat-pair-groups", Math.ceil(COLS / 2).toString());
+  document.documentElement.style.setProperty("--seat-pair-size", "2");
+  if (seatEmptyState) {
+    seatEmptyState.classList.toggle("hidden", Boolean(rows));
+  }
 
   if (!rows) {
     return;
@@ -2350,6 +2823,7 @@ function resetDrawPool() {
 function clearDrawHistory() {
   state.draw.history = [];
   saveState();
+  renderDrawResults();
 }
 
 function getRemainingPool() {
@@ -2395,11 +2869,18 @@ function drawNames() {
 
   saveState();
   renderDrawResults();
+  if (drawHistoryDetails && !drawHistoryDetails.open) {
+    drawHistoryDetails.querySelector("summary")?.click();
+  }
   showToast("抽签完成", "success");
 }
 
 function renderDrawResults() {
   const isNoRepeat = Boolean(state.draw.noRepeat);
+  if (drawHistorySummary) {
+    const count = state.draw.history.length;
+    drawHistorySummary.textContent = count ? `抽签结果与历史 ${count}` : "抽签结果与历史";
+  }
 
   if (state.students.length === 0) {
     drawStatus.textContent = "暂无学生可抽签。";
@@ -2415,6 +2896,10 @@ function renderDrawResults() {
 
   drawResults.innerHTML = "";
   if (state.draw.history.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "draw-status";
+    empty.textContent = "暂无抽签记录。";
+    drawResults.appendChild(empty);
     return;
   }
 
@@ -3952,8 +4437,11 @@ function openSavedExamTable(examId) {
   if (savedExamSearchInput) {
     savedExamSearchInput.value = "";
   }
+  if (savedExamSearchResults) {
+    savedExamSearchResults.innerHTML = "";
+  }
   if (savedExamSearchStatus) {
-    savedExamSearchStatus.textContent = "可输入学生姓名或部分姓名快速定位。";
+    savedExamSearchStatus.textContent = "可输入姓名、拼音、首字母或部分姓名，先选择候选学生再定位。";
   }
 
   const table = document.createElement("table");
@@ -3997,6 +4485,7 @@ function openSavedExamTable(examId) {
     const row = document.createElement("tr");
     row.dataset.studentName = entry.name || "";
     row.dataset.normalizedName = normalizeName(entry.name);
+    row.dataset.searchKeys = getSavedExamSearchKeys(entry.name).join("|");
     row.dataset.rowIndex = String(index + 1);
     const nameCell = document.createElement("td");
     nameCell.textContent = entry.name || "";
@@ -4054,35 +4543,84 @@ function closeSavedExamTable() {
   savedExamTableModal.setAttribute("aria-hidden", "true");
 }
 
-function searchSavedExamStudent() {
-  if (!savedExamTableWrap || !savedExamSearchInput) {
+function normalizeSavedExamSearchKey(value) {
+  return normalizeName(value).toLowerCase();
+}
+
+function getSavedExamSearchKeys(studentName) {
+  const keys = new Set([normalizeSavedExamSearchKey(studentName)]);
+  buildPinyinSearchKeys(studentName).forEach((key) => keys.add(key));
+  const nameKey = normalizeSavedExamSearchKey(studentName);
+  state.students.forEach((student) => {
+    if (normalizeSavedExamSearchKey(student.name) !== nameKey) {
+      return;
+    }
+    (student.aliases || []).forEach((alias) => {
+      const aliasKey = normalizeSavedExamSearchKey(alias);
+      if (aliasKey) {
+        keys.add(aliasKey);
+      }
+      buildPinyinSearchKeys(alias).forEach((key) => keys.add(key));
+    });
+  });
+  return [...keys].filter(Boolean);
+}
+
+function clearSavedExamSearchHighlight() {
+  if (!savedExamTableWrap) {
     return;
   }
-  const query = savedExamSearchInput.value.trim();
-  const normalized = normalizeName(query);
   savedExamTableWrap.querySelectorAll(".saved-exam-highlight").forEach((row) => {
     row.classList.remove("saved-exam-highlight");
   });
-  if (!normalized) {
-    if (savedExamSearchStatus) {
-      savedExamSearchStatus.textContent = "请输入要查找的学生姓名。";
+}
+
+function isSubsequenceSearchKey(query, target) {
+  if (!/^[a-z0-9]+$/.test(query) || !/^[a-z0-9]+$/.test(target) || query.length > target.length) {
+    return false;
+  }
+  let queryIndex = 0;
+  for (let index = 0; index < target.length && queryIndex < query.length; index += 1) {
+    if (target[index] === query[queryIndex]) {
+      queryIndex += 1;
     }
-    return;
+  }
+  return queryIndex === query.length;
+}
+
+function findSavedExamSearchMatches(query) {
+  if (!savedExamTableWrap) {
+    return [];
+  }
+  const key = normalizeSavedExamSearchKey(query);
+  if (!key) {
+    return [];
   }
   const rows = [...savedExamTableWrap.querySelectorAll("tbody tr")];
-  const exact = rows.find((row) => row.dataset.normalizedName === normalized);
-  const fuzzy = rows.find((row) => {
-    const name = row.dataset.studentName || "";
-    const normalizedName = row.dataset.normalizedName || "";
-    return name.includes(query) || normalizedName.includes(normalized) || normalized.includes(normalizedName);
-  });
-  const row = exact || fuzzy;
-  if (!row) {
-    if (savedExamSearchStatus) {
-      savedExamSearchStatus.textContent = `未找到「${query}」。`;
-    }
+  return rows
+    .map((row) => {
+      const keys = (row.dataset.searchKeys || row.dataset.normalizedName || "").split("|").filter(Boolean);
+      let score = -1;
+      if (keys.some((item) => item === key)) {
+        score = 100;
+      } else if (keys.some((item) => item.startsWith(key))) {
+        score = 80;
+      } else if (keys.some((item) => item.includes(key) || key.includes(item))) {
+        score = 60;
+      } else if (key.length >= 2 && keys.some((item) => isSubsequenceSearchKey(key, item))) {
+        score = 45;
+      }
+      return { row, score };
+    })
+    .filter((item) => item.score >= 0)
+    .sort((a, b) => b.score - a.score || Number(a.row.dataset.rowIndex || 0) - Number(b.row.dataset.rowIndex || 0));
+}
+
+function selectSavedExamSearchRow(row) {
+  if (!savedExamTableWrap || !row) {
     return;
   }
+  clearSavedExamSearchHighlight();
   row.classList.add("saved-exam-highlight");
   const targetTop = row.offsetTop - savedExamTableWrap.clientHeight / 2 + row.offsetHeight / 2;
   savedExamTableWrap.scrollTo({
@@ -4093,6 +4631,71 @@ function searchSavedExamStudent() {
   if (savedExamSearchStatus) {
     savedExamSearchStatus.textContent = `已定位到第 ${row.dataset.rowIndex || ""} 行：${row.dataset.studentName || ""}`;
   }
+}
+
+function renderSavedExamSearchChoices(matches, query) {
+  if (!savedExamSearchResults) {
+    return;
+  }
+  savedExamSearchResults.innerHTML = "";
+  if (!matches.length) {
+    savedExamSearchResults.classList.remove("has-results");
+    return;
+  }
+  savedExamSearchResults.classList.add("has-results");
+  const visibleMatches = matches.slice(0, 12);
+  visibleMatches.forEach(({ row }) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "saved-exam-search-choice";
+    const name = document.createElement("strong");
+    name.textContent = row.dataset.studentName || "";
+    const position = document.createElement("span");
+    position.textContent = `第 ${row.dataset.rowIndex || ""} 行`;
+    option.append(name, position);
+    option.addEventListener("click", () => selectSavedExamSearchRow(row));
+    savedExamSearchResults.appendChild(option);
+  });
+  if (matches.length > visibleMatches.length) {
+    const more = document.createElement("div");
+    more.className = "saved-exam-search-more muted";
+    more.textContent = `还有 ${matches.length - visibleMatches.length} 个结果，请输入更完整的姓名或拼音。`;
+    savedExamSearchResults.appendChild(more);
+  }
+  if (savedExamSearchStatus) {
+    savedExamSearchStatus.textContent = `找到 ${matches.length} 个与「${query}」相关的学生，请选择一个。`;
+  }
+}
+
+function searchSavedExamStudent() {
+  if (!savedExamTableWrap || !savedExamSearchInput) {
+    return;
+  }
+  const query = savedExamSearchInput.value.trim();
+  const normalized = normalizeSavedExamSearchKey(query);
+  clearSavedExamSearchHighlight();
+  if (!normalized) {
+    if (savedExamSearchStatus) {
+      savedExamSearchStatus.textContent = "请输入要查找的学生姓名。";
+    }
+    if (savedExamSearchResults) {
+      savedExamSearchResults.innerHTML = "";
+      savedExamSearchResults.classList.remove("has-results");
+    }
+    return;
+  }
+  const matches = findSavedExamSearchMatches(query);
+  if (!matches.length) {
+    if (savedExamSearchStatus) {
+      savedExamSearchStatus.textContent = `未找到「${query}」。`;
+    }
+    if (savedExamSearchResults) {
+      savedExamSearchResults.innerHTML = "";
+      savedExamSearchResults.classList.remove("has-results");
+    }
+    return;
+  }
+  renderSavedExamSearchChoices(matches, query);
 }
 
 function deleteSavedExamRecord(examId) {
@@ -5555,8 +6158,66 @@ function initAnimatedDetails() {
   const duration = 360;
   const contentDuration = 240;
 
-  const getSummaryHeight = (details) => details.querySelector("summary")?.offsetHeight || 0;
+  const getCollapsedHeight = (details) => {
+    const summaryHeight = details.querySelector("summary")?.offsetHeight || 0;
+    const style = window.getComputedStyle(details);
+    const borderY = parseFloat(style.borderTopWidth || "0") + parseFloat(style.borderBottomWidth || "0");
+    const paddingY = parseFloat(style.paddingTop || "0") + parseFloat(style.paddingBottom || "0");
+    return summaryHeight + borderY + paddingY;
+  };
+  const getExpandedHeight = (details) => {
+    const style = window.getComputedStyle(details);
+    const borderY = parseFloat(style.borderTopWidth || "0") + parseFloat(style.borderBottomWidth || "0");
+    return details.scrollHeight + borderY;
+  };
   const getContentNodes = (details) => Array.from(details.children).filter((node) => node.tagName !== "SUMMARY");
+  const refreshSidebarTabHeight = (details) => {
+    const viewport = details.closest(".sidebar-tab-viewport");
+    const activeSection = details.closest(".sidebar-section.is-active-tab");
+    if (viewport && activeSection) {
+      viewport.style.setProperty("--sidebar-tab-height", `${activeSection.scrollHeight}px`);
+    }
+  };
+  const getDetailsScrollContainer = (details) => {
+    const viewport = details.closest(".sidebar-tab-viewport");
+    if (viewport && viewport.scrollHeight > viewport.clientHeight + 2) {
+      return viewport;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+
+  const scrollExpandedDetailsIntoView = (details) => {
+    refreshSidebarTabHeight(details);
+    const scroller = getDetailsScrollContainer(details);
+    if (!scroller) {
+      return;
+    }
+    const contentNodes = getContentNodes(details);
+    const target = contentNodes[contentNodes.length - 1] || details;
+    requestAnimationFrame(() => {
+      refreshSidebarTabHeight(details);
+      const targetRect = target.getBoundingClientRect();
+      const scrollerRect =
+        scroller === document.documentElement || scroller === document.body || scroller === document.scrollingElement
+          ? { top: 0, bottom: window.innerHeight }
+          : scroller.getBoundingClientRect();
+      const bottomPadding = 18;
+      const topPadding = 12;
+      const overflowBottom = targetRect.bottom - (scrollerRect.bottom - bottomPadding);
+      const overflowTop = targetRect.top - (scrollerRect.top + topPadding);
+      if (overflowBottom > 0) {
+        scroller.scrollTo({
+          top: scroller.scrollTop + overflowBottom,
+          behavior: reduceMotion.matches ? "auto" : "smooth"
+        });
+      } else if (overflowTop < 0) {
+        scroller.scrollTo({
+          top: Math.max(0, scroller.scrollTop + overflowTop),
+          behavior: reduceMotion.matches ? "auto" : "smooth"
+        });
+      }
+    });
+  };
 
   const resetDetailsStyles = (details) => {
     details.style.height = "";
@@ -5571,8 +6232,8 @@ function initAnimatedDetails() {
   const finishDetailsAnimation = (details, finalHeight, callback) => {
     details.style.height = `${finalHeight}px`;
     requestAnimationFrame(() => {
-      callback?.();
       resetDetailsStyles(details);
+      callback?.();
     });
   };
 
@@ -5589,6 +6250,9 @@ function initAnimatedDetails() {
       if (reduceMotion.matches) {
         details.open = !details.open;
         resetDetailsStyles(details);
+        if (details.open) {
+          scrollExpandedDetailsIntoView(details);
+        }
         return;
       }
 
@@ -5600,7 +6264,7 @@ function initAnimatedDetails() {
 
       if (details.open) {
         const startHeight = details.offsetHeight;
-        const endHeight = getSummaryHeight(details);
+        const endHeight = getCollapsedHeight(details);
         details.classList.add("is-collapsing", "is-animating-details");
         details.style.height = `${startHeight}px`;
         details.style.overflow = "hidden";
@@ -5608,8 +6272,8 @@ function initAnimatedDetails() {
         contentNodes.forEach((node) => {
           node.animate(
             [
-              { opacity: 1, transform: "translateY(0)" },
-              { opacity: 0, transform: "translateY(-6px)" }
+              { opacity: 1 },
+              { opacity: 0 }
             ],
             { duration: contentDuration, easing, fill: "forwards" }
           );
@@ -5632,20 +6296,20 @@ function initAnimatedDetails() {
         return;
       }
 
-      const startHeight = getSummaryHeight(details);
-      details.open = true;
+      const startHeight = details.offsetHeight;
       details.classList.add("is-expanding", "is-animating-details");
       details.style.height = `${startHeight}px`;
       details.style.overflow = "hidden";
+      details.open = true;
 
       requestAnimationFrame(() => {
-        const endHeight = details.scrollHeight;
+        const endHeight = getExpandedHeight(details);
 
         contentNodes.forEach((node) => {
           node.animate(
             [
-              { opacity: 0, transform: "translateY(-6px)" },
-              { opacity: 1, transform: "translateY(0)" }
+              { opacity: 0 },
+              { opacity: 1 }
             ],
             { duration: contentDuration, easing, fill: "forwards" }
           );
@@ -5659,7 +6323,9 @@ function initAnimatedDetails() {
           { duration, easing }
         );
 
-        animation.onfinish = () => finishDetailsAnimation(details, endHeight);
+        animation.onfinish = () => finishDetailsAnimation(details, endHeight, () => {
+          scrollExpandedDetailsIntoView(details);
+        });
         animation.oncancel = () => resetDetailsStyles(details);
       });
     });
@@ -5675,6 +6341,11 @@ function initSidebarNavigation() {
   if (!sections.length) {
     return;
   }
+  const nav = sidebar.querySelector(".sidebar-quick-nav");
+  const track = sidebar.querySelector(".sidebar-tab-track");
+  const viewport = sidebar.querySelector(".sidebar-tab-viewport");
+  const indicator = sidebar.querySelector(".quick-pill-indicator");
+  sidebar.style.setProperty("--sidebar-tab-count", sections.length);
 
   let saved = {};
   try {
@@ -5701,10 +6372,28 @@ function initSidebarNavigation() {
   });
 
   const pills = Array.from(sidebar.querySelectorAll(".quick-pill[data-target]"));
+  let activeTabId = "";
+
   const setActivePillById = (id) => {
     pills.forEach((item) => {
       item.classList.toggle("active", item.dataset.target === id);
+      item.setAttribute("aria-selected", item.dataset.target === id ? "true" : "false");
     });
+  };
+
+  const syncActiveTabMetrics = () => {
+    const activePill = pills.find((item) => item.dataset.target === activeTabId);
+    if (indicator && activePill) {
+      indicator.style.setProperty("--quick-pill-x", `${activePill.offsetLeft}px`);
+      indicator.style.setProperty("--quick-pill-width", `${activePill.offsetWidth}px`);
+      indicator.style.setProperty("--quick-pill-height", `${activePill.offsetHeight}px`);
+      activePill.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+
+    const activeSection = sections.find((section) => section.id === activeTabId);
+    if (viewport && activeSection) {
+      viewport.style.setProperty("--sidebar-tab-height", `${activeSection.scrollHeight}px`);
+    }
   };
 
   const setActiveTab = (id) => {
@@ -5712,15 +6401,22 @@ function initSidebarNavigation() {
     if (!sections.some((section) => section.id === resolvedId)) {
       resolvedId = "sec-common";
     }
+    activeTabId = resolvedId;
     setActivePillById(resolvedId);
+    const activeIndex = Math.max(0, sections.findIndex((section) => section.id === resolvedId));
+    if (track) {
+      track.style.setProperty("--sidebar-tab-index", activeIndex);
+    }
     sections.forEach((section) => {
       const isActive = section.id === resolvedId;
-      if (isActive && !section.open) {
+      if (!section.open) {
         section.open = true;
       }
-      section.hidden = !isActive;
+      section.hidden = false;
+      section.setAttribute("aria-hidden", isActive ? "false" : "true");
       section.classList.toggle("is-active-tab", isActive);
     });
+    requestAnimationFrame(syncActiveTabMetrics);
     localStorage.setItem(SIDEBAR_ACTIVE_TAB_KEY, resolvedId);
   };
 
@@ -5737,12 +6433,19 @@ function initSidebarNavigation() {
         section.open = true;
       }
       setActiveTab(targetId);
-      section.classList.remove("flash-highlight");
-      void section.offsetWidth;
-      section.classList.add("flash-highlight");
-      setTimeout(() => section.classList.remove("flash-highlight"), 850);
     });
   });
+
+  if (nav) {
+    nav.setAttribute("role", "tablist");
+  }
+  pills.forEach((pill) => {
+    pill.setAttribute("role", "tab");
+  });
+  window.addEventListener("resize", syncActiveTabMetrics);
+  sidebar.addEventListener("toggle", () => {
+    requestAnimationFrame(syncActiveTabMetrics);
+  }, true);
 }
 
 function applySidebarState() {
@@ -6064,6 +6767,19 @@ if (savedExamSearchBtn) {
 }
 
 if (savedExamSearchInput) {
+  savedExamSearchInput.addEventListener("input", () => {
+    clearSavedExamSearchHighlight();
+    if (savedExamSearchResults) {
+      savedExamSearchResults.innerHTML = "";
+      savedExamSearchResults.classList.remove("has-results");
+    }
+    if (savedExamSearchStatus) {
+      savedExamSearchStatus.textContent = savedExamSearchInput.value.trim()
+        ? "点击搜索查看候选学生。"
+        : "可输入姓名、拼音、首字母或部分姓名，先选择候选学生再定位。";
+    }
+  });
+
   savedExamSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -6102,7 +6818,6 @@ resetDrawBtn.addEventListener("click", () => {
 if (clearDrawHistoryBtn) {
   clearDrawHistoryBtn.addEventListener("click", () => {
     clearDrawHistory();
-    renderDrawResults();
     showToast("抽签记录已清除", "success");
   });
 }

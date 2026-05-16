@@ -54,8 +54,13 @@
         </div>
         <div class="header-actions">
           <button id="toggleSidebarBtn" class="ghost">收起侧栏</button>
-          <button id="changePasswordBtn" class="ghost change-password-btn" type="button">修改密码</button>
-          <button id="logoutBtn" class="ghost logout-btn" type="button">退出登录</button>
+          <details class="account-menu">
+            <summary>账户</summary>
+            <div class="account-menu-popover">
+              <button id="changePasswordBtn" class="ghost change-password-btn" type="button">修改密码</button>
+              <button id="logoutBtn" class="ghost logout-btn" type="button">退出登录</button>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -63,56 +68,18 @@
         <!-- UI 关键类：.layout .panel.controls .add-student .seat-grid-wrap .seat-groups .seat -->
         <section class="panel controls">
           <div class="sidebar-quick-nav">
+            <span class="quick-pill-indicator" aria-hidden="true"></span>
             <button type="button" class="quick-pill" data-target="sec-common">常用</button>
             <button type="button" class="quick-pill" data-target="sec-import">导入备份</button>
             <button type="button" class="quick-pill" data-target="sec-scores">成绩</button>
             <button type="button" class="quick-pill" data-target="sec-history">历史</button>
           </div>
 
+          <div class="sidebar-tab-viewport">
+            <div class="sidebar-tab-track">
           <details id="sec-common" class="sidebar-section tab-panel" data-section-key="common" open>
             <summary><span>常用</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
-              <div class="panel-section compact-panel">
-                <div class="panel-header">
-                  <h2 class="panel-title">学生</h2>
-                  <p class="muted">添加、搜索都在这里处理。</p>
-                </div>
-                <div class="form-grid student-row-1">
-                  <input id="studentNameInput" class="input" type="text" placeholder="姓名" maxlength="20" />
-                  <select id="studentGenderSelect" class="select">
-                    <option value="">未知</option>
-                    <option value="男">男</option>
-                    <option value="女">女</option>
-                  </select>
-                  <button id="addStudentBtn" class="btn-primary">添加</button>
-                </div>
-                <div class="form-row">
-                  <input id="studentAliasInput" class="input" type="text" placeholder="别名/拼音（可选）" maxlength="40" />
-                </div>
-                <div class="form-row">
-                  <input id="studentSearchInput" class="input" type="text" placeholder="搜索学生" />
-                </div>
-                <div id="searchResults" class="student-list"></div>
-              </div>
-
-              <div class="panel-section compact-panel">
-                <div class="panel-header">
-                  <h2 class="panel-title">抽签</h2>
-                  <p class="muted">课堂抽问用，支持去重。</p>
-                </div>
-                <div class="draw-inline">
-                  <label class="draw-count">抽签人数 <input id="drawCount" class="input" type="number" min="1" value="1" /></label>
-                  <label class="checkbox draw-repeat"><input id="noRepeat" type="checkbox" />去重模式</label>
-                </div>
-                <div class="draw-actions">
-                  <button id="drawBtn" class="btn-primary">开始抽签</button>
-                  <button id="resetDrawBtn" class="btn-secondary">重置抽签</button>
-                </div>
-                <div id="drawStatus" class="draw-status muted"></div>
-                <div id="drawResults" class="draw-results"></div>
-                <button id="clearDrawHistoryBtn" class="btn-text danger-text" type="button">清除抽签记录</button>
-              </div>
-
               <div class="panel-section compact-panel">
                 <div class="panel-header">
                   <h2 class="panel-title">座位调整</h2>
@@ -167,10 +134,56 @@
                   </div>
                 </details>
               </div>
-            </div>
-          </details>
 
-          <details id="sec-import" class="sidebar-section tab-panel" data-section-key="import">
+              <div class="panel-section compact-panel">
+                <div class="panel-header">
+                  <h2 class="panel-title">学生</h2>
+                  <p class="muted">添加、搜索都在这里处理。</p>
+                </div>
+                <div class="form-grid student-row-1">
+                  <input id="studentNameInput" class="input" type="text" placeholder="姓名" maxlength="20" />
+                  <select id="studentGenderSelect" class="select">
+                    <option value="">未知</option>
+                    <option value="男">男</option>
+                    <option value="女">女</option>
+                  </select>
+                  <button id="addStudentBtn" class="btn-primary">添加</button>
+                </div>
+                <div class="form-row">
+                  <input id="studentAliasInput" class="input" type="text" placeholder="别名/拼音（可选）" maxlength="40" />
+                </div>
+                <div class="form-row">
+                  <input id="studentSearchInput" class="input" type="text" placeholder="搜索学生" />
+                </div>
+                <div id="searchResults" class="student-list"></div>
+              </div>
+
+              <div class="panel-section compact-panel">
+                <div class="panel-header">
+                  <h2 class="panel-title">抽签</h2>
+                  <p class="muted">课堂抽问用，支持去重。</p>
+                </div>
+                <div class="draw-inline">
+                  <label class="draw-count">抽签人数 <input id="drawCount" class="input" type="number" min="1" value="1" /></label>
+                  <label class="checkbox draw-repeat"><input id="noRepeat" type="checkbox" />去重模式</label>
+                </div>
+                <div class="draw-actions">
+                  <button id="drawBtn" class="btn-primary">开始抽签</button>
+                  <button id="resetDrawBtn" class="btn-secondary">重置抽签</button>
+                </div>
+                <div id="drawStatus" class="draw-status muted"></div>
+                <details id="drawHistoryDetails" class="constraint-advanced draw-history-panel">
+                  <summary><span id="drawHistorySummary">抽签结果与历史</span></summary>
+                  <div class="draw-history-body">
+                    <div id="drawResults" class="draw-results"></div>
+                    <button id="clearDrawHistoryBtn" class="btn-text danger-text" type="button">清除抽签记录</button>
+                  </div>
+                </details>
+              </div>
+            </div>
+              </details>
+
+              <details id="sec-import" class="sidebar-section tab-panel" data-section-key="import">
             <summary><span>导入与备份</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
               <div class="panel-section compact-panel">
@@ -220,9 +233,9 @@
                 </div>
               </div>
             </div>
-          </details>
+              </details>
 
-          <details id="sec-scores" class="sidebar-section tab-panel" data-section-key="scores">
+              <details id="sec-scores" class="sidebar-section tab-panel" data-section-key="scores">
             <summary><span>成绩导入</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
               <div class="panel-section compact-panel">
@@ -290,9 +303,9 @@
                 </details>
               </div>
             </div>
-          </details>
+              </details>
 
-          <details id="sec-history" class="sidebar-section tab-panel" data-section-key="history">
+              <details id="sec-history" class="sidebar-section tab-panel" data-section-key="history">
             <summary><span>历史座位</span><span class="summary-arrow">⌄</span></summary>
             <div class="section-body">
               <div class="panel-section compact-panel history-panel">
@@ -319,7 +332,9 @@
                 <div id="historyList" class="history-list"></div>
               </div>
             </div>
-          </details>
+              </details>
+            </div>
+          </div>
 
         </section>
 
@@ -335,6 +350,10 @@
             </div>
           </div>
           <div class="seat-grid-wrap">
+            <div id="seatEmptyState" class="seat-empty-state hidden">
+              <h3>还没有座位数据</h3>
+              <p>请先在左侧导入名单，系统会自动生成座位布局。</p>
+            </div>
             <div class="row-labels" id="rowLabels"></div>
             <div class="seat-groups" id="seatGroups"></div>
           </div>
@@ -442,6 +461,7 @@
           <input id="savedExamSearchInput" class="input" type="text" placeholder="搜索学生姓名" />
           <button id="savedExamSearchBtn" class="btn-secondary">搜索</button>
         </div>
+        <div id="savedExamSearchResults" class="saved-exam-search-results" aria-live="polite"></div>
         <div id="savedExamSearchStatus" class="saved-exam-search-status muted"></div>
         <div id="savedExamTableWrap" class="saved-exam-table-wrap"></div>
       </div>
