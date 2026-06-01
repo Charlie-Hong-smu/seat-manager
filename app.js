@@ -2363,7 +2363,7 @@ function evaluateShuffleOrder(order) {
       .sort()
       .join("|");
     if (noDeskSet.has(pairKey)) {
-      issues.push(`不做同桌冲突：${idToName.get(leftId)} - ${idToName.get(rightId)}`);
+      issues.push(`${idToName.get(leftId)} 和 ${idToName.get(rightId)} 仍然坐成了同桌`);
     }
     if (state.settings.pairByGender) {
       const leftGender = idToGender.get(leftId);
@@ -2381,7 +2381,7 @@ function evaluateShuffleOrder(order) {
       return;
     }
     if (!areDeskmatesByIndex(leftIndex, rightIndex)) {
-      issues.push(`同桌锁定未满足：${idToName.get(pair.a) || "未知"} - ${idToName.get(pair.b) || "未知"}`);
+      issues.push(`${idToName.get(pair.a) || "未知"} 和 ${idToName.get(pair.b) || "未知"} 没有安排成同桌`);
     }
   });
 
@@ -2392,7 +2392,7 @@ function evaluateShuffleOrder(order) {
       return;
     }
     if (Math.floor(seatIndex / COLS) >= frontRows) {
-      issues.push(`必须前排未满足：${idToName.get(studentId) || "未知学生"}`);
+      issues.push(`${idToName.get(studentId) || "未知学生"} 没有坐在前 ${frontRows} 排`);
     }
   });
 
@@ -2529,6 +2529,11 @@ function getSeatPreviewStats(order, evaluation) {
     const index = order.indexOf(id);
     return index !== -1 && Math.floor(index / COLS) < frontRows;
   }).length;
+  const requiredTotal =
+    (state.settings.constraints.lockedDeskmatePairs || []).length +
+    (state.settings.constraints.noDeskmatePairs || []).length +
+    frontIds.length;
+  const unmetRequired = evaluation?.hardViolations || 0;
   return {
     changedCount,
     occupiedPairs,
@@ -2536,7 +2541,9 @@ function getSeatPreviewStats(order, evaluation) {
     reasonPairCount,
     frontSatisfied,
     frontTotal: frontIds.length,
-    hardViolations: evaluation?.hardViolations || 0,
+    requiredTotal,
+    requiredSatisfied: Math.max(0, requiredTotal - unmetRequired),
+    hardViolations: unmetRequired,
     softPenalty: evaluation?.softPenalty || 0
   };
 }
@@ -2549,8 +2556,8 @@ function renderShufflePreview(result) {
   shufflePreviewSummary.innerHTML = "";
   [
     ["变动座位", `${stats.changedCount} 个`],
-    ["硬性约束未满足", `${stats.hardViolations} 项`],
-    ["男女同桌", `${stats.mixedGenderPairs}/${stats.occupiedPairs} 对`],
+    ["明确要求", stats.requiredTotal ? `${stats.requiredSatisfied}/${stats.requiredTotal} 条已满足` : "未设置"],
+    ["尽量男女同桌", `${stats.mixedGenderPairs}/${stats.occupiedPairs} 对`],
     ["恰巧互补", `${stats.reasonPairCount} 对`],
     ["前排要求", stats.frontTotal ? `${stats.frontSatisfied}/${stats.frontTotal} 人` : "无"]
   ].forEach(([label, value]) => {
@@ -2566,7 +2573,7 @@ function renderShufflePreview(result) {
   if (issues.length) {
     const title = document.createElement("div");
     title.className = "preview-block-title";
-    title.textContent = "需要注意";
+    title.textContent = "未满足的明确要求";
     shufflePreviewIssues.appendChild(title);
     issues.slice(0, 5).forEach((issue) => {
       const item = document.createElement("div");
@@ -2578,9 +2585,16 @@ function renderShufflePreview(result) {
   if (stats.softPenalty) {
     const item = document.createElement("div");
     item.className = "preview-issue";
-    item.textContent = `男女同桌偏好仍有 ${stats.softPenalty} 对未满足。`;
+    item.textContent = `尽量男女同桌还有 ${stats.softPenalty} 对没有做到。`;
     shufflePreviewIssues.appendChild(item);
   }
+  const advice = document.createElement("div");
+  advice.className = stats.hardViolations ? "preview-issue" : "preview-reason";
+  advice.textContent = stats.hardViolations
+    ? "建议点击“再随机一次”，或减少一些排座要求后重试。"
+    : "明确要求都已满足，可以采用这套座位。";
+  shufflePreviewIssues.classList.remove("hidden");
+  shufflePreviewIssues.appendChild(advice);
 
   const studentById = new Map(state.students.map((student) => [student.id, student]));
   const reasonItems = [];
@@ -2610,7 +2624,7 @@ function renderShufflePreview(result) {
   } else {
     const empty = document.createElement("div");
     empty.className = "preview-empty muted";
-    empty.textContent = "本次普通随机没有恰巧形成明显互补组合；如需主动按强弱互补，请使用高级约束里的互补标签排座。";
+    empty.textContent = "本次普通随机没有恰巧形成明显互补同桌；如需主动按强弱互补，请使用排座要求里的互补标签排座。";
     shufflePreviewReasons.appendChild(empty);
   }
 }
@@ -2661,7 +2675,7 @@ function applyShufflePreview() {
   renderAll();
   closeShufflePreview();
   if (evaluation && evaluation.hardViolations > 0) {
-    showToast("已采用最接近方案（部分约束未完全满足）", "info");
+    showToast("已采用最接近方案（部分明确要求未满足）", "info");
   } else {
     showToast("随机排座已采用", "success");
   }
@@ -3023,7 +3037,7 @@ function openComplementModal() {
   if (complementRespectLockedPairs) {
     complementRespectLockedPairs.checked = true;
   }
-  complementStatus.textContent = "选择规则后直接应用。";
+  complementStatus.textContent = "选择互补关系后，系统会尽量把互补学生安排成同桌。";
   complementPreviewOrder = null;
   complementModal.classList.remove("hidden");
   complementModal.setAttribute("aria-hidden", "false");
@@ -3047,7 +3061,7 @@ function previewComplementPlacement() {
   complementPreviewOrder = result.order;
   const requiredText = complementRuleSelect?.value ? `，必须规则命中 ${result.requiredMatchedCount} 对` : "";
   const hint =
-    result.eval.hardViolations > 0 ? `；仍有 ${result.eval.hardViolations} 项约束未完全满足，已取最优结果` : "";
+    result.eval.hardViolations > 0 ? `；仍有 ${result.eval.hardViolations} 条明确要求未满足，已取最接近结果` : "";
   complementStatus.textContent = `已生成方案：形成 ${result.pairCount} 对同桌，互补匹配 ${result.softMatchedCount + result.requiredMatchedCount} 对${requiredText}${hint}。`;
 }
 
@@ -3065,7 +3079,7 @@ function applyComplementPlacement() {
   renderAll();
   closeComplementModal();
   if (result.eval.hardViolations > 0) {
-    showToast("互补标签排座已应用（部分约束未完全满足）", "info");
+    showToast("互补标签排座已应用（部分明确要求未满足）", "info");
   } else {
     showToast("互补标签排座已应用", "success");
   }
@@ -6320,14 +6334,14 @@ function renderConstraintLists() {
   if (!state.settings.constraints.lockedDeskmatePairs.length) {
     const empty = document.createElement("div");
     empty.className = "draw-status";
-    empty.textContent = "暂无同桌锁定。";
+    empty.textContent = "暂无必须安排同桌的学生。";
     lockPairList.appendChild(empty);
   } else {
     state.settings.constraints.lockedDeskmatePairs.forEach((pair, index) => {
       const item = document.createElement("div");
       item.className = "constraint-item";
       const label = document.createElement("span");
-      label.textContent = `${idToName.get(pair.a) || "未知"} ↔ ${idToName.get(pair.b) || "未知"}`;
+      label.textContent = `${idToName.get(pair.a) || "未知"} 和 ${idToName.get(pair.b) || "未知"} 安排同桌`;
       const del = document.createElement("button");
       del.className = "ghost";
       del.textContent = "删除";
@@ -6345,14 +6359,14 @@ function renderConstraintLists() {
   if (!state.settings.constraints.noDeskmatePairs.length) {
     const empty = document.createElement("div");
     empty.className = "draw-status";
-    empty.textContent = "暂无不做同桌限制。";
+    empty.textContent = "暂无需要避免同桌的学生。";
     noDeskPairList.appendChild(empty);
   } else {
     state.settings.constraints.noDeskmatePairs.forEach((pair, index) => {
       const item = document.createElement("div");
       item.className = "constraint-item";
       const label = document.createElement("span");
-      label.textContent = `${idToName.get(pair.a) || "未知"} - ${idToName.get(pair.b) || "未知"}`;
+      label.textContent = `${idToName.get(pair.a) || "未知"} 不和 ${idToName.get(pair.b) || "未知"} 同桌`;
       const del = document.createElement("button");
       del.className = "ghost";
       del.textContent = "删除";
@@ -6370,14 +6384,15 @@ function renderConstraintLists() {
   if (!state.settings.constraints.frontRowStudentIds.length) {
     const empty = document.createElement("div");
     empty.className = "draw-status";
-    empty.textContent = "暂无前排限制。";
+    empty.textContent = "暂无需要坐前排的学生。";
     frontStudentList.appendChild(empty);
   } else {
+    const frontRows = Math.max(1, Number.parseInt(state.settings.constraints.frontRows, 10) || 2);
     state.settings.constraints.frontRowStudentIds.forEach((id, index) => {
       const item = document.createElement("div");
       item.className = "constraint-item";
       const label = document.createElement("span");
-      label.textContent = idToName.get(id) || "未知";
+      label.textContent = `${idToName.get(id) || "未知"} 坐前 ${frontRows} 排`;
       const del = document.createElement("button");
       del.className = "ghost";
       del.textContent = "删除";
@@ -7285,6 +7300,7 @@ if (frontRowsInput) {
   frontRowsInput.addEventListener("change", (event) => {
     state.settings.constraints.frontRows = Math.max(1, Number.parseInt(event.target.value, 10) || 2);
     saveState();
+    renderConstraintLists();
   });
 }
 

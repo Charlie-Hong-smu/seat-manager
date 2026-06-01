@@ -889,6 +889,58 @@ textarea {
   gap: 10px;
 }
 
+.seat-priority-note,
+.constraint-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.seat-priority-note {
+  padding: 9px 11px;
+  border: 1px solid rgba(10, 132, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(10, 132, 255, 0.055);
+}
+
+.seat-priority-note strong {
+  color: var(--text-soft);
+}
+
+.soft-rule {
+  color: var(--text-soft);
+}
+
+.constraint-group {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid rgba(60, 60, 67, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.constraint-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.constraint-group-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.constraint-group-note {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .draw-history-body {
   display: grid;
   gap: 10px;
@@ -901,12 +953,12 @@ textarea {
 }
 
 .constraint-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 72px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 126px;
   gap: 10px;
 }
 
 .constraint-row.single-right {
-  grid-template-columns: minmax(0, 1fr) 72px;
+  grid-template-columns: minmax(0, 1fr) 126px;
 }
 
 .constraint-row .btn-secondary {
@@ -1694,7 +1746,7 @@ button.ghost {
 
 .constraint-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 78px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 126px;
   gap: 8px;
   align-items: start;
 }
@@ -1769,6 +1821,11 @@ button.ghost {
   background: #fff;
   padding: 6px 8px;
   font-size: 12px;
+}
+
+.constraint-item span {
+  min-width: 0;
+  line-height: 1.4;
 }
 
 .score-edit {
@@ -3596,6 +3653,7 @@ button.ghost:hover {
   }
 
   .constraint-row,
+  .constraint-row.single-right,
   .score-edit,
   .score-manage-actions {
     grid-template-columns: 1fr;

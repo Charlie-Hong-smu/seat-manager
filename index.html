@@ -90,48 +90,87 @@
                   <button id="resetSeatsBtn" class="btn-secondary">按名单顺序</button>
                   <button id="undoSeatChangeBtn" class="btn-secondary" disabled>撤销上一步</button>
                 </div>
-                <label class="checkbox"><input id="pairByGender" type="checkbox" />随机时尽量男女同桌</label>
+                <div class="seat-priority-note">
+                  <strong>必须满足</strong>：同桌关系、前排照顾。<strong>尽量满足</strong>：男女搭配、互补标签。
+                </div>
+                <label class="checkbox soft-rule"><input id="pairByGender" type="checkbox" />尽量男女同桌</label>
                 <details class="constraint-advanced">
-                  <summary>高级约束（可选）</summary>
+                  <summary>排座要求</summary>
                   <div class="constraint-box">
-                    <button id="shuffleByComplementBtn" class="btn-secondary full">按互补标签排座（同桌）</button>
-                    <label class="checkbox"><input id="keepLockedEmpty" type="checkbox" />锁定空座位保持为空</label>
-                    <div class="constraint-row">
-                      <div class="suggest-wrap">
-                        <input id="lockPairAInput" class="input" type="text" placeholder="同桌锁定：学生A" />
-                        <div id="lockPairASuggest" class="name-suggest hidden"></div>
-                      </div>
-                      <div class="suggest-wrap">
-                        <input id="lockPairBInput" class="input" type="text" placeholder="学生B" />
-                        <div id="lockPairBSuggest" class="name-suggest hidden"></div>
-                      </div>
-                      <button id="addLockPairBtn" class="btn-secondary">添加</button>
-                    </div>
-                    <div id="lockPairList" class="constraint-list"></div>
+                    <div class="constraint-help">这里填写老师明确要求的特殊安排。普通随机会优先照顾这些要求；互补标签属于尽量优化。</div>
 
-                    <div class="constraint-row">
-                      <div class="suggest-wrap">
-                        <input id="pairAInput" class="input" type="text" placeholder="不做同桌：学生A" />
-                        <div id="pairASuggest" class="name-suggest hidden"></div>
+                    <div class="constraint-group">
+                      <div class="constraint-group-head">
+                        <div>
+                          <div class="constraint-group-title">同桌关系</div>
+                          <div class="constraint-group-note">必须满足</div>
+                        </div>
                       </div>
-                      <div class="suggest-wrap">
-                        <input id="pairBInput" class="input" type="text" placeholder="学生B" />
-                        <div id="pairBSuggest" class="name-suggest hidden"></div>
+                      <div class="constraint-row">
+                        <div class="suggest-wrap">
+                          <input id="lockPairAInput" class="input" type="text" placeholder="学生A" />
+                          <div id="lockPairASuggest" class="name-suggest hidden"></div>
+                        </div>
+                        <div class="suggest-wrap">
+                          <input id="lockPairBInput" class="input" type="text" placeholder="学生B" />
+                          <div id="lockPairBSuggest" class="name-suggest hidden"></div>
+                        </div>
+                        <button id="addLockPairBtn" class="btn-secondary">添加同桌要求</button>
                       </div>
-                      <button id="addNoDeskPairBtn" class="btn-secondary">添加</button>
-                    </div>
-                    <div id="noDeskPairList" class="constraint-list"></div>
+                      <div id="lockPairList" class="constraint-list"></div>
 
-                    <div class="constraint-row single-right">
-                      <div class="suggest-wrap">
-                        <input id="frontStudentInput" class="input" type="text" placeholder="必须前排学生" />
-                        <div id="frontStudentSuggest" class="name-suggest hidden"></div>
+                      <div class="constraint-row">
+                        <div class="suggest-wrap">
+                          <input id="pairAInput" class="input" type="text" placeholder="学生A" />
+                          <div id="pairASuggest" class="name-suggest hidden"></div>
+                        </div>
+                        <div class="suggest-wrap">
+                          <input id="pairBInput" class="input" type="text" placeholder="学生B" />
+                          <div id="pairBSuggest" class="name-suggest hidden"></div>
+                        </div>
+                        <button id="addNoDeskPairBtn" class="btn-secondary">添加避免同桌</button>
                       </div>
-                      <button id="addFrontStudentBtn" class="btn-secondary">添加</button>
+                      <div id="noDeskPairList" class="constraint-list"></div>
                     </div>
 
-                    <label class="constraint-front-row">前排行数 <input id="frontRowsInput" class="input" type="number" min="1" max="5" value="2" /></label>
-                    <div id="frontStudentList" class="constraint-list"></div>
+                    <div class="constraint-group">
+                      <div class="constraint-group-head">
+                        <div>
+                          <div class="constraint-group-title">前排照顾</div>
+                          <div class="constraint-group-note">必须满足</div>
+                        </div>
+                      </div>
+                      <div class="constraint-row single-right">
+                        <div class="suggest-wrap">
+                          <input id="frontStudentInput" class="input" type="text" placeholder="需要坐前排的学生" />
+                          <div id="frontStudentSuggest" class="name-suggest hidden"></div>
+                        </div>
+                        <button id="addFrontStudentBtn" class="btn-secondary">添加前排学生</button>
+                      </div>
+                      <label class="constraint-front-row">坐前 <input id="frontRowsInput" class="input" type="number" min="1" max="5" value="2" /> 排</label>
+                      <div id="frontStudentList" class="constraint-list"></div>
+                    </div>
+
+                    <div class="constraint-group">
+                      <div class="constraint-group-head">
+                        <div>
+                          <div class="constraint-group-title">座位保护</div>
+                          <div class="constraint-group-note">保护已手动调整的位置</div>
+                        </div>
+                      </div>
+                      <label class="checkbox"><input id="keepLockedEmpty" type="checkbox" />锁定空座不自动填人</label>
+                      <div class="constraint-help">座位卡片上的锁会让该座位不参与随机；如果锁的是空位，勾选后会继续保持为空。</div>
+                    </div>
+
+                    <div class="constraint-group">
+                      <div class="constraint-group-head">
+                        <div>
+                          <div class="constraint-group-title">互补标签</div>
+                          <div class="constraint-group-note">尽量满足</div>
+                        </div>
+                      </div>
+                      <button id="shuffleByComplementBtn" class="btn-secondary full">按强弱/性格互补安排同桌</button>
+                    </div>
                   </div>
                 </details>
               </div>
@@ -589,12 +628,12 @@
         <div class="modal-header">
           <div>
             <div class="modal-subtitle">座位调整</div>
-            <h3>按互补标签配对排座</h3>
+            <h3>按互补标签安排同桌</h3>
           </div>
           <button id="complementClose" class="ghost">关闭</button>
         </div>
         <div class="form-row">
-          <span class="muted">选择互补规则（可多选）</span>
+          <span class="muted">选择希望尽量照顾的互补关系（可多选）</span>
           <div id="complementRuleList" class="complement-rule-list"></div>
         </div>
         <label class="form-row">
@@ -602,12 +641,12 @@
           <select id="complementRuleSelect" class="select"></select>
         </label>
         <label class="checkbox compact"><input id="complementPairByGender" type="checkbox" />随机时尽量男女同桌</label>
-        <label class="checkbox compact"><input id="complementRespectNoDesk" type="checkbox" checked />遵守“不做同桌”限制</label>
+        <label class="checkbox compact"><input id="complementRespectNoDesk" type="checkbox" checked />遵守“避免同桌”要求</label>
         <label class="checkbox compact"><input id="complementRespectFrontRows" type="checkbox" checked />尽量满足前排限制</label>
-        <label class="checkbox compact"><input id="complementRespectLockedPairs" type="checkbox" checked />保持已锁定同桌关系</label>
+        <label class="checkbox compact"><input id="complementRespectLockedPairs" type="checkbox" checked />保持已指定的同桌关系</label>
         <label class="checkbox compact"><input id="complementRespectLocked" type="checkbox" checked />尊重锁定座位</label>
-        <label class="checkbox compact"><input id="complementKeepLockedEmpty" type="checkbox" checked />锁定空座位保持为空</label>
-        <div id="complementStatus" class="draw-status muted">选择规则后直接应用。</div>
+        <label class="checkbox compact"><input id="complementKeepLockedEmpty" type="checkbox" checked />锁定空座保持为空</label>
+        <div id="complementStatus" class="draw-status muted">选择互补关系后，系统会尽量把互补学生安排成同桌。</div>
         <div class="mapping-actions">
           <button id="complementApplyBtn" class="primary">应用</button>
         </div>
