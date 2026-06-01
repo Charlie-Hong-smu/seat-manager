@@ -88,6 +88,7 @@
                 <div class="seat-actions">
                   <button id="shuffleSeatsBtn" class="btn-primary">随机调整座位</button>
                   <button id="resetSeatsBtn" class="btn-secondary">按名单顺序</button>
+                  <button id="undoSeatChangeBtn" class="btn-secondary" disabled>撤销上一步</button>
                 </div>
                 <label class="checkbox"><input id="pairByGender" type="checkbox" />随机时尽量男女同桌</label>
                 <details class="constraint-advanced">
@@ -559,6 +560,26 @@
         <div class="mapping-actions">
           <button id="exportModalCancel" class="ghost">取消</button>
           <button id="exportModalConfirm" class="primary">确认导出</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="shufflePreviewModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card shuffle-preview-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">座位调整</div>
+            <h3>随机排座预览</h3>
+          </div>
+          <button id="shufflePreviewClose" class="ghost">关闭</button>
+        </div>
+        <div id="shufflePreviewSummary" class="preview-summary"></div>
+        <div id="shufflePreviewIssues" class="preview-issues hidden"></div>
+        <div id="shufflePreviewReasons" class="preview-reasons"></div>
+        <div class="mapping-actions">
+          <button id="shufflePreviewAgain" class="ghost">再随机一次</button>
+          <button id="shufflePreviewCancel" class="ghost">取消</button>
+          <button id="shufflePreviewApply" class="primary">采用方案</button>
         </div>
       </div>
     </div>

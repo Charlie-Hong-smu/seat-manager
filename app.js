@@ -118,6 +118,7 @@ const drawHistorySummary = document.getElementById("drawHistorySummary");
 
 const shuffleSeatsBtn = document.getElementById("shuffleSeatsBtn");
 const resetSeatsBtn = document.getElementById("resetSeatsBtn");
+const undoSeatChangeBtn = document.getElementById("undoSeatChangeBtn");
 const pairByGender = document.getElementById("pairByGender");
 
 const importFileInput = document.getElementById("importFileInput");
@@ -197,6 +198,14 @@ const exportModalConfirm = document.getElementById("exportModalConfirm");
 const exportOptScores = document.getElementById("exportOptScores");
 const exportOptRecords = document.getElementById("exportOptRecords");
 const exportOptNotes = document.getElementById("exportOptNotes");
+const shufflePreviewModal = document.getElementById("shufflePreviewModal");
+const shufflePreviewClose = document.getElementById("shufflePreviewClose");
+const shufflePreviewSummary = document.getElementById("shufflePreviewSummary");
+const shufflePreviewIssues = document.getElementById("shufflePreviewIssues");
+const shufflePreviewReasons = document.getElementById("shufflePreviewReasons");
+const shufflePreviewAgain = document.getElementById("shufflePreviewAgain");
+const shufflePreviewCancel = document.getElementById("shufflePreviewCancel");
+const shufflePreviewApply = document.getElementById("shufflePreviewApply");
 
 const mappingModal = document.getElementById("mappingModal");
 const mappingList = document.getElementById("mappingList");
@@ -273,6 +282,8 @@ let lastEasterAt = 0;
 let backupReminderChecked = false;
 let allowAcademicOverride = false;
 let complementPreviewOrder = null;
+let pendingShufflePreview = null;
+const seatUndoStack = [];
 let examTrendMode = "score";
 let expandedSavedExamIds = new Set();
 let activeSavedExamTableId = "";
@@ -1687,11 +1698,127 @@ function queueSeatFlash(indices) {
   seatFlashHighlight = new Set((indices || []).filter((index) => Number.isInteger(index) && index >= 0));
 }
 
+function cloneSeatSnapshot() {
+  return {
+    seatOrder: [...state.seatOrder],
+    lockedSeats: [...state.lockedSeats]
+  };
+}
+
+function hasSeatSnapshotChanged(snapshot) {
+  if (!snapshot) {
+    return false;
+  }
+  return (
+    JSON.stringify(snapshot.seatOrder || []) !== JSON.stringify(state.seatOrder || []) ||
+    JSON.stringify(snapshot.lockedSeats || []) !== JSON.stringify(state.lockedSeats || [])
+  );
+}
+
+function pushSeatUndo(label, snapshot) {
+  if (!hasSeatSnapshotChanged(snapshot)) {
+    return;
+  }
+  seatUndoStack.push({
+    label,
+    seatOrder: [...snapshot.seatOrder],
+    lockedSeats: [...snapshot.lockedSeats]
+  });
+  if (seatUndoStack.length > 8) {
+    seatUndoStack.shift();
+  }
+  renderUndoSeatChange();
+}
+
+function renderUndoSeatChange() {
+  if (!undoSeatChangeBtn) {
+    return;
+  }
+  const latest = seatUndoStack[seatUndoStack.length - 1];
+  undoSeatChangeBtn.disabled = !latest;
+  undoSeatChangeBtn.textContent = latest ? `撤销${latest.label}` : "撤销上一步";
+}
+
+function undoSeatChange() {
+  const snapshot = seatUndoStack.pop();
+  if (!snapshot) {
+    showToast("暂无可撤销的座位调整", "info");
+    renderUndoSeatChange();
+    return;
+  }
+  const before = [...state.seatOrder];
+  state.seatOrder = [...snapshot.seatOrder];
+  state.lockedSeats = [...snapshot.lockedSeats];
+  normalizeLocks();
+  queueSeatFlash(getChangedSeatIndices(before, state.seatOrder));
+  saveState();
+  renderAll();
+  showToast(`已撤销${snapshot.label}`, "success");
+}
+
 function getSeatDisplayTags(student) {
   const tags = sortTagsForSeatDisplay(getEffectiveTags(student))
     .map((id) => TAG_BY_ID.get(id))
     .filter(Boolean);
   return tags;
+}
+
+function getDeskmateIndex(index) {
+  if (index < 0) {
+    return -1;
+  }
+  return index % 2 === 0 ? index + 1 : index - 1;
+}
+
+function getComplementReason(student, mate) {
+  if (!student || !mate) {
+    return "";
+  }
+  const tagsA = new Set(getEffectiveTags(student));
+  const tagsB = new Set(getEffectiveTags(mate));
+  const matched = COMPLEMENT_RULES.find((rule) => {
+    const direct = tagsA.has(rule.leftTagId) && tagsB.has(rule.rightTagId);
+    const reverse = tagsA.has(rule.rightTagId) && tagsB.has(rule.leftTagId);
+    return direct || reverse;
+  });
+  return matched ? matched.labelZh.replace(" ↔ ", " + ") : "";
+}
+
+function getSeatReason(student, index, order = state.seatOrder) {
+  if (!student) {
+    return "";
+  }
+  const reasons = [];
+  const lockedPair = (state.settings.constraints.lockedDeskmatePairs || []).find(
+    (pair) => pair.a === student.id || pair.b === student.id
+  );
+  const frontRows = Math.max(1, Number.parseInt(state.settings.constraints.frontRows, 10) || 2);
+  if ((state.settings.constraints.frontRowStudentIds || []).includes(student.id) && Math.floor(index / COLS) < frontRows) {
+    reasons.push("前排要求");
+  }
+  if (lockedPair) {
+    const mateId = lockedPair.a === student.id ? lockedPair.b : lockedPair.a;
+    const mateIndex = order.indexOf(mateId);
+    if (areDeskmatesByIndex(index, mateIndex)) {
+      reasons.push("锁定同桌");
+    }
+  }
+  const mateId = order[getDeskmateIndex(index)];
+  const mate = mateId ? state.students.find((item) => item.id === mateId) : null;
+  if (mate) {
+    const complementReason = getComplementReason(student, mate);
+    if (complementReason) {
+      reasons.push(complementReason);
+    } else if (
+      state.settings.pairByGender &&
+      student.gender &&
+      mate.gender &&
+      student.gender !== mate.gender
+    ) {
+      reasons.push("男女同桌");
+    }
+  }
+  return reasons.slice(0, 2).join(" · ");
 }
 
 function estimateSeatTagRows(tags) {
@@ -1722,7 +1849,7 @@ function getUniformSeatHeight() {
     (max, student) => Math.max(max, estimateSeatTagRows(getSeatDisplayTags(student))),
     0
   );
-  const baseHeight = 128;
+  const baseHeight = 148;
   const perRowHeight = 19;
   const extraHeight = maxTagRows > 0 ? maxTagRows * perRowHeight + 2 : 0;
   return baseHeight + extraHeight;
@@ -1814,6 +1941,7 @@ function renderSeatGrid() {
         });
 
         let tagRow = null;
+        let reasonRow = null;
         if (student) {
           const tags = getSeatDisplayTags(student);
           if (tags.length) {
@@ -1834,24 +1962,29 @@ function renderSeatGrid() {
               tagRow.appendChild(chip);
             });
           }
+          const reason = getSeatReason(student, index);
+          if (reason) {
+            reasonRow = document.createElement("div");
+            reasonRow.className = "seat-reason";
+            reasonRow.textContent = reason;
+            reasonRow.title = reason;
+          }
         }
 
+        const seatChildren = [name, meta];
         if (student && student.gender) {
           const gender = document.createElement("div");
           gender.className = "seat-meta gender";
           gender.textContent = `性别：${student.gender}`;
-          if (tagRow) {
-            seat.append(name, meta, gender, tagRow, label, lockBtn);
-          } else {
-            seat.append(name, meta, gender, label, lockBtn);
-          }
-        } else {
-          if (tagRow) {
-            seat.append(name, meta, tagRow, label, lockBtn);
-          } else {
-            seat.append(name, meta, label, lockBtn);
-          }
+          seatChildren.push(gender);
         }
+        if (tagRow) {
+          seatChildren.push(tagRow);
+        }
+        if (reasonRow) {
+          seatChildren.push(reasonRow);
+        }
+        seat.append(...seatChildren, label, lockBtn);
 
         if (swapHighlight.has(index)) {
           seat.classList.add("swap-animate");
@@ -2033,6 +2166,7 @@ function swapSeats(sourceIndex, targetIndex) {
   if (sourceIndex === targetIndex) {
     return;
   }
+  const before = cloneSeatSnapshot();
   const next = [...state.seatOrder];
   const sourceValue = next[sourceIndex] || null;
   const targetValue = next[targetIndex] || null;
@@ -2041,6 +2175,7 @@ function swapSeats(sourceIndex, targetIndex) {
   state.seatOrder = next;
   swapHighlight = new Set([sourceIndex, targetIndex]);
   queueSeatFlash([sourceIndex, targetIndex]);
+  pushSeatUndo("拖拽换座", before);
   saveState();
   renderSeatGrid();
 }
@@ -2345,8 +2480,7 @@ function generateCandidateOrderFromCurrent() {
   return next;
 }
 
-function shuffleSeats() {
-  const beforeOrder = [...state.seatOrder];
+function buildBestShuffleCandidate() {
   const retries = Math.max(50, Number.parseInt(state.settings.constraints.maxRetries, 10) || 200);
   let bestOrder = null;
   let bestEval = null;
@@ -2365,17 +2499,171 @@ function shuffleSeats() {
       break;
     }
   }
+  return bestOrder ? { order: bestOrder, eval: bestEval, score: bestScore } : null;
+}
 
-  if (bestOrder) {
-    state.seatOrder = bestOrder;
-    queueSeatFlash(getChangedSeatIndices(beforeOrder, state.seatOrder));
-    if (bestEval && bestEval.hardViolations > 0) {
-      showToast("约束过多，已给出最接近方案，请放宽约束。", "info");
-    } else {
-      showToast("随机调整已完成", "success");
+function getSeatPreviewStats(order, evaluation) {
+  const changedCount = getChangedSeatIndices(state.seatOrder, order).length;
+  const deskPairs = getDeskPairsForSeatCount(order.length);
+  const studentById = new Map(state.students.map((student) => [student.id, student]));
+  const frontRows = Math.max(1, Number.parseInt(state.settings.constraints.frontRows, 10) || 2);
+  let occupiedPairs = 0;
+  let mixedGenderPairs = 0;
+  let reasonPairCount = 0;
+  deskPairs.forEach(([left, right]) => {
+    const leftStudent = studentById.get(order[left]);
+    const rightStudent = studentById.get(order[right]);
+    if (!leftStudent || !rightStudent) {
+      return;
     }
-    saveState();
-    renderSeatGrid();
+    occupiedPairs += 1;
+    if (leftStudent.gender && rightStudent.gender && leftStudent.gender !== rightStudent.gender) {
+      mixedGenderPairs += 1;
+    }
+    if (getComplementReason(leftStudent, rightStudent)) {
+      reasonPairCount += 1;
+    }
+  });
+  const frontIds = state.settings.constraints.frontRowStudentIds || [];
+  const frontSatisfied = frontIds.filter((id) => {
+    const index = order.indexOf(id);
+    return index !== -1 && Math.floor(index / COLS) < frontRows;
+  }).length;
+  return {
+    changedCount,
+    occupiedPairs,
+    mixedGenderPairs,
+    reasonPairCount,
+    frontSatisfied,
+    frontTotal: frontIds.length,
+    hardViolations: evaluation?.hardViolations || 0,
+    softPenalty: evaluation?.softPenalty || 0
+  };
+}
+
+function renderShufflePreview(result) {
+  if (!shufflePreviewModal || !result?.order) {
+    return;
+  }
+  const stats = getSeatPreviewStats(result.order, result.eval);
+  shufflePreviewSummary.innerHTML = "";
+  [
+    ["变动座位", `${stats.changedCount} 个`],
+    ["硬性约束未满足", `${stats.hardViolations} 项`],
+    ["男女同桌", `${stats.mixedGenderPairs}/${stats.occupiedPairs} 对`],
+    ["恰巧互补", `${stats.reasonPairCount} 对`],
+    ["前排要求", stats.frontTotal ? `${stats.frontSatisfied}/${stats.frontTotal} 人` : "无"]
+  ].forEach(([label, value]) => {
+    const card = document.createElement("div");
+    card.className = "preview-stat";
+    card.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+    shufflePreviewSummary.appendChild(card);
+  });
+
+  shufflePreviewIssues.innerHTML = "";
+  const issues = result.eval?.issues || [];
+  shufflePreviewIssues.classList.toggle("hidden", !issues.length && !stats.softPenalty);
+  if (issues.length) {
+    const title = document.createElement("div");
+    title.className = "preview-block-title";
+    title.textContent = "需要注意";
+    shufflePreviewIssues.appendChild(title);
+    issues.slice(0, 5).forEach((issue) => {
+      const item = document.createElement("div");
+      item.className = "preview-issue";
+      item.textContent = issue;
+      shufflePreviewIssues.appendChild(item);
+    });
+  }
+  if (stats.softPenalty) {
+    const item = document.createElement("div");
+    item.className = "preview-issue";
+    item.textContent = `男女同桌偏好仍有 ${stats.softPenalty} 对未满足。`;
+    shufflePreviewIssues.appendChild(item);
+  }
+
+  const studentById = new Map(state.students.map((student) => [student.id, student]));
+  const reasonItems = [];
+  getDeskPairsForSeatCount(result.order.length).forEach(([left, right]) => {
+    const leftStudent = studentById.get(result.order[left]);
+    const rightStudent = studentById.get(result.order[right]);
+    if (!leftStudent || !rightStudent) {
+      return;
+    }
+    const reason = getComplementReason(leftStudent, rightStudent);
+    if (reason) {
+      reasonItems.push(`${leftStudent.name} - ${rightStudent.name}：${reason}`);
+    }
+  });
+  shufflePreviewReasons.innerHTML = "";
+  const reasonTitle = document.createElement("div");
+  reasonTitle.className = "preview-block-title";
+  reasonTitle.textContent = "恰巧满足的互补示例";
+  shufflePreviewReasons.appendChild(reasonTitle);
+  if (reasonItems.length) {
+    reasonItems.slice(0, 6).forEach((text) => {
+      const item = document.createElement("div");
+      item.className = "preview-reason";
+      item.textContent = text;
+      shufflePreviewReasons.appendChild(item);
+    });
+  } else {
+    const empty = document.createElement("div");
+    empty.className = "preview-empty muted";
+    empty.textContent = "本次普通随机没有恰巧形成明显互补组合；如需主动按强弱互补，请使用高级约束里的互补标签排座。";
+    shufflePreviewReasons.appendChild(empty);
+  }
+}
+
+function openShufflePreview(result) {
+  if (!shufflePreviewModal || !result?.order) {
+    return;
+  }
+  pendingShufflePreview = {
+    order: [...result.order],
+    eval: result.eval
+  };
+  renderShufflePreview(result);
+  shufflePreviewModal.classList.remove("hidden");
+  shufflePreviewModal.setAttribute("aria-hidden", "false");
+}
+
+function closeShufflePreview() {
+  if (!shufflePreviewModal) {
+    return;
+  }
+  shufflePreviewModal.classList.add("hidden");
+  shufflePreviewModal.setAttribute("aria-hidden", "true");
+  pendingShufflePreview = null;
+}
+
+function shuffleSeats() {
+  const result = buildBestShuffleCandidate();
+  if (!result) {
+    showToast("暂时无法生成排座方案", "error");
+    return;
+  }
+  openShufflePreview(result);
+}
+
+function applyShufflePreview() {
+  if (!pendingShufflePreview?.order) {
+    closeShufflePreview();
+    return;
+  }
+  const before = cloneSeatSnapshot();
+  const nextOrder = [...pendingShufflePreview.order];
+  const evaluation = pendingShufflePreview.eval;
+  state.seatOrder = nextOrder;
+  queueSeatFlash(getChangedSeatIndices(before.seatOrder, state.seatOrder));
+  pushSeatUndo("随机排座", before);
+  saveState();
+  renderAll();
+  closeShufflePreview();
+  if (evaluation && evaluation.hardViolations > 0) {
+    showToast("已采用最接近方案（部分约束未完全满足）", "info");
+  } else {
+    showToast("随机排座已采用", "success");
   }
 }
 
@@ -2769,11 +3057,12 @@ function applyComplementPlacement() {
     complementStatus.textContent = result.error;
     return;
   }
-  const before = [...state.seatOrder];
+  const before = cloneSeatSnapshot();
   state.seatOrder = [...result.order];
-  queueSeatFlash(getChangedSeatIndices(before, state.seatOrder));
+  queueSeatFlash(getChangedSeatIndices(before.seatOrder, state.seatOrder));
+  pushSeatUndo("互补排座", before);
   saveState();
-  renderSeatGrid();
+  renderAll();
   closeComplementModal();
   if (result.eval.hardViolations > 0) {
     showToast("互补标签排座已应用（部分约束未完全满足）", "info");
@@ -2783,6 +3072,7 @@ function applyComplementPlacement() {
 }
 
 function resetSeats() {
+  const before = cloneSeatSnapshot();
   let keepLocks = true;
   if (state.lockedSeats.length) {
     keepLocks = confirm("检测到锁定座位。点击“确定”保留锁定；点击“取消”清除锁定。");
@@ -2800,8 +3090,10 @@ function resetSeats() {
   } else {
     normalizeLocks();
   }
+  queueSeatFlash(getChangedSeatIndices(before.seatOrder, state.seatOrder));
+  pushSeatUndo("按名单顺序", before);
   saveState();
-  renderSeatGrid();
+  renderAll();
 }
 
 function pickRandom(array, count) {
@@ -3087,7 +3379,7 @@ function renderHistoryList() {
 }
 
 function applyHistorySnapshot(snapshot) {
-  const beforeOrder = [...state.seatOrder];
+  const before = cloneSeatSnapshot();
   const nameQueues = new Map();
   state.students.forEach((student) => {
     const key = normalizeName(student.name);
@@ -3110,7 +3402,8 @@ function applyHistorySnapshot(snapshot) {
   });
 
   state.seatOrder = order;
-  queueSeatFlash(getChangedSeatIndices(beforeOrder, state.seatOrder));
+  queueSeatFlash(getChangedSeatIndices(before.seatOrder, state.seatOrder));
+  pushSeatUndo("恢复历史座位", before);
   saveState();
   renderAll();
   showToast("已应用历史座位", "success");
@@ -6120,6 +6413,7 @@ function renderAll() {
   renderDrawResults();
   renderConstraintLists();
   renderBackupInfo();
+  renderUndoSeatChange();
   if (!importStatus.textContent) {
     importStatus.textContent = "Excel 表建议包含「姓名」列，可选「行」「列」「性别」定位。";
   }
@@ -6589,6 +6883,39 @@ shuffleSeatsBtn.addEventListener("click", () => {
 resetSeatsBtn.addEventListener("click", () => {
   resetSeats();
 });
+
+if (undoSeatChangeBtn) {
+  undoSeatChangeBtn.addEventListener("click", undoSeatChange);
+}
+
+if (shufflePreviewClose) {
+  shufflePreviewClose.addEventListener("click", closeShufflePreview);
+}
+if (shufflePreviewCancel) {
+  shufflePreviewCancel.addEventListener("click", closeShufflePreview);
+}
+if (shufflePreviewAgain) {
+  shufflePreviewAgain.addEventListener("click", () => {
+    const result = buildBestShuffleCandidate();
+    if (result) {
+      pendingShufflePreview = {
+        order: [...result.order],
+        eval: result.eval
+      };
+      renderShufflePreview(result);
+    }
+  });
+}
+if (shufflePreviewApply) {
+  shufflePreviewApply.addEventListener("click", applyShufflePreview);
+}
+if (shufflePreviewModal) {
+  shufflePreviewModal.addEventListener("click", (event) => {
+    if (event.target === shufflePreviewModal) {
+      closeShufflePreview();
+    }
+  });
+}
 
 function updateImportHistoryOption() {
   if (!importKeepHistory) {
@@ -7203,6 +7530,9 @@ document.addEventListener("keydown", (event) => {
     }
     if (complementModal && !complementModal.classList.contains("hidden")) {
       closeComplementModal();
+    }
+    if (shufflePreviewModal && !shufflePreviewModal.classList.contains("hidden")) {
+      closeShufflePreview();
     }
     if (!mappingModal.classList.contains("hidden")) {
       closeMappingModal();
