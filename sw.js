@@ -1,9 +1,10 @@
-const CACHE_VERSION = "seat-manager-v2026-05-16-ui-polish";
+const ASSET_VERSION = "20260602-deploy-layout-fix";
+const CACHE_VERSION = `seat-manager-v${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./style.css",
-  "./app.js",
+  `./style.css?v=${ASSET_VERSION}`,
+  `./app.js?v=${ASSET_VERSION}`,
   "./avatar.jpg",
   "./manifest.webmanifest",
   "./vendor/xlsx.full.min.js"
@@ -11,7 +12,7 @@ const APP_SHELL = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL))
+    caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
   );
 });
 

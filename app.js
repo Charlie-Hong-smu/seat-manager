@@ -7,7 +7,7 @@ const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理
 const BACKUP_VERSION = 1;
 const SIDEBAR_SECTION_STATE_KEY = "sidebarSectionOpen-v1";
 const SIDEBAR_ACTIVE_TAB_KEY = "sidebarActiveTab-v1";
-const SEAT_CARD_MODE_KEY = "seatCardMode";
+const SEAT_CARD_MODE_KEY = "seatCardMode-v2";
 const TAG_CATALOG = [
   { id: "cn_strong", labelZh: "语文强", kind: "academic", groupId: "lvl_cn", groupNameZh: "语文水平" },
   { id: "cn_mid", labelZh: "语文中", kind: "academic", groupId: "lvl_cn", groupNameZh: "语文水平" },
@@ -1162,7 +1162,7 @@ function registerOfflineApp() {
   });
 
   navigator.serviceWorker
-    .register("./sw.js")
+    .register("./sw.js?v=20260602-deploy-layout-fix")
     .then((registration) => {
       if (registration.waiting) {
         showUpdatePrompt(registration.waiting);

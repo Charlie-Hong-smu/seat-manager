@@ -1949,6 +1949,10 @@ button.ghost {
   overflow: hidden;
 }
 
+body:not(.compact-cards) .seat {
+  max-height: var(--seat-height);
+}
+
 .seat.locked {
   border-color: #e2b769;
 }
