@@ -91,13 +91,13 @@
                   <button id="undoSeatChangeBtn" class="btn-secondary" disabled>撤销上一步</button>
                 </div>
                 <div class="seat-priority-note">
-                  <strong>必须满足</strong>：同桌关系、前排照顾。<strong>尽量满足</strong>：男女搭配、互补标签。
+                  <strong>排座要求</strong>会在随机排座时生效；<strong>尽量满足</strong>：男女搭配、互补关系。
                 </div>
                 <label class="checkbox soft-rule"><input id="pairByGender" type="checkbox" />尽量男女同桌</label>
                 <details class="constraint-advanced">
                   <summary>排座要求</summary>
                   <div class="constraint-box">
-                    <div class="constraint-help">这里填写老师明确要求的特殊安排。普通随机会优先照顾这些要求；互补标签属于尽量优化。</div>
+                    <div class="constraint-help">这里填写老师明确要求的特殊安排。点击随机排座时，系统会先照顾必须满足的要求，再尽量照顾男女搭配和互补关系。</div>
 
                     <div class="constraint-group">
                       <div class="constraint-group-head">
@@ -165,11 +165,12 @@
                     <div class="constraint-group">
                       <div class="constraint-group-head">
                         <div>
-                          <div class="constraint-group-title">互补标签</div>
+                          <div class="constraint-group-title">互补关系</div>
                           <div class="constraint-group-note">尽量满足</div>
                         </div>
                       </div>
-                      <button id="shuffleByComplementBtn" class="btn-secondary full">按强弱/性格互补安排同桌</button>
+                      <div class="constraint-help">勾选后，随机排座会在满足上方要求的基础上，尽量把互补学生安排为同桌。</div>
+                      <div id="complementRuleSettings" class="complement-rule-list"></div>
                     </div>
                   </div>
                 </details>
@@ -612,9 +613,21 @@
           </div>
           <button id="shufflePreviewClose" class="ghost">关闭</button>
         </div>
-        <div id="shufflePreviewSummary" class="preview-summary"></div>
-        <div id="shufflePreviewIssues" class="preview-issues hidden"></div>
-        <div id="shufflePreviewReasons" class="preview-reasons"></div>
+        <div class="shuffle-preview-workbench">
+          <div class="shuffle-preview-main">
+            <div class="preview-seat-head">
+              <div>
+                <div class="preview-seat-title">预览座位表</div>
+                <div class="muted">可拖动交换座位，采用前不会影响当前座位。</div>
+              </div>
+            </div>
+            <div id="shufflePreviewSeatGrid" class="preview-seat-grid"></div>
+          </div>
+          <aside class="shuffle-preview-side">
+            <div id="shufflePreviewSummary" class="preview-summary"></div>
+            <div id="shufflePreviewDetails" class="preview-details"></div>
+          </aside>
+        </div>
         <div class="mapping-actions">
           <button id="shufflePreviewAgain" class="ghost">再随机一次</button>
           <button id="shufflePreviewCancel" class="ghost">取消</button>
@@ -623,37 +636,7 @@
       </div>
     </div>
 
-    <div id="complementModal" class="modal hidden" aria-hidden="true">
-      <div class="modal-card complement-modal-card">
-        <div class="modal-header">
-          <div>
-            <div class="modal-subtitle">座位调整</div>
-            <h3>按互补标签安排同桌</h3>
-          </div>
-          <button id="complementClose" class="ghost">关闭</button>
-        </div>
-        <div class="form-row">
-          <span class="muted">选择希望尽量照顾的互补关系（可多选）</span>
-          <div id="complementRuleList" class="complement-rule-list"></div>
-        </div>
-        <label class="form-row">
-          <span class="muted">必须优先满足</span>
-          <select id="complementRuleSelect" class="select"></select>
-        </label>
-        <label class="checkbox compact"><input id="complementPairByGender" type="checkbox" />随机时尽量男女同桌</label>
-        <label class="checkbox compact"><input id="complementRespectNoDesk" type="checkbox" checked />遵守“避免同桌”要求</label>
-        <label class="checkbox compact"><input id="complementRespectFrontRows" type="checkbox" checked />尽量满足前排限制</label>
-        <label class="checkbox compact"><input id="complementRespectLockedPairs" type="checkbox" checked />保持已指定的同桌关系</label>
-        <label class="checkbox compact"><input id="complementRespectLocked" type="checkbox" checked />尊重锁定座位</label>
-        <label class="checkbox compact"><input id="complementKeepLockedEmpty" type="checkbox" checked />锁定空座保持为空</label>
-        <div id="complementStatus" class="draw-status muted">选择互补关系后，系统会尽量把互补学生安排成同桌。</div>
-        <div class="mapping-actions">
-          <button id="complementApplyBtn" class="primary">应用</button>
-        </div>
-      </div>
-    </div>
-
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260602-preview-student-detail"></script>
   </body>
 </html>

@@ -201,8 +201,8 @@ const exportOptNotes = document.getElementById("exportOptNotes");
 const shufflePreviewModal = document.getElementById("shufflePreviewModal");
 const shufflePreviewClose = document.getElementById("shufflePreviewClose");
 const shufflePreviewSummary = document.getElementById("shufflePreviewSummary");
-const shufflePreviewIssues = document.getElementById("shufflePreviewIssues");
-const shufflePreviewReasons = document.getElementById("shufflePreviewReasons");
+const shufflePreviewSeatGrid = document.getElementById("shufflePreviewSeatGrid");
+const shufflePreviewDetails = document.getElementById("shufflePreviewDetails");
 const shufflePreviewAgain = document.getElementById("shufflePreviewAgain");
 const shufflePreviewCancel = document.getElementById("shufflePreviewCancel");
 const shufflePreviewApply = document.getElementById("shufflePreviewApply");
@@ -251,20 +251,7 @@ const frontStudentSuggest = document.getElementById("frontStudentSuggest");
 const addFrontStudentBtn = document.getElementById("addFrontStudentBtn");
 const frontRowsInput = document.getElementById("frontRowsInput");
 const frontStudentList = document.getElementById("frontStudentList");
-const shuffleByComplementBtn = document.getElementById("shuffleByComplementBtn");
-const complementModal = document.getElementById("complementModal");
-const complementClose = document.getElementById("complementClose");
-const complementRuleList = document.getElementById("complementRuleList");
-const complementRuleSelect = document.getElementById("complementRuleSelect");
-const complementPairByGender = document.getElementById("complementPairByGender");
-const complementRespectNoDesk = document.getElementById("complementRespectNoDesk");
-const complementRespectFrontRows = document.getElementById("complementRespectFrontRows");
-const complementRespectLockedPairs = document.getElementById("complementRespectLockedPairs");
-const complementRespectLocked = document.getElementById("complementRespectLocked");
-const complementKeepLockedEmpty = document.getElementById("complementKeepLockedEmpty");
-const complementStatus = document.getElementById("complementStatus");
-const complementPreviewBtn = document.getElementById("complementPreviewBtn");
-const complementApplyBtn = document.getElementById("complementApplyBtn");
+const complementRuleSettings = document.getElementById("complementRuleSettings");
 
 let state = loadState();
 let activeStudentId = null;
@@ -272,6 +259,8 @@ let dragSourceIndex = null;
 let dragAutoScrollFrame = null;
 let dragAutoScrollY = 0;
 let dragAutoScrollX = 0;
+let previewDragSourceIndex = null;
+let previewSuppressNextClick = false;
 let swapHighlight = new Set();
 let seatFlashHighlight = new Set();
 let activeWeekKey = getWeekKey(new Date());
@@ -281,8 +270,8 @@ let applyTargets = new Set();
 let lastEasterAt = 0;
 let backupReminderChecked = false;
 let allowAcademicOverride = false;
-let complementPreviewOrder = null;
 let pendingShufflePreview = null;
+let activeShufflePreviewDetail = "required";
 const seatUndoStack = [];
 let examTrendMode = "score";
 let expandedSavedExamIds = new Set();
@@ -1332,6 +1321,7 @@ function loadState() {
         bottomN: 10,
         includeMid: false
       },
+      complementRuleIds: [],
       constraints: {
         lockedDeskmatePairs: [],
         noDeskmatePairs: [],
@@ -1387,12 +1377,18 @@ function normalizeState() {
     pairByGender: false,
     keepLockedEmpty: true,
     autoAcademic: {},
+    complementRuleIds: [],
     constraints: {}
   };
   state.settings.sidebarCollapsed = Boolean(state.settings.sidebarCollapsed);
   state.settings.pairByGender = Boolean(state.settings.pairByGender);
   state.settings.keepLockedEmpty =
     state.settings.keepLockedEmpty === undefined ? true : Boolean(state.settings.keepLockedEmpty);
+  state.settings.complementRuleIds = Array.isArray(state.settings.complementRuleIds)
+    ? state.settings.complementRuleIds
+        .map((id) => id?.toString().trim())
+        .filter((id) => COMPLEMENT_RULES.some((rule) => rule.id === id))
+    : [];
   state.settings.autoAcademic = getAutoAcademicSettings();
   state.settings.constraints = state.settings.constraints || {};
   state.settings.constraints.lockedDeskmatePairs = Array.isArray(
@@ -1694,6 +1690,13 @@ function getChangedSeatIndices(beforeOrder, afterOrder) {
   return changed;
 }
 
+function getSeatPositionLabel(index) {
+  if (index < 0) {
+    return "未入座";
+  }
+  return `${Math.floor(index / COLS) + 1}-${(index % COLS) + 1}`;
+}
+
 function queueSeatFlash(indices) {
   seatFlashHighlight = new Set((indices || []).filter((index) => Number.isInteger(index) && index >= 0));
 }
@@ -1770,18 +1773,42 @@ function getDeskmateIndex(index) {
   return index % 2 === 0 ? index + 1 : index - 1;
 }
 
-function getComplementReason(student, mate) {
+function getActiveComplementRules() {
+  const ids = new Set(state.settings?.complementRuleIds || []);
+  return COMPLEMENT_RULES.filter((rule) => ids.has(rule.id));
+}
+
+function getComplementReason(student, mate, rules = COMPLEMENT_RULES) {
   if (!student || !mate) {
     return "";
   }
   const tagsA = new Set(getEffectiveTags(student));
   const tagsB = new Set(getEffectiveTags(mate));
-  const matched = COMPLEMENT_RULES.find((rule) => {
+  const matched = rules.find((rule) => {
     const direct = tagsA.has(rule.leftTagId) && tagsB.has(rule.rightTagId);
     const reverse = tagsA.has(rule.rightTagId) && tagsB.has(rule.leftTagId);
     return direct || reverse;
   });
   return matched ? matched.labelZh.replace(" ↔ ", " + ") : "";
+}
+
+function getComplementMatches(student, mate, rules = COMPLEMENT_RULES) {
+  if (!student || !mate) {
+    return [];
+  }
+  const tagsA = new Set(getEffectiveTags(student));
+  const tagsB = new Set(getEffectiveTags(mate));
+  return rules
+    .filter((rule) => {
+      const direct = tagsA.has(rule.leftTagId) && tagsB.has(rule.rightTagId);
+      const reverse = tagsA.has(rule.rightTagId) && tagsB.has(rule.leftTagId);
+      return direct || reverse;
+    })
+    .map((rule) => ({
+      ruleId: rule.id,
+      ruleLabel: rule.labelZh,
+      reason: rule.labelZh.replace(" ↔ ", " + ")
+    }));
 }
 
 function getSeatReason(student, index, order = state.seatOrder) {
@@ -1806,7 +1833,7 @@ function getSeatReason(student, index, order = state.seatOrder) {
   const mateId = order[getDeskmateIndex(index)];
   const mate = mateId ? state.students.find((item) => item.id === mateId) : null;
   if (mate) {
-    const complementReason = getComplementReason(student, mate);
+    const complementReason = getComplementReason(student, mate, getActiveComplementRules());
     if (complementReason) {
       reasons.push(complementReason);
     } else if (
@@ -1898,6 +1925,8 @@ function renderSeatGrid() {
         }
         if (!student) {
           seat.classList.add("empty");
+        } else {
+          seat.classList.add("has-student");
         }
         seat.dataset.index = index.toString();
         seat.draggable = Boolean(student);
@@ -2345,6 +2374,16 @@ function evaluateShuffleOrder(order) {
   const issues = [];
   const idToName = new Map(state.students.map((student) => [student.id, student.name]));
   const idToGender = new Map(state.students.map((student) => [student.id, (student.gender || "").trim()]));
+  const studentById = new Map(state.students.map((student) => [student.id, student]));
+  const activeComplementRules = getActiveComplementRules();
+  const requiredDetails = [];
+  const frontDetails = [];
+  const genderDetails = {
+    mixed: [],
+    same: [],
+    unknown: []
+  };
+  const complementDetails = [];
   const normalizedNoDeskPairs = state.settings.constraints.noDeskmatePairs.map((pair) => {
     const a = normalizeName(idToName.get(pair.a));
     const b = normalizeName(idToName.get(pair.b));
@@ -2353,6 +2392,8 @@ function evaluateShuffleOrder(order) {
   const noDeskSet = new Set(normalizedNoDeskPairs.filter((item) => item !== "|"));
 
   let softPenalty = 0;
+  let complementMatchedCount = 0;
+  const complementReasons = [];
   getDeskPairsForSeatCount(order.length).forEach(([left, right]) => {
     const leftId = order[left];
     const rightId = order[right];
@@ -2365,11 +2406,45 @@ function evaluateShuffleOrder(order) {
     if (noDeskSet.has(pairKey)) {
       issues.push(`${idToName.get(leftId)} 和 ${idToName.get(rightId)} 仍然坐成了同桌`);
     }
-    if (state.settings.pairByGender) {
-      const leftGender = idToGender.get(leftId);
-      const rightGender = idToGender.get(rightId);
-      if (leftGender && rightGender && leftGender === rightGender) {
+    const leftGender = idToGender.get(leftId);
+    const rightGender = idToGender.get(rightId);
+    const genderItem = {
+      leftId,
+      rightId,
+      leftName: idToName.get(leftId) || "未知",
+      rightName: idToName.get(rightId) || "未知",
+      leftSeat: getSeatPositionLabel(left),
+      rightSeat: getSeatPositionLabel(right),
+      leftGender: leftGender || "未知",
+      rightGender: rightGender || "未知"
+    };
+    if (!leftGender || !rightGender) {
+      genderDetails.unknown.push(genderItem);
+    } else if (leftGender === rightGender) {
+      if (state.settings.pairByGender) {
         softPenalty += 1;
+      }
+      genderDetails.same.push(genderItem);
+    } else {
+      genderDetails.mixed.push(genderItem);
+    }
+    if (activeComplementRules.length) {
+      const leftStudent = studentById.get(leftId);
+      const rightStudent = studentById.get(rightId);
+      const matches = getComplementMatches(leftStudent, rightStudent, activeComplementRules);
+      if (matches.length) {
+        complementMatchedCount += 1;
+        const reason = matches.map((match) => match.reason).join("、");
+        complementReasons.push(`${idToName.get(leftId)} - ${idToName.get(rightId)}：${reason}`);
+        complementDetails.push({
+          leftId,
+          rightId,
+          leftName: idToName.get(leftId) || "未知",
+          rightName: idToName.get(rightId) || "未知",
+          leftSeat: getSeatPositionLabel(left),
+          rightSeat: getSeatPositionLabel(right),
+          matches
+        });
       }
     }
   });
@@ -2380,6 +2455,14 @@ function evaluateShuffleOrder(order) {
     if (leftIndex === -1 || rightIndex === -1) {
       return;
     }
+    const satisfied = areDeskmatesByIndex(leftIndex, rightIndex);
+    requiredDetails.push({
+      type: "安排同桌",
+      label: `${idToName.get(pair.a) || "未知"} 和 ${idToName.get(pair.b) || "未知"} 安排同桌`,
+      satisfied,
+      studentIds: [pair.a, pair.b],
+      seats: [getSeatPositionLabel(leftIndex), getSeatPositionLabel(rightIndex)]
+    });
     if (!areDeskmatesByIndex(leftIndex, rightIndex)) {
       issues.push(`${idToName.get(pair.a) || "未知"} 和 ${idToName.get(pair.b) || "未知"} 没有安排成同桌`);
     }
@@ -2391,12 +2474,54 @@ function evaluateShuffleOrder(order) {
     if (seatIndex === -1) {
       return;
     }
-    if (Math.floor(seatIndex / COLS) >= frontRows) {
+    const currentRow = Math.floor(seatIndex / COLS) + 1;
+    const satisfied = Math.floor(seatIndex / COLS) < frontRows;
+    const detail = {
+      type: "前排照顾",
+      label: `${idToName.get(studentId) || "未知学生"} 坐前 ${frontRows} 排`,
+      satisfied,
+      studentIds: [studentId],
+      seats: [getSeatPositionLabel(seatIndex)],
+      currentRow,
+      frontRows
+    };
+    requiredDetails.push(detail);
+    frontDetails.push(detail);
+    if (!satisfied) {
       issues.push(`${idToName.get(studentId) || "未知学生"} 没有坐在前 ${frontRows} 排`);
     }
   });
 
-  return { hardViolations: issues.length, softPenalty, issues };
+  state.settings.constraints.noDeskmatePairs.forEach((pair) => {
+    const leftIndex = order.indexOf(pair.a);
+    const rightIndex = order.indexOf(pair.b);
+    if (leftIndex === -1 || rightIndex === -1) {
+      return;
+    }
+    const satisfied = !areDeskmatesByIndex(leftIndex, rightIndex);
+    requiredDetails.push({
+      type: "避免同桌",
+      label: `${idToName.get(pair.a) || "未知"} 不和 ${idToName.get(pair.b) || "未知"} 同桌`,
+      satisfied,
+      studentIds: [pair.a, pair.b],
+      seats: [getSeatPositionLabel(leftIndex), getSeatPositionLabel(rightIndex)]
+    });
+  });
+
+  return {
+    hardViolations: issues.length,
+    softPenalty,
+    complementMatchedCount,
+    complementEnabled: activeComplementRules.length > 0,
+    complementReasons,
+    details: {
+      required: requiredDetails,
+      gender: genderDetails,
+      complement: complementDetails,
+      front: frontDetails
+    },
+    issues
+  };
 }
 
 function generateCandidateOrderFromCurrent() {
@@ -2482,24 +2607,29 @@ function generateCandidateOrderFromCurrent() {
 
 function buildBestShuffleCandidate() {
   const retries = Math.max(50, Number.parseInt(state.settings.constraints.maxRetries, 10) || 200);
+  const complementEnabled = getActiveComplementRules().length > 0;
   let bestOrder = null;
   let bestEval = null;
-  let bestScore = Infinity;
 
   for (let i = 0; i < retries; i += 1) {
     const candidate = generateCandidateOrderFromCurrent();
     const result = evaluateShuffleOrder(candidate);
-    const score = result.hardViolations * 1000 + result.softPenalty;
-    if (score < bestScore) {
-      bestScore = score;
+    if (
+      !bestEval ||
+      result.hardViolations < bestEval.hardViolations ||
+      (result.hardViolations === bestEval.hardViolations && result.softPenalty < bestEval.softPenalty) ||
+      (result.hardViolations === bestEval.hardViolations &&
+        result.softPenalty === bestEval.softPenalty &&
+        result.complementMatchedCount > (bestEval.complementMatchedCount || 0))
+    ) {
       bestOrder = candidate;
       bestEval = result;
     }
-    if (score === 0) {
+    if (!complementEnabled && result.hardViolations === 0 && result.softPenalty === 0) {
       break;
     }
   }
-  return bestOrder ? { order: bestOrder, eval: bestEval, score: bestScore } : null;
+  return bestOrder ? { order: bestOrder, eval: bestEval } : null;
 }
 
 function getSeatPreviewStats(order, evaluation) {
@@ -2509,7 +2639,6 @@ function getSeatPreviewStats(order, evaluation) {
   const frontRows = Math.max(1, Number.parseInt(state.settings.constraints.frontRows, 10) || 2);
   let occupiedPairs = 0;
   let mixedGenderPairs = 0;
-  let reasonPairCount = 0;
   deskPairs.forEach(([left, right]) => {
     const leftStudent = studentById.get(order[left]);
     const rightStudent = studentById.get(order[right]);
@@ -2519,9 +2648,6 @@ function getSeatPreviewStats(order, evaluation) {
     occupiedPairs += 1;
     if (leftStudent.gender && rightStudent.gender && leftStudent.gender !== rightStudent.gender) {
       mixedGenderPairs += 1;
-    }
-    if (getComplementReason(leftStudent, rightStudent)) {
-      reasonPairCount += 1;
     }
   });
   const frontIds = state.settings.constraints.frontRowStudentIds || [];
@@ -2538,7 +2664,10 @@ function getSeatPreviewStats(order, evaluation) {
     changedCount,
     occupiedPairs,
     mixedGenderPairs,
-    reasonPairCount,
+    sameGenderPairs: evaluation?.details?.gender?.same?.length || 0,
+    unknownGenderPairs: evaluation?.details?.gender?.unknown?.length || 0,
+    complementEnabled: Boolean(evaluation?.complementEnabled),
+    complementMatchedCount: evaluation?.complementMatchedCount || 0,
     frontSatisfied,
     frontTotal: frontIds.length,
     requiredTotal,
@@ -2548,91 +2677,314 @@ function getSeatPreviewStats(order, evaluation) {
   };
 }
 
+function createPreviewDetailItem(text, status = "") {
+  const item = document.createElement("div");
+  item.className = `preview-detail-item ${status}`.trim();
+  item.textContent = text;
+  return item;
+}
+
+function renderPreviewDetailList(container, title, items, emptyText) {
+  const block = document.createElement("div");
+  block.className = "preview-detail-block";
+  const heading = document.createElement("div");
+  heading.className = "preview-block-title";
+  heading.textContent = title;
+  block.appendChild(heading);
+  if (items.length) {
+    items.forEach((item) => block.appendChild(item));
+  } else {
+    block.appendChild(createPreviewDetailItem(emptyText, "muted"));
+  }
+  container.appendChild(block);
+}
+
+function getChangedSeatDetails(order) {
+  const studentById = new Map(state.students.map((student) => [student.id, student]));
+  return getChangedSeatIndices(state.seatOrder, order).map((index) => {
+    const beforeId = state.seatOrder[index];
+    const afterId = order[index];
+    const beforeName = beforeId ? studentById.get(beforeId)?.name || "未知" : "空";
+    const afterName = afterId ? studentById.get(afterId)?.name || "未知" : "空";
+    return createPreviewDetailItem(`${getSeatPositionLabel(index)}：${beforeName} → ${afterName}`);
+  });
+}
+
+function renderShufflePreviewDetails(result, stats) {
+  if (!shufflePreviewDetails || !result?.order) {
+    return;
+  }
+  shufflePreviewDetails.innerHTML = "";
+  const details = result.eval?.details || {};
+  if (activeShufflePreviewDetail === "changed") {
+    renderPreviewDetailList(
+      shufflePreviewDetails,
+      "发生变化的座位",
+      getChangedSeatDetails(result.order),
+      "本次方案和当前座位完全一致。"
+    );
+    return;
+  }
+
+  if (activeShufflePreviewDetail === "required") {
+    const required = details.required || [];
+    const satisfied = required
+      .filter((item) => item.satisfied)
+      .map((item) => createPreviewDetailItem(`${item.label}（${item.seats.join("、")}）`, "ok"));
+    const unmet = required
+      .filter((item) => !item.satisfied)
+      .map((item) => createPreviewDetailItem(`${item.label}（当前：${item.seats.join("、")}）`, "warn"));
+    renderPreviewDetailList(shufflePreviewDetails, "已满足的明确要求", satisfied, "暂无明确要求。");
+    renderPreviewDetailList(
+      shufflePreviewDetails,
+      "未满足的明确要求",
+      unmet,
+      stats.requiredTotal ? "明确要求都已满足。" : "暂无明确要求。"
+    );
+    if (stats.hardViolations) {
+      shufflePreviewDetails.appendChild(createPreviewDetailItem("建议再随机一次，或拖动调整到满意后采用。", "warn"));
+    }
+    return;
+  }
+
+  if (activeShufflePreviewDetail === "gender") {
+    const mixed = (details.gender?.mixed || []).map((item) =>
+      createPreviewDetailItem(`${item.leftName} - ${item.rightName}：${item.leftGender} + ${item.rightGender}`, "ok")
+    );
+    const same = (details.gender?.same || []).map((item) =>
+      createPreviewDetailItem(`${item.leftName} - ${item.rightName}：${item.leftGender} + ${item.rightGender}`, "warn")
+    );
+    const unknown = (details.gender?.unknown || []).map((item) =>
+      createPreviewDetailItem(`${item.leftName} - ${item.rightName}：性别未完整填写`, "muted")
+    );
+    renderPreviewDetailList(shufflePreviewDetails, "男女同桌", mixed, "暂未形成男女同桌。");
+    renderPreviewDetailList(
+      shufflePreviewDetails,
+      state.settings.pairByGender ? "还没做到的同桌" : "同性别同桌",
+      same,
+      "没有同性别同桌。"
+    );
+    renderPreviewDetailList(shufflePreviewDetails, "无法判断的同桌", unknown, "没有性别未知的同桌。");
+    return;
+  }
+
+  if (activeShufflePreviewDetail === "complement") {
+    if (!stats.complementEnabled) {
+      renderPreviewDetailList(
+        shufflePreviewDetails,
+        "互补关系",
+        [],
+        "未勾选互补关系；如需强弱/性格互补，请在排座要求中勾选。"
+      );
+      return;
+    }
+    const byRule = new Map();
+    (details.complement || []).forEach((item) => {
+      item.matches.forEach((match) => {
+        if (!byRule.has(match.ruleLabel)) {
+          byRule.set(match.ruleLabel, []);
+        }
+        byRule.get(match.ruleLabel).push(
+          createPreviewDetailItem(`${item.leftName} - ${item.rightName}（${item.leftSeat}、${item.rightSeat}）：${match.reason}`, "ok")
+        );
+      });
+    });
+    if (!byRule.size) {
+      renderPreviewDetailList(shufflePreviewDetails, "已形成的互补同桌", [], "本次没有形成明显互补同桌。");
+      return;
+    }
+    byRule.forEach((items, ruleLabel) => {
+      renderPreviewDetailList(shufflePreviewDetails, ruleLabel, items, "暂无。");
+    });
+    return;
+  }
+
+  if (activeShufflePreviewDetail === "front") {
+    const front = details.front || [];
+    const satisfied = front
+      .filter((item) => item.satisfied)
+      .map((item) => createPreviewDetailItem(`${item.label}：当前 ${item.seats[0]}`, "ok"));
+    const unmet = front
+      .filter((item) => !item.satisfied)
+      .map((item) => createPreviewDetailItem(`${item.label}：当前第 ${item.currentRow} 行`, "warn"));
+    renderPreviewDetailList(shufflePreviewDetails, "已坐到前排", satisfied, "暂无前排照顾学生。");
+    renderPreviewDetailList(shufflePreviewDetails, "还未坐到前排", unmet, "前排照顾都已满足。");
+  }
+}
+
+function renderPreviewSeatGrid(order) {
+  if (!shufflePreviewSeatGrid) {
+    return;
+  }
+  const rows = getRowCountFromSeatCount(order.length);
+  const studentById = new Map(state.students.map((student) => [student.id, student]));
+  shufflePreviewSeatGrid.innerHTML = "";
+  shufflePreviewSeatGrid.style.setProperty("--preview-seat-rows", rows.toString());
+
+  const rowLabelsEl = document.createElement("div");
+  rowLabelsEl.className = "row-labels preview-row-labels";
+  rowLabelsEl.style.gridTemplateRows = rows ? `repeat(${rows}, var(--preview-seat-height))` : "none";
+  for (let displayRow = 0; displayRow < rows; displayRow += 1) {
+    const label = document.createElement("div");
+    label.textContent = `第 ${rows - displayRow} 行`;
+    rowLabelsEl.appendChild(label);
+  }
+
+  const groupsEl = document.createElement("div");
+  groupsEl.className = "seat-groups preview-seat-groups";
+  for (let group = 0; group < COLS / 2; group += 1) {
+    const groupEl = document.createElement("div");
+    groupEl.className = "seat-group";
+    groupEl.style.gridTemplateRows = `repeat(${rows}, var(--preview-seat-height))`;
+    for (let displayRow = 0; displayRow < rows; displayRow += 1) {
+      const row = getSeatDataRowFromDisplayRow(displayRow, rows);
+      for (let colInGroup = 0; colInGroup < 2; colInGroup += 1) {
+        const col = group * 2 + colInGroup + 1;
+        const index = row * COLS + (col - 1);
+        const studentId = order[index];
+        const student = studentId ? studentById.get(studentId) : null;
+        const seat = document.createElement("div");
+        seat.className = "seat preview-seat";
+        if (student?.gender === "男") {
+          seat.classList.add("male");
+        } else if (student?.gender === "女") {
+          seat.classList.add("female");
+        }
+        if (!student) {
+          seat.classList.add("empty");
+        }
+        seat.dataset.index = index.toString();
+        seat.draggable = true;
+
+        const name = document.createElement("div");
+        name.className = "seat-name";
+        name.textContent = student ? student.name : "空";
+        if (student && Array.from(student.name || "").length >= 4) {
+          name.classList.add("long");
+        }
+        if (student && Array.from(student.name || "").length >= 5) {
+          name.classList.add("extra-long");
+        }
+        const label = document.createElement("div");
+        label.className = "seat-label";
+        label.textContent = `${row + 1}-${col}`;
+        seat.append(name, label);
+        if (student) {
+          seat.addEventListener("click", () => {
+            if (!previewSuppressNextClick) {
+              openRecordModal(student.id);
+            }
+          });
+        }
+        attachPreviewSeatDragHandlers(seat, index);
+        groupEl.appendChild(seat);
+      }
+    }
+    groupsEl.appendChild(groupEl);
+  }
+  shufflePreviewSeatGrid.append(rowLabelsEl, groupsEl);
+}
+
+function attachPreviewSeatDragHandlers(seat, index) {
+  seat.addEventListener("dragstart", (event) => {
+    previewDragSourceIndex = index;
+    previewSuppressNextClick = true;
+    seat.classList.add("dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", index.toString());
+  });
+  seat.addEventListener("dragend", () => {
+    previewDragSourceIndex = null;
+    seat.classList.remove("dragging");
+    document.querySelectorAll(".preview-seat.drag-over").forEach((item) => item.classList.remove("drag-over"));
+    setTimeout(() => {
+      previewSuppressNextClick = false;
+    }, 0);
+  });
+  seat.addEventListener("dragover", (event) => {
+    if (previewDragSourceIndex === null) {
+      return;
+    }
+    event.preventDefault();
+    seat.classList.add("drag-over");
+    event.dataTransfer.dropEffect = "move";
+  });
+  seat.addEventListener("dragleave", () => {
+    seat.classList.remove("drag-over");
+  });
+  seat.addEventListener("drop", (event) => {
+    if (previewDragSourceIndex === null) {
+      return;
+    }
+    event.preventDefault();
+    seat.classList.remove("drag-over");
+    const source = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
+    if (!Number.isNaN(source)) {
+      swapPreviewSeats(source, index);
+    }
+  });
+}
+
+function swapPreviewSeats(sourceIndex, targetIndex) {
+  if (!pendingShufflePreview?.order || sourceIndex === targetIndex) {
+    return;
+  }
+  const nextOrder = [...pendingShufflePreview.order];
+  const sourceValue = nextOrder[sourceIndex] || null;
+  nextOrder[sourceIndex] = nextOrder[targetIndex] || null;
+  nextOrder[targetIndex] = sourceValue;
+  pendingShufflePreview.order = nextOrder;
+  pendingShufflePreview.eval = evaluateShuffleOrder(nextOrder);
+  refreshPendingShufflePreview();
+}
+
+function refreshPendingShufflePreview() {
+  if (!pendingShufflePreview?.order) {
+    return;
+  }
+  renderShufflePreview({
+    order: pendingShufflePreview.order,
+    eval: pendingShufflePreview.eval
+  });
+}
+
 function renderShufflePreview(result) {
   if (!shufflePreviewModal || !result?.order) {
     return;
   }
   const stats = getSeatPreviewStats(result.order, result.eval);
   shufflePreviewSummary.innerHTML = "";
-  [
-    ["变动座位", `${stats.changedCount} 个`],
-    ["明确要求", stats.requiredTotal ? `${stats.requiredSatisfied}/${stats.requiredTotal} 条已满足` : "未设置"],
-    ["尽量男女同桌", `${stats.mixedGenderPairs}/${stats.occupiedPairs} 对`],
-    ["恰巧互补", `${stats.reasonPairCount} 对`],
-    ["前排要求", stats.frontTotal ? `${stats.frontSatisfied}/${stats.frontTotal} 人` : "无"]
-  ].forEach(([label, value]) => {
-    const card = document.createElement("div");
-    card.className = "preview-stat";
+  const cards = [
+    ["changed", "变动座位", `${stats.changedCount} 个`],
+    ["required", "明确要求", stats.requiredTotal ? `${stats.requiredSatisfied}/${stats.requiredTotal} 条已满足` : "未设置"],
+    ["gender", "尽量男女同桌", `${stats.mixedGenderPairs}/${stats.occupiedPairs} 对`],
+    ["complement", "互补关系", stats.complementEnabled ? `互补同桌 ${stats.complementMatchedCount} 对` : "未启用"],
+    ["front", "前排要求", stats.frontTotal ? `${stats.frontSatisfied}/${stats.frontTotal} 人` : "无"]
+  ];
+  cards.forEach(([key, label, value]) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `preview-stat ${activeShufflePreviewDetail === key ? "active" : ""}`;
+    card.dataset.detail = key;
     card.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+    card.addEventListener("click", () => {
+      activeShufflePreviewDetail = key;
+      renderShufflePreviewDetails(result, stats);
+      shufflePreviewSummary.querySelectorAll(".preview-stat").forEach((item) => {
+        item.classList.toggle("active", item.dataset.detail === key);
+      });
+    });
     shufflePreviewSummary.appendChild(card);
   });
-
-  shufflePreviewIssues.innerHTML = "";
-  const issues = result.eval?.issues || [];
-  shufflePreviewIssues.classList.toggle("hidden", !issues.length && !stats.softPenalty);
-  if (issues.length) {
-    const title = document.createElement("div");
-    title.className = "preview-block-title";
-    title.textContent = "未满足的明确要求";
-    shufflePreviewIssues.appendChild(title);
-    issues.slice(0, 5).forEach((issue) => {
-      const item = document.createElement("div");
-      item.className = "preview-issue";
-      item.textContent = issue;
-      shufflePreviewIssues.appendChild(item);
-    });
-  }
-  if (stats.softPenalty) {
-    const item = document.createElement("div");
-    item.className = "preview-issue";
-    item.textContent = `尽量男女同桌还有 ${stats.softPenalty} 对没有做到。`;
-    shufflePreviewIssues.appendChild(item);
-  }
-  const advice = document.createElement("div");
-  advice.className = stats.hardViolations ? "preview-issue" : "preview-reason";
-  advice.textContent = stats.hardViolations
-    ? "建议点击“再随机一次”，或减少一些排座要求后重试。"
-    : "明确要求都已满足，可以采用这套座位。";
-  shufflePreviewIssues.classList.remove("hidden");
-  shufflePreviewIssues.appendChild(advice);
-
-  const studentById = new Map(state.students.map((student) => [student.id, student]));
-  const reasonItems = [];
-  getDeskPairsForSeatCount(result.order.length).forEach(([left, right]) => {
-    const leftStudent = studentById.get(result.order[left]);
-    const rightStudent = studentById.get(result.order[right]);
-    if (!leftStudent || !rightStudent) {
-      return;
-    }
-    const reason = getComplementReason(leftStudent, rightStudent);
-    if (reason) {
-      reasonItems.push(`${leftStudent.name} - ${rightStudent.name}：${reason}`);
-    }
-  });
-  shufflePreviewReasons.innerHTML = "";
-  const reasonTitle = document.createElement("div");
-  reasonTitle.className = "preview-block-title";
-  reasonTitle.textContent = "恰巧满足的互补示例";
-  shufflePreviewReasons.appendChild(reasonTitle);
-  if (reasonItems.length) {
-    reasonItems.slice(0, 6).forEach((text) => {
-      const item = document.createElement("div");
-      item.className = "preview-reason";
-      item.textContent = text;
-      shufflePreviewReasons.appendChild(item);
-    });
-  } else {
-    const empty = document.createElement("div");
-    empty.className = "preview-empty muted";
-    empty.textContent = "本次普通随机没有恰巧形成明显互补同桌；如需主动按强弱互补，请使用排座要求里的互补标签排座。";
-    shufflePreviewReasons.appendChild(empty);
-  }
+  renderPreviewSeatGrid(result.order);
+  renderShufflePreviewDetails(result, stats);
 }
 
 function openShufflePreview(result) {
   if (!shufflePreviewModal || !result?.order) {
     return;
   }
+  activeShufflePreviewDetail = "required";
   pendingShufflePreview = {
     order: [...result.order],
     eval: result.eval
@@ -2649,6 +3001,8 @@ function closeShufflePreview() {
   shufflePreviewModal.classList.add("hidden");
   shufflePreviewModal.setAttribute("aria-hidden", "true");
   pendingShufflePreview = null;
+  previewDragSourceIndex = null;
+  previewSuppressNextClick = false;
 }
 
 function shuffleSeats() {
@@ -2678,410 +3032,6 @@ function applyShufflePreview() {
     showToast("已采用最接近方案（部分明确要求未满足）", "info");
   } else {
     showToast("随机排座已采用", "success");
-  }
-}
-
-function computeComplementScore(studentA, studentB, rule) {
-  if (!studentA || !studentB || !rule) {
-    return 0;
-  }
-  const tagsA = new Set(getEffectiveTags(studentA));
-  const tagsB = new Set(getEffectiveTags(studentB));
-  const direct = tagsA.has(rule.leftTagId) && tagsB.has(rule.rightTagId);
-  const reverse = tagsA.has(rule.rightTagId) && tagsB.has(rule.leftTagId);
-  return direct || reverse ? 1 : 0;
-}
-
-function getSelectedComplementRuleIds() {
-  if (!complementRuleList) {
-    return [];
-  }
-  return Array.from(complementRuleList.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
-}
-
-function getSelectedComplementRules() {
-  const ids = new Set(getSelectedComplementRuleIds());
-  return COMPLEMENT_RULES.filter((rule) => ids.has(rule.id));
-}
-
-function refreshComplementRequiredOptions(selectedIds = getSelectedComplementRuleIds()) {
-  if (!complementRuleSelect) {
-    return;
-  }
-  const current = complementRuleSelect.value;
-  complementRuleSelect.innerHTML = "";
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = "无（全部尽量满足）";
-  complementRuleSelect.appendChild(none);
-  COMPLEMENT_RULES.filter((rule) => selectedIds.includes(rule.id)).forEach((rule) => {
-    const option = document.createElement("option");
-    option.value = rule.id;
-    option.textContent = rule.labelZh;
-    complementRuleSelect.appendChild(option);
-  });
-  if (current && selectedIds.includes(current)) {
-    complementRuleSelect.value = current;
-  } else {
-    complementRuleSelect.value = "";
-  }
-}
-
-function generateComplementPairs(studentIds, rules, requiredRuleId = "") {
-  const studentById = new Map(state.students.map((student) => [student.id, student]));
-  const pairCandidates = [];
-  const selectedRules = Array.isArray(rules) ? rules : [];
-  const softRules = selectedRules.filter((rule) => rule.id !== requiredRuleId);
-  for (let i = 0; i < studentIds.length; i += 1) {
-    for (let j = i + 1; j < studentIds.length; j += 1) {
-      const a = studentIds[i];
-      const b = studentIds[j];
-      const requiredMatch = requiredRuleId
-        ? computeComplementScore(
-            studentById.get(a),
-            studentById.get(b),
-            selectedRules.find((rule) => rule.id === requiredRuleId)
-          )
-        : 0;
-      const softScore = softRules.reduce(
-        (sum, rule) => sum + computeComplementScore(studentById.get(a), studentById.get(b), rule),
-        0
-      );
-      pairCandidates.push({
-        a,
-        b,
-        requiredMatch,
-        softScore,
-        totalScore: requiredMatch * 100 + softScore
-      });
-    }
-  }
-  const used = new Set();
-  const selected = [];
-  const pickPairs = (candidates) => {
-    candidates.forEach((pair) => {
-      if (used.has(pair.a) || used.has(pair.b)) {
-        return;
-      }
-      used.add(pair.a);
-      used.add(pair.b);
-      selected.push(pair);
-    });
-  };
-  if (requiredRuleId) {
-    const requiredCandidates = pairCandidates
-      .filter((pair) => pair.requiredMatch > 0)
-      .sort((x, y) => y.softScore - x.softScore || (Math.random() < 0.5 ? -1 : 1));
-    pickPairs(requiredCandidates);
-  }
-  pairCandidates
-    .sort(
-      (x, y) =>
-        y.totalScore - x.totalScore ||
-        y.requiredMatch - x.requiredMatch ||
-        y.softScore - x.softScore ||
-        (Math.random() < 0.5 ? -1 : 1)
-    )
-    .forEach((pair) => {
-      if (used.has(pair.a) || used.has(pair.b)) {
-        return;
-      }
-      used.add(pair.a);
-      used.add(pair.b);
-      selected.push(pair);
-    });
-  return {
-    pairs: selected,
-    requiredMatchedCount: selected.filter((item) => item.requiredMatch > 0).length,
-    softMatchedCount: selected.filter((item) => item.softScore > 0).length
-  };
-}
-
-function buildComplementSeatOrder(rules, options = {}) {
-  const respectLocked = options.respectLocked !== false;
-  const keepLockedEmpty = options.keepLockedEmpty !== false;
-  const total = state.seatOrder.length;
-  const next = [...state.seatOrder];
-  const lockedSet = new Set(state.lockedSeats);
-  const movableIndices = [];
-  const fixedByIndex = new Map();
-
-  for (let index = 0; index < total; index += 1) {
-    const value = state.seatOrder[index] ?? null;
-    if (respectLocked && lockedSet.has(index)) {
-      if (value || keepLockedEmpty) {
-        fixedByIndex.set(index, value);
-        continue;
-      }
-    }
-    movableIndices.push(index);
-  }
-
-  const movableStudents = movableIndices.map((index) => state.seatOrder[index]).filter(Boolean);
-  const sortedMovableIndices = [...movableIndices].sort((a, b) => a - b);
-  const studentSeatIndices = sortedMovableIndices.slice(0, movableStudents.length);
-  const emptySeatIndices = sortedMovableIndices.slice(movableStudents.length);
-  const {
-    pairs,
-    requiredMatchedCount,
-    softMatchedCount
-  } = generateComplementPairs(movableStudents, rules, options.requiredRuleId || "");
-  const pairDeskSlots = getDeskPairsForSeatCount(total).filter(
-    ([left, right]) => studentSeatIndices.includes(left) && studentSeatIndices.includes(right)
-  );
-  shuffleArray(pairDeskSlots);
-
-  const assigned = new Set();
-  let pairIndex = 0;
-  for (let i = 0; i < pairDeskSlots.length && pairIndex < pairs.length; i += 1) {
-    const [left, right] = pairDeskSlots[i];
-    if (assigned.has(left) || assigned.has(right)) {
-      continue;
-    }
-    const pair = pairs[pairIndex];
-    pairIndex += 1;
-    const swap = Math.random() < 0.5;
-    next[left] = swap ? pair.b : pair.a;
-    next[right] = swap ? pair.a : pair.b;
-    assigned.add(left);
-    assigned.add(right);
-  }
-
-  const usedStudents = new Set();
-  assigned.forEach((seatIndex) => {
-    if (next[seatIndex]) {
-      usedStudents.add(next[seatIndex]);
-    }
-  });
-  const remainingStudents = movableStudents.filter((id) => !usedStudents.has(id));
-  const restIndices = studentSeatIndices.filter((index) => !assigned.has(index));
-  shuffleArray(restIndices);
-  shuffleArray(remainingStudents);
-  let pointer = 0;
-  restIndices.forEach((index) => {
-    next[index] = pointer < remainingStudents.length ? remainingStudents[pointer] : null;
-    if (pointer < remainingStudents.length) {
-      pointer += 1;
-    }
-  });
-
-  emptySeatIndices.forEach((index) => {
-    next[index] = null;
-  });
-
-  fixedByIndex.forEach((value, index) => {
-    next[index] = value;
-  });
-
-  return {
-    order: next,
-    pairCount: pairs.length,
-    requiredMatchedCount,
-    softMatchedCount
-  };
-}
-
-function evaluateComplementConstraints(order, options = {}) {
-  let softPenalty = 0;
-  let hardViolations = 0;
-
-  if (options.respectNoDesk) {
-    const noDeskSet = new Set(
-      state.settings.constraints.noDeskmatePairs.map((pair) => [pair.a, pair.b].sort().join("|"))
-    );
-    getDeskPairsForSeatCount(order.length).forEach(([left, right]) => {
-      const leftId = order[left];
-      const rightId = order[right];
-      if (!leftId || !rightId) {
-        return;
-      }
-      if (noDeskSet.has([leftId, rightId].sort().join("|"))) {
-        hardViolations += 1;
-      }
-    });
-  }
-
-  if (options.respectLockedPairs) {
-    (state.settings.constraints.lockedDeskmatePairs || []).forEach((pair) => {
-      const leftIndex = order.indexOf(pair.a);
-      const rightIndex = order.indexOf(pair.b);
-      if (leftIndex !== -1 && rightIndex !== -1 && !areDeskmatesByIndex(leftIndex, rightIndex)) {
-        hardViolations += 1;
-      }
-    });
-  }
-
-  if (options.respectFrontRows) {
-    const frontRows = Math.max(1, Number.parseInt(state.settings.constraints.frontRows, 10) || 2);
-    (state.settings.constraints.frontRowStudentIds || []).forEach((studentId) => {
-      const seatIndex = order.indexOf(studentId);
-      if (seatIndex !== -1 && Math.floor(seatIndex / COLS) >= frontRows) {
-        hardViolations += 1;
-      }
-    });
-  }
-
-  if (options.pairByGender) {
-    const idToGender = new Map(state.students.map((student) => [student.id, (student.gender || "").trim()]));
-    getDeskPairsForSeatCount(order.length).forEach(([left, right]) => {
-      const leftId = order[left];
-      const rightId = order[right];
-      if (!leftId || !rightId) {
-        return;
-      }
-      const leftGender = idToGender.get(leftId);
-      const rightGender = idToGender.get(rightId);
-      if (leftGender && rightGender && leftGender === rightGender) {
-        softPenalty += 1;
-      }
-    });
-  }
-
-  return { hardViolations, softPenalty };
-}
-
-function isBetterComplementCandidate(current, next) {
-  if (!current) {
-    return true;
-  }
-  if (next.eval.hardViolations !== current.eval.hardViolations) {
-    return next.eval.hardViolations < current.eval.hardViolations;
-  }
-  if (next.requiredMatchedCount !== current.requiredMatchedCount) {
-    return next.requiredMatchedCount > current.requiredMatchedCount;
-  }
-  if (next.softMatchedCount !== current.softMatchedCount) {
-    return next.softMatchedCount > current.softMatchedCount;
-  }
-  if (next.eval.softPenalty !== current.eval.softPenalty) {
-    return next.eval.softPenalty < current.eval.softPenalty;
-  }
-  return false;
-}
-
-function computeBestComplementPlacement() {
-  const rules = getSelectedComplementRules();
-  if (!rules.length) {
-    return { error: "请至少勾选一条互补规则。" };
-  }
-
-  const requiredRuleId = complementRuleSelect?.value || "";
-  const options = {
-    respectLocked: Boolean(complementRespectLocked?.checked),
-    keepLockedEmpty: Boolean(complementKeepLockedEmpty?.checked),
-    requiredRuleId
-  };
-  const evalOptions = {
-    respectNoDesk: Boolean(complementRespectNoDesk?.checked),
-    respectFrontRows: Boolean(complementRespectFrontRows?.checked),
-    respectLockedPairs: Boolean(complementRespectLockedPairs?.checked),
-    pairByGender: Boolean(complementPairByGender?.checked)
-  };
-
-  let best = null;
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const result = buildComplementSeatOrder(rules, options);
-    const evaluation = evaluateComplementConstraints(result.order, evalOptions);
-    const candidate = {
-      ...result,
-      eval: evaluation
-    };
-    if (isBetterComplementCandidate(best, candidate)) {
-      best = candidate;
-      if (
-        best.eval.hardViolations === 0 &&
-        best.eval.softPenalty === 0 &&
-        (!requiredRuleId || best.requiredMatchedCount > 0)
-      ) {
-        break;
-      }
-    }
-  }
-
-  return best || { error: "未能生成排座结果。" };
-}
-
-function openComplementModal() {
-  if (!complementModal) {
-    return;
-  }
-  if (complementRuleList) {
-    complementRuleList.innerHTML = "";
-    COMPLEMENT_RULES.forEach((rule) => {
-      const label = document.createElement("label");
-      label.className = "complement-rule-item";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.value = rule.id;
-      checkbox.addEventListener("change", () => {
-        refreshComplementRequiredOptions();
-      });
-      const text = document.createElement("span");
-      text.textContent = rule.labelZh;
-      label.append(checkbox, text);
-      complementRuleList.appendChild(label);
-    });
-  }
-  refreshComplementRequiredOptions([]);
-  complementRespectLocked.checked = true;
-  complementKeepLockedEmpty.checked = Boolean(state.settings.keepLockedEmpty);
-  if (complementPairByGender) {
-    complementPairByGender.checked = Boolean(state.settings.pairByGender);
-  }
-  if (complementRespectNoDesk) {
-    complementRespectNoDesk.checked = true;
-  }
-  if (complementRespectFrontRows) {
-    complementRespectFrontRows.checked = true;
-  }
-  if (complementRespectLockedPairs) {
-    complementRespectLockedPairs.checked = true;
-  }
-  complementStatus.textContent = "选择互补关系后，系统会尽量把互补学生安排成同桌。";
-  complementPreviewOrder = null;
-  complementModal.classList.remove("hidden");
-  complementModal.setAttribute("aria-hidden", "false");
-}
-
-function closeComplementModal() {
-  if (!complementModal) {
-    return;
-  }
-  complementModal.classList.add("hidden");
-  complementModal.setAttribute("aria-hidden", "true");
-  complementPreviewOrder = null;
-}
-
-function previewComplementPlacement() {
-  const result = computeBestComplementPlacement();
-  if (result.error) {
-    complementStatus.textContent = result.error;
-    return;
-  }
-  complementPreviewOrder = result.order;
-  const requiredText = complementRuleSelect?.value ? `，必须规则命中 ${result.requiredMatchedCount} 对` : "";
-  const hint =
-    result.eval.hardViolations > 0 ? `；仍有 ${result.eval.hardViolations} 条明确要求未满足，已取最接近结果` : "";
-  complementStatus.textContent = `已生成方案：形成 ${result.pairCount} 对同桌，互补匹配 ${result.softMatchedCount + result.requiredMatchedCount} 对${requiredText}${hint}。`;
-}
-
-function applyComplementPlacement() {
-  const result = computeBestComplementPlacement();
-  if (result.error) {
-    complementStatus.textContent = result.error;
-    return;
-  }
-  const before = cloneSeatSnapshot();
-  state.seatOrder = [...result.order];
-  queueSeatFlash(getChangedSeatIndices(before.seatOrder, state.seatOrder));
-  pushSeatUndo("互补排座", before);
-  saveState();
-  renderAll();
-  closeComplementModal();
-  if (result.eval.hardViolations > 0) {
-    showToast("互补标签排座已应用（部分明确要求未满足）", "info");
-  } else {
-    showToast("互补标签排座已应用", "success");
   }
 }
 
@@ -6407,6 +6357,37 @@ function renderConstraintLists() {
   }
 }
 
+function renderComplementRuleSettings() {
+  if (!complementRuleSettings) {
+    return;
+  }
+  const selectedIds = new Set(state.settings.complementRuleIds || []);
+  complementRuleSettings.innerHTML = "";
+  COMPLEMENT_RULES.forEach((rule) => {
+    const label = document.createElement("label");
+    label.className = "complement-rule-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = rule.id;
+    checkbox.checked = selectedIds.has(rule.id);
+    checkbox.addEventListener("change", () => {
+      const next = new Set(state.settings.complementRuleIds || []);
+      if (checkbox.checked) {
+        next.add(rule.id);
+      } else {
+        next.delete(rule.id);
+      }
+      state.settings.complementRuleIds = COMPLEMENT_RULES.filter((item) => next.has(item.id)).map((item) => item.id);
+      saveState();
+      renderSeatGrid();
+    });
+    const text = document.createElement("span");
+    text.textContent = rule.labelZh;
+    label.append(checkbox, text);
+    complementRuleSettings.appendChild(label);
+  });
+}
+
 function renderAll() {
   normalizeState();
   syncSavedExamsToStudentDetails();
@@ -6427,6 +6408,7 @@ function renderAll() {
   renderExamManager();
   renderDrawResults();
   renderConstraintLists();
+  renderComplementRuleSettings();
   renderBackupInfo();
   renderUndoSeatChange();
   if (!importStatus.textContent) {
@@ -6913,6 +6895,7 @@ if (shufflePreviewAgain) {
   shufflePreviewAgain.addEventListener("click", () => {
     const result = buildBestShuffleCandidate();
     if (result) {
+      activeShufflePreviewDetail = "required";
       pendingShufflePreview = {
         order: [...result.order],
         eval: result.eval
@@ -7178,16 +7161,6 @@ pairByGender.addEventListener("change", (event) => {
   saveState();
 });
 
-if (shuffleByComplementBtn) {
-  shuffleByComplementBtn.addEventListener("click", () => {
-    if (!state.students.length) {
-      showToast("暂无学生可排座", "error");
-      return;
-    }
-    openComplementModal();
-  });
-}
-
 function saveAutoAcademicSettingsFromInputs() {
   if (!autoAcademicEnabled) {
     return;
@@ -7410,23 +7383,6 @@ if (examTrendModeSelect) {
     }
   });
 }
-if (complementClose) {
-  complementClose.addEventListener("click", closeComplementModal);
-}
-if (complementPreviewBtn) {
-  complementPreviewBtn.addEventListener("click", previewComplementPlacement);
-}
-if (complementApplyBtn) {
-  complementApplyBtn.addEventListener("click", applyComplementPlacement);
-}
-if (complementModal) {
-  complementModal.addEventListener("click", (event) => {
-    if (event.target === complementModal) {
-      closeComplementModal();
-    }
-  });
-}
-
 mappingClose.addEventListener("click", closeMappingModal);
 mappingCancel.addEventListener("click", closeMappingModal);
 mappingModal.addEventListener("click", (event) => {
@@ -7543,9 +7499,6 @@ document.addEventListener("keydown", (event) => {
     }
     if (changePasswordModal && !changePasswordModal.classList.contains("hidden")) {
       closeChangePasswordModal();
-    }
-    if (complementModal && !complementModal.classList.contains("hidden")) {
-      closeComplementModal();
     }
     if (shufflePreviewModal && !shufflePreviewModal.classList.contains("hidden")) {
       closeShufflePreview();
