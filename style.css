@@ -905,19 +905,118 @@ textarea {
 
 .seat-priority-note strong {
   color: var(--text-soft);
+  font-weight: 800;
 }
 
 .soft-rule {
   color: var(--text-soft);
 }
 
+.seat-gender-rule {
+  min-height: 32px;
+  align-items: center;
+  padding: 7px 9px;
+  border: 1px solid rgba(60, 60, 67, 0.075);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.seat-rule-summary {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(60, 60, 67, 0.075);
+  border-radius: 14px;
+  background: rgba(118, 118, 128, 0.045);
+}
+
+.seat-rule-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.seat-rule-summary-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.seat-rule-summary-note {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.seat-rule-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.seat-rule-chip {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(60, 60, 67, 0.075);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.seat-rule-chip strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.seat-rule-chip span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.seat-rule-chip.must {
+  border-color: rgba(10, 132, 255, 0.14);
+  background: rgba(10, 132, 255, 0.055);
+}
+
+.seat-rule-chip.soft {
+  border-color: rgba(52, 199, 89, 0.14);
+  background: rgba(52, 199, 89, 0.055);
+}
+
+.seat-requirement-editor {
+  margin-top: 2px;
+}
+
+.seat-requirement-editor summary {
+  min-height: 42px;
+  color: var(--text-soft);
+}
+
+.seat-requirement-editor .constraint-box {
+  gap: 10px;
+  padding: 10px;
+}
+
+.seat-requirement-editor .constraint-help {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .constraint-group {
   display: grid;
-  gap: 9px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid rgba(60, 60, 67, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.68);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .constraint-group-head {
@@ -935,10 +1034,18 @@ textarea {
 }
 
 .constraint-group-note {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 20px;
+  margin-top: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(10, 132, 255, 0.08);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
 .draw-history-body {
@@ -954,7 +1061,7 @@ textarea {
 
 .constraint-row {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 126px;
-  gap: 10px;
+  gap: 8px;
 }
 
 .constraint-row.single-right {
@@ -1662,6 +1769,10 @@ button.ghost {
   width: 100%;
 }
 
+.panel.controls .seat-actions > #shuffleSeatsBtn {
+  grid-column: 1 / -1;
+}
+
 .record-week {
   display: flex;
   align-items: center;
@@ -1813,15 +1924,29 @@ button.ghost {
   justify-content: space-between;
   gap: 8px;
   border: 1px solid var(--soft-border);
-  border-radius: 10px;
-  background: #fff;
-  padding: 6px 8px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 7px 8px;
   font-size: 12px;
 }
 
 .constraint-item span {
   min-width: 0;
   line-height: 1.4;
+}
+
+.constraint-item .constraint-name {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.constraint-item .ghost {
+  width: auto;
+  min-width: 50px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 12px;
 }
 
 .score-edit {
@@ -2115,15 +2240,23 @@ body:not(.compact-cards) .seat {
 
 .complement-rule-list {
   display: grid;
-  gap: 8px;
-  margin-top: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 2px;
 }
 
 .complement-rule-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid rgba(60, 60, 67, 0.075);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  line-height: 1.25;
   color: var(--text);
 }
 
@@ -3723,6 +3856,46 @@ button.ghost:hover {
   border-radius: 7px;
 }
 
+.panel.controls .seat-rule-summary {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(118, 118, 128, 0.045);
+}
+
+.panel.controls .seat-rule-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.panel.controls .seat-rule-chip {
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.panel.controls .seat-requirement-editor summary {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.panel.controls .seat-requirement-editor .constraint-box {
+  gap: 10px;
+  padding: 10px;
+}
+
+.panel.controls .seat-requirement-editor .constraint-group {
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.panel.controls .seat-requirement-editor .constraint-item,
+.panel.controls .seat-requirement-editor .complement-rule-item,
+.panel.controls .seat-requirement-editor .seat-gender-rule {
+  background: rgba(255, 255, 255, 0.82);
+}
+
 .seat-label {
   color: #9a9188;
 }
@@ -3867,6 +4040,14 @@ button.ghost:hover {
   }
 
   .student-row-1 {
+    grid-template-columns: 1fr;
+  }
+
+  .panel.controls .seat-rule-chip-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .complement-rule-list {
     grid-template-columns: 1fr;
   }
 

@@ -120,6 +120,8 @@ const shuffleSeatsBtn = document.getElementById("shuffleSeatsBtn");
 const resetSeatsBtn = document.getElementById("resetSeatsBtn");
 const undoSeatChangeBtn = document.getElementById("undoSeatChangeBtn");
 const pairByGender = document.getElementById("pairByGender");
+const seatRuleStatus = document.getElementById("seatRuleStatus");
+const seatRuleSummaryChips = document.getElementById("seatRuleSummaryChips");
 
 const importFileInput = document.getElementById("importFileInput");
 const importReplace = document.getElementById("importReplace");
@@ -1162,7 +1164,7 @@ function registerOfflineApp() {
   });
 
   navigator.serviceWorker
-    .register("./sw.js?v=20260602-deploy-layout-fix")
+    .register("./sw.js?v=20260604-gender-in-rules")
     .then((registration) => {
       if (registration.waiting) {
         showUpdatePrompt(registration.waiting);
@@ -2219,6 +2221,7 @@ function toggleSeatLock(index) {
   state.lockedSeats = Array.from(set).sort((a, b) => a - b);
   saveState();
   renderSeatGrid();
+  renderSeatRuleSummary();
 }
 
 function buildSeatOrderWithGenderPairs() {
@@ -6280,6 +6283,13 @@ function renderConstraintLists() {
     return;
   }
   const idToName = new Map(state.students.map((student) => [student.id, student.name]));
+  const appendName = (parent, name) => {
+    const strong = document.createElement("strong");
+    strong.className = "constraint-name";
+    strong.textContent = name;
+    parent.appendChild(strong);
+  };
+
   lockPairList.innerHTML = "";
   if (!state.settings.constraints.lockedDeskmatePairs.length) {
     const empty = document.createElement("div");
@@ -6291,7 +6301,10 @@ function renderConstraintLists() {
       const item = document.createElement("div");
       item.className = "constraint-item";
       const label = document.createElement("span");
-      label.textContent = `${idToName.get(pair.a) || "未知"} 和 ${idToName.get(pair.b) || "未知"} 安排同桌`;
+      appendName(label, idToName.get(pair.a) || "未知");
+      label.append(" 和 ");
+      appendName(label, idToName.get(pair.b) || "未知");
+      label.append(" 安排同桌");
       const del = document.createElement("button");
       del.className = "ghost";
       del.textContent = "删除";
@@ -6316,7 +6329,10 @@ function renderConstraintLists() {
       const item = document.createElement("div");
       item.className = "constraint-item";
       const label = document.createElement("span");
-      label.textContent = `${idToName.get(pair.a) || "未知"} 不和 ${idToName.get(pair.b) || "未知"} 同桌`;
+      appendName(label, idToName.get(pair.a) || "未知");
+      label.append(" 不和 ");
+      appendName(label, idToName.get(pair.b) || "未知");
+      label.append(" 同桌");
       const del = document.createElement("button");
       del.className = "ghost";
       del.textContent = "删除";
@@ -6342,7 +6358,8 @@ function renderConstraintLists() {
       const item = document.createElement("div");
       item.className = "constraint-item";
       const label = document.createElement("span");
-      label.textContent = `${idToName.get(id) || "未知"} 坐前 ${frontRows} 排`;
+      appendName(label, idToName.get(id) || "未知");
+      label.append(` 坐前 ${frontRows} 排`);
       const del = document.createElement("button");
       del.className = "ghost";
       del.textContent = "删除";
@@ -6355,6 +6372,7 @@ function renderConstraintLists() {
       frontStudentList.appendChild(item);
     });
   }
+  renderSeatRuleSummary();
 }
 
 function renderComplementRuleSettings() {
@@ -6379,12 +6397,98 @@ function renderComplementRuleSettings() {
       }
       state.settings.complementRuleIds = COMPLEMENT_RULES.filter((item) => next.has(item.id)).map((item) => item.id);
       saveState();
+      renderSeatRuleSummary();
       renderSeatGrid();
     });
     const text = document.createElement("span");
     text.textContent = rule.labelZh;
     label.append(checkbox, text);
     complementRuleSettings.appendChild(label);
+  });
+}
+
+function renderSeatRuleSummary() {
+  if (!seatRuleStatus || !seatRuleSummaryChips) {
+    return;
+  }
+  const constraints = state.settings.constraints || {};
+  const lockPairCount = (constraints.lockedDeskmatePairs || []).length;
+  const noPairCount = (constraints.noDeskmatePairs || []).length;
+  const frontStudentCount = (constraints.frontRowStudentIds || []).length;
+  const explicitCount = lockPairCount + noPairCount + frontStudentCount;
+  const complementCount = (state.settings.complementRuleIds || []).length;
+  const lockedSeatCount = (state.lockedSeats || []).length;
+  const keepEmptyText = state.settings.keepLockedEmpty ? "开启" : "关闭";
+
+  const setStatus = (parts) => {
+    seatRuleStatus.innerHTML = "";
+    parts.forEach((part) => {
+      if (typeof part === "string") {
+        seatRuleStatus.append(document.createTextNode(part));
+        return;
+      }
+      const strong = document.createElement("strong");
+      strong.textContent = part.text;
+      seatRuleStatus.append(strong);
+    });
+  };
+
+  if (explicitCount > 0) {
+    const softParts = [];
+    if (state.settings.pairByGender) {
+      softParts.push("男女搭配");
+    }
+    if (complementCount > 0) {
+      softParts.push({ text: `${complementCount} 类互补关系` });
+    }
+    const statusParts = ["随机排座会先满足 ", { text: `${explicitCount} 条明确要求` }];
+    if (softParts.length) {
+      statusParts.push("，再尽量照顾");
+      softParts.forEach((part, index) => {
+        if (index > 0) {
+          statusParts.push("、");
+        }
+        statusParts.push(part);
+      });
+    }
+    statusParts.push("。");
+    setStatus(statusParts);
+  } else if (state.settings.pairByGender || complementCount > 0) {
+    const softParts = [];
+    if (state.settings.pairByGender) {
+      softParts.push("男女搭配");
+    }
+    if (complementCount > 0) {
+      softParts.push(`${complementCount} 类互补关系`);
+    }
+    setStatus(["暂无明确要求，随机排座会尽量照顾", { text: softParts.join("、") }, "。"]);
+  } else {
+    setStatus(["暂无明确要求，点击随机排座将按当前名单随机生成。"]);
+  }
+
+  const chips = [
+    { title: "安排同桌", value: `${lockPairCount} 条`, tone: "must" },
+    { title: "避免同桌", value: `${noPairCount} 条`, tone: "must" },
+    {
+      title: "前排照顾",
+      value: frontStudentCount ? `${frontStudentCount} 人，坐前 ${constraints.frontRows || 2} 排` : "0 人",
+      tone: "must"
+    },
+    { title: "座位保护", value: `${lockedSeatCount} 个锁定，空座${keepEmptyText}`, tone: "must" },
+    { title: "男女搭配", value: state.settings.pairByGender ? "开启" : "关闭", tone: "soft" },
+    { title: "互补关系", value: complementCount ? `${complementCount} 类` : "未启用", tone: "soft" }
+  ];
+
+  seatRuleSummaryChips.innerHTML = "";
+  chips.forEach((chip) => {
+    const item = document.createElement("div");
+    item.className = `seat-rule-chip ${chip.tone}`;
+    const title = document.createElement("strong");
+    title.textContent = chip.title;
+    const value = document.createElement("span");
+    value.textContent = chip.value;
+    item.append(title, value);
+    seatRuleSummaryChips.appendChild(item);
   });
 }
 
@@ -6409,6 +6513,7 @@ function renderAll() {
   renderDrawResults();
   renderConstraintLists();
   renderComplementRuleSettings();
+  renderSeatRuleSummary();
   renderBackupInfo();
   renderUndoSeatChange();
   if (!importStatus.textContent) {
@@ -7159,6 +7264,7 @@ noRepeat.addEventListener("change", (event) => {
 pairByGender.addEventListener("change", (event) => {
   state.settings.pairByGender = event.target.checked;
   saveState();
+  renderSeatRuleSummary();
 });
 
 function saveAutoAcademicSettingsFromInputs() {
@@ -7204,6 +7310,7 @@ if (keepLockedEmpty) {
   keepLockedEmpty.addEventListener("change", (event) => {
     state.settings.keepLockedEmpty = event.target.checked;
     saveState();
+    renderSeatRuleSummary();
   });
 }
 
@@ -7274,6 +7381,7 @@ if (frontRowsInput) {
     state.settings.constraints.frontRows = Math.max(1, Number.parseInt(event.target.value, 10) || 2);
     saveState();
     renderConstraintLists();
+    renderSeatRuleSummary();
   });
 }
 

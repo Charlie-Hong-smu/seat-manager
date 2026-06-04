@@ -1,4 +1,4 @@
-const ASSET_VERSION = "20260602-deploy-layout-fix";
+const ASSET_VERSION = "20260604-gender-in-rules";
 const CACHE_VERSION = `seat-manager-v${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",
