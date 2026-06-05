@@ -1,4 +1,4 @@
-const ASSET_VERSION = "20260604-gender-in-rules";
+const ASSET_VERSION = "20260605-seat-swap-flip";
 const CACHE_VERSION = `seat-manager-v${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",

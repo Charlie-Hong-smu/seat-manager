@@ -264,7 +264,7 @@ let dragAutoScrollX = 0;
 let previewDragSourceIndex = null;
 let previewSuppressNextClick = false;
 let swapHighlight = new Set();
-let seatFlashHighlight = new Set();
+let pendingSeatFlip = [];
 let activeWeekKey = getWeekKey(new Date());
 let examDraft = null;
 let mappingState = null;
@@ -275,7 +275,7 @@ let allowAcademicOverride = false;
 let pendingShufflePreview = null;
 let activeShufflePreviewDetail = "required";
 const seatUndoStack = [];
-let examTrendMode = "score";
+let examTrendMode = "all";
 let expandedSavedExamIds = new Set();
 let activeSavedExamTableId = "";
 const inputSuggestMap = new Map();
@@ -1164,7 +1164,7 @@ function registerOfflineApp() {
   });
 
   navigator.serviceWorker
-    .register("./sw.js?v=20260604-gender-in-rules")
+    .register("./sw.js?v=20260605-seat-swap-flip")
     .then((registration) => {
       if (registration.waiting) {
         showUpdatePrompt(registration.waiting);
@@ -1699,8 +1699,63 @@ function getSeatPositionLabel(index) {
   return `${Math.floor(index / COLS) + 1}-${(index % COLS) + 1}`;
 }
 
+function getSeatElementByIndex(index) {
+  return document.querySelector(`.seat[data-index="${index}"]`);
+}
+
+function getSeatRectByIndex(index) {
+  const el = getSeatElementByIndex(index);
+  return el ? el.getBoundingClientRect() : null;
+}
+
 function queueSeatFlash(indices) {
-  seatFlashHighlight = new Set((indices || []).filter((index) => Number.isInteger(index) && index >= 0));
+  swapHighlight = new Set((indices || []).filter((index) => Number.isInteger(index) && index >= 0));
+}
+
+function queueSeatFlip(sourceIndex, targetIndex) {
+  const sourceRect = getSeatRectByIndex(sourceIndex);
+  const targetRect = getSeatRectByIndex(targetIndex);
+  pendingSeatFlip = [];
+  if (sourceRect && targetRect) {
+    pendingSeatFlip.push({ index: targetIndex, from: sourceRect });
+    pendingSeatFlip.push({ index: sourceIndex, from: targetRect });
+  }
+}
+
+function playPendingSeatFlip() {
+  if (!pendingSeatFlip.length) {
+    return;
+  }
+  const animations = pendingSeatFlip
+    .map((item) => {
+      const el = getSeatElementByIndex(item.index);
+      if (!el) {
+        return null;
+      }
+      const to = el.getBoundingClientRect();
+      const dx = item.from.left - to.left;
+      const dy = item.from.top - to.top;
+      if (!dx && !dy) {
+        el.classList.add("swap-settle");
+        return null;
+      }
+      el.classList.add("swap-moving", "swap-settle");
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      return el;
+    })
+    .filter(Boolean);
+  pendingSeatFlip = [];
+  requestAnimationFrame(() => {
+    animations.forEach((el) => {
+      el.style.transform = "";
+    });
+  });
+  setTimeout(() => {
+    document.querySelectorAll(".seat.swap-moving, .seat.swap-settle").forEach((item) => {
+      item.classList.remove("swap-moving", "swap-settle");
+      item.style.transform = "";
+    });
+  }, 520);
 }
 
 function cloneSeatSnapshot() {
@@ -1972,7 +2027,6 @@ function renderSeatGrid() {
         });
 
         let tagRow = null;
-        let reasonRow = null;
         if (student) {
           const tags = getSeatDisplayTags(student);
           if (tags.length) {
@@ -1993,13 +2047,6 @@ function renderSeatGrid() {
               tagRow.appendChild(chip);
             });
           }
-          const reason = getSeatReason(student, index);
-          if (reason) {
-            reasonRow = document.createElement("div");
-            reasonRow.className = "seat-reason";
-            reasonRow.textContent = reason;
-            reasonRow.title = reason;
-          }
         }
 
         const seatChildren = [name, meta];
@@ -2012,16 +2059,10 @@ function renderSeatGrid() {
         if (tagRow) {
           seatChildren.push(tagRow);
         }
-        if (reasonRow) {
-          seatChildren.push(reasonRow);
-        }
         seat.append(...seatChildren, label, lockBtn);
 
         if (swapHighlight.has(index)) {
-          seat.classList.add("swap-animate");
-        }
-        if (seatFlashHighlight.has(index)) {
-          seat.classList.add("flash");
+          seat.classList.add("swap-settle");
         }
         if (student) {
           seat.addEventListener("click", () => openRecordModal(student.id));
@@ -2035,26 +2076,14 @@ function renderSeatGrid() {
   }
 
   if (swapHighlight.size) {
-    const indices = new Set(swapHighlight);
     swapHighlight.clear();
     setTimeout(() => {
-      document.querySelectorAll(".seat.swap-animate").forEach((item) => {
-        item.classList.remove("swap-animate");
+      document.querySelectorAll(".seat.swap-settle").forEach((item) => {
+        item.classList.remove("swap-settle");
       });
-      if (indices.size) {
-        renderSeatGrid();
-      }
-    }, 360);
+    }, 540);
   }
-
-  if (seatFlashHighlight.size) {
-    setTimeout(() => {
-      document.querySelectorAll(".seat.flash").forEach((item) => {
-        item.classList.remove("flash");
-      });
-      seatFlashHighlight.clear();
-    }, 760);
-  }
+  playPendingSeatFlip();
 }
 
 function getEdgeScrollSpeed(distance, threshold, maxSpeed) {
@@ -2197,6 +2226,7 @@ function swapSeats(sourceIndex, targetIndex) {
   if (sourceIndex === targetIndex) {
     return;
   }
+  queueSeatFlip(sourceIndex, targetIndex);
   const before = cloneSeatSnapshot();
   const next = [...state.seatOrder];
   const sourceValue = next[sourceIndex] || null;
@@ -2205,7 +2235,6 @@ function swapSeats(sourceIndex, targetIndex) {
   next[targetIndex] = sourceValue;
   state.seatOrder = next;
   swapHighlight = new Set([sourceIndex, targetIndex]);
-  queueSeatFlash([sourceIndex, targetIndex]);
   pushSeatUndo("拖拽换座", before);
   saveState();
   renderSeatGrid();
@@ -5834,29 +5863,29 @@ function renderExamTrends(exams) {
 
   const chronological = [...exams].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const labels = chronological.map((exam) => exam.date || exam.name || "考试");
-  const rankField = examTrendMode === "rankClass" ? "rankClass" : examTrendMode === "rankSchool" ? "rankSchool" : "";
-  const rankMode = Boolean(rankField);
-  const rankLabel = rankField === "rankClass" ? "班级排名" : "年级排名";
-  const totals = chronological.map((exam) => (rankMode ? parseRankValue(exam.total?.[rankField]) : sumExamScores(exam.scores)));
+  const trendMode = ["all", "score", "rankClass", "rankSchool"].includes(examTrendMode) ? examTrendMode : "all";
+  const selectedMetricLabel = getTrendMetricLabel(trendMode);
   const totalDetails = chronological.map((exam, index) => ({
     name: exam.name || "考试",
     date: exam.date || "",
-    value: totals[index],
+    value: null,
     scoreValue: parseScoreValue(exam.total?.score) ?? sumExamScores(exam.scores),
     rankClass: parseRankValue(exam.total?.rankClass),
     rankSchool: parseRankValue(exam.total?.rankSchool)
   }));
-  const totalValues = totals.filter((value) => Number.isFinite(value));
+  const totalSeries = buildTrendSeries(totalDetails, trendMode, "总分");
+  const totalHasChart = totalSeries.some((series) => series.values.filter((value) => Number.isFinite(value)).length >= 2);
 
-  if (totalValues.length >= 2) {
-    const card = createChartCard(rankMode ? `${rankLabel}趋势` : "总分趋势", labels, totals, {
+  if (totalHasChart) {
+    const totalTitle =
+      trendMode === "all" || trendMode === "score" ? "总分趋势" : `${selectedMetricLabel}趋势`;
+    const card = createChartCard(totalTitle, labels, null, {
       width: 360,
       height: 140,
-      color: "#1c6f5f",
-      reverseY: rankMode,
+      series: totalSeries,
       details: totalDetails,
-      valueLabel: rankMode ? rankLabel : "总分",
-      scoreLabel: "总分"
+      scoreLabel: "总分",
+      metricMode: trendMode
     });
     examTrends.appendChild(card);
   }
@@ -5879,44 +5908,85 @@ function renderExamTrends(exams) {
   let hasSubjectChart = false;
 
   subjects.forEach((subject) => {
-    const values = chronological.map((exam) =>
-      rankMode ? parseRankValue(exam.scores?.[subject]?.[rankField]) : parseScoreValue(exam.scores?.[subject])
-    );
     const details = chronological.map((exam, index) => ({
       name: exam.name || "考试",
       date: exam.date || "",
-      value: values[index],
+      value: null,
       scoreValue: parseScoreValue(exam.scores?.[subject]),
       rankClass: parseRankValue(exam.scores?.[subject]?.rankClass),
       rankSchool: parseRankValue(exam.scores?.[subject]?.rankSchool)
     }));
-    const validValues = values.filter((value) => Number.isFinite(value));
-    if (validValues.length < 2) {
+    const series = buildTrendSeries(details, trendMode, `${subject}分数`);
+    const hasChart = series.some((item) => item.values.filter((value) => Number.isFinite(value)).length >= 2);
+    if (!hasChart) {
       return;
     }
     hasSubjectChart = true;
-    const card = createChartCard(`${subject}${rankMode ? rankLabel : ""}趋势`, labels, values, {
+    const card = createChartCard(`${subject}${trendMode === "all" ? "" : selectedMetricLabel}趋势`, labels, null, {
       width: 240,
       height: 120,
-      color: "#f0b429",
-      reverseY: rankMode,
+      series,
       details,
-      valueLabel: rankMode ? `${subject}${rankLabel}` : `${subject}分数`,
-      scoreLabel: `${subject}分数`
+      scoreLabel: `${subject}分数`,
+      metricMode: trendMode
     });
     subjectCards.appendChild(card);
   });
 
   if (hasSubjectChart) {
     examTrends.appendChild(subjectCards);
-  } else if (!totalValues.length) {
+  } else if (!totalHasChart) {
     const empty = document.createElement("div");
     empty.className = "chart-empty";
-    empty.textContent = rankMode ? `暂无可用的${rankLabel}趋势数据。` : "暂无可用的成绩趋势数据。";
+    empty.textContent =
+      trendMode === "all" ? "暂无可用的成绩趋势数据。" : `暂无可用的${selectedMetricLabel}趋势数据。`;
     examTrends.appendChild(empty);
   }
 
-  return totalValues.length >= 2 || hasSubjectChart;
+  return totalHasChart || hasSubjectChart;
+}
+
+function getTrendMetricLabel(mode) {
+  if (mode === "rankClass") {
+    return "班级排名";
+  }
+  if (mode === "rankSchool") {
+    return "年级排名";
+  }
+  return "分数";
+}
+
+function buildTrendSeries(details, mode, scoreLabel) {
+  const allSeries = [
+    {
+      id: "score",
+      label: scoreLabel,
+      shortLabel: "分数",
+      color: "#1c6f5f",
+      reverseY: false,
+      values: details.map((item) => (Number.isFinite(item.scoreValue) ? item.scoreValue : null))
+    },
+    {
+      id: "rankClass",
+      label: "班级排名",
+      shortLabel: "班排",
+      color: "#f0a202",
+      reverseY: true,
+      values: details.map((item) => (Number.isFinite(item.rankClass) ? item.rankClass : null))
+    },
+    {
+      id: "rankSchool",
+      label: "年级排名",
+      shortLabel: "年排",
+      color: "#3b82f6",
+      reverseY: true,
+      values: details.map((item) => (Number.isFinite(item.rankSchool) ? item.rankSchool : null))
+    }
+  ];
+  if (mode === "score" || mode === "rankClass" || mode === "rankSchool") {
+    return allSeries.filter((series) => series.id === mode);
+  }
+  return allSeries;
 }
 
 function sumExamScores(scores = {}) {
@@ -5973,33 +6043,60 @@ function createChartCard(title, labels, values, options) {
   svg.classList.add("chart-svg");
 
   card.append(header, subtitle, svg);
+  const legend = createTrendLegend(options?.series || []);
+  if (legend) {
+    card.appendChild(legend);
+  }
   card.addEventListener("click", () => {
-    openTrendDetail(title, options?.details || [], options?.scoreLabel || "分数");
+    openTrendDetail(title, options?.details || [], options?.scoreLabel || "分数", options?.series || []);
   });
   card.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      openTrendDetail(title, options?.details || [], options?.scoreLabel || "分数");
+      openTrendDetail(title, options?.details || [], options?.scoreLabel || "分数", options?.series || []);
     }
   });
   return card;
 }
 
-function openTrendDetail(title, details, scoreLabel) {
+function createTrendLegend(series) {
+  const visible = series.filter((item) => item.values?.some((value) => Number.isFinite(value)));
+  if (visible.length <= 1) {
+    return null;
+  }
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  visible.forEach((item) => {
+    const chip = document.createElement("span");
+    chip.className = "chart-legend-item";
+    const dot = document.createElement("i");
+    dot.style.background = item.color;
+    chip.append(dot, document.createTextNode(item.shortLabel || item.label));
+    legend.appendChild(chip);
+  });
+  return legend;
+}
+
+function openTrendDetail(title, details, scoreLabel, series = []) {
   if (!trendDetailModal || !trendDetailList) {
     return;
   }
   trendDetailTitle.textContent = title;
-  const validCount = details.filter((item) => Number.isFinite(item.scoreValue)).length;
-  trendDetailMeta.textContent = `${scoreLabel} · ${details.length} 次考试 · ${validCount} 个有效分数`;
+  const visibleSeries = series.filter((item) => item.values?.some((value) => Number.isFinite(value)));
+  const metricText = visibleSeries.length > 1 ? "分数、班级排名、年级排名" : visibleSeries[0]?.label || scoreLabel;
+  const validCount = visibleSeries.reduce(
+    (count, item) => count + item.values.filter((value) => Number.isFinite(value)).length,
+    0
+  );
+  trendDetailMeta.textContent = `${metricText} · ${details.length} 次考试 · ${validCount} 个有效数据`;
   trendDetailList.innerHTML = "";
-  trendDetailList.appendChild(createTrendDetailChart(details, scoreLabel));
+  trendDetailList.appendChild(createTrendDetailChart(details, scoreLabel, series));
 
   trendDetailModal.classList.remove("hidden");
   trendDetailModal.setAttribute("aria-hidden", "false");
 }
 
-function createTrendDetailChart(details, scoreLabel) {
+function createTrendDetailChart(details, scoreLabel, series = []) {
   const wrap = document.createElement("div");
   wrap.className = "trend-detail-chart-wrap";
   const width = Math.max(680, details.length * 150);
@@ -6009,26 +6106,25 @@ function createTrendDetailChart(details, scoreLabel) {
   svg.classList.add("trend-detail-chart");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
-  const scores = details.map((item) => (Number.isFinite(item.scoreValue) ? item.scoreValue : null));
-  const numericScores = scores.filter((value) => value !== null);
-  if (!numericScores.length) {
+  const visibleSeries = (series.length ? series : buildTrendSeries(details, "score", scoreLabel)).filter((item) =>
+    item.values?.some((value) => Number.isFinite(value))
+  );
+  if (!visibleSeries.length) {
     const empty = document.createElement("div");
     empty.className = "chart-empty";
-    empty.textContent = "暂无可绘制的分数数据。";
+    empty.textContent = "暂无可绘制的趋势数据。";
     wrap.appendChild(empty);
     return wrap;
   }
 
-  const minRaw = Math.min(...numericScores);
-  const maxRaw = Math.max(...numericScores);
-  const rangeRaw = maxRaw - minRaw || 1;
-  const min = Math.max(0, Math.floor(minRaw - rangeRaw * 0.12));
-  const max = Math.ceil(maxRaw + rangeRaw * 0.12);
-  const range = max - min || 1;
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
   const getX = (index) => padding.left + (index / Math.max(details.length - 1, 1)) * chartWidth;
-  const getY = (value) => padding.top + (1 - (value - min) / range) * chartHeight;
+  const getNormalizedY = (value, stats, reverseY) => {
+    const range = stats.max - stats.min || 1;
+    const normalized = reverseY ? (stats.max - value) / range : (value - stats.min) / range;
+    return padding.top + (1 - normalized) * chartHeight;
+  };
 
   const axis = document.createElementNS("http://www.w3.org/2000/svg", "path");
   axis.setAttribute("d", `M${padding.left} ${padding.top} V${padding.top + chartHeight} H${padding.left + chartWidth}`);
@@ -6037,8 +6133,8 @@ function createTrendDetailChart(details, scoreLabel) {
   axis.setAttribute("stroke-width", "1");
   svg.appendChild(axis);
 
-  [min, (min + max) / 2, max].forEach((tick) => {
-    const y = getY(tick);
+  [0, 0.5, 1].forEach((ratio) => {
+    const y = padding.top + ratio * chartHeight;
     const grid = document.createElementNS("http://www.w3.org/2000/svg", "line");
     grid.setAttribute("x1", padding.left);
     grid.setAttribute("x2", padding.left + chartWidth);
@@ -6047,31 +6143,44 @@ function createTrendDetailChart(details, scoreLabel) {
     grid.setAttribute("stroke", "#f0f2f5");
     grid.setAttribute("stroke-width", "1");
     svg.appendChild(grid);
-
-    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", padding.left - 10);
-    label.setAttribute("y", y + 4);
-    label.setAttribute("text-anchor", "end");
-    label.setAttribute("class", "trend-axis-label");
-    label.textContent = Number.isInteger(tick) ? String(tick) : tick.toFixed(1);
-    svg.appendChild(label);
   });
 
-  const points = scores.map((score, index) => ({
-    score,
-    x: getX(index),
-    y: score === null ? null : getY(score),
-    detail: details[index]
-  }));
-  const validPoints = points.filter((point) => point.y !== null);
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-  line.setAttribute("points", validPoints.map((point) => `${point.x},${point.y}`).join(" "));
-  line.setAttribute("fill", "none");
-  line.setAttribute("stroke", "#1c6f5f");
-  line.setAttribute("stroke-width", "3");
-  line.setAttribute("stroke-linecap", "round");
-  line.setAttribute("stroke-linejoin", "round");
-  svg.appendChild(line);
+  visibleSeries.forEach((item) => {
+    const numeric = item.values.filter((value) => Number.isFinite(value));
+    const stats = { min: Math.min(...numeric), max: Math.max(...numeric) };
+    const points = item.values.map((value, index) => ({
+      value,
+      x: getX(index),
+      y: Number.isFinite(value) ? getNormalizedY(value, stats, item.reverseY) : null,
+      detail: details[index]
+    }));
+    const validPoints = points.filter((point) => point.y !== null);
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    line.setAttribute("points", validPoints.map((point) => `${point.x},${point.y}`).join(" "));
+    line.setAttribute("fill", "none");
+    line.setAttribute("stroke", item.color);
+    line.setAttribute("stroke-width", "3");
+    line.setAttribute("stroke-linecap", "round");
+    line.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(line);
+
+    validPoints.forEach((point) => {
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", point.x);
+      circle.setAttribute("cy", point.y);
+      circle.setAttribute("r", "5");
+      circle.setAttribute("fill", item.color);
+      svg.appendChild(circle);
+
+      const value = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      value.setAttribute("x", point.x);
+      value.setAttribute("y", point.y - 10);
+      value.setAttribute("text-anchor", "middle");
+      value.setAttribute("class", "trend-point-score");
+      value.textContent = `${item.shortLabel || item.label}${point.value}`;
+      svg.appendChild(value);
+    });
+  });
 
   details.forEach((item, index) => {
     const x = getX(index);
@@ -6091,65 +6200,30 @@ function createTrendDetailChart(details, scoreLabel) {
     svg.appendChild(label);
   });
 
-  validPoints.forEach((point, index) => {
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", point.x);
-    circle.setAttribute("cy", point.y);
-    circle.setAttribute("r", "5");
-    circle.setAttribute("fill", "#1c6f5f");
-    svg.appendChild(circle);
-
-    const value = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    value.setAttribute("x", point.x);
-    value.setAttribute("y", point.y - 10);
-    value.setAttribute("text-anchor", "middle");
-    value.setAttribute("class", "trend-point-score");
-    value.textContent = String(point.score);
-    svg.appendChild(value);
-
-    const rankParts = [];
-    if (Number.isFinite(point.detail.rankClass)) {
-      rankParts.push(`班${point.detail.rankClass}`);
-    }
-    if (Number.isFinite(point.detail.rankSchool)) {
-      rankParts.push(`年${point.detail.rankSchool}`);
-    }
-    if (!rankParts.length) {
-      return;
-    }
-    const text = rankParts.join(" · ");
-    const rankWidth = Math.max(52, text.length * 8 + 14);
-    const preferRight = index % 2 === 0;
-    let rankX = preferRight ? point.x + 12 : point.x - rankWidth - 12;
-    rankX = Math.max(padding.left + 4, Math.min(width - padding.right - rankWidth, rankX));
-    let rankY = point.y > padding.top + 38 ? point.y - 34 : point.y + 18;
-    rankY = Math.max(padding.top + 4, Math.min(padding.top + chartHeight - 22, rankY));
-
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    bg.setAttribute("x", rankX);
-    bg.setAttribute("y", rankY);
-    bg.setAttribute("width", rankWidth);
-    bg.setAttribute("height", "22");
-    bg.setAttribute("rx", "11");
-    bg.setAttribute("fill", "rgba(255,255,255,0.92)");
-    bg.setAttribute("stroke", "#dfe8f1");
-    const rankText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    rankText.setAttribute("x", rankX + rankWidth / 2);
-    rankText.setAttribute("y", rankY + 15);
-    rankText.setAttribute("text-anchor", "middle");
-    rankText.setAttribute("class", "trend-rank-label");
-    rankText.textContent = text;
-    group.append(bg, rankText);
-    svg.appendChild(group);
-  });
-
   const yTitle = document.createElementNS("http://www.w3.org/2000/svg", "text");
   yTitle.setAttribute("x", padding.left);
   yTitle.setAttribute("y", 18);
   yTitle.setAttribute("class", "trend-axis-title");
-  yTitle.textContent = scoreLabel;
+  yTitle.textContent = visibleSeries.length > 1 ? "三项趋势（各自缩放）" : visibleSeries[0].label;
   svg.appendChild(yTitle);
+
+  const legendGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  visibleSeries.forEach((item, index) => {
+    const x = padding.left + index * 118;
+    const y = height - 24;
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", x);
+    dot.setAttribute("cy", y - 4);
+    dot.setAttribute("r", "5");
+    dot.setAttribute("fill", item.color);
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", x + 10);
+    text.setAttribute("y", y);
+    text.setAttribute("class", "trend-axis-label");
+    text.textContent = item.label;
+    legendGroup.append(dot, text);
+  });
+  svg.appendChild(legendGroup);
 
   wrap.appendChild(svg);
   return wrap;
@@ -6172,45 +6246,21 @@ function createLineChart(values, options) {
   const width = options.width || 320;
   const height = options.height || 120;
   const padding = 16;
-  const color = options.color || "#1c6f5f";
+  const series = options.series?.length
+    ? options.series.filter((item) => item.values?.some((value) => Number.isFinite(value)))
+    : [
+        {
+          color: options.color || "#1c6f5f",
+          reverseY: Boolean(options.reverseY),
+          values: values || []
+        }
+      ];
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
-  const parsed = values.map((value) => (Number.isFinite(value) ? value : null));
-  const numericValues = parsed.filter((value) => value !== null);
-  if (!numericValues.length) {
+  if (!series.length) {
     return svg;
   }
-
-  const min = Math.min(...numericValues);
-  const max = Math.max(...numericValues);
-  const range = max - min || 1;
-
-  const points = parsed.map((value, index) => {
-    const x = padding + (index / Math.max(parsed.length - 1, 1)) * (width - padding * 2);
-    if (value === null) {
-      return { x, y: null };
-    }
-    const normalized = options.reverseY ? (max - value) / range : (value - min) / range;
-    const y = height - padding - normalized * (height - padding * 2);
-    return { x, y };
-  });
-
-  const pathPoints = points.filter((point) => point.y !== null);
-  if (!pathPoints.length) {
-    return svg;
-  }
-
-  const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-  polyline.setAttribute(
-    "points",
-    pathPoints.map((point) => `${point.x},${point.y}`).join(" ")
-  );
-  polyline.setAttribute("fill", "none");
-  polyline.setAttribute("stroke", color);
-  polyline.setAttribute("stroke-width", "2");
-  polyline.setAttribute("stroke-linecap", "round");
-  polyline.setAttribute("stroke-linejoin", "round");
 
   const baseline = document.createElementNS("http://www.w3.org/2000/svg", "line");
   baseline.setAttribute("x1", padding);
@@ -6221,15 +6271,45 @@ function createLineChart(values, options) {
   baseline.setAttribute("stroke-width", "1");
 
   svg.appendChild(baseline);
-  svg.appendChild(polyline);
 
-  pathPoints.forEach((point) => {
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", point.x);
-    circle.setAttribute("cy", point.y);
-    circle.setAttribute("r", "3");
-    circle.setAttribute("fill", color);
-    svg.appendChild(circle);
+  series.forEach((item) => {
+    const parsed = item.values.map((value) => (Number.isFinite(value) ? value : null));
+    const numericValues = parsed.filter((value) => value !== null);
+    if (!numericValues.length) {
+      return;
+    }
+    const min = Math.min(...numericValues);
+    const max = Math.max(...numericValues);
+    const range = max - min || 1;
+    const points = parsed.map((value, index) => {
+      const x = padding + (index / Math.max(parsed.length - 1, 1)) * (width - padding * 2);
+      if (value === null) {
+        return { x, y: null };
+      }
+      const normalized = item.reverseY ? (max - value) / range : (value - min) / range;
+      const y = height - padding - normalized * (height - padding * 2);
+      return { x, y };
+    });
+    const pathPoints = points.filter((point) => point.y !== null);
+    if (!pathPoints.length) {
+      return;
+    }
+    const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    polyline.setAttribute("points", pathPoints.map((point) => `${point.x},${point.y}`).join(" "));
+    polyline.setAttribute("fill", "none");
+    polyline.setAttribute("stroke", item.color || "#1c6f5f");
+    polyline.setAttribute("stroke-width", "2");
+    polyline.setAttribute("stroke-linecap", "round");
+    polyline.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(polyline);
+    pathPoints.forEach((point) => {
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", point.x);
+      circle.setAttribute("cy", point.y);
+      circle.setAttribute("r", "3");
+      circle.setAttribute("fill", item.color || "#1c6f5f");
+      svg.appendChild(circle);
+    });
   });
 
   return svg;
@@ -7482,9 +7562,9 @@ if (exportModal) {
 }
 if (examTrendModeSelect) {
   examTrendModeSelect.addEventListener("change", (event) => {
-    examTrendMode = ["score", "rankClass", "rankSchool"].includes(event.target.value)
+    examTrendMode = ["all", "score", "rankClass", "rankSchool"].includes(event.target.value)
       ? event.target.value
-      : "score";
+      : "all";
     const student = state.students.find((item) => item.id === activeStudentId);
     if (student) {
       renderExamTrends(Array.isArray(student.exams) ? [...student.exams].sort((a, b) => (b.date || "").localeCompare(a.date || "")) : []);

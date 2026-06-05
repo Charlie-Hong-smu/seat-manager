@@ -912,7 +912,8 @@ textarea {
   color: var(--text-soft);
 }
 
-.seat-gender-rule {
+.seat-gender-rule,
+.seat-rule-option {
   min-height: 32px;
   align-items: center;
   padding: 7px 9px;
@@ -2087,21 +2088,29 @@ body:not(.compact-cards) .seat {
   box-shadow: 0 10px 22px rgba(20, 20, 20, 0.08);
 }
 
+.seat.swap-moving:hover {
+  transform: none;
+}
+
 .seat.dragging {
   opacity: 0.55;
   border-style: dashed;
 }
 
 .seat.drag-over {
-  outline: 2px solid rgba(28, 111, 95, 0.35);
+  outline: 2px solid rgba(10, 132, 255, 0.28);
+  outline-offset: 2px;
+  box-shadow: 0 12px 28px rgba(10, 132, 255, 0.10);
 }
 
-.seat.swap-animate {
-  animation: swapPulse 0.35s ease;
+.seat.swap-moving {
+  z-index: 2;
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
-.seat.flash {
-  animation: seatFlash 0.72s ease;
+.seat.swap-settle {
+  animation: swapSettle 520ms ease;
 }
 
 .seat.empty {
@@ -2374,6 +2383,10 @@ body.compact-cards .seat-reason {
 
 #recordModal {
   z-index: 30;
+}
+
+#trendDetailModal {
+  z-index: 35;
 }
 
 #mappingModal .modal-card {
@@ -2866,6 +2879,29 @@ button.tag-chip.mid.active {
   color: var(--muted);
 }
 
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.chart-legend-item i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
 .trend-detail-card {
   width: min(820px, 95vw);
   max-height: calc(100vh - 32px);
@@ -3254,27 +3290,18 @@ button.tag-chip.mid.active {
   }
 }
 
-@keyframes swapPulse {
+@keyframes swapSettle {
   0% {
-    transform: scale(1);
-    box-shadow: 0 6px 14px rgba(20, 20, 20, 0.05);
+    border-color: rgba(10, 132, 255, 0.28);
+    box-shadow: 0 14px 30px rgba(10, 132, 255, 0.10);
   }
   50% {
-    transform: scale(1.02);
-    box-shadow: 0 18px 28px rgba(20, 20, 20, 0.12);
+    border-color: rgba(10, 132, 255, 0.20);
+    box-shadow: 0 12px 26px rgba(10, 132, 255, 0.08);
   }
   100% {
-    transform: scale(1);
-    box-shadow: 0 6px 14px rgba(20, 20, 20, 0.05);
-  }
-}
-
-@keyframes seatFlash {
-  0% {
-    background: #fff9d9;
-  }
-  100% {
-    background: #ffffff;
+    border-color: inherit;
+    box-shadow: inherit;
   }
 }
 
@@ -3892,7 +3919,8 @@ button.ghost:hover {
 
 .panel.controls .seat-requirement-editor .constraint-item,
 .panel.controls .seat-requirement-editor .complement-rule-item,
-.panel.controls .seat-requirement-editor .seat-gender-rule {
+.panel.controls .seat-requirement-editor .seat-gender-rule,
+.panel.controls .seat-requirement-editor .seat-rule-option {
   background: rgba(255, 255, 255, 0.82);
 }
 
