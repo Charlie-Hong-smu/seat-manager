@@ -32,7 +32,7 @@ printf '你的AI使用码' | shasum -a 256
 
 - `POST /analyze-class`
   - header: `Authorization: Bearer <token>`
-  - body: 全班匿名成绩变化摘要，不包含真实姓名
+  - body: 全班成绩变化摘要，包含学生姓名，方便直接生成可读的关注名单
   - response: `{ "overall": "...", "classChanges": "...", "focusStudents": "...", "suggestions": "...", "disclaimer": "..." }`
 
 ## Frontend Setup

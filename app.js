@@ -6209,7 +6209,6 @@ function buildClassTrendPayload() {
         }
       });
       return {
-        id: `学生${String(index + 1).padStart(2, "0")}`,
         name: student.name,
         previousExam: previous.name || "上次考试",
         latestExam: latest.name || "最近考试",
@@ -6238,20 +6237,18 @@ function buildClassTrendPayload() {
     examCount: state.exams.length,
     studentCount: state.students.length,
     comparedStudentCount: students.length,
-    focusCandidates: focusCandidates.map(({ name, concernScore, ...item }) => item),
+    focusCandidates: focusCandidates.map(({ concernScore, ...item }) => item),
     localAnalysis: {
       totalImproved: students.filter((item) => item.totalDiff > 0).length,
       totalDeclined: students.filter((item) => item.totalDiff < 0).length,
       rankImproved: students.filter((item) => item.rankDiff < 0).length,
       rankDeclined: students.filter((item) => item.rankDiff > 0).length
-    },
-    localNameMap: Object.fromEntries(focusCandidates.map((item) => [item.id, item.name]))
+    }
   };
 }
 
 function validateAiPayloadSize(payload) {
-  const { localNameMap, ...safePayload } = payload || {};
-  return new Blob([JSON.stringify(safePayload)]).size <= AI_REQUEST_LIMIT_BYTES;
+  return new Blob([JSON.stringify(payload)]).size <= AI_REQUEST_LIMIT_BYTES;
 }
 
 function openAiAuthModal() {
@@ -6429,15 +6426,7 @@ function renderClassAiMessage(message, tone = "muted") {
   );
 }
 
-function withLocalStudentNames(value, nameMap) {
-  const text = formatAiValue(value);
-  if (!text) {
-    return "";
-  }
-  return text.replace(/学生\d{2}/g, (id) => (nameMap[id] ? `${id}（${nameMap[id]}）` : id));
-}
-
-function renderClassAiResult(data, nameMap) {
+function renderClassAiResult(data) {
   renderAiResult(
     classAiTrendResult,
     { title: "全班 AI 分析" },
@@ -6445,7 +6434,7 @@ function renderClassAiResult(data, nameMap) {
     [
       ["总体判断", data.overall],
       ["班级变化", data.classChanges || data.changes],
-      ["重点关注", withLocalStudentNames(data.focusStudents || data.suggestions, nameMap)],
+      ["重点关注", data.focusStudents || data.suggestions],
       ["建议关注", data.suggestions],
       ["参考提示", data.disclaimer]
     ]
@@ -6471,7 +6460,6 @@ async function generateClassAiTrendAdvice() {
     return;
   }
 
-  const { localNameMap, ...safePayload } = payload;
   classAiTrendBtn.disabled = true;
   classAiTrendBtn.textContent = "生成中";
   try {
@@ -6486,7 +6474,7 @@ async function generateClassAiTrendAdvice() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${auth.token}`
       },
-      body: JSON.stringify(safePayload)
+      body: JSON.stringify(payload)
     });
     if (response.status === 401) {
       clearAiAuth(false);
@@ -6504,7 +6492,7 @@ async function generateClassAiTrendAdvice() {
       throw new Error("ai_failed");
     }
     const data = await response.json();
-    renderClassAiResult(data, localNameMap);
+    renderClassAiResult(data);
   } catch (error) {
     if (error.message === "unauthorized") {
       renderClassAiMessage("AI 功能未授权。", "error");
