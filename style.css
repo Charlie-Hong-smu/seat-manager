@@ -3026,6 +3026,10 @@ button.tag-chip.mid.active {
   fill: var(--accent-strong);
   font-size: 12px;
   font-weight: 700;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 4px;
+  stroke-linejoin: round;
 }
 
 .trend-rank-label {

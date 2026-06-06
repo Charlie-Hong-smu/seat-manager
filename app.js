@@ -6755,7 +6755,7 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
   wrap.className = "trend-detail-chart-wrap";
   const width = Math.max(680, details.length * 150);
   const height = 360;
-  const padding = { top: 34, right: 34, bottom: 96, left: 54 };
+  const padding = { top: 56, right: 46, bottom: 100, left: 64 };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.classList.add("trend-detail-chart");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -6774,6 +6774,7 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
   const getX = (index) => padding.left + (index / Math.max(details.length - 1, 1)) * chartWidth;
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
   const getNormalizedY = (value, stats, reverseY) => {
     const range = stats.max - stats.min || 1;
     const normalized = reverseY ? (stats.max - value) / range : (value - stats.min) / range;
@@ -6799,7 +6800,7 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
     svg.appendChild(grid);
   });
 
-  visibleSeries.forEach((item) => {
+  visibleSeries.forEach((item, seriesIndex) => {
     const numeric = item.values.filter((value) => Number.isFinite(value));
     const stats = { min: Math.min(...numeric), max: Math.max(...numeric) };
     const points = item.values.map((value, index) => ({
@@ -6818,7 +6819,7 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
     line.setAttribute("stroke-linejoin", "round");
     svg.appendChild(line);
 
-    validPoints.forEach((point) => {
+    validPoints.forEach((point, pointIndex) => {
       const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       circle.setAttribute("cx", point.x);
       circle.setAttribute("cy", point.y);
@@ -6827,9 +6828,13 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
       svg.appendChild(circle);
 
       const value = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      value.setAttribute("x", point.x);
-      value.setAttribute("y", point.y - 10);
-      value.setAttribute("text-anchor", "middle");
+      const labelOffsets = [-18, 20, -34, 36];
+      const labelY = clamp(point.y + labelOffsets[seriesIndex % labelOffsets.length], padding.top + 14, padding.top + chartHeight - 10);
+      const anchor = pointIndex === 0 ? "start" : pointIndex === validPoints.length - 1 ? "end" : "middle";
+      const labelX = clamp(point.x, padding.left + 8, padding.left + chartWidth - 8);
+      value.setAttribute("x", labelX);
+      value.setAttribute("y", labelY);
+      value.setAttribute("text-anchor", anchor);
       value.setAttribute("class", "trend-point-score");
       value.textContent = `${item.shortLabel || item.label}${point.value}`;
       svg.appendChild(value);
