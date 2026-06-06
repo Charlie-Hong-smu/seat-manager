@@ -6324,7 +6324,7 @@ function buildClassTrendPayload() {
         (student.rankDiff > 0 ? Math.min(student.rankDiff, 100) / 2 : 0) +
         student.subjectChanges.filter((item) => item.diff < 0).length * 8
     }))
-    .sort((a, b) => b.concernScore - a.concernScore || a.id.localeCompare(b.id))
+    .sort((a, b) => b.concernScore - a.concernScore || (a.name || "").localeCompare(b.name || ""))
     .slice(0, 30);
 
   return {
@@ -6545,19 +6545,18 @@ async function generateClassAiTrendAdvice() {
     renderClassAiMessage("当前处于离线状态，联网后可使用全班 AI 分析。");
     return;
   }
-  const payload = buildClassTrendPayload();
-  if (payload.comparedStudentCount < 2) {
-    renderClassAiMessage("至少需要两次考试、且有多名学生可比较，才能生成全班 AI 分析。");
-    return;
-  }
-  if (!validateAiPayloadSize(payload)) {
-    renderClassAiMessage("当前全班成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
-    return;
-  }
-
   classAiTrendBtn.disabled = true;
   classAiTrendBtn.textContent = "生成中";
   try {
+    const payload = buildClassTrendPayload();
+    if (payload.comparedStudentCount < 2) {
+      renderClassAiMessage("至少需要两次考试、且有多名学生可比较，才能生成全班 AI 分析。");
+      return;
+    }
+    if (!validateAiPayloadSize(payload)) {
+      renderClassAiMessage("当前全班成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
+      return;
+    }
     const auth = await ensureAiAuth();
     if (!auth) {
       return;
