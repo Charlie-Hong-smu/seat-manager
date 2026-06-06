@@ -2860,6 +2860,29 @@ button.tag-chip.mid.active {
   gap: 10px;
 }
 
+.ai-trend-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-result-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dfe5e2;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ai-result-close:hover {
+  color: var(--text);
+  border-color: #cbd7d2;
+}
+
 .ai-trend-title {
   font-size: 13px;
   font-weight: 700;

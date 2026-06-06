@@ -14,6 +14,7 @@ const AI_AUTH_TOKEN_KEY = "seat-manager-ai-auth-token";
 const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
 const AI_AUTH_SESSION_TOKEN_KEY = "seat-manager-ai-session-token";
 const AI_AUTH_SESSION_EXPIRES_KEY = "seat-manager-ai-session-expires";
+const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
 const AI_REMEMBER_DAYS = 30;
 const AI_REQUEST_LIMIT_BYTES = 20 * 1024;
 const TAG_CATALOG = [
@@ -4371,15 +4372,15 @@ function buildScoreMappingAiPayload(rows, filename, localMapping) {
 
 async function requestAiScoreMapping(rows, filename, localMapping) {
   if (window.location.protocol === "file:" || !navigator.onLine) {
-    return null;
+    return { ok: false, reason: "offline" };
   }
   const payload = buildScoreMappingAiPayload(rows, filename, localMapping);
   if (!validateAiPayloadSize(payload)) {
-    return null;
+    return { ok: false, reason: "too_large" };
   }
   const auth = await ensureAiAuth();
   if (!auth) {
-    return null;
+    return { ok: false, reason: "no_auth" };
   }
   const baseUrl = getAiWorkerBaseUrl();
   const response = await fetch(`${baseUrl}/suggest-score-mapping`, {
@@ -4392,13 +4393,16 @@ async function requestAiScoreMapping(rows, filename, localMapping) {
   });
   if (response.status === 401) {
     clearAiAuth(false);
-    return null;
+    return { ok: false, reason: "expired" };
+  }
+  if (response.status === 404) {
+    return { ok: false, reason: "not_deployed" };
   }
   if (!response.ok) {
-    return null;
+    return { ok: false, reason: "failed" };
   }
   const data = await response.json();
-  return normalizeAiMappingResult(data, localMapping.headers || []);
+  return { ok: true, mapping: normalizeAiMappingResult(data, localMapping.headers || []) };
 }
 
 function getStudentExamsForAutoTag(student, settings) {
@@ -5353,11 +5357,25 @@ async function prepareScoreMapping(rows, filename) {
   }
   scoreStatus.textContent = "本地识别不够可靠，正在尝试 AI 辅助映射。";
   try {
-    const aiMapping = await requestAiScoreMapping(rows, filename, mapping);
-    if (!aiMapping || mappingState?.rows !== rows) {
+    const aiResult = await requestAiScoreMapping(rows, filename, mapping);
+    if (!aiResult.ok) {
+      const reasonText =
+        {
+          offline: "当前离线，无法使用 AI 映射，请手动选择映射。",
+          too_large: "成绩表样例过大，无法使用 AI 映射，请手动选择映射。",
+          no_auth: "尚未启用 AI 授权，请手动选择映射或先启用 AI。",
+          expired: "AI 授权已过期，请重新启用后再试。",
+          not_deployed: "AI 映射接口尚未部署到 Cloudflare，请先手动选择映射。",
+          failed: "AI 映射暂时不可用，请手动选择映射。"
+        }[aiResult.reason] || "AI 映射暂时不可用，请手动选择映射。";
+      scoreStatus.textContent = reasonText;
+      return;
+    }
+    if (mappingState?.rows !== rows) {
       scoreStatus.textContent = "未能可靠识别列，请手动选择映射。";
       return;
     }
+    const aiMapping = aiResult.mapping;
     mappingState.suggestion = aiMapping;
     openMappingModal(aiMapping.headers, aiMapping);
     scoreStatus.textContent = "AI 已辅助填好映射，请确认或手动调整后再应用。";
@@ -6120,6 +6138,50 @@ function clearAiAuth(showMessage = true) {
   }
 }
 
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function getAiCacheSignature(scope, payload) {
+  const text = `${scope}:${stableStringify(payload)}`;
+  let hash = 5381;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 33) ^ text.charCodeAt(index);
+  }
+  return `${scope}:${(hash >>> 0).toString(36)}:${text.length}`;
+}
+
+function readAiResultCache() {
+  try {
+    return JSON.parse(localStorage.getItem(AI_RESULT_CACHE_KEY) || "{}") || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function getCachedAiResult(signature) {
+  const cache = readAiResultCache();
+  return cache[signature]?.data || null;
+}
+
+function storeCachedAiResult(signature, data) {
+  const cache = readAiResultCache();
+  cache[signature] = { savedAt: Date.now(), data };
+  const entries = Object.entries(cache)
+    .sort((a, b) => (b[1].savedAt || 0) - (a[1].savedAt || 0))
+    .slice(0, 30);
+  localStorage.setItem(AI_RESULT_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+}
+
 function formatAiValue(value) {
   if (Array.isArray(value)) {
     return value
@@ -6151,10 +6213,22 @@ function renderAiResult(container, data, statusText = "", fields = null) {
   const title = document.createElement("div");
   title.className = "ai-trend-title";
   title.textContent = data.title || "AI 趋势建议";
+  const headRight = document.createElement("div");
+  headRight.className = "ai-trend-head-actions";
   const status = document.createElement("div");
   status.className = "ai-trend-status";
   status.textContent = statusText || "仅供教师参考";
-  head.append(title, status);
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "ai-result-close";
+  closeBtn.type = "button";
+  closeBtn.textContent = "×";
+  closeBtn.setAttribute("aria-label", "关闭 AI 分析");
+  closeBtn.addEventListener("click", () => {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+  });
+  headRight.append(status, closeBtn);
+  head.append(title, headRight);
   container.appendChild(head);
 
   const resultFields = fields || [
@@ -6179,16 +6253,6 @@ function renderAiResult(container, data, statusText = "", fields = null) {
     block.append(label, text);
     container.appendChild(block);
   });
-
-  const actions = document.createElement("div");
-  actions.className = "ai-trend-actions-inline";
-  const clearBtn = document.createElement("button");
-  clearBtn.className = "ghost";
-  clearBtn.type = "button";
-  clearBtn.textContent = "清除 AI 授权";
-  clearBtn.addEventListener("click", () => clearAiAuth(true));
-  actions.appendChild(clearBtn);
-  container.appendChild(actions);
 }
 
 function renderAiTrendResult(data, statusText = "") {
@@ -6491,6 +6555,12 @@ async function generateAiTrendAdvice() {
     renderAiTrendMessage("当前成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
     return;
   }
+  const cacheSignature = getAiCacheSignature("student-trend", { studentId: activeStudentId, payload });
+  const cached = getCachedAiResult(cacheSignature);
+  if (cached) {
+    renderAiTrendResult(cached, "已缓存");
+    return;
+  }
 
   aiTrendBtn.disabled = true;
   aiTrendBtn.textContent = "生成中";
@@ -6524,6 +6594,7 @@ async function generateAiTrendAdvice() {
       throw new Error("ai_failed");
     }
     const data = await response.json();
+    storeCachedAiResult(cacheSignature, data);
     renderAiTrendResult(data, "已生成");
   } catch (error) {
     if (error.message === "unauthorized") {
@@ -6565,11 +6636,11 @@ function enrichFocusStudentsWithReasons(value, reasonMap = {}) {
     .join("\n");
 }
 
-function renderClassAiResult(data, reasonMap = {}) {
+function renderClassAiResult(data, reasonMap = {}, statusText = "已生成") {
   renderAiResult(
     classAiTrendResult,
     { title: "全班 AI 分析" },
-    "已生成",
+    statusText,
     [
       ["总体判断", data.overall],
       ["班级变化", data.classChanges || data.changes],
@@ -6603,6 +6674,12 @@ async function generateClassAiTrendAdvice() {
       renderClassAiMessage("当前全班成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
       return;
     }
+    const cacheSignature = getAiCacheSignature("class-trend", safePayload);
+    const cached = getCachedAiResult(cacheSignature);
+    if (cached) {
+      renderClassAiResult(cached, focusReasonMap, "已缓存");
+      return;
+    }
     const auth = await ensureAiAuth();
     if (!auth) {
       return;
@@ -6632,7 +6709,8 @@ async function generateClassAiTrendAdvice() {
       throw new Error("ai_failed");
     }
     const data = await response.json();
-    renderClassAiResult(data, focusReasonMap);
+    storeCachedAiResult(cacheSignature, data);
+    renderClassAiResult(data, focusReasonMap, "已生成");
   } catch (error) {
     if (error.message === "unauthorized") {
       renderClassAiMessage("AI 功能未授权。", "error");
@@ -6849,11 +6927,14 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
   visibleSeries.forEach((item, seriesIndex) => {
     const numeric = item.values.filter((value) => Number.isFinite(value));
     const stats = { min: Math.min(...numeric), max: Math.max(...numeric) };
+    const visualOffset = visibleSeries.length > 1 ? (seriesIndex - (visibleSeries.length - 1) / 2) * 10 : 0;
     const points = item.values.map((value, index) => ({
       index,
       value,
       x: getX(index),
-      y: Number.isFinite(value) ? getNormalizedY(value, stats, item.reverseY) : null,
+      y: Number.isFinite(value)
+        ? clamp(getNormalizedY(value, stats, item.reverseY) + visualOffset, padding.top + 8, padding.top + chartHeight - 8)
+        : null,
       detail: details[index]
     }));
     const validPoints = points.filter((point) => point.y !== null);
@@ -6864,6 +6945,9 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
     line.setAttribute("stroke-width", "3");
     line.setAttribute("stroke-linecap", "round");
     line.setAttribute("stroke-linejoin", "round");
+    if (visibleSeries.length > 1 && seriesIndex > 0) {
+      line.setAttribute("stroke-dasharray", seriesIndex === 1 ? "8 6" : "3 6");
+    }
     svg.appendChild(line);
 
     validPoints.forEach((point, pointIndex) => {
