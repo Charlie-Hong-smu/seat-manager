@@ -4322,6 +4322,85 @@ function parseScoreRowsWithMapping(rows, mapping) {
   return { subjects, entries };
 }
 
+function normalizeAiMappingResult(result, headers) {
+  const safeIndex = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isInteger(parsed) && parsed >= 0 && parsed < headers.length ? parsed : -1;
+  };
+  const subjectMappings = Array.isArray(result?.subjectMappings)
+    ? result.subjectMappings
+        .map((item) => ({
+          subject: SUBJECT_ORDER.includes(item?.subject) ? item.subject : "",
+          scoreCol: safeIndex(item?.scoreCol),
+          rankClassCol: safeIndex(item?.rankClassCol),
+          rankSchoolCol: safeIndex(item?.rankSchoolCol)
+        }))
+        .filter((item) => item.subject && item.scoreCol !== -1)
+    : [];
+  return {
+    reliable: false,
+    reason: "ai",
+    headers,
+    nameCol: safeIndex(result?.nameCol),
+    subjectMappings,
+    totalMapping: {
+      scoreCol: safeIndex(result?.totalMapping?.scoreCol),
+      rankClassCol: safeIndex(result?.totalMapping?.rankClassCol),
+      rankSchoolCol: safeIndex(result?.totalMapping?.rankSchoolCol)
+    },
+    conflicts: result?.note ? [`AI 已辅助识别：${String(result.note).slice(0, 80)}`] : ["AI 已辅助识别列，请确认后再保存。"],
+    candidatesBySubject: {}
+  };
+}
+
+function buildScoreMappingAiPayload(rows, filename, localMapping) {
+  const headers = Array.isArray(localMapping?.headers) ? localMapping.headers : rows[0] || [];
+  return {
+    filename: filename || "",
+    headers: headers.map((header, index) => ({ index, header: header || `第${index + 1}列` })),
+    sampleRows: rows.slice(1, 9).map((row) => headers.map((_, index) => String(row[index] ?? "").slice(0, 40))),
+    knownSubjects: SUBJECT_ORDER,
+    localSuggestion: {
+      nameCol: localMapping?.nameCol ?? -1,
+      subjectMappings: localMapping?.subjectMappings || [],
+      totalMapping: localMapping?.totalMapping || { scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 },
+      conflicts: localMapping?.conflicts || []
+    }
+  };
+}
+
+async function requestAiScoreMapping(rows, filename, localMapping) {
+  if (window.location.protocol === "file:" || !navigator.onLine) {
+    return null;
+  }
+  const payload = buildScoreMappingAiPayload(rows, filename, localMapping);
+  if (!validateAiPayloadSize(payload)) {
+    return null;
+  }
+  const auth = await ensureAiAuth();
+  if (!auth) {
+    return null;
+  }
+  const baseUrl = getAiWorkerBaseUrl();
+  const response = await fetch(`${baseUrl}/suggest-score-mapping`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${auth.token}`
+    },
+    body: JSON.stringify(payload)
+  });
+  if (response.status === 401) {
+    clearAiAuth(false);
+    return null;
+  }
+  if (!response.ok) {
+    return null;
+  }
+  const data = await response.json();
+  return normalizeAiMappingResult(data, localMapping.headers || []);
+}
+
 function getStudentExamsForAutoTag(student, settings) {
   const exams = Array.isArray(student.exams)
     ? student.exams.filter((exam) => exam?.source !== "savedExamRecord")
@@ -5262,13 +5341,29 @@ function closeMappingModal() {
   mappingState = null;
 }
 
-function prepareScoreMapping(rows, filename) {
+async function prepareScoreMapping(rows, filename) {
   const mapping = detectScoreMapping(rows);
   mappingState = { rows, headers: mapping.headers, suggestion: mapping, filename };
   openMappingModal(mapping.headers, mapping);
   scoreStatus.textContent = mapping.reliable
     ? "已自动识别列，请确认或手动调整映射。"
     : "未能可靠识别列，请手动选择映射。";
+  if (mapping.reliable) {
+    return;
+  }
+  scoreStatus.textContent = "本地识别不够可靠，正在尝试 AI 辅助映射。";
+  try {
+    const aiMapping = await requestAiScoreMapping(rows, filename, mapping);
+    if (!aiMapping || mappingState?.rows !== rows) {
+      scoreStatus.textContent = "未能可靠识别列，请手动选择映射。";
+      return;
+    }
+    mappingState.suggestion = aiMapping;
+    openMappingModal(aiMapping.headers, aiMapping);
+    scoreStatus.textContent = "AI 已辅助填好映射，请确认或手动调整后再应用。";
+  } catch (error) {
+    scoreStatus.textContent = "AI 映射暂时不可用，请手动选择映射。";
+  }
 }
 
 function applyExamDraft() {

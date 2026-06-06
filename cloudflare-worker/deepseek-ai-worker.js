@@ -29,6 +29,9 @@ export default {
     if (url.pathname === "/analyze-class") {
       return handleAnalyzeClass(request, env, corsHeaders);
     }
+    if (url.pathname === "/suggest-score-mapping") {
+      return handleSuggestScoreMapping(request, env, corsHeaders);
+    }
     return jsonResponse({ error: "not_found" }, 404, corsHeaders);
   }
 };
@@ -175,6 +178,60 @@ async function handleAnalyzeClass(request, env, corsHeaders) {
   }
 }
 
+async function handleSuggestScoreMapping(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || !env.TOKEN_SECRET) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  const token = getBearerToken(request);
+  const verified = token ? await verifyToken(token, env.TOKEN_SECRET) : null;
+  if (!verified || verified.exp <= Date.now() || verified.scope !== "ai-trend") {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+  if (isOverDailyLimit(token)) {
+    return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
+  }
+
+  const body = await readJsonBody(request);
+  if (!body.ok || !isValidScoreMappingPayload(body.value)) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是成绩表列映射助手。根据表头和少量样例，返回 JSON。列索引必须使用用户提供的 index，无法判断填 -1。字段：nameCol、subjectMappings、totalMapping、note。subjectMappings 数组元素字段：subject、scoreCol、rankClassCol、rankSchoolCol。只使用 knownSubjects 中的科目。不要编造不存在的列。"
+          },
+          { role: "user", content: JSON.stringify(body.value) }
+        ]
+      })
+    });
+    if (!response.ok) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    const data = await response.json();
+    const parsed = parseModelJson(data?.choices?.[0]?.message?.content || "");
+    if (!parsed) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    return jsonResponse(sanitizeScoreMappingResult(parsed, body.value), 200, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
 async function readJsonBody(request) {
   const clone = request.clone();
   const text = await clone.text();
@@ -207,6 +264,18 @@ function isValidClassPayload(payload) {
     Array.isArray(payload.focusCandidates) &&
     payload.focusCandidates.length > 0 &&
     payload.focusCandidates.length <= 30
+  );
+}
+
+function isValidScoreMappingPayload(payload) {
+  return (
+    payload &&
+    Array.isArray(payload.headers) &&
+    payload.headers.length > 0 &&
+    payload.headers.length <= 80 &&
+    Array.isArray(payload.sampleRows) &&
+    payload.sampleRows.length <= 10 &&
+    Array.isArray(payload.knownSubjects)
   );
 }
 
@@ -338,6 +407,36 @@ function sanitizeClassAiResult(result) {
     focusStudents: toText(result.focusStudents),
     suggestions: toText(result.suggestions),
     disclaimer: toText(result.disclaimer) || "AI 内容仅供参考，请结合实际课堂观察判断。"
+  };
+}
+
+function sanitizeScoreMappingResult(result, payload) {
+  const maxIndex = payload.headers.length - 1;
+  const safeIndex = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isInteger(parsed) && parsed >= 0 && parsed <= maxIndex ? parsed : -1;
+  };
+  const knownSubjects = new Set(payload.knownSubjects || []);
+  const subjectMappings = Array.isArray(result.subjectMappings)
+    ? result.subjectMappings
+        .map((item) => ({
+          subject: knownSubjects.has(item?.subject) ? item.subject : "",
+          scoreCol: safeIndex(item?.scoreCol),
+          rankClassCol: safeIndex(item?.rankClassCol),
+          rankSchoolCol: safeIndex(item?.rankSchoolCol)
+        }))
+        .filter((item) => item.subject && item.scoreCol !== -1)
+        .slice(0, 12)
+    : [];
+  return {
+    nameCol: safeIndex(result.nameCol),
+    subjectMappings,
+    totalMapping: {
+      scoreCol: safeIndex(result.totalMapping?.scoreCol),
+      rankClassCol: safeIndex(result.totalMapping?.rankClassCol),
+      rankSchoolCol: safeIndex(result.totalMapping?.rankSchoolCol)
+    },
+    note: toText(result.note || result.reason || "AI 已生成映射建议")
   };
 }
 

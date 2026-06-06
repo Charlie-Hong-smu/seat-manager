@@ -35,6 +35,11 @@ printf '你的AI使用码' | shasum -a 256
   - body: 全班成绩变化摘要，包含学生姓名，方便直接生成可读的关注名单
   - response: `{ "overall": "...", "classChanges": "...", "focusStudents": "...", "suggestions": "...", "disclaimer": "..." }`
 
+- `POST /suggest-score-mapping`
+  - header: `Authorization: Bearer <token>`
+  - body: 成绩表表头和少量样例行
+  - response: `{ "nameCol": 0, "subjectMappings": [...], "totalMapping": {...}, "note": "..." }`
+
 ## Frontend Setup
 
 首次点击 AI 分析时，页面只要求老师输入 AI 使用码。Worker 地址已经内置在前端，DeepSeek API Key 只保存在 Cloudflare Worker Secret 中。
