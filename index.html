@@ -6,7 +6,7 @@
     <title>班主任座位管理</title>
     <meta name="theme-color" content="#f5f5f7" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="style.css?v=20260605-seat-swap-flip" />
+    <link rel="stylesheet" href="style.css?v=20260606-ai-trend" />
   </head>
   <body>
     <div class="bg-watermark" aria-hidden="true"></div>
@@ -478,10 +478,41 @@
                   <option value="rankClass">按班级排名</option>
                   <option value="rankSchool">按年级排名</option>
                 </select>
+              <button id="aiTrendBtn" class="ghost" type="button">生成 AI 趋势建议</button>
               <button id="exportTrendsBtn" class="ghost">导出</button>
             </div>
           </div>
+          <div id="aiTrendResult" class="ai-trend-result hidden" aria-live="polite"></div>
           <div id="examTrends" class="exam-trends"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="aiAuthModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card ai-auth-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">AI 趋势建议</div>
+            <h3>启用 AI 分析</h3>
+          </div>
+          <button id="aiAuthClose" class="ghost" type="button">关闭</button>
+        </div>
+        <div class="ai-auth-note">
+          将发送该学生的匿名成绩摘要用于生成分析，不会发送全班完整成绩表。AI 内容仅供参考。
+        </div>
+        <label class="form-row">
+          <span class="muted">Worker 接口地址</span>
+          <input id="aiWorkerUrlInput" class="input" type="url" placeholder="https://your-worker.example.workers.dev" />
+        </label>
+        <label class="form-row">
+          <span class="muted">AI 使用码</span>
+          <input id="aiAccessCodeInput" class="input" type="password" autocomplete="off" placeholder="请输入 AI 使用码" />
+        </label>
+        <label class="checkbox compact"><input id="aiRememberInput" type="checkbox" checked />在这台设备上记住 30 天</label>
+        <div id="aiAuthError" class="login-error" aria-live="polite"></div>
+        <div class="modal-footer">
+          <button id="aiAuthCancel" class="ghost" type="button">取消</button>
+          <button id="aiAuthSubmit" class="primary" type="button">启用</button>
         </div>
       </div>
     </div>
@@ -656,6 +687,6 @@
     </div>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260605-seat-swap-flip"></script>
+    <script src="app.js?v=20260606-ai-trend"></script>
   </body>
 </html>

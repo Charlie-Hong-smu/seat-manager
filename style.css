@@ -2389,6 +2389,10 @@ body.compact-cards .seat-reason {
   z-index: 35;
 }
 
+#aiAuthModal {
+  z-index: 70;
+}
+
 #mappingModal .modal-card {
   width: min(760px, 95vw);
   max-height: calc(100vh - 32px);
@@ -2814,6 +2818,7 @@ button.tag-chip.mid.active {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .exam-trend-actions .select {
@@ -2830,6 +2835,72 @@ button.tag-chip.mid.active {
   display: grid;
   gap: 12px;
   margin-top: 6px;
+}
+
+.ai-trend-result {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #dfe8e4;
+  border-radius: 14px;
+  background: #f8fbfa;
+}
+
+.ai-trend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-trend-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ai-trend-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ai-trend-block {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-trend-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #315f56;
+}
+
+.ai-trend-text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.ai-trend-actions-inline {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ai-auth-card {
+  width: min(460px, 92vw);
+}
+
+.ai-auth-note {
+  padding: 10px 12px;
+  border: 1px solid #dfe8e4;
+  border-radius: 12px;
+  background: #f8fbfa;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .chart-card {

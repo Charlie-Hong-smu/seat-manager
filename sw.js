@@ -1,4 +1,4 @@
-const ASSET_VERSION = "20260605-seat-swap-flip";
+const ASSET_VERSION = "20260606-ai-trend";
 const CACHE_VERSION = `seat-manager-v${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -40,6 +40,9 @@ self.addEventListener("fetch", (event) => {
 
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
+  if (requestUrl.pathname.startsWith("/api/")) {
     return;
   }
 
