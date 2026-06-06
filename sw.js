@@ -1,4 +1,4 @@
-const ASSET_VERSION = "20260606-ai-trend";
+const ASSET_VERSION = "20260606-class-ai";
 const CACHE_VERSION = `seat-manager-v${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",

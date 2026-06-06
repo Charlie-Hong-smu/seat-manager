@@ -6,7 +6,7 @@
     <title>班主任座位管理</title>
     <meta name="theme-color" content="#f5f5f7" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="style.css?v=20260606-ai-trend" />
+    <link rel="stylesheet" href="style.css?v=20260606-class-ai" />
   </head>
   <body>
     <div class="bg-watermark" aria-hidden="true"></div>
@@ -319,6 +319,10 @@
                   <input id="scoreExamDate" class="input" type="date" />
                   <button id="saveScoreBtn" class="btn-secondary" disabled>保存考试</button>
                 </div>
+                <div class="class-ai-actions">
+                  <button id="classAiTrendBtn" class="ghost" type="button">生成全班 AI 分析</button>
+                </div>
+                <div id="classAiTrendResult" class="ai-trend-result hidden" aria-live="polite"></div>
                 <div class="score-history-block">
                   <div class="score-history-title">历史考试</div>
                   <div id="savedExamList" class="saved-exam-list"></div>
@@ -687,6 +691,6 @@
     </div>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260606-ai-trend"></script>
+    <script src="app.js?v=20260606-class-ai"></script>
   </body>
 </html>

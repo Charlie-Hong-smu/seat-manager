@@ -30,6 +30,11 @@ printf '你的AI使用码' | shasum -a 256
   - body: 当前学生的匿名成绩摘要
   - response: `{ "overall": "...", "changes": "...", "suggestions": "...", "disclaimer": "..." }`
 
+- `POST /analyze-class`
+  - header: `Authorization: Bearer <token>`
+  - body: 全班匿名成绩变化摘要，不包含真实姓名
+  - response: `{ "overall": "...", "classChanges": "...", "focusStudents": "...", "suggestions": "...", "disclaimer": "..." }`
+
 ## Frontend Setup
 
-首次点击“生成 AI 趋势建议”时，页面会要求输入 Worker 接口地址和 AI 使用码。Worker 地址只会保存在浏览器本地，不是密钥。
+首次点击 AI 分析时，页面只要求老师输入 AI 使用码。Worker 地址已经内置在前端，DeepSeek API Key 只保存在 Cloudflare Worker Secret 中。

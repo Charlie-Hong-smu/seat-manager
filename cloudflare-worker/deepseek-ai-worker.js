@@ -26,6 +26,9 @@ export default {
     if (url.pathname === "/analyze-trend") {
       return handleAnalyzeTrend(request, env, corsHeaders);
     }
+    if (url.pathname === "/analyze-class") {
+      return handleAnalyzeClass(request, env, corsHeaders);
+    }
     return jsonResponse({ error: "not_found" }, 404, corsHeaders);
   }
 };
@@ -112,6 +115,66 @@ async function handleAnalyzeTrend(request, env, corsHeaders) {
   }
 }
 
+async function handleAnalyzeClass(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || !env.TOKEN_SECRET) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  const token = getBearerToken(request);
+  const verified = token ? await verifyToken(token, env.TOKEN_SECRET) : null;
+  if (!verified || verified.exp <= Date.now() || verified.scope !== "ai-trend") {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+
+  if (isOverDailyLimit(token)) {
+    return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
+  }
+
+  const body = await readJsonBody(request);
+  if (!body.ok || !isValidClassPayload(body.value)) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是谨慎的班主任成绩分析助手。只根据匿名全班成绩变化摘要，概括班级趋势，并指出需要教师重点关注的匿名学生编号。不要输出真实姓名。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。"
+          },
+          {
+            role: "user",
+            content: JSON.stringify(body.value)
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    const parsed = parseModelJson(content);
+    if (!parsed) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    return jsonResponse(sanitizeClassAiResult(parsed), 200, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
 async function readJsonBody(request) {
   const clone = request.clone();
   const text = await clone.text();
@@ -132,6 +195,18 @@ function isValidTrendPayload(payload) {
     Array.isArray(payload.recentExams) &&
     payload.recentExams.length > 0 &&
     payload.recentExams.length <= 6
+  );
+}
+
+function isValidClassPayload(payload) {
+  return (
+    payload &&
+    payload.className === "本班" &&
+    Number.isInteger(payload.studentCount) &&
+    Number.isInteger(payload.comparedStudentCount) &&
+    Array.isArray(payload.focusCandidates) &&
+    payload.focusCandidates.length > 0 &&
+    payload.focusCandidates.length <= 30
   );
 }
 
@@ -256,9 +331,28 @@ function sanitizeAiResult(result) {
   };
 }
 
+function sanitizeClassAiResult(result) {
+  return {
+    overall: toText(result.overall),
+    classChanges: toText(result.classChanges || result.changes),
+    focusStudents: toText(result.focusStudents),
+    suggestions: toText(result.suggestions),
+    disclaimer: toText(result.disclaimer) || "AI 内容仅供参考，请结合实际课堂观察判断。"
+  };
+}
+
 function toText(value) {
   if (Array.isArray(value)) {
-    return value.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 6);
+    return value.map((item) => toText(item)).filter(Boolean).slice(0, 8);
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, item]) => {
+        const text = toText(item);
+        return text ? `${key}：${Array.isArray(text) ? text.join("；") : text}` : "";
+      })
+      .filter(Boolean)
+      .slice(0, 8);
   }
   return String(value || "").trim().slice(0, 800);
 }

@@ -196,6 +196,8 @@ const aiWorkerUrlInput = document.getElementById("aiWorkerUrlInput");
 const aiAccessCodeInput = document.getElementById("aiAccessCodeInput");
 const aiRememberInput = document.getElementById("aiRememberInput");
 const aiAuthError = document.getElementById("aiAuthError");
+const classAiTrendBtn = document.getElementById("classAiTrendBtn");
+const classAiTrendResult = document.getElementById("classAiTrendResult");
 const deleteStudentBtn = document.getElementById("deleteStudentBtn");
 const behaviorTagGroups = document.getElementById("behaviorTagGroups");
 const academicAutoTags = document.getElementById("academicAutoTags");
@@ -6023,31 +6025,52 @@ function clearAiAuth(showMessage = true) {
   }
 }
 
-function renderAiTrendResult(data, statusText = "") {
-  if (!aiTrendResult) {
+function formatAiValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => formatAiValue(item))
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, item]) => {
+        const formatted = formatAiValue(item);
+        return formatted ? `${key}：${formatted}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  return String(value || "").trim();
+}
+
+function renderAiResult(container, data, statusText = "", fields = null) {
+  if (!container) {
     return;
   }
-  aiTrendResult.innerHTML = "";
-  aiTrendResult.classList.remove("hidden");
+  container.innerHTML = "";
+  container.classList.remove("hidden");
 
   const head = document.createElement("div");
   head.className = "ai-trend-head";
   const title = document.createElement("div");
   title.className = "ai-trend-title";
-  title.textContent = "AI 趋势建议";
+  title.textContent = data.title || "AI 趋势建议";
   const status = document.createElement("div");
   status.className = "ai-trend-status";
   status.textContent = statusText || "仅供教师参考";
   head.append(title, status);
-  aiTrendResult.appendChild(head);
+  container.appendChild(head);
 
-  [
+  const resultFields = fields || [
     ["总体判断", data.overall],
     ["重点变化", data.changes],
     ["建议关注", data.suggestions],
     ["参考提示", data.disclaimer]
-  ].forEach(([labelText, value]) => {
-    if (!value) {
+  ];
+  resultFields.forEach(([labelText, value]) => {
+    const textValue = formatAiValue(value);
+    if (!textValue) {
       return;
     }
     const block = document.createElement("div");
@@ -6057,9 +6080,9 @@ function renderAiTrendResult(data, statusText = "") {
     label.textContent = labelText;
     const text = document.createElement("div");
     text.className = "ai-trend-text";
-    text.textContent = Array.isArray(value) ? value.join("\n") : value.toString();
+    text.textContent = textValue;
     block.append(label, text);
-    aiTrendResult.appendChild(block);
+    container.appendChild(block);
   });
 
   const actions = document.createElement("div");
@@ -6070,7 +6093,11 @@ function renderAiTrendResult(data, statusText = "") {
   clearBtn.textContent = "清除 AI 授权";
   clearBtn.addEventListener("click", () => clearAiAuth(true));
   actions.appendChild(clearBtn);
-  aiTrendResult.appendChild(actions);
+  container.appendChild(actions);
+}
+
+function renderAiTrendResult(data, statusText = "") {
+  renderAiResult(aiTrendResult, data, statusText);
 }
 
 function renderAiTrendMessage(message, tone = "muted") {
@@ -6146,8 +6173,85 @@ function buildAiTrendPayload(student) {
   };
 }
 
+function getExamSortValue(exam) {
+  const examOrder = (state.exams || []).findIndex((item) => item.id === exam.id);
+  return `${exam.date || ""}::${String(examOrder).padStart(4, "0")}::${exam.name || ""}`;
+}
+
+function buildClassTrendPayload() {
+  const students = state.students
+    .map((student, index) => {
+      const exams = Array.isArray(student.exams) ? [...student.exams] : [];
+      const chronological = exams.sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b)));
+      if (chronological.length < 2) {
+        return null;
+      }
+      const previous = chronological[chronological.length - 2];
+      const latest = chronological[chronological.length - 1];
+      const previousTotal = parseScoreValue(previous.total?.score) ?? sumExamScores(previous.scores);
+      const latestTotal = parseScoreValue(latest.total?.score) ?? sumExamScores(latest.scores);
+      const previousRank = parseRankValue(previous.total?.rankClass) ?? parseRankValue(previous.total?.rankSchool);
+      const latestRank = parseRankValue(latest.total?.rankClass) ?? parseRankValue(latest.total?.rankSchool);
+      if (!Number.isFinite(previousTotal) || !Number.isFinite(latestTotal)) {
+        return null;
+      }
+      const subjectChanges = [];
+      const subjects = new Set([...(previous.subjects || []), ...(latest.subjects || [])]);
+      subjects.forEach((subject) => {
+        const before = parseScoreValue(previous.scores?.[subject]);
+        const after = parseScoreValue(latest.scores?.[subject]);
+        if (!Number.isFinite(before) || !Number.isFinite(after)) {
+          return;
+        }
+        const diff = Number((after - before).toFixed(1));
+        if (Math.abs(diff) >= 8) {
+          subjectChanges.push({ subject, diff });
+        }
+      });
+      return {
+        id: `学生${String(index + 1).padStart(2, "0")}`,
+        name: student.name,
+        previousExam: previous.name || "上次考试",
+        latestExam: latest.name || "最近考试",
+        totalDiff: Number((latestTotal - previousTotal).toFixed(1)),
+        latestTotal,
+        rankDiff: Number.isFinite(previousRank) && Number.isFinite(latestRank) ? latestRank - previousRank : null,
+        latestRank: Number.isFinite(latestRank) ? latestRank : null,
+        subjectChanges: subjectChanges.slice(0, 4)
+      };
+    })
+    .filter(Boolean);
+
+  const focusCandidates = students
+    .map((student) => ({
+      ...student,
+      concernScore:
+        (student.totalDiff < 0 ? Math.abs(student.totalDiff) : 0) +
+        (student.rankDiff > 0 ? Math.min(student.rankDiff, 100) / 2 : 0) +
+        student.subjectChanges.filter((item) => item.diff < 0).length * 8
+    }))
+    .sort((a, b) => b.concernScore - a.concernScore || a.id.localeCompare(b.id))
+    .slice(0, 30);
+
+  return {
+    className: "本班",
+    examCount: state.exams.length,
+    studentCount: state.students.length,
+    comparedStudentCount: students.length,
+    focusCandidates: focusCandidates.map(({ name, concernScore, ...item }) => item),
+    localAnalysis: {
+      totalImproved: students.filter((item) => item.totalDiff > 0).length,
+      totalDeclined: students.filter((item) => item.totalDiff < 0).length,
+      rankImproved: students.filter((item) => item.rankDiff < 0).length,
+      rankDeclined: students.filter((item) => item.rankDiff > 0).length
+    },
+    localNameMap: Object.fromEntries(focusCandidates.map((item) => [item.id, item.name]))
+  };
+}
+
 function validateAiPayloadSize(payload) {
-  return new Blob([JSON.stringify(payload)]).size <= AI_REQUEST_LIMIT_BYTES;
+  const { localNameMap, ...safePayload } = payload || {};
+  return new Blob([JSON.stringify(safePayload)]).size <= AI_REQUEST_LIMIT_BYTES;
 }
 
 function openAiAuthModal() {
@@ -6314,6 +6418,102 @@ async function generateAiTrendAdvice() {
   } finally {
     aiTrendBtn.disabled = false;
     aiTrendBtn.textContent = "生成 AI 趋势建议";
+  }
+}
+
+function renderClassAiMessage(message, tone = "muted") {
+  renderAiResult(
+    classAiTrendResult,
+    { title: "全班 AI 分析", overall: message, disclaimer: tone === "error" ? "AI 分析暂时不可用，可先查看本地成绩记录。" : "原有本地成绩功能不受影响。" },
+    tone === "error" ? "暂不可用" : "提示"
+  );
+}
+
+function withLocalStudentNames(value, nameMap) {
+  const text = formatAiValue(value);
+  if (!text) {
+    return "";
+  }
+  return text.replace(/学生\d{2}/g, (id) => (nameMap[id] ? `${id}（${nameMap[id]}）` : id));
+}
+
+function renderClassAiResult(data, nameMap) {
+  renderAiResult(
+    classAiTrendResult,
+    { title: "全班 AI 分析" },
+    "已生成",
+    [
+      ["总体判断", data.overall],
+      ["班级变化", data.classChanges || data.changes],
+      ["重点关注", withLocalStudentNames(data.focusStudents || data.suggestions, nameMap)],
+      ["建议关注", data.suggestions],
+      ["参考提示", data.disclaimer]
+    ]
+  );
+}
+
+async function generateClassAiTrendAdvice() {
+  if (window.location.protocol === "file:") {
+    renderClassAiMessage("当前是本地文件打开方式，浏览器会拦截 AI 网络请求。请通过 GitHub Pages 正式网页打开后再使用 AI。", "error");
+    return;
+  }
+  if (!navigator.onLine) {
+    renderClassAiMessage("当前处于离线状态，联网后可使用全班 AI 分析。");
+    return;
+  }
+  const payload = buildClassTrendPayload();
+  if (payload.comparedStudentCount < 2) {
+    renderClassAiMessage("至少需要两次考试、且有多名学生可比较，才能生成全班 AI 分析。");
+    return;
+  }
+  if (!validateAiPayloadSize(payload)) {
+    renderClassAiMessage("当前全班成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
+    return;
+  }
+
+  const { localNameMap, ...safePayload } = payload;
+  classAiTrendBtn.disabled = true;
+  classAiTrendBtn.textContent = "生成中";
+  try {
+    const auth = await ensureAiAuth();
+    if (!auth) {
+      return;
+    }
+    const baseUrl = getAiWorkerBaseUrl();
+    const response = await fetch(`${baseUrl}/analyze-class`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${auth.token}`
+      },
+      body: JSON.stringify(safePayload)
+    });
+    if (response.status === 401) {
+      clearAiAuth(false);
+      const retryAuth = await requestAiAuth();
+      if (!retryAuth) {
+        return;
+      }
+      return generateClassAiTrendAdvice();
+    }
+    if (response.status === 403) {
+      renderClassAiMessage("AI 功能未授权。", "error");
+      return;
+    }
+    if (!response.ok) {
+      throw new Error("ai_failed");
+    }
+    const data = await response.json();
+    renderClassAiResult(data, localNameMap);
+  } catch (error) {
+    if (error.message === "unauthorized") {
+      renderClassAiMessage("AI 功能未授权。", "error");
+    } else {
+      renderClassAiMessage("AI 分析暂时不可用，可先查看本地成绩记录。", "error");
+    }
+  } finally {
+    classAiTrendBtn.disabled = false;
+    classAiTrendBtn.textContent = "生成全班 AI 分析";
   }
 }
 
@@ -7944,6 +8144,9 @@ if (examTrendModeSelect) {
 }
 if (aiTrendBtn) {
   aiTrendBtn.addEventListener("click", generateAiTrendAdvice);
+}
+if (classAiTrendBtn) {
+  classAiTrendBtn.addEventListener("click", generateClassAiTrendAdvice);
 }
 mappingClose.addEventListener("click", closeMappingModal);
 mappingCancel.addEventListener("click", closeMappingModal);

@@ -2826,6 +2826,12 @@ button.tag-chip.mid.active {
   height: 36px;
 }
 
+.class-ai-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
 .exam-list {
   display: grid;
   gap: 10px;
