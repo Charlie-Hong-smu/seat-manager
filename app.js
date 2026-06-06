@@ -6338,8 +6338,32 @@ function buildClassTrendPayload() {
       totalDeclined: students.filter((item) => item.totalDiff < 0).length,
       rankImproved: students.filter((item) => item.rankDiff < 0).length,
       rankDeclined: students.filter((item) => item.rankDiff > 0).length
-    }
+    },
+    localFocusReasons: Object.fromEntries(focusCandidates.map((item) => [item.name, buildClassFocusReason(item)]))
   };
+}
+
+function buildClassFocusReason(student) {
+  const reasons = [];
+  if (student.rankDiff > 0) {
+    reasons.push(`排名退步${student.rankDiff}`);
+  }
+  if (student.totalDiff < 0) {
+    reasons.push(`总分下降${Math.abs(student.totalDiff)}`);
+  }
+  const weakSubjects = (student.subjectChanges || [])
+    .filter((item) => item.diff < 0)
+    .sort((a, b) => a.diff - b.diff)
+    .slice(0, 2)
+    .map((item) => `${item.subject}下降${Math.abs(item.diff)}`);
+  reasons.push(...weakSubjects);
+  if (!reasons.length && student.rankDiff < 0) {
+    reasons.push(`排名进步但仍需巩固`);
+  }
+  if (!reasons.length && student.totalDiff > 0) {
+    reasons.push(`总分提升后需保持`);
+  }
+  return reasons.slice(0, 2).join("，") || "需继续观察";
 }
 
 function validateAiPayloadSize(payload) {
@@ -6521,7 +6545,27 @@ function renderClassAiMessage(message, tone = "muted") {
   );
 }
 
-function renderClassAiResult(data) {
+function enrichFocusStudentsWithReasons(value, reasonMap = {}) {
+  const text = formatAiValue(value);
+  if (!text) {
+    return "";
+  }
+  return text
+    .split(/\n|；|;/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      if (/（.+）|\(.+\)/.test(line)) {
+        return line;
+      }
+      const name = line.replace(/^[\d.\s、-]+/, "").trim();
+      const reason = reasonMap[name];
+      return reason ? `${name}（${reason}）` : line;
+    })
+    .join("\n");
+}
+
+function renderClassAiResult(data, reasonMap = {}) {
   renderAiResult(
     classAiTrendResult,
     { title: "全班 AI 分析" },
@@ -6529,7 +6573,7 @@ function renderClassAiResult(data) {
     [
       ["总体判断", data.overall],
       ["班级变化", data.classChanges || data.changes],
-      ["重点关注", data.focusStudents || data.suggestions],
+      ["重点关注", enrichFocusStudentsWithReasons(data.focusStudents || data.suggestions, reasonMap)],
       ["建议关注", data.suggestions],
       ["参考提示", data.disclaimer]
     ]
@@ -6549,11 +6593,13 @@ async function generateClassAiTrendAdvice() {
   classAiTrendBtn.textContent = "生成中";
   try {
     const payload = buildClassTrendPayload();
+    const focusReasonMap = payload.localFocusReasons || {};
+    const { localFocusReasons, ...safePayload } = payload;
     if (payload.comparedStudentCount < 2) {
       renderClassAiMessage("至少需要两次考试、且有多名学生可比较，才能生成全班 AI 分析。");
       return;
     }
-    if (!validateAiPayloadSize(payload)) {
+    if (!validateAiPayloadSize(safePayload)) {
       renderClassAiMessage("当前全班成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
       return;
     }
@@ -6568,7 +6614,7 @@ async function generateClassAiTrendAdvice() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${auth.token}`
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(safePayload)
     });
     if (response.status === 401) {
       clearAiAuth(false);
@@ -6586,7 +6632,7 @@ async function generateClassAiTrendAdvice() {
       throw new Error("ai_failed");
     }
     const data = await response.json();
-    renderClassAiResult(data);
+    renderClassAiResult(data, focusReasonMap);
   } catch (error) {
     if (error.message === "unauthorized") {
       renderClassAiMessage("AI 功能未授权。", "error");
@@ -6799,10 +6845,12 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
     svg.appendChild(grid);
   });
 
+  const pointLabels = [];
   visibleSeries.forEach((item, seriesIndex) => {
     const numeric = item.values.filter((value) => Number.isFinite(value));
     const stats = { min: Math.min(...numeric), max: Math.max(...numeric) };
     const points = item.values.map((value, index) => ({
+      index,
       value,
       x: getX(index),
       y: Number.isFinite(value) ? getNormalizedY(value, stats, item.reverseY) : null,
@@ -6825,19 +6873,42 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
       circle.setAttribute("r", "5");
       circle.setAttribute("fill", item.color);
       svg.appendChild(circle);
-
-      const value = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      const labelOffsets = [-18, 20, -34, 36];
-      const labelY = clamp(point.y + labelOffsets[seriesIndex % labelOffsets.length], padding.top + 14, padding.top + chartHeight - 10);
-      const anchor = pointIndex === 0 ? "start" : pointIndex === validPoints.length - 1 ? "end" : "middle";
-      const labelX = clamp(point.x, padding.left + 8, padding.left + chartWidth - 8);
-      value.setAttribute("x", labelX);
-      value.setAttribute("y", labelY);
-      value.setAttribute("text-anchor", anchor);
-      value.setAttribute("class", "trend-point-score");
-      value.textContent = `${item.shortLabel || item.label}${point.value}`;
-      svg.appendChild(value);
+      pointLabels.push({
+        pointIndex: point.index,
+        seriesIndex,
+        x: point.x,
+        y: point.y,
+        text: `${item.shortLabel || item.label}${point.value}`
+      });
     });
+  });
+
+  const labelsByPoint = new Map();
+  pointLabels.forEach((label) => {
+    if (!labelsByPoint.has(label.pointIndex)) {
+      labelsByPoint.set(label.pointIndex, []);
+    }
+    labelsByPoint.get(label.pointIndex).push(label);
+  });
+  labelsByPoint.forEach((labels) => {
+    const groupY = labels.reduce((sum, label) => sum + label.y, 0) / labels.length;
+    const stackStart = clamp(groupY - ((labels.length - 1) * 15) / 2, padding.top + 14, padding.top + chartHeight - 10 - (labels.length - 1) * 15);
+    labels
+      .sort((a, b) => a.y - b.y || a.seriesIndex - b.seriesIndex)
+      .forEach((label, labelIndex) => {
+        const isFirstPoint = label.pointIndex === 0;
+        const isLastPoint = label.pointIndex === details.length - 1;
+        const anchor = isFirstPoint ? "start" : isLastPoint ? "end" : "middle";
+        const labelX = clamp(label.x + (isFirstPoint ? 8 : isLastPoint ? -8 : 0), padding.left + 8, padding.left + chartWidth - 8);
+        const labelY = stackStart + labelIndex * 15;
+        const value = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        value.setAttribute("x", labelX);
+        value.setAttribute("y", labelY);
+        value.setAttribute("text-anchor", anchor);
+        value.setAttribute("class", "trend-point-score");
+        value.textContent = label.text;
+        svg.appendChild(value);
+      });
   });
 
   details.forEach((item, index) => {

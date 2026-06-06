@@ -153,7 +153,7 @@ async function handleAnalyzeClass(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的班主任成绩分析助手。只根据提供的全班成绩变化摘要，概括班级趋势，并指出需要教师重点关注的学生姓名。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。"
+              "你是谨慎的班主任成绩分析助手。只根据提供的全班成绩变化摘要，概括班级趋势，并指出需要教师重点关注的学生。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。focusStudents 必须逐行列出，格式为“姓名（简短原因）”，原因控制在 12 个字以内，例如“化学下降26”或“排名退步35”。"
           },
           {
             role: "user",
