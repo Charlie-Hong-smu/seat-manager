@@ -188,7 +188,6 @@ const examTrends = document.getElementById("examTrends");
 const exportTrendsBtn = document.getElementById("exportTrendsBtn");
 const examTrendModeSelect = document.getElementById("examTrendModeSelect");
 const aiTrendBtn = document.getElementById("aiTrendBtn");
-const aiTrendRegenerateBtn = document.getElementById("aiTrendRegenerateBtn");
 const aiTrendResult = document.getElementById("aiTrendResult");
 const aiAuthModal = document.getElementById("aiAuthModal");
 const aiAuthClose = document.getElementById("aiAuthClose");
@@ -198,8 +197,14 @@ const aiWorkerUrlInput = document.getElementById("aiWorkerUrlInput");
 const aiAccessCodeInput = document.getElementById("aiAccessCodeInput");
 const aiRememberInput = document.getElementById("aiRememberInput");
 const aiAuthError = document.getElementById("aiAuthError");
+const aiChoiceModal = document.getElementById("aiChoiceModal");
+const aiChoiceClose = document.getElementById("aiChoiceClose");
+const aiChoiceTitle = document.getElementById("aiChoiceTitle");
+const aiChoiceMessage = document.getElementById("aiChoiceMessage");
+const aiChoiceActions = document.getElementById("aiChoiceActions");
 const classAiTrendBtn = document.getElementById("classAiTrendBtn");
 const batchAiTrendBtn = document.getElementById("batchAiTrendBtn");
+const studentAiBatchStatus = document.getElementById("studentAiBatchStatus");
 const classAiTrendResult = document.getElementById("classAiTrendResult");
 const deleteStudentBtn = document.getElementById("deleteStudentBtn");
 const behaviorTagGroups = document.getElementById("behaviorTagGroups");
@@ -5912,11 +5917,7 @@ function updateStudentAiTrendControls(student, renderCached = false) {
   const isRunning = studentAiTrendJobs.has(student.id);
   if (aiTrendBtn) {
     aiTrendBtn.disabled = !hasEnoughExams || isRunning;
-    aiTrendBtn.textContent = isRunning ? "生成中" : "生成 AI 趋势建议";
-  }
-  if (aiTrendRegenerateBtn) {
-    aiTrendRegenerateBtn.disabled = !hasEnoughExams || isRunning;
-    aiTrendRegenerateBtn.classList.toggle("hidden", !hasEnoughExams);
+    aiTrendBtn.textContent = isRunning ? "生成中" : "生成趋势建议";
   }
   if (renderCached && aiTrendResult && hasEnoughExams && !isRunning) {
     const cached = getCachedAiResult(cacheSignature);
@@ -5946,10 +5947,6 @@ function renderExamList(student) {
     exportTrendsBtn.disabled = false;
     if (aiTrendBtn) {
       aiTrendBtn.disabled = true;
-    }
-    if (aiTrendRegenerateBtn) {
-      aiTrendRegenerateBtn.disabled = true;
-      aiTrendRegenerateBtn.classList.add("hidden");
     }
     return;
   }
@@ -6591,6 +6588,62 @@ function openAiAuthModal() {
   });
 }
 
+function openAiChoiceModal({ title, message, actions = [] }) {
+  return new Promise((resolve) => {
+    if (!aiChoiceModal || !aiChoiceTitle || !aiChoiceMessage || !aiChoiceActions || !aiChoiceClose) {
+      resolve(null);
+      return;
+    }
+    aiChoiceTitle.textContent = title;
+    aiChoiceMessage.textContent = message;
+    aiChoiceActions.innerHTML = "";
+    aiChoiceModal.classList.remove("hidden");
+    aiChoiceModal.setAttribute("aria-hidden", "false");
+
+    const cleanup = (result) => {
+      aiChoiceModal.classList.add("hidden");
+      aiChoiceModal.setAttribute("aria-hidden", "true");
+      aiChoiceClose.removeEventListener("click", close);
+      aiChoiceModal.removeEventListener("click", backdrop);
+      document.removeEventListener("keydown", keydown);
+      resolve(result);
+    };
+    const close = () => cleanup(null);
+    const backdrop = (event) => {
+      if (event.target === aiChoiceModal) {
+        close();
+      }
+    };
+    const keydown = (event) => {
+      if (event.key === "Escape") {
+        close();
+      }
+    };
+
+    actions.forEach((action) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = action.label;
+      button.className = action.recommended ? "primary" : "ghost";
+      if (action.danger) {
+        button.classList.add("secondary-action");
+      }
+      button.addEventListener("click", () => cleanup(action.value));
+      aiChoiceActions.appendChild(button);
+    });
+
+    aiChoiceClose.addEventListener("click", close);
+    aiChoiceModal.addEventListener("click", backdrop);
+    document.addEventListener("keydown", keydown);
+    setTimeout(() => {
+      const firstButton = aiChoiceActions.querySelector("button");
+      if (firstButton) {
+        firstButton.focus();
+      }
+    }, 0);
+  });
+}
+
 async function requestAiAuth() {
   const input = await openAiAuthModal();
   if (!input) {
@@ -6740,65 +6793,173 @@ async function generateAiTrendAdvice(options = {}) {
   }
 }
 
-async function batchGenerateStudentAiTrends() {
+async function handleStudentAiTrendClick() {
+  const student = state.students.find((item) => item.id === activeStudentId);
+  if (!student) {
+    return;
+  }
+  const { payload, cacheSignature } = getStudentAiTrendContext(student);
+  if (payload.recentExams.length < 2) {
+    renderAiTrendMessage("至少需要两次考试记录，才能生成相对可靠的 AI 趋势建议。");
+    return;
+  }
+  const cached = getCachedAiResult(cacheSignature);
+  if (!cached) {
+    if (aiTrendResult) {
+      aiTrendResult.dataset.aiCollapsed = "false";
+    }
+    generateAiTrendAdvice();
+    return;
+  }
+  const choice = await openAiChoiceModal({
+    title: "已有趋势建议",
+    message: "当前学生已有 AI 趋势建议。如果成绩没有变化，可以直接查看已有结果；如果想获得新的表达，可以重新生成。",
+    actions: [
+      { label: "查看已有", value: "view", recommended: true },
+      { label: "重新生成", value: "regenerate" },
+      { label: "取消", value: null }
+    ]
+  });
+  if (choice === "view") {
+    if (aiTrendResult) {
+      aiTrendResult.dataset.aiCollapsed = "false";
+    }
+    renderAiTrendResult(cached, "已缓存");
+  } else if (choice === "regenerate") {
+    if (aiTrendResult) {
+      aiTrendResult.dataset.aiCollapsed = "false";
+    }
+    generateAiTrendAdvice({ force: true });
+  }
+}
+
+function setStudentAiBatchStatus(message, tone = "info") {
+  if (!studentAiBatchStatus) {
+    return;
+  }
+  studentAiBatchStatus.textContent = message;
+  studentAiBatchStatus.classList.remove("hidden", "error", "success");
+  if (tone === "error" || tone === "success") {
+    studentAiBatchStatus.classList.add(tone);
+  }
+}
+
+function getStudentAiBatchCandidates() {
+  return state.students
+    .map((student) => {
+      const context = getStudentAiTrendContext(student);
+      return {
+        student,
+        ...context,
+        cached: Boolean(getCachedAiResult(context.cacheSignature))
+      };
+    })
+    .filter((item) => item.payload.recentExams.length >= 2 && validateAiPayloadSize(item.payload));
+}
+
+async function handleBatchStudentAiTrendClick() {
+  const candidates = getStudentAiBatchCandidates();
+  if (!candidates.length) {
+    setStudentAiBatchStatus("暂无可生成建议的学生：至少需要两次考试记录。");
+    return;
+  }
+  const cachedCount = candidates.filter((item) => item.cached).length;
+  const pendingCount = candidates.length - cachedCount;
+  if (!cachedCount) {
+    batchGenerateStudentAiTrends({ forceAll: false });
+    return;
+  }
+  if (!pendingCount) {
+    const choice = await openAiChoiceModal({
+      title: "学生建议已准备好",
+      message: `${candidates.length} 人已有建议，无需重复生成。如果成绩未变化，建议直接沿用已有结果。`,
+      actions: [
+        { label: "知道了", value: "ok", recommended: true },
+        { label: "全部重新生成", value: "force" }
+      ]
+    });
+    if (choice === "force") {
+      batchGenerateStudentAiTrends({ forceAll: true });
+    } else if (choice === "ok") {
+      setStudentAiBatchStatus(`学生建议已准备好：${candidates.length} 人已有建议，无需重复生成。`, "success");
+    }
+    return;
+  }
+  const choice = await openAiChoiceModal({
+    title: "生成学生建议",
+    message: `可分析学生共 ${candidates.length} 人，其中 ${cachedCount} 人已有建议，${pendingCount} 人需要生成。`,
+    actions: [
+      { label: "只生成缺少的", value: "missing", recommended: true },
+      { label: "全部重新生成", value: "force" },
+      { label: "取消", value: null }
+    ]
+  });
+  if (choice === "missing") {
+    batchGenerateStudentAiTrends({ forceAll: false });
+  } else if (choice === "force") {
+    batchGenerateStudentAiTrends({ forceAll: true });
+  }
+}
+
+async function batchGenerateStudentAiTrends(options = {}) {
   if (batchAiTrendRunning) {
     return;
   }
+  const forceAll = Boolean(options.forceAll);
   if (window.location.protocol === "file:") {
-    scoreStatus.textContent = "当前是本地文件打开方式，请通过 GitHub Pages 正式网页使用批量 AI 建议。";
+    setStudentAiBatchStatus("学生建议暂时不可用，可稍后重试。", "error");
     return;
   }
   if (!navigator.onLine) {
-    scoreStatus.textContent = "当前处于离线状态，联网后可批量生成 AI 建议。";
+    setStudentAiBatchStatus("学生建议暂时不可用，可稍后重试。", "error");
     return;
   }
-  const candidates = state.students
-    .map((student) => {
-      const context = getStudentAiTrendContext(student);
-      return { student, ...context };
-    })
-    .filter((item) => item.payload.recentExams.length >= 2 && validateAiPayloadSize(item.payload));
+  const candidates = getStudentAiBatchCandidates();
   if (!candidates.length) {
-    scoreStatus.textContent = "暂无可批量分析的学生，至少需要每名学生有两次考试记录。";
+    setStudentAiBatchStatus("暂无可生成建议的学生：至少需要两次考试记录。");
     return;
   }
-  const pending = candidates.filter((item) => !getCachedAiResult(item.cacheSignature));
-  const skipped = candidates.length - pending.length;
+  const pending = forceAll ? candidates : candidates.filter((item) => !item.cached);
+  const skipped = forceAll ? 0 : candidates.length - pending.length;
   if (!pending.length) {
-    scoreStatus.textContent = `所有可分析学生已有 AI 建议缓存，本次无需重新生成（共 ${candidates.length} 人）。`;
+    setStudentAiBatchStatus(`学生建议已准备好：${candidates.length} 人已有建议，无需重复生成。`, "success");
     return;
   }
 
   batchAiTrendRunning = true;
   if (batchAiTrendBtn) {
     batchAiTrendBtn.disabled = true;
-    batchAiTrendBtn.textContent = "批量生成中";
+    batchAiTrendBtn.textContent = "生成中";
   }
   let generated = 0;
   let failed = 0;
   try {
     const auth = await ensureAiAuth();
     if (!auth) {
-      scoreStatus.textContent = "已取消批量 AI 建议生成。";
+      setStudentAiBatchStatus("学生建议暂时不可用，可稍后重试。", "error");
       return;
     }
     for (const [index, item] of pending.entries()) {
-      scoreStatus.textContent = `正在批量生成学生 AI 建议：${index + 1}/${pending.length}，已跳过缓存 ${skipped} 人。`;
-      const data = await generateAiTrendAdvice({ studentId: item.student.id });
+      setStudentAiBatchStatus(`正在生成学生建议：${index + 1} / ${pending.length}，${skipped} 人已有建议。`);
+      const data = await generateAiTrendAdvice({ studentId: item.student.id, force: forceAll });
       if (data) {
         generated += 1;
       } else {
         failed += 1;
       }
     }
-    scoreStatus.textContent = `批量 AI 建议完成：新生成 ${generated} 人，跳过缓存 ${skipped} 人${failed ? `，失败 ${failed} 人` : ""}。`;
+    if (failed) {
+      setStudentAiBatchStatus("学生建议暂时不可用，可稍后重试。", "error");
+    } else {
+      setStudentAiBatchStatus(`学生建议已准备好：${generated} 人新生成，${skipped} 人沿用已有建议。`, "success");
+    }
   } catch (error) {
-    scoreStatus.textContent = "批量 AI 建议暂时不可用，可稍后重试。";
+    setStudentAiBatchStatus("学生建议暂时不可用，可稍后重试。", "error");
   } finally {
     batchAiTrendRunning = false;
     if (batchAiTrendBtn) {
       batchAiTrendBtn.disabled = false;
-      batchAiTrendBtn.textContent = "批量生成学生 AI 建议";
+      batchAiTrendBtn.textContent = "生成学生建议";
     }
     const activeStudent = state.students.find((item) => item.id === activeStudentId);
     if (activeStudent) {
@@ -6850,7 +7011,54 @@ function renderClassAiResult(data, reasonMap = {}, statusText = "已生成") {
   );
 }
 
-async function generateClassAiTrendAdvice() {
+function getClassAiTrendContext() {
+  const payload = buildClassTrendPayload();
+  const focusReasonMap = payload.localFocusReasons || {};
+  const { localFocusReasons, ...safePayload } = payload;
+  return {
+    payload,
+    safePayload,
+    focusReasonMap,
+    cacheSignature: getAiCacheSignature("class-trend", safePayload)
+  };
+}
+
+async function handleClassAiTrendClick() {
+  const { payload, safePayload, focusReasonMap, cacheSignature } = getClassAiTrendContext();
+  if (payload.comparedStudentCount < 2) {
+    renderClassAiMessage("至少需要两次考试、且有多名学生可比较，才能生成全班 AI 分析。");
+    return;
+  }
+  if (!validateAiPayloadSize(safePayload)) {
+    renderClassAiMessage("当前全班成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
+    return;
+  }
+  const cached = getCachedAiResult(cacheSignature);
+  if (!cached) {
+    generateClassAiTrendAdvice();
+    return;
+  }
+  const choice = await openAiChoiceModal({
+    title: "已有班级分析",
+    message: "当前成绩摘要已有班级分析。可以直接查看已有结果，也可以重新生成。",
+    actions: [
+      { label: "查看已有", value: "view", recommended: true },
+      { label: "重新生成", value: "regenerate" },
+      { label: "取消", value: null }
+    ]
+  });
+  if (choice === "view") {
+    if (classAiTrendResult) {
+      classAiTrendResult.dataset.aiCollapsed = "false";
+    }
+    renderClassAiResult(cached, focusReasonMap, "已缓存");
+  } else if (choice === "regenerate") {
+    generateClassAiTrendAdvice({ force: true });
+  }
+}
+
+async function generateClassAiTrendAdvice(options = {}) {
+  const force = Boolean(options.force);
   if (window.location.protocol === "file:") {
     renderClassAiMessage("当前是本地文件打开方式，浏览器会拦截 AI 网络请求。请通过 GitHub Pages 正式网页打开后再使用 AI。", "error");
     return;
@@ -6862,9 +7070,7 @@ async function generateClassAiTrendAdvice() {
   classAiTrendBtn.disabled = true;
   classAiTrendBtn.textContent = "生成中";
   try {
-    const payload = buildClassTrendPayload();
-    const focusReasonMap = payload.localFocusReasons || {};
-    const { localFocusReasons, ...safePayload } = payload;
+    const { payload, safePayload, focusReasonMap, cacheSignature } = getClassAiTrendContext();
     if (payload.comparedStudentCount < 2) {
       renderClassAiMessage("至少需要两次考试、且有多名学生可比较，才能生成全班 AI 分析。");
       return;
@@ -6873,8 +7079,7 @@ async function generateClassAiTrendAdvice() {
       renderClassAiMessage("当前全班成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
       return;
     }
-    const cacheSignature = getAiCacheSignature("class-trend", safePayload);
-    const cached = getCachedAiResult(cacheSignature);
+    const cached = force ? null : getCachedAiResult(cacheSignature);
     if (cached) {
       renderClassAiResult(cached, focusReasonMap, "已缓存");
       return;
@@ -6898,7 +7103,7 @@ async function generateClassAiTrendAdvice() {
       if (!retryAuth) {
         return;
       }
-      return generateClassAiTrendAdvice();
+      return generateClassAiTrendAdvice({ force });
     }
     if (response.status === 403) {
       renderClassAiMessage("AI 功能未授权。", "error");
@@ -6918,7 +7123,7 @@ async function generateClassAiTrendAdvice() {
     }
   } finally {
     classAiTrendBtn.disabled = false;
-    classAiTrendBtn.textContent = "生成全班 AI 分析";
+    classAiTrendBtn.textContent = "生成班级分析";
   }
 }
 
@@ -8607,18 +8812,7 @@ if (examTrendModeSelect) {
 }
 if (aiTrendBtn) {
   aiTrendBtn.addEventListener("click", () => {
-    if (aiTrendResult) {
-      aiTrendResult.dataset.aiCollapsed = "false";
-    }
-    generateAiTrendAdvice();
-  });
-}
-if (aiTrendRegenerateBtn) {
-  aiTrendRegenerateBtn.addEventListener("click", () => {
-    if (aiTrendResult) {
-      aiTrendResult.dataset.aiCollapsed = "false";
-    }
-    generateAiTrendAdvice({ force: true });
+    handleStudentAiTrendClick();
   });
 }
 if (classAiTrendBtn) {
@@ -8626,11 +8820,11 @@ if (classAiTrendBtn) {
     if (classAiTrendResult) {
       classAiTrendResult.dataset.aiCollapsed = "false";
     }
-    generateClassAiTrendAdvice();
+    handleClassAiTrendClick();
   });
 }
 if (batchAiTrendBtn) {
-  batchAiTrendBtn.addEventListener("click", batchGenerateStudentAiTrends);
+  batchAiTrendBtn.addEventListener("click", handleBatchStudentAiTrendClick);
 }
 mappingClose.addEventListener("click", closeMappingModal);
 mappingCancel.addEventListener("click", closeMappingModal);

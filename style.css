@@ -2834,6 +2834,46 @@ button.tag-chip.mid.active {
   margin-top: 10px;
 }
 
+.score-ai-tools {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(229, 233, 239, 0.9);
+}
+
+.score-ai-head {
+  display: grid;
+  gap: 2px;
+}
+
+.score-ai-head p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.ai-batch-status {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-batch-status.success {
+  border-color: #d7eadf;
+  background: #f1f8f4;
+  color: #166534;
+}
+
+.ai-batch-status.error {
+  border-color: #f3d5d5;
+  background: #fff5f5;
+  color: #b42318;
+}
+
 .exam-list {
   display: grid;
   gap: 10px;
@@ -2853,6 +2893,25 @@ button.tag-chip.mid.active {
   border: 1px solid #dfe8e4;
   border-radius: 14px;
   background: #f8fbfa;
+}
+
+.ai-choice-card {
+  width: min(420px, 94vw);
+}
+
+.ai-choice-message {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ai-choice-actions {
+  justify-content: flex-end;
+}
+
+.ai-choice-actions .secondary-action {
+  color: var(--muted);
 }
 
 .ai-trend-result-collapsed {

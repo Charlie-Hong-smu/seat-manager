@@ -319,9 +319,16 @@
                   <input id="scoreExamDate" class="input" type="date" />
                   <button id="saveScoreBtn" class="btn-secondary" disabled>保存考试</button>
                 </div>
-                <div class="class-ai-actions">
-                  <button id="classAiTrendBtn" class="ghost" type="button">生成全班 AI 分析</button>
-                  <button id="batchAiTrendBtn" class="ghost" type="button">批量生成学生 AI 建议</button>
+                <div class="score-ai-tools">
+                  <div class="score-ai-head">
+                    <div class="score-history-title">分析与建议</div>
+                    <p class="muted">班级分析会显示在下方；学生建议可在学生详情中查看。</p>
+                  </div>
+                  <div class="class-ai-actions">
+                    <button id="classAiTrendBtn" class="ghost" type="button">生成班级分析</button>
+                    <button id="batchAiTrendBtn" class="ghost" type="button">生成学生建议</button>
+                  </div>
+                  <div id="studentAiBatchStatus" class="ai-batch-status hidden" aria-live="polite"></div>
                 </div>
                 <div id="classAiTrendResult" class="ai-trend-result hidden" aria-live="polite"></div>
                 <div class="score-history-block">
@@ -483,8 +490,7 @@
                   <option value="rankClass">按班级排名</option>
                   <option value="rankSchool">按年级排名</option>
                 </select>
-              <button id="aiTrendBtn" class="ghost" type="button">生成 AI 趋势建议</button>
-              <button id="aiTrendRegenerateBtn" class="ghost" type="button">重新生成</button>
+              <button id="aiTrendBtn" class="ghost" type="button">生成趋势建议</button>
               <button id="exportTrendsBtn" class="ghost">导出</button>
             </div>
           </div>
@@ -520,6 +526,20 @@
           <button id="aiAuthCancel" class="ghost" type="button">取消</button>
           <button id="aiAuthSubmit" class="primary" type="button">启用</button>
         </div>
+      </div>
+    </div>
+
+    <div id="aiChoiceModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card ai-choice-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">AI 分析</div>
+            <h3 id="aiChoiceTitle">已有分析</h3>
+          </div>
+          <button id="aiChoiceClose" class="ghost" type="button">关闭</button>
+        </div>
+        <p id="aiChoiceMessage" class="ai-choice-message"></p>
+        <div id="aiChoiceActions" class="modal-footer ai-choice-actions"></div>
       </div>
     </div>
 
