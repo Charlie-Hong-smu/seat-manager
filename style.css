@@ -2828,6 +2828,8 @@ button.tag-chip.mid.active {
 
 .class-ai-actions {
   display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
   justify-content: flex-end;
   margin-top: 10px;
 }
@@ -2853,6 +2855,13 @@ button.tag-chip.mid.active {
   background: #f8fbfa;
 }
 
+.ai-trend-result-collapsed {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
 .ai-trend-head {
   display: flex;
   align-items: center;
@@ -2866,21 +2875,20 @@ button.tag-chip.mid.active {
   gap: 8px;
 }
 
-.ai-result-close {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #dfe5e2;
-  border-radius: 50%;
-  background: #fff;
+.ai-result-toggle {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 4px 7px;
   cursor: pointer;
 }
 
-.ai-result-close:hover {
+.ai-result-toggle:hover {
+  background: rgba(15, 23, 42, 0.06);
   color: var(--text);
-  border-color: #cbd7d2;
 }
 
 .ai-trend-title {
@@ -2892,6 +2900,9 @@ button.tag-chip.mid.active {
 .ai-trend-status {
   font-size: 12px;
   color: var(--muted);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+  padding: 2px 7px;
 }
 
 .ai-trend-block {

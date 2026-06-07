@@ -188,6 +188,7 @@ const examTrends = document.getElementById("examTrends");
 const exportTrendsBtn = document.getElementById("exportTrendsBtn");
 const examTrendModeSelect = document.getElementById("examTrendModeSelect");
 const aiTrendBtn = document.getElementById("aiTrendBtn");
+const aiTrendRegenerateBtn = document.getElementById("aiTrendRegenerateBtn");
 const aiTrendResult = document.getElementById("aiTrendResult");
 const aiAuthModal = document.getElementById("aiAuthModal");
 const aiAuthClose = document.getElementById("aiAuthClose");
@@ -198,6 +199,7 @@ const aiAccessCodeInput = document.getElementById("aiAccessCodeInput");
 const aiRememberInput = document.getElementById("aiRememberInput");
 const aiAuthError = document.getElementById("aiAuthError");
 const classAiTrendBtn = document.getElementById("classAiTrendBtn");
+const batchAiTrendBtn = document.getElementById("batchAiTrendBtn");
 const classAiTrendResult = document.getElementById("classAiTrendResult");
 const deleteStudentBtn = document.getElementById("deleteStudentBtn");
 const behaviorTagGroups = document.getElementById("behaviorTagGroups");
@@ -300,6 +302,8 @@ let examTrendMode = "all";
 let expandedSavedExamIds = new Set();
 let activeSavedExamTableId = "";
 const inputSuggestMap = new Map();
+const studentAiTrendJobs = new Map();
+let batchAiTrendRunning = false;
 
 function isAuthenticated() {
   return localStorage.getItem(AUTH_PERSIST_KEY) === "true" || sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
@@ -5899,11 +5903,35 @@ function renderTagEditor(student) {
   });
 }
 
+function updateStudentAiTrendControls(student, renderCached = false) {
+  if (!student) {
+    return;
+  }
+  const { payload, cacheSignature } = getStudentAiTrendContext(student);
+  const hasEnoughExams = payload.recentExams.length >= 2;
+  const isRunning = studentAiTrendJobs.has(student.id);
+  if (aiTrendBtn) {
+    aiTrendBtn.disabled = !hasEnoughExams || isRunning;
+    aiTrendBtn.textContent = isRunning ? "生成中" : "生成 AI 趋势建议";
+  }
+  if (aiTrendRegenerateBtn) {
+    aiTrendRegenerateBtn.disabled = !hasEnoughExams || isRunning;
+    aiTrendRegenerateBtn.classList.toggle("hidden", !hasEnoughExams);
+  }
+  if (renderCached && aiTrendResult && hasEnoughExams && !isRunning) {
+    const cached = getCachedAiResult(cacheSignature);
+    if (cached) {
+      renderAiTrendResult(cached, "已缓存");
+    }
+  }
+}
+
 function renderExamList(student) {
   examList.innerHTML = "";
   if (aiTrendResult) {
     aiTrendResult.classList.add("hidden");
     aiTrendResult.innerHTML = "";
+    aiTrendResult.dataset.aiCollapsed = "false";
   }
   if (examTrendModeSelect) {
     examTrendModeSelect.value = examTrendMode;
@@ -5919,11 +5947,13 @@ function renderExamList(student) {
     if (aiTrendBtn) {
       aiTrendBtn.disabled = true;
     }
+    if (aiTrendRegenerateBtn) {
+      aiTrendRegenerateBtn.disabled = true;
+      aiTrendRegenerateBtn.classList.add("hidden");
+    }
     return;
   }
-  if (aiTrendBtn) {
-    aiTrendBtn.disabled = false;
-  }
+  updateStudentAiTrendControls(student, true);
 
   const sorted = [...exams].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   sorted.forEach((exam) => {
@@ -6178,9 +6208,20 @@ function storeCachedAiResult(signature, data) {
   cache[signature] = { savedAt: Date.now(), data };
   const entries = Object.entries(cache)
     .sort((a, b) => (b[1].savedAt || 0) - (a[1].savedAt || 0))
-    .slice(0, 30);
+    .slice(0, 180);
   localStorage.setItem(AI_RESULT_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
 }
+
+const AI_VALUE_KEY_LABELS = {
+  totalScore: "总分变化",
+  subjects: "科目变化",
+  subject: "科目",
+  score: "分数",
+  rankClass: "班级排名",
+  rankSchool: "年级排名",
+  classRank: "班级排名",
+  schoolRank: "年级排名"
+};
 
 function formatAiValue(value) {
   if (Array.isArray(value)) {
@@ -6193,7 +6234,8 @@ function formatAiValue(value) {
     return Object.entries(value)
       .map(([key, item]) => {
         const formatted = formatAiValue(item);
-        return formatted ? `${key}：${formatted}` : "";
+        const label = AI_VALUE_KEY_LABELS[key] || key;
+        return formatted ? `${label}：${formatted}` : "";
       })
       .filter(Boolean)
       .join("\n");
@@ -6205,8 +6247,15 @@ function renderAiResult(container, data, statusText = "", fields = null) {
   if (!container) {
     return;
   }
+  container._aiResultPayload = { data, statusText, fields };
   container.innerHTML = "";
   container.classList.remove("hidden");
+  container.classList.remove("ai-trend-result-collapsed");
+
+  if (container.dataset.aiCollapsed === "true") {
+    renderAiCollapsedResult(container, data, statusText);
+    return;
+  }
 
   const head = document.createElement("div");
   head.className = "ai-trend-head";
@@ -6219,13 +6268,13 @@ function renderAiResult(container, data, statusText = "", fields = null) {
   status.className = "ai-trend-status";
   status.textContent = statusText || "仅供教师参考";
   const closeBtn = document.createElement("button");
-  closeBtn.className = "ai-result-close";
+  closeBtn.className = "ai-result-toggle";
   closeBtn.type = "button";
-  closeBtn.textContent = "×";
-  closeBtn.setAttribute("aria-label", "关闭 AI 分析");
+  closeBtn.textContent = "收起⌃";
+  closeBtn.setAttribute("aria-label", "收起 AI 趋势建议");
   closeBtn.addEventListener("click", () => {
-    container.classList.add("hidden");
-    container.innerHTML = "";
+    container.dataset.aiCollapsed = "true";
+    renderAiCollapsedResult(container, data, statusText);
   });
   headRight.append(status, closeBtn);
   head.append(title, headRight);
@@ -6253,6 +6302,35 @@ function renderAiResult(container, data, statusText = "", fields = null) {
     block.append(label, text);
     container.appendChild(block);
   });
+}
+
+function renderAiCollapsedResult(container, data, statusText = "") {
+  container.innerHTML = "";
+  container.classList.add("ai-trend-result-collapsed");
+
+  const title = document.createElement("div");
+  title.className = "ai-trend-title";
+  title.textContent = data.title || "AI 趋势建议";
+
+  const actions = document.createElement("div");
+  actions.className = "ai-trend-head-actions";
+  const status = document.createElement("div");
+  status.className = "ai-trend-status";
+  status.textContent = statusText || "仅供教师参考";
+  const expandBtn = document.createElement("button");
+  expandBtn.className = "ai-result-toggle";
+  expandBtn.type = "button";
+  expandBtn.textContent = "展开⌄";
+  expandBtn.setAttribute("aria-label", "展开 AI 趋势建议");
+  expandBtn.addEventListener("click", () => {
+    container.dataset.aiCollapsed = "false";
+    container.classList.remove("ai-trend-result-collapsed");
+    const payload = container._aiResultPayload || { data, statusText, fields: null };
+    renderAiResult(container, payload.data, payload.statusText, payload.fields);
+  });
+
+  actions.append(status, expandBtn);
+  container.append(title, actions);
 }
 
 function renderAiTrendResult(data, statusText = "") {
@@ -6332,6 +6410,14 @@ function buildAiTrendPayload(student) {
     localAnalysis: {
       summary: buildLocalTrendSummary(exams)
     }
+  };
+}
+
+function getStudentAiTrendContext(student) {
+  const payload = buildAiTrendPayload(student);
+  return {
+    payload,
+    cacheSignature: getAiCacheSignature("student-trend", { studentId: student.id, payload })
   };
 }
 
@@ -6539,78 +6625,185 @@ async function ensureAiAuth() {
   return requestAiAuth();
 }
 
-async function generateAiTrendAdvice() {
-  const student = state.students.find((item) => item.id === activeStudentId);
+async function generateAiTrendAdvice(options = {}) {
+  const studentId = options.studentId || activeStudentId;
+  const force = Boolean(options.force);
+  const student = state.students.find((item) => item.id === studentId);
   if (!student) {
-    return;
+    return null;
   }
+  const isActiveStudent = () => activeStudentId === studentId;
   if (window.location.protocol === "file:") {
-    renderAiTrendMessage("当前是本地文件打开方式，浏览器会拦截 AI 网络请求。请通过 GitHub Pages 正式网页打开后再使用 AI。", "error");
-    return;
+    if (isActiveStudent()) {
+      renderAiTrendMessage("当前是本地文件打开方式，浏览器会拦截 AI 网络请求。请通过 GitHub Pages 正式网页打开后再使用 AI。", "error");
+    }
+    return null;
   }
   if (!navigator.onLine) {
-    renderAiTrendMessage("当前处于离线状态，联网后可使用 AI 趋势建议。");
-    return;
+    if (isActiveStudent()) {
+      renderAiTrendMessage("当前处于离线状态，联网后可使用 AI 趋势建议。");
+    }
+    return null;
   }
-  const payload = buildAiTrendPayload(student);
+  const { payload, cacheSignature } = getStudentAiTrendContext(student);
   if (payload.recentExams.length < 2) {
-    renderAiTrendMessage("至少需要两次考试记录，才能生成相对可靠的 AI 趋势建议。");
-    return;
+    if (isActiveStudent()) {
+      renderAiTrendMessage("至少需要两次考试记录，才能生成相对可靠的 AI 趋势建议。");
+    }
+    return null;
   }
   if (!validateAiPayloadSize(payload)) {
-    renderAiTrendMessage("当前成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
-    return;
+    if (isActiveStudent()) {
+      renderAiTrendMessage("当前成绩摘要过大，已停止发送。请减少考试记录后再试。", "error");
+    }
+    return null;
   }
-  const cacheSignature = getAiCacheSignature("student-trend", { studentId: activeStudentId, payload });
-  const cached = getCachedAiResult(cacheSignature);
-  if (cached) {
-    renderAiTrendResult(cached, "已缓存");
-    return;
+  if (!force) {
+    const cached = getCachedAiResult(cacheSignature);
+    if (cached) {
+      if (isActiveStudent()) {
+        renderAiTrendResult(cached, "已缓存");
+      }
+      return cached;
+    }
+  }
+  if (studentAiTrendJobs.has(studentId)) {
+    return studentAiTrendJobs.get(studentId);
   }
 
-  aiTrendBtn.disabled = true;
-  aiTrendBtn.textContent = "生成中";
-  try {
+  const job = (async () => {
+    if (isActiveStudent()) {
+      updateStudentAiTrendControls(student);
+    }
     const auth = await ensureAiAuth();
     if (!auth) {
-      return;
+      return null;
     }
     const baseUrl = getAiWorkerBaseUrl();
-    const response = await fetch(`${baseUrl}/analyze-trend`, {
+    const sendRequest = (token) => fetch(`${baseUrl}/analyze-trend`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${auth.token}`
+        Authorization: `Bearer ${token}`
       },
       body: JSON.stringify(payload)
     });
+    let response = await sendRequest(auth.token);
     if (response.status === 401) {
       clearAiAuth(false);
       const retryAuth = await requestAiAuth();
       if (!retryAuth) {
-        return;
+        return null;
       }
-      return generateAiTrendAdvice();
+      response = await sendRequest(retryAuth.token);
     }
     if (response.status === 403) {
-      renderAiTrendMessage("AI 功能未授权。", "error");
-      return;
+      if (isActiveStudent()) {
+        renderAiTrendMessage("AI 功能未授权。", "error");
+      }
+      return null;
     }
     if (!response.ok) {
       throw new Error("ai_failed");
     }
     const data = await response.json();
     storeCachedAiResult(cacheSignature, data);
-    renderAiTrendResult(data, "已生成");
-  } catch (error) {
-    if (error.message === "unauthorized") {
-      renderAiTrendMessage("AI 功能未授权。", "error");
-    } else {
-      renderAiTrendMessage("AI 分析暂时不可用，可先查看本地趋势。", "error");
+    if (isActiveStudent()) {
+      if (aiTrendResult) {
+        aiTrendResult.dataset.aiCollapsed = "false";
+      }
+      renderAiTrendResult(data, "已生成");
     }
+    return data;
+  })();
+
+  studentAiTrendJobs.set(studentId, job);
+  if (isActiveStudent()) {
+    updateStudentAiTrendControls(student);
+  }
+  try {
+    return await job;
+  } catch (error) {
+    if (isActiveStudent()) {
+      if (error.message === "unauthorized") {
+        renderAiTrendMessage("AI 功能未授权。", "error");
+      } else {
+        renderAiTrendMessage("AI 分析暂时不可用，可先查看本地趋势。", "error");
+      }
+    }
+    return null;
   } finally {
-    aiTrendBtn.disabled = false;
-    aiTrendBtn.textContent = "生成 AI 趋势建议";
+    studentAiTrendJobs.delete(studentId);
+    if (isActiveStudent()) {
+      updateStudentAiTrendControls(student);
+    }
+  }
+}
+
+async function batchGenerateStudentAiTrends() {
+  if (batchAiTrendRunning) {
+    return;
+  }
+  if (window.location.protocol === "file:") {
+    scoreStatus.textContent = "当前是本地文件打开方式，请通过 GitHub Pages 正式网页使用批量 AI 建议。";
+    return;
+  }
+  if (!navigator.onLine) {
+    scoreStatus.textContent = "当前处于离线状态，联网后可批量生成 AI 建议。";
+    return;
+  }
+  const candidates = state.students
+    .map((student) => {
+      const context = getStudentAiTrendContext(student);
+      return { student, ...context };
+    })
+    .filter((item) => item.payload.recentExams.length >= 2 && validateAiPayloadSize(item.payload));
+  if (!candidates.length) {
+    scoreStatus.textContent = "暂无可批量分析的学生，至少需要每名学生有两次考试记录。";
+    return;
+  }
+  const pending = candidates.filter((item) => !getCachedAiResult(item.cacheSignature));
+  const skipped = candidates.length - pending.length;
+  if (!pending.length) {
+    scoreStatus.textContent = `所有可分析学生已有 AI 建议缓存，本次无需重新生成（共 ${candidates.length} 人）。`;
+    return;
+  }
+
+  batchAiTrendRunning = true;
+  if (batchAiTrendBtn) {
+    batchAiTrendBtn.disabled = true;
+    batchAiTrendBtn.textContent = "批量生成中";
+  }
+  let generated = 0;
+  let failed = 0;
+  try {
+    const auth = await ensureAiAuth();
+    if (!auth) {
+      scoreStatus.textContent = "已取消批量 AI 建议生成。";
+      return;
+    }
+    for (const [index, item] of pending.entries()) {
+      scoreStatus.textContent = `正在批量生成学生 AI 建议：${index + 1}/${pending.length}，已跳过缓存 ${skipped} 人。`;
+      const data = await generateAiTrendAdvice({ studentId: item.student.id });
+      if (data) {
+        generated += 1;
+      } else {
+        failed += 1;
+      }
+    }
+    scoreStatus.textContent = `批量 AI 建议完成：新生成 ${generated} 人，跳过缓存 ${skipped} 人${failed ? `，失败 ${failed} 人` : ""}。`;
+  } catch (error) {
+    scoreStatus.textContent = "批量 AI 建议暂时不可用，可稍后重试。";
+  } finally {
+    batchAiTrendRunning = false;
+    if (batchAiTrendBtn) {
+      batchAiTrendBtn.disabled = false;
+      batchAiTrendBtn.textContent = "批量生成学生 AI 建议";
+    }
+    const activeStudent = state.students.find((item) => item.id === activeStudentId);
+    if (activeStudent) {
+      updateStudentAiTrendControls(activeStudent, true);
+    }
   }
 }
 
@@ -8413,10 +8606,31 @@ if (examTrendModeSelect) {
   });
 }
 if (aiTrendBtn) {
-  aiTrendBtn.addEventListener("click", generateAiTrendAdvice);
+  aiTrendBtn.addEventListener("click", () => {
+    if (aiTrendResult) {
+      aiTrendResult.dataset.aiCollapsed = "false";
+    }
+    generateAiTrendAdvice();
+  });
+}
+if (aiTrendRegenerateBtn) {
+  aiTrendRegenerateBtn.addEventListener("click", () => {
+    if (aiTrendResult) {
+      aiTrendResult.dataset.aiCollapsed = "false";
+    }
+    generateAiTrendAdvice({ force: true });
+  });
 }
 if (classAiTrendBtn) {
-  classAiTrendBtn.addEventListener("click", generateClassAiTrendAdvice);
+  classAiTrendBtn.addEventListener("click", () => {
+    if (classAiTrendResult) {
+      classAiTrendResult.dataset.aiCollapsed = "false";
+    }
+    generateClassAiTrendAdvice();
+  });
+}
+if (batchAiTrendBtn) {
+  batchAiTrendBtn.addEventListener("click", batchGenerateStudentAiTrends);
 }
 mappingClose.addEventListener("click", closeMappingModal);
 mappingCancel.addEventListener("click", closeMappingModal);
