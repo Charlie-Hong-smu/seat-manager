@@ -6270,7 +6270,7 @@ function renderAiTrendMessage(message, tone = "muted") {
 }
 
 function buildLocalTrendSummary(exams) {
-  const chronological = [...exams].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const chronological = [...exams].sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b)));
   const totals = chronological
     .map((exam) => parseScoreValue(exam.total?.score) ?? sumExamScores(exam.scores))
     .filter((value) => Number.isFinite(value));
@@ -6300,11 +6300,11 @@ function buildLocalTrendSummary(exams) {
 
 function buildAiTrendPayload(student) {
   const exams = Array.isArray(student.exams) ? [...student.exams] : [];
-  const recent = exams
-    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-    .slice(0, 6)
-    .reverse()
-    .map((exam) => {
+  const chronological = exams.sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b)));
+  const recentSource = chronological.slice(-6);
+  const recent = recentSource
+    .sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b)))
+    .map((exam, index) => {
       const subjects = {};
       (exam.subjects || []).forEach((subject) => {
         const subjectData = exam.scores?.[subject];
@@ -6315,8 +6315,10 @@ function buildAiTrendPayload(student) {
         };
       });
       return {
+        order: index + 1,
         name: exam.name || "考试",
         date: exam.date || "",
+        period: index === 0 ? "oldest" : index === recentSource.length - 1 ? "latest" : "middle",
         totalScore: parseScoreValue(exam.total?.score) ?? sumExamScores(exam.scores),
         classRank: parseRankValue(exam.total?.rankClass),
         schoolRank: parseRankValue(exam.total?.rankSchool),
@@ -6325,6 +6327,7 @@ function buildAiTrendPayload(student) {
     });
   return {
     student: "学生A",
+    orderInstruction: "recentExams 已按考试先后从早到晚排列；最后一项是最新考试。所有升降变化都必须用最新考试减最早考试来判断。",
     recentExams: recent,
     localAnalysis: {
       summary: buildLocalTrendSummary(exams)
@@ -6334,7 +6337,10 @@ function buildAiTrendPayload(student) {
 
 function getExamSortValue(exam) {
   const examOrder = (state.exams || []).findIndex((item) => item.id === exam.id);
-  return `${exam.date || ""}::${String(examOrder).padStart(4, "0")}::${exam.name || ""}`;
+  const savedExamOrder = getSavedExamRecords().findIndex((item) => item.id === exam.id);
+  const savedAt = savedExamOrder >= 0 ? getSavedExamRecords()[savedExamOrder]?.savedAt || "" : "";
+  const order = examOrder >= 0 ? examOrder : savedExamOrder >= 0 ? savedExamOrder : 9999;
+  return `${exam.date || ""}::${savedAt}::${String(order).padStart(4, "0")}::${exam.name || ""}`;
 }
 
 function buildClassTrendPayload() {
@@ -6876,13 +6882,6 @@ function openTrendDetail(title, details, scoreLabel, series = []) {
 function createTrendDetailChart(details, scoreLabel, series = []) {
   const wrap = document.createElement("div");
   wrap.className = "trend-detail-chart-wrap";
-  const width = Math.max(680, details.length * 150);
-  const height = 360;
-  const padding = { top: 56, right: 46, bottom: 100, left: 64 };
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.classList.add("trend-detail-chart");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-
   const visibleSeries = (series.length ? series : buildTrendSeries(details, "score", scoreLabel)).filter((item) =>
     item.values?.some((value) => Number.isFinite(value))
   );
@@ -6893,6 +6892,34 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
     wrap.appendChild(empty);
     return wrap;
   }
+
+  if (visibleSeries.length > 1) {
+    wrap.classList.add("trend-detail-chart-stack");
+    visibleSeries.forEach((item) => {
+      const panel = document.createElement("section");
+      panel.className = "trend-detail-panel";
+      const title = document.createElement("div");
+      title.className = "trend-detail-panel-title";
+      title.textContent =
+        item.id === "score" ? `${scoreLabel}变化` : item.id === "rankClass" ? "班级排名变化" : "年级排名变化";
+      const svg = createTrendDetailSvg(details, [item], scoreLabel);
+      panel.append(title, svg);
+      wrap.appendChild(panel);
+    });
+    return wrap;
+  }
+
+  wrap.appendChild(createTrendDetailSvg(details, visibleSeries, scoreLabel));
+  return wrap;
+}
+
+function createTrendDetailSvg(details, visibleSeries, scoreLabel) {
+  const width = Math.max(680, details.length * 150);
+  const height = 360;
+  const padding = { top: 56, right: 46, bottom: 100, left: 64 };
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("trend-detail-chart");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
@@ -6962,7 +6989,8 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
         seriesIndex,
         x: point.x,
         y: point.y,
-        text: `${item.shortLabel || item.label}${point.value}`
+        text: `${item.shortLabel || item.label}${point.value}`,
+        color: item.color
       });
     });
   });
@@ -6990,6 +7018,7 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
         value.setAttribute("y", labelY);
         value.setAttribute("text-anchor", anchor);
         value.setAttribute("class", "trend-point-score");
+        value.setAttribute("fill", label.color);
         value.textContent = label.text;
         svg.appendChild(value);
       });
@@ -7017,7 +7046,7 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
   yTitle.setAttribute("x", padding.left);
   yTitle.setAttribute("y", 18);
   yTitle.setAttribute("class", "trend-axis-title");
-  yTitle.textContent = visibleSeries.length > 1 ? "三项趋势（各自缩放）" : visibleSeries[0].label;
+  yTitle.textContent = visibleSeries[0].label;
   svg.appendChild(yTitle);
 
   const legendGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -7038,8 +7067,7 @@ function createTrendDetailChart(details, scoreLabel, series = []) {
   });
   svg.appendChild(legendGroup);
 
-  wrap.appendChild(svg);
-  return wrap;
+  return svg;
 }
 
 function truncateChartLabel(value, maxLength) {

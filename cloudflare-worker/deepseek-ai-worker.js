@@ -93,7 +93,7 @@ async function handleAnalyzeTrend(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的教师助手。只根据提供的匿名成绩摘要生成温和、可参考的趋势建议，不做绝对判断。必须返回 JSON，字段为 overall、changes、suggestions、disclaimer。"
+              "你是谨慎的教师助手。只根据提供的匿名成绩摘要生成温和、可参考的趋势建议，不做绝对判断。recentExams 按考试先后从早到晚排列，最后一项是最新考试；所有升降必须用最新考试减最早考试判断，不要把顺序反过来。必须返回 JSON，字段为 overall、changes、suggestions、disclaimer。"
           },
           {
             role: "user",
