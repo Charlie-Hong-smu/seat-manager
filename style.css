@@ -2393,6 +2393,10 @@ body.compact-cards .seat-reason {
   z-index: 70;
 }
 
+#aiChoiceModal {
+  z-index: 80;
+}
+
 #mappingModal .modal-card {
   width: min(760px, 95vw);
   max-height: calc(100vh - 32px);
@@ -2895,6 +2899,14 @@ button.tag-chip.mid.active {
   background: #f8fbfa;
 }
 
+.ai-trend-result.is-animating-ai-result {
+  overflow: hidden;
+}
+
+.ai-trend-result.is-animating-ai-result > * {
+  pointer-events: none;
+}
+
 .ai-choice-card {
   width: min(420px, 94vw);
 }
@@ -2917,7 +2929,7 @@ button.tag-chip.mid.active {
 .ai-trend-result-collapsed {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  column-gap: 16px;
   padding: 10px 12px;
 }
 
@@ -2925,16 +2937,23 @@ button.tag-chip.mid.active {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 14px;
 }
 
 .ai-trend-head-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .ai-result-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 58px;
   border: 0;
   border-radius: 8px;
   background: transparent;

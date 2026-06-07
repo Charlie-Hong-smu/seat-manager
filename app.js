@@ -6240,11 +6240,55 @@ function formatAiValue(value) {
   return String(value || "").trim();
 }
 
-function renderAiResult(container, data, statusText = "", fields = null) {
+function animateAiResultSwap(container, renderContent, afterRender) {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const shouldAnimate = !reduceMotion && !container.classList.contains("hidden") && container.childElementCount > 0;
+  const startHeight = shouldAnimate ? container.offsetHeight : 0;
+
+  renderContent();
+
+  if (!shouldAnimate) {
+    afterRender?.();
+    return;
+  }
+
+  const contentNodes = Array.from(container.children);
+  const endHeight = container.scrollHeight;
+  container.style.height = `${startHeight}px`;
+  container.style.overflow = "hidden";
+  container.classList.add("is-animating-ai-result");
+  contentNodes.forEach((node) => {
+    node.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: 220,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      fill: "forwards"
+    });
+  });
+
+  const animation = container.animate([{ height: `${startHeight}px` }, { height: `${endHeight}px` }], {
+    duration: 360,
+    easing: "cubic-bezier(0.22, 1, 0.36, 1)"
+  });
+  const reset = () => {
+    container.style.height = "";
+    container.style.overflow = "";
+    container.classList.remove("is-animating-ai-result");
+    contentNodes.forEach((node) => {
+      node.style.opacity = "";
+      node.getAnimations().forEach((item) => item.cancel());
+    });
+    afterRender?.();
+  };
+  animation.onfinish = reset;
+  animation.oncancel = reset;
+}
+
+function renderAiResult(container, data, statusText = "", fields = null, options = {}) {
   if (!container) {
     return;
   }
   container._aiResultPayload = { data, statusText, fields };
+  const renderContent = () => {
   container.innerHTML = "";
   container.classList.remove("hidden");
   container.classList.remove("ai-trend-result-collapsed");
@@ -6267,11 +6311,11 @@ function renderAiResult(container, data, statusText = "", fields = null) {
   const closeBtn = document.createElement("button");
   closeBtn.className = "ai-result-toggle";
   closeBtn.type = "button";
-  closeBtn.textContent = "收起⌃";
+  closeBtn.innerHTML = "<span>收起</span><span aria-hidden=\"true\">⌃</span>";
   closeBtn.setAttribute("aria-label", "收起 AI 趋势建议");
   closeBtn.addEventListener("click", () => {
     container.dataset.aiCollapsed = "true";
-    renderAiCollapsedResult(container, data, statusText);
+    renderAiCollapsedResult(container, data, statusText, { animate: true });
   });
   headRight.append(status, closeBtn);
   head.append(title, headRight);
@@ -6299,9 +6343,16 @@ function renderAiResult(container, data, statusText = "", fields = null) {
     block.append(label, text);
     container.appendChild(block);
   });
+  };
+  if (options.animate) {
+    animateAiResultSwap(container, renderContent);
+  } else {
+    renderContent();
+  }
 }
 
-function renderAiCollapsedResult(container, data, statusText = "") {
+function renderAiCollapsedResult(container, data, statusText = "", options = {}) {
+  const renderContent = () => {
   container.innerHTML = "";
   container.classList.add("ai-trend-result-collapsed");
 
@@ -6317,17 +6368,23 @@ function renderAiCollapsedResult(container, data, statusText = "") {
   const expandBtn = document.createElement("button");
   expandBtn.className = "ai-result-toggle";
   expandBtn.type = "button";
-  expandBtn.textContent = "展开⌄";
+  expandBtn.innerHTML = "<span>展开</span><span aria-hidden=\"true\">⌄</span>";
   expandBtn.setAttribute("aria-label", "展开 AI 趋势建议");
   expandBtn.addEventListener("click", () => {
     container.dataset.aiCollapsed = "false";
     container.classList.remove("ai-trend-result-collapsed");
     const payload = container._aiResultPayload || { data, statusText, fields: null };
-    renderAiResult(container, payload.data, payload.statusText, payload.fields);
+    renderAiResult(container, payload.data, payload.statusText, payload.fields, { animate: true });
   });
 
   actions.append(status, expandBtn);
   container.append(title, actions);
+  };
+  if (options.animate) {
+    animateAiResultSwap(container, renderContent);
+  } else {
+    renderContent();
+  }
 }
 
 function renderAiTrendResult(data, statusText = "") {
