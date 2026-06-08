@@ -2919,7 +2919,18 @@ button.tag-chip.mid.active {
 }
 
 .ai-choice-actions {
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+  justify-content: stretch;
+  align-items: stretch;
+}
+
+.ai-choice-actions button {
+  width: 100%;
+  min-height: 44px;
+  padding-inline: 12px;
+  white-space: nowrap;
 }
 
 .ai-choice-actions .secondary-action {
