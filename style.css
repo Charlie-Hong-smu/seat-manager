@@ -4505,6 +4505,21 @@ body::before {
   color: #a33a34;
 }
 
+.install-help-card {
+  width: min(440px, 95vw);
+}
+
+.install-help-list {
+  display: grid;
+  gap: 10px;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.install-help-list p {
+  margin: 0;
+}
+
 .layout {
   gap: 26px;
 }

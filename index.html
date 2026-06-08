@@ -57,6 +57,7 @@
           <details class="account-menu">
             <summary>账户</summary>
             <div class="account-menu-popover">
+              <button id="installAppBtn" class="ghost install-app-btn" type="button">安装到桌面</button>
               <button id="changePasswordBtn" class="ghost change-password-btn" type="button">修改密码</button>
               <button id="logoutBtn" class="ghost logout-btn" type="button">退出登录</button>
             </div>
@@ -630,6 +631,22 @@
           <button class="primary" type="submit">保存新密码</button>
         </div>
       </form>
+    </div>
+
+    <div id="installHelpModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card install-help-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">桌面快捷入口</div>
+            <h3>安装到桌面</h3>
+          </div>
+          <button id="installHelpClose" class="ghost" type="button">关闭</button>
+        </div>
+        <div class="install-help-list">
+          <p><strong>Chrome / Edge：</strong>点击地址栏右侧的安装图标。</p>
+          <p><strong>Mac Safari：</strong>分享按钮 → 添加到 Dock。</p>
+        </div>
+      </div>
     </div>
 
     <div id="easterModal" class="modal hidden" aria-hidden="true">

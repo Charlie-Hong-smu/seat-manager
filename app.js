@@ -102,6 +102,9 @@ const currentPasswordInput = document.getElementById("currentPasswordInput");
 const newPasswordInput = document.getElementById("newPasswordInput");
 const confirmPasswordInput = document.getElementById("confirmPasswordInput");
 const changePasswordError = document.getElementById("changePasswordError");
+const installAppBtn = document.getElementById("installAppBtn");
+const installHelpModal = document.getElementById("installHelpModal");
+const installHelpClose = document.getElementById("installHelpClose");
 const logoutBtn = document.getElementById("logoutBtn");
 const studentNameInput = document.getElementById("studentNameInput");
 const studentAliasInput = document.getElementById("studentAliasInput");
@@ -309,6 +312,7 @@ let activeSavedExamTableId = "";
 const inputSuggestMap = new Map();
 const studentAiTrendJobs = new Map();
 let batchAiTrendRunning = false;
+let deferredInstallPrompt = null;
 
 function isAuthenticated() {
   return localStorage.getItem(AUTH_PERSIST_KEY) === "true" || sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
@@ -394,6 +398,36 @@ function closeChangePasswordModal() {
   changePasswordForm?.reset();
   if (changePasswordError) {
     changePasswordError.textContent = "";
+  }
+}
+
+function openInstallHelpModal() {
+  installHelpModal?.classList.remove("hidden");
+  installHelpModal?.setAttribute("aria-hidden", "false");
+  setTimeout(() => installHelpClose?.focus(), 0);
+}
+
+function closeInstallHelpModal() {
+  installHelpModal?.classList.add("hidden");
+  installHelpModal?.setAttribute("aria-hidden", "true");
+}
+
+async function handleInstallAppClick() {
+  installAppBtn?.closest("details")?.removeAttribute("open");
+
+  if (!deferredInstallPrompt) {
+    openInstallHelpModal();
+    return;
+  }
+
+  const promptEvent = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  try {
+    await promptEvent.prompt();
+    await promptEvent.userChoice;
+  } catch (error) {
+    console.warn("安装确认未能打开", error);
+    openInstallHelpModal();
   }
 }
 
@@ -8323,6 +8357,32 @@ if (changePasswordForm) {
   });
 }
 
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  showToast("已安装到桌面", "success");
+});
+
+if (installAppBtn) {
+  installAppBtn.addEventListener("click", handleInstallAppClick);
+}
+
+if (installHelpClose) {
+  installHelpClose.addEventListener("click", closeInstallHelpModal);
+}
+
+if (installHelpModal) {
+  installHelpModal.addEventListener("click", (event) => {
+    if (event.target === installHelpModal) {
+      closeInstallHelpModal();
+    }
+  });
+}
+
 if (logoutBtn) {
   logoutBtn.addEventListener("click", () => {
     clearAuth();
@@ -8999,6 +9059,9 @@ document.addEventListener("keydown", (event) => {
     }
     if (changePasswordModal && !changePasswordModal.classList.contains("hidden")) {
       closeChangePasswordModal();
+    }
+    if (installHelpModal && !installHelpModal.classList.contains("hidden")) {
+      closeInstallHelpModal();
     }
     if (shufflePreviewModal && !shufflePreviewModal.classList.contains("hidden")) {
       closeShufflePreview();
