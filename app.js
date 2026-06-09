@@ -17,6 +17,17 @@ const AI_AUTH_SESSION_EXPIRES_KEY = "seat-manager-ai-session-expires";
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
 const AI_REMEMBER_DAYS = 30;
 const AI_REQUEST_LIMIT_BYTES = 20 * 1024;
+const SYNC_AUTH_TOKEN_KEY = "seat-manager-sync-token";
+const SYNC_AUTH_EXPIRES_KEY = "seat-manager-sync-expires";
+const SYNC_AUTH_SESSION_TOKEN_KEY = "seat-manager-sync-session-token";
+const SYNC_AUTH_SESSION_EXPIRES_KEY = "seat-manager-sync-session-expires";
+const SYNC_LAST_UPLOAD_AT_KEY = "seat-manager-sync-last-upload-at";
+const SYNC_LAST_RESTORE_AT_KEY = "seat-manager-sync-last-restore-at";
+const SYNC_LAST_CLOUD_UPDATED_AT_KEY = "seat-manager-sync-last-cloud-updated-at";
+const SYNC_DEVICE_NAME_KEY = "seat-manager-sync-device-name";
+const SYNC_REMEMBER_DAYS = 30;
+const SYNC_VERSION = 1;
+const SYNC_MAX_CLIENT_BYTES = 5 * 1024 * 1024;
 const TAG_CATALOG = [
   { id: "cn_strong", labelZh: "语文强", kind: "academic", groupId: "lvl_cn", groupNameZh: "语文水平" },
   { id: "cn_mid", labelZh: "语文中", kind: "academic", groupId: "lvl_cn", groupNameZh: "语文水平" },
@@ -105,6 +116,25 @@ const changePasswordError = document.getElementById("changePasswordError");
 const installAppBtn = document.getElementById("installAppBtn");
 const installHelpModal = document.getElementById("installHelpModal");
 const installHelpClose = document.getElementById("installHelpClose");
+const cloudSyncBtn = document.getElementById("cloudSyncBtn");
+const syncModal = document.getElementById("syncModal");
+const syncClose = document.getElementById("syncClose");
+const syncDeviceName = document.getElementById("syncDeviceName");
+const syncCloudStatus = document.getElementById("syncCloudStatus");
+const syncCloudUpdatedAt = document.getElementById("syncCloudUpdatedAt");
+const syncLastLocalAt = document.getElementById("syncLastLocalAt");
+const syncMessage = document.getElementById("syncMessage");
+const syncStatusBtn = document.getElementById("syncStatusBtn");
+const syncSaveBtn = document.getElementById("syncSaveBtn");
+const syncLoadBtn = document.getElementById("syncLoadBtn");
+const syncClearAuthBtn = document.getElementById("syncClearAuthBtn");
+const syncAuthModal = document.getElementById("syncAuthModal");
+const syncAuthClose = document.getElementById("syncAuthClose");
+const syncAuthCancel = document.getElementById("syncAuthCancel");
+const syncAuthSubmit = document.getElementById("syncAuthSubmit");
+const syncCodeInput = document.getElementById("syncCodeInput");
+const syncRememberInput = document.getElementById("syncRememberInput");
+const syncAuthError = document.getElementById("syncAuthError");
 const logoutBtn = document.getElementById("logoutBtn");
 const studentNameInput = document.getElementById("studentNameInput");
 const studentAliasInput = document.getElementById("studentAliasInput");
@@ -4117,6 +4147,18 @@ function exportPreImportBackup() {
   downloadJsonFile(filename, JSON.stringify(payload, null, 2));
 }
 
+function exportPreCloudRestoreBackup() {
+  const exportedAt = new Date().toISOString();
+  const payload = {
+    version: BACKUP_VERSION,
+    exportedAt,
+    reason: "before-cloud-restore",
+    data: state
+  };
+  const filename = `seat-manager-local-backup-before-cloud-restore-${formatDateForFilename()}.json`;
+  downloadJsonFile(filename, JSON.stringify(payload, null, 2));
+}
+
 function importBackupJson(file) {
   file
     .text()
@@ -6769,6 +6811,357 @@ async function ensureAiAuth() {
   return requestAiAuth();
 }
 
+function getSyncDeviceName() {
+  let name = "";
+  try {
+    name = localStorage.getItem(SYNC_DEVICE_NAME_KEY) || "";
+  } catch (error) {
+    name = "";
+  }
+  if (!name) {
+    const suggested = navigator.userAgent.includes("Mac") ? "我的 Mac" : "本机";
+    name = window.prompt("请给这台设备取个名字，方便识别云端备份来源。", suggested) || suggested;
+    name = name.trim().slice(0, 30) || suggested;
+    localStorage.setItem(SYNC_DEVICE_NAME_KEY, name);
+  }
+  return name;
+}
+
+function formatSyncTime(value) {
+  if (!value) {
+    return "--";
+  }
+  return formatDateTimeLocal(value);
+}
+
+function setSyncMessage(message, tone = "muted") {
+  if (!syncMessage) {
+    return;
+  }
+  syncMessage.textContent = message;
+  syncMessage.dataset.tone = tone;
+}
+
+function renderSyncPanel(status = null) {
+  if (syncDeviceName) {
+    syncDeviceName.textContent = getSyncDeviceName();
+  }
+  if (status && syncCloudStatus && syncCloudUpdatedAt) {
+    syncCloudStatus.textContent = status.exists ? `已有备份${status.deviceName ? ` · ${status.deviceName}` : ""}` : "云端暂无备份";
+    syncCloudUpdatedAt.textContent = status.exists ? formatSyncTime(status.updatedAt) : "--";
+  }
+  if (syncLastLocalAt) {
+    const lastUpload = localStorage.getItem(SYNC_LAST_UPLOAD_AT_KEY) || "";
+    const lastRestore = localStorage.getItem(SYNC_LAST_RESTORE_AT_KEY) || "";
+    const lastLocal = [lastUpload, lastRestore].filter(Boolean).sort().pop() || "";
+    syncLastLocalAt.textContent = formatSyncTime(lastLocal);
+  }
+}
+
+function getStoredSyncAuth() {
+  const now = Date.now();
+  const candidates = [
+    {
+      token: localStorage.getItem(SYNC_AUTH_TOKEN_KEY),
+      expiresAt: Number.parseInt(localStorage.getItem(SYNC_AUTH_EXPIRES_KEY) || "", 10)
+    },
+    {
+      token: sessionStorage.getItem(SYNC_AUTH_SESSION_TOKEN_KEY),
+      expiresAt: Number.parseInt(sessionStorage.getItem(SYNC_AUTH_SESSION_EXPIRES_KEY) || "", 10)
+    }
+  ];
+  return candidates.find((item) => item.token && Number.isFinite(item.expiresAt) && item.expiresAt > now) || null;
+}
+
+function storeSyncAuth(token, expiresAt, remember) {
+  clearSyncAuth(false);
+  const storage = remember ? localStorage : sessionStorage;
+  storage.setItem(remember ? SYNC_AUTH_TOKEN_KEY : SYNC_AUTH_SESSION_TOKEN_KEY, token);
+  storage.setItem(remember ? SYNC_AUTH_EXPIRES_KEY : SYNC_AUTH_SESSION_EXPIRES_KEY, String(expiresAt));
+}
+
+function clearSyncAuth(showMessage = true) {
+  localStorage.removeItem(SYNC_AUTH_TOKEN_KEY);
+  localStorage.removeItem(SYNC_AUTH_EXPIRES_KEY);
+  sessionStorage.removeItem(SYNC_AUTH_SESSION_TOKEN_KEY);
+  sessionStorage.removeItem(SYNC_AUTH_SESSION_EXPIRES_KEY);
+  if (showMessage) {
+    setSyncMessage("同步授权已清除。", "muted");
+    showToast("已清除同步授权");
+  }
+}
+
+function openSyncAuthModal() {
+  return new Promise((resolve) => {
+    if (!syncAuthModal || !syncAuthSubmit || !syncAuthCancel || !syncAuthClose) {
+      resolve(null);
+      return;
+    }
+    syncCodeInput.value = "";
+    syncRememberInput.checked = true;
+    syncAuthError.textContent = "";
+    syncAuthModal.classList.remove("hidden");
+    syncAuthModal.setAttribute("aria-hidden", "false");
+
+    const cleanup = (result) => {
+      syncAuthModal.classList.add("hidden");
+      syncAuthModal.setAttribute("aria-hidden", "true");
+      syncAuthSubmit.removeEventListener("click", submit);
+      syncAuthCancel.removeEventListener("click", cancel);
+      syncAuthClose.removeEventListener("click", cancel);
+      syncAuthModal.removeEventListener("click", backdrop);
+      syncCodeInput.removeEventListener("keydown", keydown);
+      resolve(result);
+    };
+    const cancel = () => cleanup(null);
+    const submit = () => {
+      const syncCode = syncCodeInput.value.trim();
+      if (!syncCode) {
+        syncAuthError.textContent = "请输入同步码。";
+        return;
+      }
+      cleanup({ syncCode, remember: Boolean(syncRememberInput.checked) });
+    };
+    const backdrop = (event) => {
+      if (event.target === syncAuthModal) {
+        cancel();
+      }
+    };
+    const keydown = (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submit();
+      }
+    };
+    syncAuthSubmit.addEventListener("click", submit);
+    syncAuthCancel.addEventListener("click", cancel);
+    syncAuthClose.addEventListener("click", cancel);
+    syncAuthModal.addEventListener("click", backdrop);
+    syncCodeInput.addEventListener("keydown", keydown);
+    setTimeout(() => syncCodeInput.focus(), 0);
+  });
+}
+
+async function requestSyncAuth() {
+  const input = await openSyncAuthModal();
+  if (!input) {
+    return null;
+  }
+  const baseUrl = getAiWorkerBaseUrl();
+  if (!baseUrl) {
+    throw new Error("sync_unavailable");
+  }
+  const response = await fetch(`${baseUrl}/sync/auth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ syncCode: input.syncCode, rememberDays: input.remember ? SYNC_REMEMBER_DAYS : 0 })
+  });
+  if (response.status === 403) {
+    throw new Error("sync_forbidden");
+  }
+  if (!response.ok) {
+    throw new Error("sync_unavailable");
+  }
+  const data = await response.json();
+  if (!data?.token || !Number.isFinite(data.expiresAt)) {
+    throw new Error("sync_unavailable");
+  }
+  storeSyncAuth(data.token, data.expiresAt, input.remember);
+  return { token: data.token, expiresAt: data.expiresAt };
+}
+
+async function ensureSyncAuth() {
+  const stored = getStoredSyncAuth();
+  if (stored) {
+    return stored;
+  }
+  return requestSyncAuth();
+}
+
+async function fetchSyncEndpoint(path, options = {}) {
+  const auth = await ensureSyncAuth();
+  if (!auth) {
+    return null;
+  }
+  const baseUrl = getAiWorkerBaseUrl();
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${auth.token}`
+    }
+  });
+  if (response.status === 401) {
+    clearSyncAuth(false);
+    throw new Error("sync_expired");
+  }
+  if (!response.ok) {
+    throw new Error("sync_unavailable");
+  }
+  return response.json();
+}
+
+async function refreshSyncStatus() {
+  setSyncMessage("正在查看云端状态...");
+  const status = await fetchSyncEndpoint("/sync/status");
+  if (!status) {
+    setSyncMessage("已取消同步授权。");
+    return null;
+  }
+  renderSyncPanel(status);
+  if (status.exists) {
+    localStorage.setItem(SYNC_LAST_CLOUD_UPDATED_AT_KEY, status.updatedAt || "");
+    const lastLocal = localStorage.getItem(SYNC_LAST_UPLOAD_AT_KEY) || localStorage.getItem(SYNC_LAST_RESTORE_AT_KEY) || "";
+    const cloudTime = Date.parse(status.updatedAt || "");
+    const localTime = Date.parse(lastLocal || "");
+    const hint = Number.isFinite(cloudTime) && (!Number.isFinite(localTime) || cloudTime > localTime)
+      ? "云端有较新的备份。"
+      : `云端备份时间：${formatSyncTime(status.updatedAt)}。`;
+    setSyncMessage(hint);
+  } else {
+    setSyncMessage("云端暂无备份。");
+  }
+  return status;
+}
+
+function getSyncStatePayload() {
+  return cloneJson(state, {});
+}
+
+function validateCloudStateData(data) {
+  return data && typeof data === "object" && Array.isArray(data.students) && Array.isArray(data.seatOrder);
+}
+
+async function uploadToCloud() {
+  const confirmed = await openAiChoiceModal({
+    title: "上传到云端",
+    message: "将用本机数据覆盖云端备份。其他设备之后从云端恢复时，会看到这份数据。是否继续？",
+    actions: [
+      { label: "取消", value: "cancel" },
+      { label: "上传", value: "upload", recommended: true }
+    ]
+  });
+  if (confirmed !== "upload") {
+    return;
+  }
+  const payload = {
+    version: SYNC_VERSION,
+    updatedAt: new Date().toISOString(),
+    deviceName: getSyncDeviceName(),
+    data: getSyncStatePayload()
+  };
+  const size = new Blob([JSON.stringify(payload)]).size;
+  if (size > SYNC_MAX_CLIENT_BYTES) {
+    setSyncMessage("本机数据过大，暂时无法同步。请先导出本机备份。", "error");
+    return;
+  }
+  setSyncMessage("正在上传到云端...");
+  const result = await fetchSyncEndpoint("/sync/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!result) {
+    return;
+  }
+  const uploadedAt = result.updatedAt || new Date().toISOString();
+  localStorage.setItem(SYNC_LAST_UPLOAD_AT_KEY, uploadedAt);
+  localStorage.setItem(SYNC_LAST_CLOUD_UPDATED_AT_KEY, uploadedAt);
+  renderSyncPanel({ exists: true, updatedAt: uploadedAt, deviceName: payload.deviceName });
+  setSyncMessage(`已上传到云端：${formatSyncTime(uploadedAt)}。`, "success");
+  showToast("已上传到云端", "success");
+}
+
+async function restoreFromCloud() {
+  const status = await refreshSyncStatus();
+  if (!status) {
+    return;
+  }
+  if (!status.exists) {
+    setSyncMessage("云端暂无备份，请先在另一台设备上传。", "error");
+    return;
+  }
+  const choice = await openAiChoiceModal({
+    title: "从云端恢复",
+    message: "将用云端数据覆盖本机当前数据。建议先导出本机备份，以防误覆盖。",
+    actions: [
+      { label: "取消", value: "cancel" },
+      { label: "先导出本机备份", value: "backup" },
+      { label: "恢复云端数据", value: "restore", recommended: true, danger: true }
+    ]
+  });
+  if (choice === "cancel" || !choice) {
+    return;
+  }
+  if (choice === "backup") {
+    exportPreCloudRestoreBackup();
+    setSyncMessage("恢复前已自动导出本机备份。");
+    showToast("恢复前已自动导出本机备份", "success");
+    return;
+  }
+  exportPreCloudRestoreBackup();
+  setSyncMessage("正在从云端恢复...");
+  const cloud = await fetchSyncEndpoint("/sync/load");
+  if (!cloud || !validateCloudStateData(cloud.data)) {
+    throw new Error("sync_invalid_data");
+  }
+  state = cloud.data;
+  normalizeState();
+  saveState();
+  backupReminderChecked = false;
+  renderAll();
+  const restoredAt = new Date().toISOString();
+  localStorage.setItem(SYNC_LAST_RESTORE_AT_KEY, restoredAt);
+  localStorage.setItem(SYNC_LAST_CLOUD_UPDATED_AT_KEY, cloud.updatedAt || "");
+  renderSyncPanel({ exists: true, updatedAt: cloud.updatedAt, deviceName: cloud.deviceName });
+  setSyncMessage(`已从云端恢复：${formatSyncTime(restoredAt)}。恢复前已自动导出本机备份。`, "success");
+  showToast("已从云端恢复", "success");
+}
+
+async function runSyncAction(action) {
+  try {
+    if (action === "status") {
+      await refreshSyncStatus();
+    } else if (action === "save") {
+      await uploadToCloud();
+    } else if (action === "load") {
+      await restoreFromCloud();
+    }
+  } catch (error) {
+    if (error.message === "sync_forbidden") {
+      setSyncMessage("同步码错误，请重新输入。", "error");
+      showToast("同步码错误，请重新输入", "error");
+      return;
+    }
+    if (error.message === "sync_expired") {
+      setSyncMessage("同步授权已过期，请重新输入同步码。", "error");
+      showToast("同步授权已过期", "error");
+      return;
+    }
+    if (error.message === "sync_invalid_data") {
+      setSyncMessage("云端数据格式异常，暂时无法恢复。", "error");
+      showToast("云同步暂时不可用", "error");
+      return;
+    }
+    setSyncMessage("网络不可用，暂时无法同步。", "error");
+    showToast("云同步暂时不可用，可先继续使用本机数据", "error");
+  }
+}
+
+function openSyncModal() {
+  if (!syncModal) {
+    return;
+  }
+  renderSyncPanel();
+  syncModal.classList.remove("hidden");
+  syncModal.setAttribute("aria-hidden", "false");
+}
+
+function closeSyncModal() {
+  syncModal?.classList.add("hidden");
+  syncModal?.setAttribute("aria-hidden", "true");
+}
+
 async function generateAiTrendAdvice(options = {}) {
   const studentId = options.studentId || activeStudentId;
   const force = Boolean(options.force);
@@ -8383,6 +8776,38 @@ if (installHelpModal) {
   });
 }
 
+if (cloudSyncBtn) {
+  cloudSyncBtn.addEventListener("click", openSyncModal);
+}
+
+if (syncClose) {
+  syncClose.addEventListener("click", closeSyncModal);
+}
+
+if (syncModal) {
+  syncModal.addEventListener("click", (event) => {
+    if (event.target === syncModal) {
+      closeSyncModal();
+    }
+  });
+}
+
+if (syncStatusBtn) {
+  syncStatusBtn.addEventListener("click", () => runSyncAction("status"));
+}
+
+if (syncSaveBtn) {
+  syncSaveBtn.addEventListener("click", () => runSyncAction("save"));
+}
+
+if (syncLoadBtn) {
+  syncLoadBtn.addEventListener("click", () => runSyncAction("load"));
+}
+
+if (syncClearAuthBtn) {
+  syncClearAuthBtn.addEventListener("click", () => clearSyncAuth(true));
+}
+
 if (logoutBtn) {
   logoutBtn.addEventListener("click", () => {
     clearAuth();
@@ -9062,6 +9487,9 @@ document.addEventListener("keydown", (event) => {
     }
     if (installHelpModal && !installHelpModal.classList.contains("hidden")) {
       closeInstallHelpModal();
+    }
+    if (syncModal && !syncModal.classList.contains("hidden")) {
+      closeSyncModal();
     }
     if (shufflePreviewModal && !shufflePreviewModal.classList.contains("hidden")) {
       closeShufflePreview();

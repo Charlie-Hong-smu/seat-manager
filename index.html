@@ -59,6 +59,7 @@
             <div class="account-menu-popover">
               <button id="installAppBtn" class="ghost install-app-btn" type="button">安装到桌面</button>
               <button id="changePasswordBtn" class="ghost change-password-btn" type="button">修改密码</button>
+              <button id="cloudSyncBtn" class="ghost cloud-sync-btn" type="button">云同步</button>
               <button id="logoutBtn" class="ghost logout-btn" type="button">退出登录</button>
             </div>
           </details>
@@ -541,6 +542,71 @@
         </div>
         <p id="aiChoiceMessage" class="ai-choice-message"></p>
         <div id="aiChoiceActions" class="modal-footer ai-choice-actions"></div>
+      </div>
+    </div>
+
+    <div id="syncModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card sync-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">云端备份恢复</div>
+            <h3>云同步</h3>
+          </div>
+          <button id="syncClose" class="ghost" type="button">关闭</button>
+        </div>
+        <div class="sync-note">
+          用于在办公室和家里电脑之间同步学生、座位、成绩和历史数据。
+        </div>
+        <div class="sync-status-grid">
+          <div class="sync-status-item">
+            <span>当前设备</span>
+            <strong id="syncDeviceName">本机</strong>
+          </div>
+          <div class="sync-status-item">
+            <span>云端状态</span>
+            <strong id="syncCloudStatus">尚未查看</strong>
+          </div>
+          <div class="sync-status-item">
+            <span>云端更新时间</span>
+            <strong id="syncCloudUpdatedAt">--</strong>
+          </div>
+          <div class="sync-status-item">
+            <span>本机上次同步</span>
+            <strong id="syncLastLocalAt">--</strong>
+          </div>
+        </div>
+        <div id="syncMessage" class="sync-message" aria-live="polite">打开后不会自动上传或恢复，请手动选择操作。</div>
+        <div class="modal-footer sync-actions">
+          <button id="syncStatusBtn" class="ghost" type="button">查看云端状态</button>
+          <button id="syncClearAuthBtn" class="ghost" type="button">清除同步授权</button>
+          <button id="syncLoadBtn" class="secondary-action" type="button">从云端恢复</button>
+          <button id="syncSaveBtn" class="primary" type="button">上传到云端</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="syncAuthModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card ai-auth-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">云同步授权</div>
+            <h3>输入同步码</h3>
+          </div>
+          <button id="syncAuthClose" class="ghost" type="button">关闭</button>
+        </div>
+        <div class="ai-auth-note">
+          同步码只用于换取临时同步授权，不会保存 Cloudflare 密钥。
+        </div>
+        <label class="form-row">
+          <span class="muted">同步码</span>
+          <input id="syncCodeInput" class="input" type="password" autocomplete="off" placeholder="请输入同步码" />
+        </label>
+        <label class="checkbox compact"><input id="syncRememberInput" type="checkbox" checked />在这台设备上记住 30 天</label>
+        <div id="syncAuthError" class="login-error" aria-live="polite"></div>
+        <div class="modal-footer">
+          <button id="syncAuthCancel" class="ghost" type="button">取消</button>
+          <button id="syncAuthSubmit" class="primary" type="button">启用同步</button>
+        </div>
       </div>
     </div>
 

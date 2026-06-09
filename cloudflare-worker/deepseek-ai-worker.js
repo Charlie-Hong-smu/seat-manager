@@ -1,8 +1,10 @@
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 20 * 1024;
+const SYNC_MAX_BODY_BYTES = 5 * 1024 * 1024;
 const DAILY_LIMIT = 100;
 const MODEL = "deepseek-v4-flash";
+const SYNC_STATE_KEY = "seat-manager:single-teacher:state";
 
 const dailyUsage = new Map();
 
@@ -15,11 +17,15 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/sync/")) {
+      return handleSyncRoute(request, env, corsHeaders, url.pathname);
+    }
+
     if (request.method !== "POST") {
       return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
     }
 
-    const url = new URL(request.url);
     if (url.pathname === "/auth") {
       return handleAuth(request, env, corsHeaders);
     }
@@ -35,6 +41,133 @@ export default {
     return jsonResponse({ error: "not_found" }, 404, corsHeaders);
   }
 };
+
+async function handleSyncRoute(request, env, corsHeaders, pathname) {
+  if (pathname === "/sync/auth") {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
+    }
+    return handleSyncAuth(request, env, corsHeaders);
+  }
+
+  if (!["GET", "POST"].includes(request.method)) {
+    return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
+  }
+  const verified = await verifySyncRequest(request, env);
+  if (!verified) {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+  if (!env.SEAT_MANAGER_KV) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  if (pathname === "/sync/status") {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
+    }
+    return handleSyncStatus(env, corsHeaders);
+  }
+  if (pathname === "/sync/save") {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
+    }
+    return handleSyncSave(request, env, corsHeaders);
+  }
+  if (pathname === "/sync/load") {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
+    }
+    return handleSyncLoad(env, corsHeaders);
+  }
+  return jsonResponse({ error: "not_found" }, 404, corsHeaders);
+}
+
+async function handleSyncAuth(request, env, corsHeaders) {
+  if ((!env.SYNC_ACCESS_CODE && !env.SYNC_ACCESS_CODE_HASH) || !env.SYNC_TOKEN_SECRET) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const syncCode = String(body.value.syncCode || "");
+  let allowed = false;
+  if (env.SYNC_ACCESS_CODE_HASH) {
+    allowed = timingSafeEqual(await sha256Hex(syncCode), env.SYNC_ACCESS_CODE_HASH);
+  } else {
+    allowed = timingSafeEqual(syncCode, env.SYNC_ACCESS_CODE);
+  }
+  if (!allowed) {
+    return jsonResponse({ error: "forbidden" }, 403, corsHeaders);
+  }
+  const rememberDays = Number(body.value.rememberDays);
+  const ttl = rememberDays > 0 ? Math.min(rememberDays, 30) * 24 * 60 * 60 * 1000 : SESSION_TOKEN_TTL_MS;
+  const expiresAt = Date.now() + ttl;
+  const token = await signToken({ exp: expiresAt, scope: "seat-sync" }, env.SYNC_TOKEN_SECRET);
+  return jsonResponse({ token, expiresAt }, 200, corsHeaders);
+}
+
+async function verifySyncRequest(request, env) {
+  if (!env.SYNC_TOKEN_SECRET) {
+    return false;
+  }
+  const token = getBearerToken(request);
+  const verified = token ? await verifyToken(token, env.SYNC_TOKEN_SECRET) : null;
+  return Boolean(verified && verified.exp > Date.now() && verified.scope === "seat-sync");
+}
+
+async function handleSyncStatus(env, corsHeaders) {
+  const saved = await env.SEAT_MANAGER_KV.get(SYNC_STATE_KEY, { type: "json" });
+  if (!saved) {
+    return jsonResponse({ exists: false }, 200, corsHeaders);
+  }
+  return jsonResponse({
+    exists: true,
+    updatedAt: saved.updatedAt || "",
+    deviceName: toText(saved.deviceName || "").slice(0, 60),
+    version: Number(saved.version) || 1,
+    sizeBytes: Number(saved.sizeBytes) || 0
+  }, 200, corsHeaders);
+}
+
+async function handleSyncSave(request, env, corsHeaders) {
+  const body = await readJsonBody(request, SYNC_MAX_BODY_BYTES);
+  if (!body.ok || !isValidSyncSavePayload(body.value)) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const updatedAt = new Date().toISOString();
+  const payload = {
+    version: Number(body.value.version) || 1,
+    updatedAt,
+    deviceName: toText(body.value.deviceName || "").slice(0, 60) || "未知设备",
+    data: body.value.data
+  };
+  payload.sizeBytes = new TextEncoder().encode(JSON.stringify(payload)).length;
+  if (payload.sizeBytes > SYNC_MAX_BODY_BYTES) {
+    return jsonResponse({ error: "payload_too_large" }, 413, corsHeaders);
+  }
+  await env.SEAT_MANAGER_KV.put(SYNC_STATE_KEY, JSON.stringify(payload));
+  return jsonResponse({
+    ok: true,
+    updatedAt,
+    deviceName: payload.deviceName,
+    version: payload.version,
+    sizeBytes: payload.sizeBytes
+  }, 200, corsHeaders);
+}
+
+async function handleSyncLoad(env, corsHeaders) {
+  const saved = await env.SEAT_MANAGER_KV.get(SYNC_STATE_KEY, { type: "json" });
+  if (!saved) {
+    return jsonResponse({ error: "not_found" }, 404, corsHeaders);
+  }
+  return jsonResponse({
+    version: Number(saved.version) || 1,
+    updatedAt: saved.updatedAt || "",
+    deviceName: toText(saved.deviceName || "").slice(0, 60),
+    data: saved.data
+  }, 200, corsHeaders);
+}
 
 async function handleAuth(request, env, corsHeaders) {
   if (!env.AI_ACCESS_CODE_HASH || !env.TOKEN_SECRET) {
@@ -232,10 +365,10 @@ async function handleSuggestScoreMapping(request, env, corsHeaders) {
   }
 }
 
-async function readJsonBody(request) {
+async function readJsonBody(request, maxBytes = MAX_BODY_BYTES) {
   const clone = request.clone();
   const text = await clone.text();
-  if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) {
+  if (new TextEncoder().encode(text).length > maxBytes) {
     return { ok: false };
   }
   try {
@@ -243,6 +376,18 @@ async function readJsonBody(request) {
   } catch (error) {
     return { ok: false };
   }
+}
+
+function isValidSyncSavePayload(payload) {
+  return (
+    payload &&
+    typeof payload === "object" &&
+    Number(payload.version) >= 1 &&
+    typeof payload.data === "object" &&
+    payload.data !== null &&
+    Array.isArray(payload.data.students) &&
+    Array.isArray(payload.data.seatOrder)
+  );
 }
 
 function isValidTrendPayload(payload) {
@@ -280,11 +425,20 @@ function isValidScoreMappingPayload(payload) {
 }
 
 function getCorsHeaders(origin, env) {
-  const allowed = env.ALLOWED_ORIGIN || "*";
-  const allowOrigin = allowed === "*" || allowed === origin ? origin || "*" : allowed;
+  const defaultAllowed = "https://charlie-hong-smu.github.io";
+  const allowedList = String(env.ALLOWED_ORIGIN || defaultAllowed)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const localhostAllowed = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  const allowOrigin = allowedList.includes("*")
+    ? origin || "*"
+    : allowedList.includes(origin) || localhostAllowed
+      ? origin
+      : defaultAllowed;
   return {
     "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Content-Type": "application/json"
   };
