@@ -189,6 +189,25 @@ const existingExamSelect = document.getElementById("existingExamSelect");
 const replaceExamBtn = document.getElementById("replaceExamBtn");
 const deleteExamBtn = document.getElementById("deleteExamBtn");
 const savedExamList = document.getElementById("savedExamList");
+const mainBoardPanel = document.getElementById("mainBoardPanel");
+const scoreDashboardSubtitle = document.getElementById("scoreDashboardSubtitle");
+const scoreDashboardExamSelect = document.getElementById("scoreDashboardExamSelect");
+const scoreDashboardMetricSelect = document.getElementById("scoreDashboardMetricSelect");
+const scoreDashboardTableBtn = document.getElementById("scoreDashboardTableBtn");
+const scorePassThreshold = document.getElementById("scorePassThreshold");
+const scoreGoodThreshold = document.getElementById("scoreGoodThreshold");
+const scoreExcellentThreshold = document.getElementById("scoreExcellentThreshold");
+const scoreDashboardEmpty = document.getElementById("scoreDashboardEmpty");
+const scoreDashboardContent = document.getElementById("scoreDashboardContent");
+const scoreDashboardStats = document.getElementById("scoreDashboardStats");
+const scoreRankTitle = document.getElementById("scoreRankTitle");
+const scoreRankMeta = document.getElementById("scoreRankMeta");
+const scoreDashboardRankList = document.getElementById("scoreDashboardRankList");
+const scoreDistributionTitle = document.getElementById("scoreDistributionTitle");
+const scoreDistributionMeta = document.getElementById("scoreDistributionMeta");
+const scoreDistributionChart = document.getElementById("scoreDistributionChart");
+const scoreSubjectMeta = document.getElementById("scoreSubjectMeta");
+const scoreSubjectAverages = document.getElementById("scoreSubjectAverages");
 const autoAcademicEnabled = document.getElementById("autoAcademicEnabled");
 const autoAcademicRangeMode = document.getElementById("autoAcademicRangeMode");
 const autoAcademicRecentWrap = document.getElementById("autoAcademicRecentWrap");
@@ -285,6 +304,11 @@ const savedExamSearchResults = document.getElementById("savedExamSearchResults")
 const savedExamSearchStatus = document.getElementById("savedExamSearchStatus");
 const savedExamTableWrap = document.getElementById("savedExamTableWrap");
 const savedExamTableClose = document.getElementById("savedExamTableClose");
+const scoreBucketModal = document.getElementById("scoreBucketModal");
+const scoreBucketTitle = document.getElementById("scoreBucketTitle");
+const scoreBucketMeta = document.getElementById("scoreBucketMeta");
+const scoreBucketList = document.getElementById("scoreBucketList");
+const scoreBucketClose = document.getElementById("scoreBucketClose");
 const trendDetailModal = document.getElementById("trendDetailModal");
 const trendDetailTitle = document.getElementById("trendDetailTitle");
 const trendDetailMeta = document.getElementById("trendDetailMeta");
@@ -4775,6 +4799,477 @@ function saveExamRecord() {
 function renderExamManager() {
   renderSavedExamList();
   renderLegacyExamManager();
+  renderScoreDashboard();
+}
+
+function getScoreDashboardThresholds() {
+  const pass = Number(scorePassThreshold?.value || 60);
+  const good = Number(scoreGoodThreshold?.value || 75);
+  const excellent = Number(scoreExcellentThreshold?.value || 90);
+  return {
+    pass: Number.isFinite(pass) ? pass : 60,
+    good: Number.isFinite(good) ? good : 75,
+    excellent: Number.isFinite(excellent) ? excellent : 90
+  };
+}
+
+function getScoreDashboardExamOptions() {
+  return getSavedExamRecords().sort((a, b) => {
+    const dateCompare = (b.date || "").localeCompare(a.date || "");
+    return dateCompare || (b.savedAt || "").localeCompare(a.savedAt || "");
+  });
+}
+
+function getScoreDashboardTotal(entry) {
+  const directTotal = parseScoreValue(entry.total?.score);
+  if (Number.isFinite(directTotal)) {
+    return { value: directTotal, computed: false };
+  }
+  const fallback = sumExamScores(entry.scores || {});
+  return Number.isFinite(fallback) ? { value: fallback, computed: true } : { value: null, computed: false };
+}
+
+function getScoreDashboardStudentId(name) {
+  const normalized = normalizeName(name);
+  if (!normalized) {
+    return "";
+  }
+  const student = state.students.find((item) => {
+    const keys = [normalizeName(item.name), ...(item.aliases || []).map((alias) => normalizeName(alias))];
+    return keys.includes(normalized);
+  });
+  return student?.id || "";
+}
+
+function buildScoreDashboardRows(exam) {
+  const metric = getScoreDashboardMetric(exam);
+  return (exam.entries || [])
+    .map((entry) => {
+      const total = getScoreDashboardTotal(entry);
+      const metricValue = metric.type === "total" ? total.value : parseScoreValue(entry.scores?.[metric.subject]);
+      const metricRankClass =
+        metric.type === "total" ? parseRankValue(entry.total?.rankClass) : parseRankValue(entry.scores?.[metric.subject]?.rankClass);
+      const metricRankSchool =
+        metric.type === "total" ? parseRankValue(entry.total?.rankSchool) : parseRankValue(entry.scores?.[metric.subject]?.rankSchool);
+      const subjectScores = (exam.subjects || [])
+        .map((subject) => ({ subject, score: parseScoreValue(entry.scores?.[subject]) }))
+        .filter((item) => Number.isFinite(item.score));
+      const sortedSubjects = [...subjectScores].sort((a, b) => b.score - a.score);
+      const strong = sortedSubjects[0]?.subject || "";
+      const weak = sortedSubjects[sortedSubjects.length - 1]?.subject || "";
+      return {
+        name: entry.name || "",
+        studentId: getScoreDashboardStudentId(entry.name || ""),
+        total: total.value,
+        computedTotal: total.computed,
+        metricValue,
+        metricComputed: metric.type === "total" && total.computed,
+        rankClass: metricRankClass,
+        rankSchool: metricRankSchool,
+        strong,
+        weak,
+        scores: entry.scores || {}
+      };
+    })
+    .sort((a, b) => {
+      if (Number.isFinite(b.metricValue) && Number.isFinite(a.metricValue)) {
+        return b.metricValue - a.metricValue;
+      }
+      if (Number.isFinite(b.metricValue)) {
+        return 1;
+      }
+      if (Number.isFinite(a.metricValue)) {
+        return -1;
+      }
+      return a.name.localeCompare(b.name, "zh-Hans-CN");
+    });
+}
+
+function getScoreDashboardMetric(exam) {
+  const value = scoreDashboardMetricSelect?.value || "total";
+  if (value === "total") {
+    return { type: "total", key: "total", label: "总分" };
+  }
+  const subjects = Array.isArray(exam?.subjects) ? exam.subjects : [];
+  const subject = subjects.includes(value) ? value : subjects[0] || "";
+  return subject ? { type: "subject", key: subject, subject, label: subject } : { type: "total", key: "total", label: "总分" };
+}
+
+function renderScoreDashboardMetricOptions(exam) {
+  if (!scoreDashboardMetricSelect) {
+    return;
+  }
+  const previousValue = scoreDashboardMetricSelect.value || "total";
+  scoreDashboardMetricSelect.innerHTML = "";
+  const totalOption = document.createElement("option");
+  totalOption.value = "total";
+  totalOption.textContent = "按总分";
+  scoreDashboardMetricSelect.appendChild(totalOption);
+  (exam.subjects || []).forEach((subject) => {
+    const option = document.createElement("option");
+    option.value = subject;
+    option.textContent = `按${subject}`;
+    scoreDashboardMetricSelect.appendChild(option);
+  });
+  scoreDashboardMetricSelect.value =
+    previousValue === "total" || (exam.subjects || []).includes(previousValue) ? previousValue : "total";
+}
+
+function formatDashboardNumber(value, digits = 1) {
+  return Number.isFinite(value) ? String(Number(value.toFixed(digits))) : "-";
+}
+
+function renderScoreDashboard() {
+  if (!scoreDashboardExamSelect || !scoreDashboardStats || !scoreDashboardContent || !scoreDashboardEmpty) {
+    return;
+  }
+  const exams = getScoreDashboardExamOptions();
+  const previousValue = scoreDashboardExamSelect.value;
+  scoreDashboardExamSelect.innerHTML = "";
+
+  if (!exams.length) {
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = "暂无已保存考试";
+    scoreDashboardExamSelect.appendChild(emptyOption);
+    scoreDashboardContent.classList.add("hidden");
+    scoreDashboardEmpty.classList.remove("hidden");
+    if (scoreDashboardSubtitle) {
+      scoreDashboardSubtitle.textContent = "请先在左侧上传并保存一次成绩。";
+    }
+    if (scoreDashboardTableBtn) {
+      scoreDashboardTableBtn.disabled = true;
+    }
+    return;
+  }
+
+  exams.forEach((exam) => {
+    const option = document.createElement("option");
+    option.value = exam.id;
+    option.textContent = `${exam.name || "考试"}${exam.date ? ` · ${exam.date}` : ""}`;
+    scoreDashboardExamSelect.appendChild(option);
+  });
+
+  const selectedExam = exams.find((exam) => exam.id === previousValue) || exams[0];
+  scoreDashboardExamSelect.value = selectedExam.id;
+  if (scoreDashboardTableBtn) {
+    scoreDashboardTableBtn.disabled = false;
+  }
+  renderScoreDashboardMetricOptions(selectedExam);
+  scoreDashboardContent.classList.remove("hidden");
+  scoreDashboardEmpty.classList.add("hidden");
+  renderScoreDashboardExam(selectedExam);
+}
+
+function renderScoreDashboardExam(exam) {
+  const thresholds = getScoreDashboardThresholds();
+  const metric = getScoreDashboardMetric(exam);
+  const rows = buildScoreDashboardRows(exam);
+  const validRows = rows.filter((row) => Number.isFinite(row.metricValue));
+  const values = validRows.map((row) => row.metricValue);
+  const sum = values.reduce((total, value) => total + value, 0);
+  const average = values.length ? sum / values.length : null;
+  const max = values.length ? Math.max(...values) : null;
+  const min = values.length ? Math.min(...values) : null;
+  const rate = (count) => (validRows.length ? `${formatDashboardNumber((count / validRows.length) * 100)}%` : "-");
+  const passCount = validRows.filter((row) => row.metricValue >= thresholds.pass).length;
+  const goodCount = validRows.filter((row) => row.metricValue >= thresholds.good).length;
+  const excellentCount = validRows.filter((row) => row.metricValue >= thresholds.excellent).length;
+  const missingCount = rows.length - validRows.length;
+
+  if (scoreDashboardSubtitle) {
+    scoreDashboardSubtitle.textContent = `${exam.date || "未填写日期"} · ${rows.length || 0} 名学生 · ${(exam.subjects || []).length} 个科目 · ${metric.label}`;
+  }
+  renderScoreDashboardStats([
+    { label: "最高分", value: formatDashboardNumber(max), note: getScoreNameByMetric(validRows, max), tone: "good" },
+    { label: "最低分", value: formatDashboardNumber(min), note: getScoreNameByMetric(validRows, min), tone: "danger" },
+    { label: "平均分", value: formatDashboardNumber(average), note: `${validRows.length} 个有效${metric.label}`, tone: "" },
+    { label: "参考人数", value: String(rows.length || 0), note: missingCount ? `${missingCount} 人缺${metric.label}` : `${metric.label}数据完整`, tone: "" },
+    { label: "及格率", value: rate(passCount), note: `>= ${thresholds.pass}`, tone: "good" },
+    { label: "良好率", value: rate(goodCount), note: `>= ${thresholds.good}`, tone: "warn" },
+    { label: "优秀率", value: rate(excellentCount), note: `>= ${thresholds.excellent}`, tone: "good" },
+    { label: `缺失${metric.label}`, value: String(missingCount), note: "不参与率统计", tone: missingCount ? "danger" : "" }
+  ]);
+  renderScoreDashboardRankList(rows, metric);
+  renderScoreDistribution(validRows, metric);
+  renderSubjectAverages(exam);
+}
+
+function getScoreNameByMetric(rows, value) {
+  if (!Number.isFinite(value)) {
+    return "暂无数据";
+  }
+  const row = rows.find((item) => item.metricValue === value);
+  return row?.name || "";
+}
+
+function renderScoreDashboardStats(items) {
+  scoreDashboardStats.innerHTML = "";
+  items.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = `score-stat-card ${item.tone || ""}`.trim();
+    const label = document.createElement("div");
+    label.className = "score-stat-label";
+    label.textContent = item.label;
+    const value = document.createElement("div");
+    value.className = "score-stat-value";
+    value.textContent = item.value;
+    const note = document.createElement("div");
+    note.className = "score-stat-note";
+    note.textContent = item.note || "";
+    card.append(label, value, note);
+    scoreDashboardStats.appendChild(card);
+  });
+}
+
+function renderScoreDashboardRankList(rows, metric) {
+  if (!scoreDashboardRankList) {
+    return;
+  }
+  scoreDashboardRankList.innerHTML = "";
+  if (scoreRankTitle) {
+    scoreRankTitle.textContent = `学生${metric.label}排行`;
+  }
+  if (scoreRankMeta) {
+    scoreRankMeta.textContent = `${rows.filter((row) => Number.isFinite(row.metricValue)).length} 人有${metric.label}`;
+  }
+  rows.forEach((row, index) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "score-rank-row";
+    item.disabled = !row.studentId;
+    if (row.studentId) {
+      item.addEventListener("click", () => openRecordModal(row.studentId));
+    }
+    const rank = document.createElement("div");
+    rank.className = "score-rank-index";
+    rank.textContent = `#${index + 1}`;
+    const main = document.createElement("div");
+    main.className = "score-rank-main";
+    const name = document.createElement("div");
+    name.className = "score-rank-name";
+    name.textContent = row.name || "未命名";
+    const tags = document.createElement("div");
+    tags.className = "score-rank-tags";
+    const rankText = [
+      row.rankClass ? `班排 ${row.rankClass}` : "",
+      row.rankSchool ? `校排 ${row.rankSchool}` : "",
+      row.strong ? `强项 ${row.strong}` : "",
+      row.weak && row.weak !== row.strong ? `待补 ${row.weak}` : ""
+    ].filter(Boolean);
+    tags.textContent = rankText.join(" · ") || "暂无排名或科目摘要";
+    main.append(name, tags);
+    const score = document.createElement("div");
+    score.className = "score-rank-score";
+    score.textContent = Number.isFinite(row.metricValue) ? formatDashboardNumber(row.metricValue) : "-";
+    const scoreNote = document.createElement("span");
+    scoreNote.textContent = row.metricComputed ? "科目合计" : metric.label;
+    score.appendChild(scoreNote);
+    item.append(rank, main, score);
+    scoreDashboardRankList.appendChild(item);
+  });
+}
+
+function renderScoreDistribution(rows, metric) {
+  if (!scoreDistributionChart) {
+    return;
+  }
+  scoreDistributionChart.innerHTML = "";
+  if (scoreDistributionTitle) {
+    scoreDistributionTitle.textContent = `${metric.label}分布`;
+  }
+  if (scoreDistributionMeta) {
+    scoreDistributionMeta.textContent = `${rows.length} 个有效${metric.label}`;
+  }
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "暂无可统计的总分。";
+    scoreDistributionChart.appendChild(empty);
+    return;
+  }
+  const buckets = buildScoreDistributionBuckets(rows).map((bucket) => ({
+    ...bucket,
+    metricLabel: metric.label
+  }));
+  const maxCount = Math.max(...buckets.map((bucket) => bucket.students.length), 1);
+  const chart = document.createElement("div");
+  chart.className = "score-histogram";
+  const yAxis = document.createElement("div");
+  yAxis.className = "score-histogram-y";
+  [maxCount, Math.ceil(maxCount / 2), 0].forEach((value) => {
+    const tick = document.createElement("span");
+    tick.textContent = String(value);
+    yAxis.appendChild(tick);
+  });
+  const plot = document.createElement("div");
+  plot.className = "score-histogram-plot";
+  plot.style.setProperty("--bucket-count", String(buckets.length));
+  buckets.forEach((bucket) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "score-histogram-bar";
+    button.disabled = bucket.students.length === 0;
+    button.style.setProperty("--bar-height", `${Math.max(4, (bucket.students.length / maxCount) * 100)}%`);
+    button.setAttribute("aria-label", `${bucket.label}，${bucket.students.length} 人`);
+    button.addEventListener("click", () => openScoreBucketModal(bucket));
+    const fill = document.createElement("span");
+    fill.className = "score-histogram-fill";
+    const count = document.createElement("strong");
+    count.textContent = String(bucket.students.length);
+    const label = document.createElement("small");
+    const minLabel = document.createElement("span");
+    minLabel.textContent = formatBucketEdge(bucket.min);
+    const maxLabel = document.createElement("span");
+    maxLabel.textContent = formatBucketEdge(bucket.max);
+    label.append(minLabel, maxLabel);
+    button.append(fill, count, label);
+    plot.appendChild(button);
+  });
+  chart.append(yAxis, plot);
+  scoreDistributionChart.appendChild(chart);
+}
+
+function buildScoreDistributionBuckets(rows) {
+  const values = rows.map((row) => row.metricValue).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  const min = values[0];
+  const max = values[values.length - 1];
+  const spread = Math.max(max - min, 1);
+  const targetBucketCount = Math.min(8, Math.max(5, Math.ceil(Math.sqrt(values.length))));
+  const rawStep = spread / targetBucketCount;
+  const niceBases = [1, 2, 2.5, 5, 10];
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep || 1));
+  const niceStep = niceBases.find((base) => base * magnitude >= rawStep) * magnitude;
+  const step = Math.max(1, niceStep);
+  const start = Math.floor(min / step) * step;
+  const end = Math.ceil(max / step) * step;
+  const bucketCount = Math.max(1, Math.round((end - start) / step));
+  const buckets = Array.from({ length: bucketCount }, (_, index) => {
+    const bucketMin = start + index * step;
+    const bucketMax = index === bucketCount - 1 ? end : start + (index + 1) * step;
+    return {
+      min: bucketMin,
+      max: bucketMax,
+      label: `${formatBucketEdge(bucketMin)}-${formatBucketEdge(bucketMax)}`,
+      students: []
+    };
+  });
+  rows.forEach((row) => {
+    const index = Math.min(Math.floor((row.metricValue - start) / step), buckets.length - 1);
+    buckets[Math.max(0, index)].students.push(row);
+  });
+  return buckets;
+}
+
+function formatBucketEdge(value) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
+}
+
+function openScoreBucketModal(bucket) {
+  if (!scoreBucketModal || !scoreBucketList) {
+    return;
+  }
+  const metricLabel = bucket.metricLabel || "分数";
+  scoreBucketTitle.textContent = `${bucket.label} ${metricLabel}`;
+  if (scoreBucketMeta) {
+    scoreBucketMeta.textContent = `${bucket.students.length} 名学生 · 点击学生可查看详情`;
+  }
+  scoreBucketList.innerHTML = "";
+  bucket.students
+    .slice()
+    .sort((a, b) => b.metricValue - a.metricValue)
+    .forEach((student, index) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "score-bucket-row";
+      row.disabled = !student.studentId;
+      if (student.studentId) {
+        row.addEventListener("click", () => {
+          openRecordModal(student.studentId);
+        });
+      }
+      const rank = document.createElement("span");
+      rank.className = "score-bucket-rank";
+      rank.textContent = `#${index + 1}`;
+      const name = document.createElement("strong");
+      name.textContent = student.name || "未命名";
+      const meta = document.createElement("span");
+      meta.textContent = [
+        student.rankClass ? `班排 ${student.rankClass}` : "",
+        student.strong ? `强项 ${student.strong}` : "",
+        student.weak && student.weak !== student.strong ? `待补 ${student.weak}` : ""
+      ].filter(Boolean).join(" · ");
+      const score = document.createElement("b");
+      score.textContent = formatDashboardNumber(student.metricValue);
+      row.append(rank, name, meta, score);
+      scoreBucketList.appendChild(row);
+    });
+  scoreBucketModal.classList.remove("hidden");
+  scoreBucketModal.setAttribute("aria-hidden", "false");
+}
+
+function closeScoreBucketModal() {
+  if (!scoreBucketModal) {
+    return;
+  }
+  scoreBucketModal.classList.add("hidden");
+  scoreBucketModal.setAttribute("aria-hidden", "true");
+}
+
+function renderSubjectAverages(exam) {
+  if (!scoreSubjectAverages) {
+    return;
+  }
+  scoreSubjectAverages.innerHTML = "";
+  const subjects = exam.subjects || [];
+  if (scoreSubjectMeta) {
+    scoreSubjectMeta.textContent = `${subjects.length} 个科目`;
+  }
+  if (!subjects.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "暂无科目成绩。";
+    scoreSubjectAverages.appendChild(empty);
+    return;
+  }
+  const subjectStats = subjects.map((subject) => {
+    const values = (exam.entries || [])
+      .map((entry) => parseScoreValue(entry.scores?.[subject]))
+      .filter((value) => Number.isFinite(value));
+    const average = values.length ? values.reduce((total, value) => total + value, 0) / values.length : null;
+    return { subject, average, count: values.length };
+  });
+  const maxAverage = Math.max(...subjectStats.map((item) => item.average || 0), 1);
+  subjectStats.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "score-subject-row";
+    const name = document.createElement("div");
+    name.className = "score-subject-name";
+    name.textContent = item.subject;
+    const track = document.createElement("div");
+    track.className = "score-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "score-bar-fill";
+    fill.style.width = Number.isFinite(item.average) ? `${Math.max(4, (item.average / maxAverage) * 100)}%` : "0";
+    track.appendChild(fill);
+    const value = document.createElement("div");
+    value.className = "score-subject-value";
+    value.textContent = Number.isFinite(item.average) ? formatDashboardNumber(item.average) : "-";
+    row.append(name, track, value);
+    scoreSubjectAverages.appendChild(row);
+  });
+}
+
+function setMainBoardMode(mode) {
+  if (!mainBoardPanel) {
+    return;
+  }
+  const showScores = mode === "scores";
+  mainBoardPanel.classList.toggle("show-score-dashboard", showScores);
+  document.getElementById("appRoot")?.classList.toggle("score-dashboard-active", showScores);
+  if (showScores) {
+    renderScoreDashboard();
+  }
 }
 
 function renderSavedExamList() {
@@ -8374,7 +8869,8 @@ function initAnimatedDetails() {
     const viewport = details.closest(".sidebar-tab-viewport");
     const activeSection = details.closest(".sidebar-section.is-active-tab");
     if (viewport && activeSection) {
-      viewport.style.setProperty("--sidebar-tab-height", `${activeSection.scrollHeight}px`);
+      const isDesktop = window.matchMedia("(min-width: 1101px)").matches;
+      viewport.style.setProperty("--sidebar-tab-height", isDesktop ? "100%" : `${activeSection.scrollHeight}px`);
     }
   };
   const getDetailsScrollContainer = (details) => {
@@ -8591,7 +9087,8 @@ function initSidebarNavigation() {
 
     const activeSection = sections.find((section) => section.id === activeTabId);
     if (viewport && activeSection) {
-      viewport.style.setProperty("--sidebar-tab-height", `${activeSection.scrollHeight}px`);
+      const isDesktop = window.matchMedia("(min-width: 1101px)").matches;
+      viewport.style.setProperty("--sidebar-tab-height", isDesktop ? "100%" : `${activeSection.scrollHeight}px`);
     }
   };
 
@@ -8617,6 +9114,7 @@ function initSidebarNavigation() {
     });
     requestAnimationFrame(syncActiveTabMetrics);
     localStorage.setItem(SIDEBAR_ACTIVE_TAB_KEY, resolvedId);
+    setMainBoardMode(resolvedId === "sec-scores" ? "scores" : "seats");
   };
 
   setActiveTab(localStorage.getItem(SIDEBAR_ACTIVE_TAB_KEY) || "sec-common");
@@ -9037,8 +9535,52 @@ if (savedExamList) {
   });
 }
 
+if (scoreDashboardExamSelect) {
+  scoreDashboardExamSelect.addEventListener("change", () => {
+    const exam = getSavedExamRecords().find((item) => item.id === scoreDashboardExamSelect.value);
+    if (exam) {
+      renderScoreDashboardMetricOptions(exam);
+      renderScoreDashboardExam(exam);
+    }
+  });
+}
+
+if (scoreDashboardMetricSelect) {
+  scoreDashboardMetricSelect.addEventListener("change", () => {
+    const exam = getSavedExamRecords().find((item) => item.id === scoreDashboardExamSelect?.value);
+    if (exam) {
+      renderScoreDashboardExam(exam);
+    }
+  });
+}
+
+[scorePassThreshold, scoreGoodThreshold, scoreExcellentThreshold].forEach((input) => {
+  if (!input) {
+    return;
+  }
+  input.addEventListener("input", () => {
+    const exam = getSavedExamRecords().find((item) => item.id === scoreDashboardExamSelect?.value);
+    if (exam) {
+      renderScoreDashboardExam(exam);
+    }
+  });
+});
+
+if (scoreDashboardTableBtn) {
+  scoreDashboardTableBtn.addEventListener("click", () => {
+    const examId = scoreDashboardExamSelect?.value || "";
+    if (examId) {
+      openSavedExamTable(examId);
+    }
+  });
+}
+
 if (savedExamTableClose) {
   savedExamTableClose.addEventListener("click", closeSavedExamTable);
+}
+
+if (scoreBucketClose) {
+  scoreBucketClose.addEventListener("click", closeScoreBucketModal);
 }
 
 if (trendDetailClose) {
@@ -9083,6 +9625,14 @@ if (savedExamTableModal) {
   savedExamTableModal.addEventListener("click", (event) => {
     if (event.target === savedExamTableModal) {
       closeSavedExamTable();
+    }
+  });
+}
+
+if (scoreBucketModal) {
+  scoreBucketModal.addEventListener("click", (event) => {
+    if (event.target === scoreBucketModal) {
+      closeScoreBucketModal();
     }
   });
 }
@@ -9499,6 +10049,9 @@ document.addEventListener("keydown", (event) => {
     }
     if (savedExamTableModal && !savedExamTableModal.classList.contains("hidden")) {
       closeSavedExamTable();
+    }
+    if (scoreBucketModal && !scoreBucketModal.classList.contains("hidden")) {
+      closeScoreBucketModal();
     }
     if (trendDetailModal && !trendDetailModal.classList.contains("hidden")) {
       closeTrendDetail();

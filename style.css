@@ -186,6 +186,13 @@ textarea {
   animation: fadeUp 0.6s ease;
 }
 
+.app.score-dashboard-active {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
 .login-screen {
   min-height: 100vh;
   display: grid;
@@ -347,6 +354,40 @@ textarea {
     gap var(--sidebar-duration) var(--sidebar-ease);
 }
 
+.app.score-dashboard-active .layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.app.score-dashboard-active .app-header {
+  flex: 0 0 auto;
+}
+
+.app.score-dashboard-active .panel.controls,
+.app.score-dashboard-active .panel.seating {
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+}
+
+.app.score-dashboard-active .panel.controls {
+  overflow: hidden;
+}
+
+.app.score-dashboard-active .sidebar-tab-viewport,
+.app.score-dashboard-active .panel.controls .sidebar-section.is-active-tab {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .layout > * {
   min-width: 0;
 }
@@ -379,13 +420,72 @@ textarea {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
+}
+
+.main-board-viewport {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main-board-track {
+  display: flex;
+  width: 200%;
+  height: 100%;
+  min-height: 0;
+  transform: translateX(0);
+  transition: transform var(--sidebar-duration) var(--sidebar-ease);
+}
+
+.panel.seating.show-score-dashboard .main-board-track {
+  transform: translateX(-50%);
+}
+
+.main-board-page {
+  flex: 0 0 50%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.seat-board-view,
+.score-dashboard-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.seat-board-view {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.score-dashboard-view {
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 @media (min-width: 1101px) {
   .panel.seating {
     position: sticky;
     top: 18px;
+    height: calc(100vh - 36px);
     max-height: calc(100vh - 36px);
+  }
+
+  .app.score-dashboard-active .panel.seating {
+    position: static;
+    top: auto;
   }
 }
 
@@ -406,6 +506,451 @@ textarea {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+}
+
+.score-dashboard-header {
+  align-items: center;
+}
+
+.score-dashboard-actions {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(120px, auto) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-dashboard-actions .select {
+  min-width: 0;
+}
+
+.score-dashboard-toolbar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 120px));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.score-dashboard-toolbar label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--soft-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 7px 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.score-dashboard-toolbar .input {
+  min-height: 30px;
+  padding: 4px 7px;
+  text-align: center;
+}
+
+.score-dashboard-empty {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 260px;
+  border: 1px dashed rgba(10, 132, 255, 0.24);
+  border-radius: 18px;
+  background: rgba(246, 251, 255, 0.74);
+  text-align: center;
+}
+
+.score-dashboard-empty h3 {
+  font-size: 18px;
+}
+
+.score-dashboard-empty p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.score-dashboard-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+  padding-right: 2px;
+}
+
+.score-dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.score-stat-card,
+.score-dashboard-card {
+  border: 1px solid var(--soft-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.score-stat-card {
+  padding: 12px 14px;
+  border-top: 3px solid var(--accent);
+}
+
+.score-stat-card.good {
+  border-top-color: #52b788;
+}
+
+.score-stat-card.warn {
+  border-top-color: #d9a441;
+}
+
+.score-stat-card.danger {
+  border-top-color: #d9687a;
+}
+
+.score-stat-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.score-stat-value {
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: clamp(20px, 2.4vw, 28px);
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.score-stat-note {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.score-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.05fr) minmax(260px, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+  height: 100%;
+  min-height: 520px;
+}
+
+.score-dashboard-card {
+  min-width: 0;
+  padding: 14px;
+}
+
+.score-rank-card {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.score-dashboard-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.score-dashboard-card-head h3 {
+  font-size: 15px;
+}
+
+.score-dashboard-rank-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.score-rank-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--soft-border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px 12px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.score-rank-row:hover {
+  border-color: rgba(10, 132, 255, 0.32);
+  background: #f7fbff;
+}
+
+.score-rank-index {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.score-rank-main {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.score-rank-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-rank-tags {
+  overflow: hidden;
+  max-width: 100%;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-rank-score {
+  justify-self: end;
+  width: 72px;
+  max-width: 72px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--accent-strong);
+  font-size: 18px;
+  font-weight: 800;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+.score-rank-score span {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-distribution-chart,
+.score-subject-averages {
+  display: grid;
+  gap: 10px;
+}
+
+.score-histogram {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 220px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.score-histogram-y {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 10px 0 42px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.score-histogram-plot {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--bucket-count, 6), minmax(0, 1fr));
+  align-items: end;
+  gap: clamp(2px, 0.45vw, 6px);
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 2px 0;
+  border-left: 1px solid var(--soft-border);
+  border-bottom: 1px solid var(--soft-border);
+  background:
+    linear-gradient(to top, rgba(60, 60, 67, 0.08) 1px, transparent 1px) 0 10px / 100% 33.33%;
+}
+
+.score-histogram-bar {
+  display: grid;
+  grid-template-rows: minmax(104px, 1fr) auto 32px;
+  align-items: end;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.score-histogram-bar:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.score-histogram-fill {
+  width: min(34px, 72%);
+  height: var(--bar-height);
+  min-height: 4px;
+  border-radius: 10px 10px 4px 4px;
+  background: linear-gradient(180deg, #67b7ff, #0a84ff);
+  box-shadow: 0 8px 18px rgba(10, 132, 255, 0.18);
+  transition:
+    transform 180ms var(--sidebar-ease),
+    box-shadow 180ms var(--sidebar-ease);
+}
+
+.score-histogram-bar:not(:disabled):hover .score-histogram-fill {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(10, 132, 255, 0.24);
+}
+
+.score-histogram-bar strong {
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+.score-histogram-bar small {
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  color: var(--muted);
+  max-width: 100%;
+  overflow: hidden;
+  font-size: clamp(8px, 0.72vw, 10px);
+  line-height: 1.1;
+  white-space: nowrap;
+  transform: none;
+}
+
+.score-histogram-bar small::before {
+  content: "";
+  width: 1px;
+  height: 5px;
+  background: rgba(60, 60, 67, 0.20);
+}
+
+.score-histogram-bar small span {
+  display: block;
+}
+
+.score-bucket-card {
+  width: min(620px, 94vw);
+  height: min(680px, calc(100vh - 40px));
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.score-bucket-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  padding-right: 2px;
+}
+
+.score-bucket-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--soft-border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px 12px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.score-bucket-row:hover {
+  border-color: rgba(10, 132, 255, 0.32);
+  background: #f7fbff;
+}
+
+.score-bucket-row strong,
+.score-bucket-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-bucket-rank {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.score-bucket-row b {
+  color: var(--accent-strong);
+  font-size: 17px;
+}
+
+.score-bar-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.score-bar-track {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf2f7;
+}
+
+.score-bar-fill {
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #74b9ff, #2f80ed);
+}
+
+.score-subject-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.score-subject-name {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.score-subject-value {
+  color: var(--accent-strong);
+  font-weight: 800;
+  text-align: right;
 }
 
 .card-mode-switch {
@@ -2375,10 +2920,12 @@ body.compact-cards .seat-reason {
 }
 
 #recordModal .modal-card {
+  height: min(860px, calc(100vh - 28px));
   max-height: calc(100vh - 28px);
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  align-content: start;
 }
 
 #recordModal {
@@ -4835,8 +5382,10 @@ button.ghost:hover {
 
 .seat-grid-wrap {
   position: relative;
+  flex: 0 0 auto;
   border-radius: 20px;
   padding: 2px 4px 8px 0;
+  overflow: visible;
 }
 
 .seat-empty-state {
@@ -5017,6 +5566,17 @@ button.ghost:hover {
   transform: scale(1);
 }
 
+.app.score-dashboard-active .sidebar-tab-viewport,
+.app.score-dashboard-active .panel.controls .sidebar-section.is-active-tab {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .panel.controls .sidebar-section[hidden] {
   display: block;
 }
@@ -5027,11 +5587,68 @@ button.ghost:hover {
 
 @media (min-width: 1101px) {
   .panel.controls {
+    height: auto;
     max-height: calc(100vh - 130px);
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app.score-dashboard-active .panel.controls {
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .panel.controls .sidebar-tab-viewport {
+    flex: 0 1 auto;
+    height: auto !important;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .panel.controls .sidebar-tab-track {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    transform: none !important;
+  }
+
+  .panel.controls .sidebar-section {
+    display: none;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .panel.controls .sidebar-section.is-active-tab {
+    display: block;
+    overflow: visible;
   }
 }
 
 @media (max-width: 1100px) {
+  .score-dashboard-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .score-dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .score-rank-card {
+    grid-row: auto;
+  }
+
   .sidebar-tab-viewport {
     flex: 0 0 auto;
     height: var(--sidebar-tab-height, auto);
@@ -5055,6 +5672,37 @@ button.ghost:hover {
 }
 
 @media (max-width: 640px) {
+  .score-dashboard-header,
+  .score-dashboard-actions {
+    align-items: stretch;
+  }
+
+  .score-dashboard-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .score-dashboard-actions .select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .score-dashboard-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .score-dashboard-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .score-rank-row {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .score-rank-score {
+    grid-column: 2;
+    text-align: left;
+  }
+
   .sidebar-quick-nav {
     overflow-x: auto;
     scrollbar-width: none;
@@ -5074,6 +5722,7 @@ button.ghost:hover {
   .quick-pill-indicator,
   .sidebar-tab-viewport,
   .sidebar-tab-track,
+  .main-board-track,
   .panel.controls .sidebar-section {
     transition: none !important;
   }
@@ -5110,5 +5759,75 @@ button.ghost:hover {
 
   .seat-empty-state {
     min-height: 300px;
+  }
+}
+
+/* Fix: in the score dashboard, make the left tab content the only sidebar scroller. */
+.app.score-dashboard-active {
+  min-height: 100dvh;
+  height: 100dvh;
+}
+
+.app.score-dashboard-active .layout {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app.score-dashboard-active .panel.controls {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app.score-dashboard-active .sidebar-quick-nav {
+  flex: 0 0 auto;
+}
+
+.app.score-dashboard-active .panel.controls .sidebar-tab-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto !important;
+  overflow-x: hidden;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app.score-dashboard-active .panel.controls .sidebar-tab-track {
+  min-height: 0;
+}
+
+.app.score-dashboard-active .panel.controls .sidebar-section.is-active-tab {
+  overflow: visible !important;
+}
+
+@media (min-width: 1101px) {
+  .app.score-dashboard-active .panel.controls {
+    max-height: none;
+    overflow: hidden !important;
+  }
+
+  .app.score-dashboard-active .panel.controls .sidebar-tab-viewport {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto !important;
+    overflow-x: hidden;
+    overflow-y: auto !important;
+  }
+
+  .app.score-dashboard-active .panel.controls .sidebar-tab-track {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    transform: none !important;
+  }
+
+  .app.score-dashboard-active .panel.controls .sidebar-section.is-active-tab {
+    display: block;
+    overflow: visible !important;
   }
 }

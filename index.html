@@ -6,7 +6,7 @@
     <title>班主任座位管理</title>
     <meta name="theme-color" content="#f5f5f7" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="style.css?v=20260609-cloud-sync" />
+    <link rel="stylesheet" href="style.css?v=20260613-score-dashboard-12" />
   </head>
   <body>
     <div class="bg-watermark" aria-hidden="true"></div>
@@ -411,24 +411,91 @@
 
         </section>
 
-        <section class="panel seating">
-          <div class="panel-header seating-header">
-            <div>
-              <h2>座位布局</h2>
-              <p>每两列为同桌一组，共 4 组 · 可拖动交换座位</p>
+        <section class="panel seating" id="mainBoardPanel">
+          <div class="main-board-viewport">
+            <div class="main-board-track" id="mainBoardTrack">
+              <div class="main-board-page seat-board-view" aria-label="座位布局">
+                <div class="panel-header seating-header">
+                  <div>
+                    <h2>座位布局</h2>
+                    <p>每两列为同桌一组，共 4 组 · 可拖动交换座位</p>
+                  </div>
+                  <div class="card-mode-switch" role="group" aria-label="座位卡片显示模式">
+                    <button id="cardCompactBtn" type="button" class="mode-btn">简洁</button>
+                    <button id="cardDetailBtn" type="button" class="mode-btn">详细</button>
+                  </div>
+                </div>
+                <div class="seat-grid-wrap">
+                  <div id="seatEmptyState" class="seat-empty-state hidden">
+                    <h3>还没有座位数据</h3>
+                    <p>请先在左侧导入名单，系统会自动生成座位布局。</p>
+                  </div>
+                  <div class="row-labels" id="rowLabels"></div>
+                  <div class="seat-groups" id="seatGroups"></div>
+                </div>
+              </div>
+
+              <div class="main-board-page score-dashboard-view" aria-label="成绩看板">
+                <div class="panel-header seating-header score-dashboard-header">
+                  <div>
+                    <h2>成绩看板</h2>
+                    <p id="scoreDashboardSubtitle">选择一次考试，查看班级整体和学生表现。</p>
+                  </div>
+                  <div class="score-dashboard-actions">
+                    <select id="scoreDashboardExamSelect" class="select" aria-label="选择考试"></select>
+                    <select id="scoreDashboardMetricSelect" class="select" aria-label="选择排名指标"></select>
+                    <button id="scoreDashboardTableBtn" type="button" class="btn-secondary">完整表格</button>
+                  </div>
+                </div>
+
+                <div class="score-dashboard-toolbar" aria-label="阈值设置">
+                  <label>
+                    <span>及格</span>
+                    <input id="scorePassThreshold" class="input" type="number" value="60" min="0" />
+                  </label>
+                  <label>
+                    <span>良好</span>
+                    <input id="scoreGoodThreshold" class="input" type="number" value="75" min="0" />
+                  </label>
+                  <label>
+                    <span>优秀</span>
+                    <input id="scoreExcellentThreshold" class="input" type="number" value="90" min="0" />
+                  </label>
+                </div>
+
+                <div id="scoreDashboardEmpty" class="score-dashboard-empty hidden">
+                  <h3>暂无成绩看板</h3>
+                  <p>请先在左侧上传并保存一次成绩。</p>
+                </div>
+
+                <div id="scoreDashboardContent" class="score-dashboard-content">
+                  <div id="scoreDashboardStats" class="score-dashboard-stats"></div>
+                  <div class="score-dashboard-grid">
+                    <section class="score-dashboard-card score-rank-card">
+                      <div class="score-dashboard-card-head">
+                        <h3 id="scoreRankTitle">学生总分排行</h3>
+                        <span id="scoreRankMeta" class="muted"></span>
+                      </div>
+                      <div id="scoreDashboardRankList" class="score-dashboard-rank-list"></div>
+                    </section>
+                    <section class="score-dashboard-card">
+                      <div class="score-dashboard-card-head">
+                        <h3 id="scoreDistributionTitle">总分分布</h3>
+                        <span id="scoreDistributionMeta" class="muted"></span>
+                      </div>
+                      <div id="scoreDistributionChart" class="score-distribution-chart"></div>
+                    </section>
+                    <section class="score-dashboard-card">
+                      <div class="score-dashboard-card-head">
+                        <h3>各科平均分</h3>
+                        <span id="scoreSubjectMeta" class="muted"></span>
+                      </div>
+                      <div id="scoreSubjectAverages" class="score-subject-averages"></div>
+                    </section>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="card-mode-switch" role="group" aria-label="座位卡片显示模式">
-              <button id="cardCompactBtn" type="button" class="mode-btn">简洁</button>
-              <button id="cardDetailBtn" type="button" class="mode-btn">详细</button>
-            </div>
-          </div>
-          <div class="seat-grid-wrap">
-            <div id="seatEmptyState" class="seat-empty-state hidden">
-              <h3>还没有座位数据</h3>
-              <p>请先在左侧导入名单，系统会自动生成座位布局。</p>
-            </div>
-            <div class="row-labels" id="rowLabels"></div>
-            <div class="seat-groups" id="seatGroups"></div>
           </div>
         </section>
       </main>
@@ -651,6 +718,20 @@
       </div>
     </div>
 
+    <div id="scoreBucketModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card score-bucket-card">
+        <div class="modal-header">
+          <div>
+            <div class="modal-subtitle">总分分布</div>
+            <h3 id="scoreBucketTitle">分数段学生</h3>
+          </div>
+          <button id="scoreBucketClose" class="ghost" type="button">关闭</button>
+        </div>
+        <div id="scoreBucketMeta" class="saved-exam-table-meta muted"></div>
+        <div id="scoreBucketList" class="score-bucket-list"></div>
+      </div>
+    </div>
+
     <div id="trendDetailModal" class="modal hidden" aria-hidden="true">
       <div class="modal-card trend-detail-card">
         <div class="modal-header">
@@ -796,6 +877,6 @@
     </div>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260609-cloud-sync"></script>
+    <script src="app.js?v=20260613-score-dashboard-12"></script>
   </body>
 </html>

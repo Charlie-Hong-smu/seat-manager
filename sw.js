@@ -1,4 +1,4 @@
-const ASSET_VERSION = "20260609-cloud-sync";
+const ASSET_VERSION = "20260613-score-dashboard-12";
 const CACHE_VERSION = `seat-manager-v${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",
