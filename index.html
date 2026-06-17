@@ -442,9 +442,13 @@
                     <p id="scoreDashboardSubtitle">选择一次考试，查看班级整体和学生表现。</p>
                   </div>
                   <div class="score-dashboard-actions">
-                    <select id="scoreDashboardExamSelect" class="select" aria-label="选择考试"></select>
-                    <select id="scoreDashboardMetricSelect" class="select" aria-label="选择排名指标"></select>
-                    <button id="scoreDashboardTableBtn" type="button" class="btn-secondary">完整表格</button>
+                    <div class="card-mode-switch score-view-switch" aria-label="成绩视图切换">
+                      <button id="scoreSingleViewBtn" class="mode-btn active" type="button">单次考试</button>
+                      <button id="scoreTrendViewBtn" class="mode-btn" type="button">多考趋势</button>
+                    </div>
+                    <select id="scoreDashboardExamSelect" class="select score-single-control" aria-label="选择考试"></select>
+                    <select id="scoreDashboardMetricSelect" class="select score-single-control" aria-label="选择排名指标"></select>
+                    <button id="scoreDashboardTableBtn" type="button" class="btn-secondary score-single-control">完整表格</button>
                   </div>
                 </div>
 
@@ -460,6 +464,64 @@
                   <label>
                     <span>优秀</span>
                     <input id="scoreExcellentThreshold" class="input" type="number" value="90" min="0" />
+                  </label>
+                </div>
+
+                <div id="scoreTrendToolbar" class="score-trend-toolbar hidden" aria-label="多考趋势筛选">
+                  <label>
+                    <span>范围选择</span>
+                    <select id="scoreTrendRangeSelect" class="select">
+                      <option value="all">全部历史</option>
+                      <option value="recent3">最近 3 次</option>
+                      <option value="recent5">最近 5 次</option>
+                      <option value="custom">自定义范围</option>
+                    </select>
+                  </label>
+                  <label id="scoreTrendStartWrap" class="hidden">
+                    <span>起始考试</span>
+                    <select id="scoreTrendStartSelect" class="select"></select>
+                  </label>
+                  <label id="scoreTrendEndWrap" class="hidden">
+                    <span>结束考试</span>
+                    <select id="scoreTrendEndSelect" class="select"></select>
+                  </label>
+                  <label>
+                    <span>分析对象</span>
+                    <select id="scoreTrendTargetSelect" class="select">
+                      <option value="all">全体学生</option>
+                      <option value="class">按班级</option>
+                      <option value="student">单个学生</option>
+                    </select>
+                  </label>
+                  <label id="scoreTrendClassWrap" class="hidden">
+                    <span>班级</span>
+                    <select id="scoreTrendClassSelect" class="select"></select>
+                  </label>
+                  <label id="scoreTrendStudentWrap" class="hidden">
+                    <span>学生</span>
+                    <select id="scoreTrendStudentSelect" class="select"></select>
+                  </label>
+                  <label>
+                    <span>指标口径</span>
+                    <select id="scoreTrendMetricSelect" class="select">
+                      <option value="total" selected>总分</option>
+                      <option value="rate">得分率</option>
+                      <option value="rank">排名</option>
+                      <option value="percentile">百分位</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>科目筛选</span>
+                    <select id="scoreTrendSubjectSelect" class="select">
+                      <option value="all">全部科目</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>分布口径</span>
+                    <select id="scoreTrendDistributionMode" class="select">
+                      <option value="count">人数</option>
+                      <option value="share">占比</option>
+                    </select>
                   </label>
                 </div>
 
@@ -491,6 +553,48 @@
                         <span id="scoreSubjectMeta" class="muted"></span>
                       </div>
                       <div id="scoreSubjectAverages" class="score-subject-averages"></div>
+                    </section>
+                  </div>
+                </div>
+
+                <div id="scoreTrendDashboardContent" class="score-trend-dashboard hidden">
+                  <div id="scoreTrendWarnings" class="score-trend-warnings"></div>
+                  <div id="scoreTrendStats" class="score-dashboard-stats"></div>
+                  <div class="score-trend-main">
+                    <section class="score-dashboard-card score-trend-overview-panel">
+                      <div class="score-dashboard-card-head">
+                        <h3 id="scoreTrendOverviewTitle">总览对比区</h3>
+                        <span id="scoreTrendMeta" class="muted"></span>
+                      </div>
+                      <div id="scoreTrendCharts" class="score-trend-charts"></div>
+                    </section>
+                    <section class="score-dashboard-card score-trend-distribution-panel">
+                      <div class="score-dashboard-card-head">
+                        <h3>分布变化</h3>
+                        <span id="scoreTrendDistributionMeta" class="muted"></span>
+                      </div>
+                      <div id="scoreTrendDistribution" class="score-trend-distribution"></div>
+                    </section>
+                    <section class="score-dashboard-card score-trend-board-panel">
+                      <div class="score-dashboard-card-head">
+                        <h3>学生变化榜</h3>
+                        <span id="scoreTrendBoardMeta" class="muted"></span>
+                      </div>
+                      <div id="scoreTrendBoards" class="score-trend-boards"></div>
+                    </section>
+                    <section class="score-dashboard-card score-trend-contribution-panel">
+                      <div class="score-dashboard-card-head">
+                        <h3>科目分析</h3>
+                        <span id="scoreTrendContributionMeta" class="muted"></span>
+                      </div>
+                      <div id="scoreTrendContribution" class="score-trend-contribution-list"></div>
+                    </section>
+                    <section class="score-dashboard-card score-trend-student-panel">
+                      <div class="score-dashboard-card-head">
+                        <h3 id="scoreTrendStudentTitle">学生明细表</h3>
+                        <span id="scoreTrendStudentMeta" class="muted"></span>
+                      </div>
+                      <div id="scoreTrendStudentDetail" class="score-trend-student-detail"></div>
                     </section>
                   </div>
                 </div>
@@ -560,6 +664,7 @@
                   <option value="rankSchool">按年级排名</option>
                 </select>
               <button id="aiTrendBtn" class="ghost" type="button">生成趋势建议</button>
+              <button id="aiCommentBtn" class="ghost" type="button">评语助手</button>
               <button id="exportTrendsBtn" class="ghost">导出</button>
             </div>
           </div>
@@ -610,6 +715,58 @@
         <p id="aiChoiceMessage" class="ai-choice-message"></p>
         <div id="aiChoiceActions" class="modal-footer ai-choice-actions"></div>
       </div>
+    </div>
+
+    <div id="aiCommentDrawer" class="drawer-overlay hidden" aria-hidden="true">
+      <aside class="ai-comment-drawer" role="dialog" aria-modal="true" aria-labelledby="aiCommentTitle">
+        <div class="ai-comment-header">
+          <div>
+            <div class="modal-subtitle">AI 期末评语</div>
+            <h3 id="aiCommentTitle">评语助手</h3>
+          </div>
+          <button id="aiCommentClose" class="ghost" type="button">关闭</button>
+        </div>
+        <div id="aiCommentStatus" class="ai-comment-status muted" aria-live="polite"></div>
+        <div class="ai-comment-body">
+          <section class="ai-comment-section">
+            <h4>学生信息</h4>
+            <div id="aiCommentStudentInfo" class="ai-comment-info-grid"></div>
+          </section>
+          <section class="ai-comment-section">
+            <h4>成绩摘要</h4>
+            <div id="aiCommentScoreSummary" class="ai-comment-summary"></div>
+          </section>
+          <section class="ai-comment-section">
+            <h4>学生标签</h4>
+            <div id="aiCommentTags" class="tag-chip-list"></div>
+          </section>
+          <section class="ai-comment-section">
+            <h4>教师补充评价</h4>
+            <textarea id="aiCommentTeacherNote" class="input ai-comment-note" rows="4" placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。"></textarea>
+          </section>
+          <section class="ai-comment-section">
+            <h4>风格选择</h4>
+            <select id="aiCommentStyleSelect" class="select">
+              <option value="warm">温和鼓励</option>
+              <option value="formal">客观正式</option>
+              <option value="brief">简洁家长会风格</option>
+            </select>
+          </section>
+          <section class="ai-comment-section">
+            <div class="ai-comment-result-head">
+              <h4>AI 生成结果</h4>
+              <span id="aiCommentWordCount" class="muted">0 字</span>
+            </div>
+            <textarea id="aiCommentResult" class="input ai-comment-result" rows="7" placeholder="生成后可在这里直接编辑。"></textarea>
+          </section>
+        </div>
+        <div class="ai-comment-footer">
+          <button id="aiCommentGenerateBtn" class="primary" type="button">生成评语</button>
+          <button id="aiCommentRegenerateBtn" class="btn-secondary" type="button">重新生成</button>
+          <button id="aiCommentCopyBtn" class="ghost" type="button">复制</button>
+          <button id="aiCommentSaveBtn" class="btn-secondary" type="button">保存</button>
+        </div>
+      </aside>
     </div>
 
     <div id="syncModal" class="modal hidden" aria-hidden="true">

@@ -35,6 +35,9 @@ export default {
     if (url.pathname === "/analyze-class") {
       return handleAnalyzeClass(request, env, corsHeaders);
     }
+    if (url.pathname === "/generate-comment") {
+      return handleGenerateStudentComment(request, env, corsHeaders);
+    }
     if (url.pathname === "/suggest-score-mapping") {
       return handleSuggestScoreMapping(request, env, corsHeaders);
     }
@@ -365,6 +368,69 @@ async function handleSuggestScoreMapping(request, env, corsHeaders) {
   }
 }
 
+async function handleGenerateStudentComment(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || !env.TOKEN_SECRET) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  const token = getBearerToken(request);
+  const verified = token ? await verifyToken(token, env.TOKEN_SECRET) : null;
+  if (!verified || verified.exp <= Date.now() || verified.scope !== "ai-trend") {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+  if (isOverDailyLimit(token)) {
+    return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
+  }
+
+  const body = await readJsonBody(request);
+  if (!body.ok || !isValidStudentCommentPayload(body.value)) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+
+  const missingInfo = getStudentCommentMissingInfo(body.value.context);
+  if (missingInfo.length >= 3 && !toText(body.value.context.teacherNote)) {
+    return jsonResponse({ comment: "", needsMoreInfo: true, missingInfo }, 200, corsHeaders);
+  }
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是谨慎的班主任评语助手。只根据用户提供的单个学生信息、成绩摘要、标签和教师补充评价写期末评语。禁止编造未提供事实，禁止夸大或做医学/心理诊断。语言自然，不模板化，兼具鼓励和建设性提醒。必须返回 JSON，字段为 comment、needsMoreInfo、missingInfo。comment 必须是中文 100 到 150 字。若信息不足，needsMoreInfo 为 true，missingInfo 说明需要补充哪些信息，comment 可以为空。"
+          },
+          {
+            role: "user",
+            content: JSON.stringify(body.value)
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    const data = await response.json();
+    const parsed = parseModelJson(data?.choices?.[0]?.message?.content || "");
+    if (!parsed) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    return jsonResponse(sanitizeStudentCommentResult(parsed, missingInfo), 200, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
 async function readJsonBody(request, maxBytes = MAX_BODY_BYTES) {
   const clone = request.clone();
   const text = await clone.text();
@@ -422,6 +488,42 @@ function isValidScoreMappingPayload(payload) {
     payload.sampleRows.length <= 10 &&
     Array.isArray(payload.knownSubjects)
   );
+}
+
+function isValidStudentCommentPayload(payload) {
+  const context = payload?.context;
+  const student = context?.student;
+  return (
+    payload &&
+    typeof payload === "object" &&
+    ["warm", "formal", "brief"].includes(payload.style) &&
+    context &&
+    typeof context === "object" &&
+    student &&
+    typeof student === "object" &&
+    Boolean(toText(student.name)) &&
+    Array.isArray(context.tags) &&
+    context.tags.length <= 20 &&
+    Array.isArray(context.strengths) &&
+    Array.isArray(context.weaknesses)
+  );
+}
+
+function getStudentCommentMissingInfo(context) {
+  const missing = [];
+  if (!context?.latestExam) {
+    missing.push("最近考试成绩");
+  }
+  if (!context?.trend || Number(context.trend.examCount) < 2) {
+    missing.push("多次考试趋势");
+  }
+  if (!Array.isArray(context?.tags) || !context.tags.length) {
+    missing.push("学生标签");
+  }
+  if (!toText(context?.teacherNote)) {
+    missing.push("教师补充评价");
+  }
+  return missing;
 }
 
 function getCorsHeaders(origin, env) {
@@ -591,6 +693,19 @@ function sanitizeScoreMappingResult(result, payload) {
       rankSchoolCol: safeIndex(result.totalMapping?.rankSchoolCol)
     },
     note: toText(result.note || result.reason || "AI 已生成映射建议")
+  };
+}
+
+function sanitizeStudentCommentResult(result, fallbackMissingInfo = []) {
+  const rawComment = String(toText(result.comment) || "").replace(/\s+/g, "");
+  const comment = rawComment.slice(0, 180);
+  const missingInfo = Array.isArray(result.missingInfo)
+    ? result.missingInfo.map((item) => toText(item)).filter(Boolean).slice(0, 6)
+    : fallbackMissingInfo;
+  return {
+    comment,
+    needsMoreInfo: Boolean(result.needsMoreInfo) || !comment,
+    missingInfo
   };
 }
 

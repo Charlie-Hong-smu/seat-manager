@@ -15,6 +15,7 @@ const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
 const AI_AUTH_SESSION_TOKEN_KEY = "seat-manager-ai-session-token";
 const AI_AUTH_SESSION_EXPIRES_KEY = "seat-manager-ai-session-expires";
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
+const AI_COMMENT_CACHE_SCOPE = "student-comment";
 const AI_REMEMBER_DAYS = 30;
 const AI_REQUEST_LIMIT_BYTES = 20 * 1024;
 const SYNC_AUTH_TOKEN_KEY = "seat-manager-sync-token";
@@ -208,6 +209,53 @@ const scoreDistributionMeta = document.getElementById("scoreDistributionMeta");
 const scoreDistributionChart = document.getElementById("scoreDistributionChart");
 const scoreSubjectMeta = document.getElementById("scoreSubjectMeta");
 const scoreSubjectAverages = document.getElementById("scoreSubjectAverages");
+const scoreSingleViewBtn = document.getElementById("scoreSingleViewBtn");
+const scoreTrendViewBtn = document.getElementById("scoreTrendViewBtn");
+const scoreTrendToolbar = document.getElementById("scoreTrendToolbar");
+const scoreTrendRangeSelect = document.getElementById("scoreTrendRangeSelect");
+const scoreTrendStartWrap = document.getElementById("scoreTrendStartWrap");
+const scoreTrendStartSelect = document.getElementById("scoreTrendStartSelect");
+const scoreTrendEndWrap = document.getElementById("scoreTrendEndWrap");
+const scoreTrendEndSelect = document.getElementById("scoreTrendEndSelect");
+const scoreTrendTargetSelect = document.getElementById("scoreTrendTargetSelect");
+const scoreTrendClassWrap = document.getElementById("scoreTrendClassWrap");
+const scoreTrendClassSelect = document.getElementById("scoreTrendClassSelect");
+const scoreTrendStudentWrap = document.getElementById("scoreTrendStudentWrap");
+const scoreTrendStudentSelect = document.getElementById("scoreTrendStudentSelect");
+const scoreTrendMetricSelect = document.getElementById("scoreTrendMetricSelect");
+const scoreTrendSubjectSelect = document.getElementById("scoreTrendSubjectSelect");
+const scoreTrendDistributionMode = document.getElementById("scoreTrendDistributionMode");
+const scoreTrendDashboardContent = document.getElementById("scoreTrendDashboardContent");
+const scoreTrendWarnings = document.getElementById("scoreTrendWarnings");
+const scoreTrendStats = document.getElementById("scoreTrendStats");
+const scoreTrendMeta = document.getElementById("scoreTrendMeta");
+const scoreTrendOverviewTitle = document.getElementById("scoreTrendOverviewTitle");
+const scoreTrendCharts = document.getElementById("scoreTrendCharts");
+const scoreTrendBoardMeta = document.getElementById("scoreTrendBoardMeta");
+const scoreTrendBoards = document.getElementById("scoreTrendBoards");
+const scoreTrendContributionMeta = document.getElementById("scoreTrendContributionMeta");
+const scoreTrendContribution = document.getElementById("scoreTrendContribution");
+const scoreTrendDistributionMeta = document.getElementById("scoreTrendDistributionMeta");
+const scoreTrendDistribution = document.getElementById("scoreTrendDistribution");
+const scoreTrendStudentTitle = document.getElementById("scoreTrendStudentTitle");
+const scoreTrendStudentMeta = document.getElementById("scoreTrendStudentMeta");
+const scoreTrendStudentDetail = document.getElementById("scoreTrendStudentDetail");
+const aiCommentBtn = document.getElementById("aiCommentBtn");
+const aiCommentDrawer = document.getElementById("aiCommentDrawer");
+const aiCommentClose = document.getElementById("aiCommentClose");
+const aiCommentTitle = document.getElementById("aiCommentTitle");
+const aiCommentStatus = document.getElementById("aiCommentStatus");
+const aiCommentStudentInfo = document.getElementById("aiCommentStudentInfo");
+const aiCommentScoreSummary = document.getElementById("aiCommentScoreSummary");
+const aiCommentTags = document.getElementById("aiCommentTags");
+const aiCommentTeacherNote = document.getElementById("aiCommentTeacherNote");
+const aiCommentStyleSelect = document.getElementById("aiCommentStyleSelect");
+const aiCommentResult = document.getElementById("aiCommentResult");
+const aiCommentWordCount = document.getElementById("aiCommentWordCount");
+const aiCommentGenerateBtn = document.getElementById("aiCommentGenerateBtn");
+const aiCommentRegenerateBtn = document.getElementById("aiCommentRegenerateBtn");
+const aiCommentCopyBtn = document.getElementById("aiCommentCopyBtn");
+const aiCommentSaveBtn = document.getElementById("aiCommentSaveBtn");
 const autoAcademicEnabled = document.getElementById("autoAcademicEnabled");
 const autoAcademicRangeMode = document.getElementById("autoAcademicRangeMode");
 const autoAcademicRecentWrap = document.getElementById("autoAcademicRecentWrap");
@@ -362,6 +410,9 @@ let activeShufflePreviewDetail = "required";
 const seatUndoStack = [];
 let examTrendMode = "all";
 let expandedSavedExamIds = new Set();
+let scoreDashboardViewMode = "single";
+let selectedTrendStudentKey = "";
+let scoreTrendDistributionView = "heatmap";
 let activeSavedExamTableId = "";
 const inputSuggestMap = new Map();
 const studentAiTrendJobs = new Map();
@@ -1482,7 +1533,8 @@ function normalizeState() {
     records: Array.isArray(student.records) ? student.records : [],
     manualTags: sanitizeTags(student.manualTags),
     autoTags: sanitizeTags(student.autoTags),
-    exams: Array.isArray(student.exams) ? student.exams : []
+    exams: Array.isArray(student.exams) ? student.exams : [],
+    aiComments: student.aiComments && typeof student.aiComments === "object" ? student.aiComments : {}
   }));
   state.seatOrder = Array.isArray(state.seatOrder) ? state.seatOrder : [];
   state.lockedSeats = Array.isArray(state.lockedSeats)
@@ -4919,6 +4971,545 @@ function formatDashboardNumber(value, digits = 1) {
   return Number.isFinite(value) ? String(Number(value.toFixed(digits))) : "-";
 }
 
+function getChronologicalScoreExams() {
+  return getSavedExamRecords().sort((a, b) => {
+    const dateCompare = (a.date || "").localeCompare(b.date || "");
+    return dateCompare || (a.savedAt || "").localeCompare(b.savedAt || "") || (a.name || "").localeCompare(b.name || "");
+  });
+}
+
+function getScoreTrendSettings() {
+  const metric = ["total", "rate", "rank", "percentile"].includes(scoreTrendMetricSelect?.value)
+    ? scoreTrendMetricSelect.value
+    : "total";
+  const distributionMode = ["count", "share"].includes(scoreTrendDistributionMode?.value)
+    ? scoreTrendDistributionMode.value
+    : "count";
+  return {
+    range: scoreTrendRangeSelect?.value || "all",
+    startId: scoreTrendStartSelect?.value || "",
+    endId: scoreTrendEndSelect?.value || "",
+    target: scoreTrendTargetSelect?.value || "all",
+    className: scoreTrendClassSelect?.value || "",
+    studentKey: scoreTrendStudentSelect?.value || "",
+    metric,
+    subject: scoreTrendSubjectSelect?.value || "all",
+    distributionMode
+  };
+}
+
+function getScoreInputStatus(value) {
+  const raw = typeof value === "object" && value !== null ? value.score : value;
+  if (typeof raw === "string" && /缺考|absent|缺席/i.test(raw)) {
+    return { kind: "absent", value: null };
+  }
+  if (raw === null || raw === undefined || raw === "") {
+    return { kind: "unrecorded", value: null };
+  }
+  const parsed = parseScoreValue(raw);
+  if (Number.isFinite(parsed)) {
+    return { kind: parsed === 0 ? "zero" : "valid", value: parsed };
+  }
+  return { kind: "unrecorded", value: null };
+}
+
+function getStudentClassName(student) {
+  return (
+    student?.className ||
+    student?.class ||
+    student?.classLabel ||
+    student?.班级 ||
+    student?.gradeClass ||
+    ""
+  ).toString().trim();
+}
+
+function getScoreStudentKeyByName(name) {
+  const normalized = normalizeName(name);
+  if (!normalized) {
+    return "";
+  }
+  const matches = state.students.filter((item) => {
+    const keys = [normalizeName(item.name), ...(item.aliases || []).map((alias) => normalizeName(alias))].filter(Boolean);
+    return keys.includes(normalized);
+  });
+  return matches.length === 1 ? `id:${matches[0].id}` : `name:${normalized}`;
+}
+
+function getScoreStudentByKey(key) {
+  if (!key) {
+    return null;
+  }
+  if (key.startsWith("id:")) {
+    return state.students.find((item) => item.id === key.slice(3)) || null;
+  }
+  const normalized = key.replace(/^name:/, "");
+  const matches = state.students.filter((item) => {
+    const keys = [normalizeName(item.name), ...(item.aliases || []).map((alias) => normalizeName(alias))].filter(Boolean);
+    return keys.includes(normalized);
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function getScoreTrendExamRange(exams, settings) {
+  if (settings.range === "recent3") {
+    return exams.slice(-3);
+  }
+  if (settings.range === "recent5") {
+    return exams.slice(-5);
+  }
+  if (settings.range === "custom") {
+    const startIndex = Math.max(0, exams.findIndex((exam) => exam.id === settings.startId));
+    const rawEndIndex = exams.findIndex((exam) => exam.id === settings.endId);
+    const endIndex = rawEndIndex >= 0 ? rawEndIndex : exams.length - 1;
+    const from = Math.min(startIndex, endIndex);
+    const to = Math.max(startIndex, endIndex);
+    return exams.slice(from, to + 1);
+  }
+  return exams;
+}
+
+function getTrendScoreValue(entry, exam, subject) {
+  if (subject && subject !== "all") {
+    return parseScoreValue(entry.scores?.[subject]);
+  }
+  return getScoreDashboardTotal(entry).value;
+}
+
+function getTrendScoreStatus(entry, exam, subject) {
+  if (subject && subject !== "all") {
+    return getScoreInputStatus(entry.scores?.[subject]);
+  }
+  const direct = getScoreInputStatus(entry.total?.score);
+  if (Number.isFinite(direct.value)) {
+    return direct;
+  }
+  if (direct.kind === "absent") {
+    return direct;
+  }
+  const subjectValues = (exam.subjects || []).map((item) => getScoreInputStatus(entry.scores?.[item]));
+  const validSubjects = subjectValues.filter((item) => Number.isFinite(item.value));
+  if (validSubjects.length) {
+    const total = validSubjects.reduce((sum, item) => sum + item.value, 0);
+    return { kind: total === 0 ? "zero" : "valid", value: total };
+  }
+  if (subjectValues.some((item) => item.kind === "absent")) {
+    return { kind: "absent", value: null };
+  }
+  return { kind: "unrecorded", value: null };
+}
+
+function inferTrendMaxScore(exam, subject) {
+  const values = (exam.entries || [])
+    .map((entry) => getTrendScoreValue(entry, exam, subject))
+    .filter((value) => Number.isFinite(value));
+  return values.length ? Math.max(...values) : null;
+}
+
+function getExplicitTrendFullScore(exam, subject) {
+  const directKeys = ["totalMaxScore", "maxScore", "fullScore", "fullMark", "scoreFullMark"];
+  const direct = directKeys.map((key) => parseScoreValue(exam?.[key])).find((value) => Number.isFinite(value) && value > 0);
+  if (Number.isFinite(direct)) {
+    return direct;
+  }
+  const nested = [exam?.total?.maxScore, exam?.total?.fullScore, exam?.total?.fullMark]
+    .map(parseScoreValue)
+    .find((value) => Number.isFinite(value) && value > 0);
+  if (Number.isFinite(nested)) {
+    return nested;
+  }
+  const subjectFullScores = exam?.subjectFullScores || exam?.subjectMaxScores || exam?.fullScores;
+  if (!subjectFullScores || typeof subjectFullScores !== "object") {
+    return null;
+  }
+  if (subject && subject !== "all") {
+    const subjectScore = parseScoreValue(subjectFullScores[subject]);
+    return Number.isFinite(subjectScore) && subjectScore > 0 ? subjectScore : null;
+  }
+  const total = (exam.subjects || [])
+    .map((item) => parseScoreValue(subjectFullScores[item]))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .reduce((sum, value) => sum + value, 0);
+  return total > 0 ? total : null;
+}
+
+function getMedianValue(values) {
+  const sorted = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (!sorted.length) {
+    return null;
+  }
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function getStandardDeviation(values) {
+  const clean = values.filter((value) => Number.isFinite(value));
+  if (clean.length < 2) {
+    return 0;
+  }
+  const average = clean.reduce((sum, value) => sum + value, 0) / clean.length;
+  const variance = clean.reduce((sum, value) => sum + (value - average) ** 2, 0) / clean.length;
+  return Math.sqrt(variance);
+}
+
+function getScoreTrendRowsForExam(exam, settings, warnings) {
+  const subject = settings.subject || "all";
+  const selectedStudent = getScoreStudentByKey(settings.studentKey);
+  const explicitMax = getExplicitTrendFullScore(exam, subject);
+  const inferredMax = Number.isFinite(explicitMax) ? explicitMax : inferTrendMaxScore(exam, subject);
+  const rawRows = (exam.entries || []).map((entry) => {
+    const studentKey = getScoreStudentKeyByName(entry.name || "");
+    const student = getScoreStudentByKey(studentKey);
+    const className = getStudentClassName(student);
+    const scoreStatus = getTrendScoreStatus(entry, exam, subject);
+    const score = scoreStatus.value;
+    const rankClass =
+      subject === "all"
+        ? parseRankValue(entry.total?.rankClass)
+        : parseRankValue(entry.scores?.[subject]?.rankClass);
+    const rankSchool =
+      subject === "all"
+        ? parseRankValue(entry.total?.rankSchool)
+        : parseRankValue(entry.scores?.[subject]?.rankSchool);
+    return {
+      examId: exam.id,
+      examName: exam.name || "考试",
+      examDate: exam.date || "",
+      name: entry.name || "",
+      studentKey,
+      studentId: student?.id || "",
+      className,
+      score,
+      scoreStatus: scoreStatus.kind,
+      rate: Number.isFinite(score) && Number.isFinite(inferredMax) && inferredMax > 0 ? (score / inferredMax) * 100 : null,
+      rawRankClass: rankClass,
+      rawRankSchool: rankSchool,
+      rankClass,
+      rankSchool,
+      scores: entry.scores || {},
+      total: entry.total || {}
+    };
+  });
+  let rows = rawRows;
+  if (settings.target === "class" && settings.className) {
+    rows = rows.filter((row) => row.className === settings.className);
+  }
+  if (settings.target === "student" && selectedStudent) {
+    rows = rows.filter((row) => row.studentId === selectedStudent.id);
+  } else if (settings.target === "student" && settings.studentKey) {
+    rows = rows.filter((row) => row.studentKey === settings.studentKey);
+  }
+
+  const validRows = rows.filter((row) => Number.isFinite(row.score));
+  const sortedByScore = [...validRows].sort((a, b) => b.score - a.score);
+  sortedByScore.forEach((row, index) => {
+    row.computedRank = index + 1;
+    row.rankClass = Number.isFinite(row.rawRankClass) ? row.rawRankClass : row.computedRank;
+    row.rankSchool = Number.isFinite(row.rawRankSchool) ? row.rawRankSchool : null;
+    row.rank = row.rankClass;
+    row.percentile = sortedByScore.length > 1 ? ((sortedByScore.length - row.computedRank) / (sortedByScore.length - 1)) * 100 : 100;
+  });
+  rows.forEach((row) => {
+    if (!Number.isFinite(row.rank) && Number.isFinite(row.score)) {
+      row.rankClass = row.computedRank || null;
+      row.rank = row.rankClass;
+    }
+  });
+  return { rows, validRows, inferredMax, explicitMax };
+}
+
+function getTrendMetricValue(row, settings) {
+  if (settings.metric === "rate") {
+    return row.rate;
+  }
+  if (settings.metric === "rank") {
+    return Number.isFinite(row.rank) ? row.rank : null;
+  }
+  if (settings.metric === "percentile") {
+    return row.percentile;
+  }
+  return row.score;
+}
+
+function formatTrendMetric(value, metric = "total", digits = 1) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  if (metric === "rate" || metric === "percentile") {
+    return `${formatDashboardNumber(value, digits)}%`;
+  }
+  if (metric === "rank") {
+    return `#${formatDashboardNumber(value, 0)}`;
+  }
+  return formatDashboardNumber(value, digits);
+}
+
+function formatTrendDelta(value, metric = "total") {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  const sign = value > 0 ? "+" : "";
+  if (metric === "rate" || metric === "percentile") {
+    return `${sign}${formatDashboardNumber(value)}%`;
+  }
+  if (metric === "rank") {
+    return `${sign}${formatDashboardNumber(value, 0)}名`;
+  }
+  return `${sign}${formatDashboardNumber(value)}`;
+}
+
+function getFirstLastFinitePoints(points, field) {
+  const valid = (points || []).filter((point) => point && Number.isFinite(point[field]));
+  return { first: valid[0] || null, latest: valid[valid.length - 1] || null, count: valid.length };
+}
+
+function getRankChangeSummary(points, field, label, compact = false) {
+  const { first, latest, count } = getFirstLastFinitePoints(points, field);
+  if (!first || !latest) {
+    return compact ? `${label}缺失` : "缺失";
+  }
+  const delta = latest[field] - first[field];
+  const value = `${first[field]} → ${latest[field]}（${formatTrendDelta(delta, "rank")}）`;
+  if (compact) {
+    return `${label}${formatTrendDelta(delta, "rank")}`;
+  }
+  return count < (points || []).length ? `${value} · 部分考试缺失` : value;
+}
+
+function getScoreTrendStudentDetails(student) {
+  return (student.points || []).map((point) => ({
+    name: point?.examName || "考试",
+    date: point?.examDate || "",
+    scoreValue: Number.isFinite(point?.score) ? point.score : null,
+    rankClass: Number.isFinite(point?.rankClass) ? point.rankClass : null,
+    rankSchool: Number.isFinite(point?.rankSchool) ? point.rankSchool : null
+  }));
+}
+
+function openScoreTrendStudentDetail(student) {
+  if (!student) {
+    return;
+  }
+  const details = getScoreTrendStudentDetails(student);
+  openTrendDetail(`${student.name} · 多考趋势`, details, "总分", buildTrendSeries(details, "all", "总分"));
+}
+
+function buildScoreTrendAnalysis() {
+  const settings = getScoreTrendSettings();
+  const allExams = getChronologicalScoreExams();
+  const exams = getScoreTrendExamRange(allExams, settings);
+  const thresholds = getScoreDashboardThresholds();
+  const warnings = new Set();
+  const subjectSets = exams.map((exam) => new Set(exam.subjects || []));
+  const unionSubjects = Array.from(new Set(exams.flatMap((exam) => exam.subjects || [])));
+  const commonSubjects = unionSubjects.filter((subject) => subjectSets.every((set) => set.has(subject)));
+  if (unionSubjects.length && commonSubjects.length !== unionSubjects.length) {
+    warnings.add(`不同考试科目不完全一致，当前可选择单科比较；共同科目：${commonSubjects.join("、") || "无"}。`);
+  }
+  if (settings.subject !== "all" && exams.some((exam) => !(exam.subjects || []).includes(settings.subject))) {
+    warnings.add(`所选科目「${settings.subject}」不是每次考试都有，缺失考试会自动留空。`);
+  }
+
+  const nameGroups = new Map();
+  state.students.forEach((student) => {
+    const keys = [normalizeName(student.name), ...(student.aliases || []).map((alias) => normalizeName(alias))].filter(Boolean);
+    keys.forEach((key) => {
+      if (!nameGroups.has(key)) {
+        nameGroups.set(key, []);
+      }
+      nameGroups.get(key).push(student.name);
+    });
+  });
+  const duplicatedNames = Array.from(nameGroups.entries()).filter(([, names]) => names.length > 1);
+  if (duplicatedNames.length) {
+    warnings.add(`存在 ${duplicatedNames.length} 组重名或别名冲突；无学生 ID 的跨考匹配可能不准确。`);
+  }
+
+  const examStats = exams.map((exam) => {
+    const { rows, validRows, inferredMax, explicitMax } = getScoreTrendRowsForExam(exam, settings, warnings);
+    const metricValues = validRows.map((row) => getTrendMetricValue(row, settings)).filter((value) => Number.isFinite(value));
+    const scoreValues = validRows.map((row) => row.score).filter((value) => Number.isFinite(value));
+    const rateValues = validRows.map((row) => row.rate).filter((value) => Number.isFinite(value));
+    const passBase = scoreValues;
+    const average = metricValues.length ? metricValues.reduce((sum, value) => sum + value, 0) / metricValues.length : null;
+    const averageScore = scoreValues.length ? scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length : null;
+    const averageRate = rateValues.length ? rateValues.reduce((sum, value) => sum + value, 0) / rateValues.length : null;
+    const thresholdValues = thresholds;
+    const rateOf = (line) => (passBase.length ? (passBase.filter((value) => value >= line).length / passBase.length) * 100 : null);
+    return {
+      exam,
+      rows,
+      validRows,
+      inferredMax,
+      explicitMax,
+      average,
+      averageScore,
+      averageRate,
+      max: scoreValues.length ? Math.max(...scoreValues) : null,
+      min: scoreValues.length ? Math.min(...scoreValues) : null,
+      median: getMedianValue(scoreValues),
+      passRate: rateOf(thresholdValues.pass),
+      goodRate: rateOf(thresholdValues.good),
+      excellentRate: rateOf(thresholdValues.excellent),
+      missingCount: rows.length - validRows.length,
+      absentCount: rows.filter((row) => row.scoreStatus === "absent").length,
+      unrecordedCount: rows.filter((row) => row.scoreStatus === "unrecorded").length,
+      zeroCount: validRows.filter((row) => row.score === 0).length
+    };
+  });
+
+  const studentMap = new Map();
+  examStats.forEach((stat, examIndex) => {
+    stat.rows.forEach((row) => {
+      if (!row.studentKey) {
+        return;
+      }
+      if (!studentMap.has(row.studentKey)) {
+        studentMap.set(row.studentKey, {
+          key: row.studentKey,
+          name: row.name || "未命名",
+          studentId: row.studentId,
+          className: row.className,
+          points: Array(exams.length).fill(null)
+        });
+      }
+      studentMap.get(row.studentKey).points[examIndex] = {
+        ...row,
+        metricValue: getTrendMetricValue(row, settings)
+      };
+    });
+  });
+  const students = Array.from(studentMap.values()).map((student) => {
+    const validPoints = student.points.filter((point) => point && Number.isFinite(point.metricValue));
+    const first = validPoints[0] || null;
+    const latest = validPoints[validPoints.length - 1] || null;
+    const rawDelta = first && latest ? latest.metricValue - first.metricValue : null;
+    const improvement = settings.metric === "rank" && Number.isFinite(rawDelta) ? -rawDelta : rawDelta;
+    return {
+      ...student,
+      validPoints,
+      first,
+      latest,
+      rawDelta,
+      improvement,
+      volatility: getStandardDeviation(validPoints.map((point) => point.metricValue)),
+      averagePercentile: getMedianValue(validPoints.map((point) => point.percentile)),
+      latestRate: latest?.rate ?? null,
+      latestScore: latest?.score ?? null
+    };
+  });
+
+  const scoreScales = Array.from(new Set(examStats.map((stat) => Math.round((stat.explicitMax || 0) * 100) / 100).filter((value) => value > 0)));
+  const hasDifferentScoreScale = scoreScales.length > 1;
+  if (hasDifferentScoreScale) {
+    warnings.add("当前范围内考试满分设置不同，总分变化仅供参考。");
+  }
+
+  return { settings, allExams, exams, thresholds, warnings: Array.from(warnings), unionSubjects, commonSubjects, examStats, students, hasDifferentScoreScale };
+}
+
+function getTrendChange(startValue, endValue) {
+  return Number.isFinite(startValue) && Number.isFinite(endValue) ? endValue - startValue : null;
+}
+
+function updateScoreTrendFilterOptions(exams) {
+  const chronological = getChronologicalScoreExams();
+  if (scoreTrendDistributionMode && !["count", "share"].includes(scoreTrendDistributionMode.value)) {
+    scoreTrendDistributionMode.value = "count";
+  }
+  const examOptions = chronological.map((exam) => ({ value: exam.id, label: `${exam.name || "考试"}${exam.date ? ` · ${exam.date}` : ""}` }));
+  [scoreTrendStartSelect, scoreTrendEndSelect].forEach((select) => {
+    if (!select) {
+      return;
+    }
+    const previous = select.value;
+    select.innerHTML = "";
+    examOptions.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = item.label;
+      select.appendChild(option);
+    });
+    select.value = examOptions.some((item) => item.value === previous) ? previous : select === scoreTrendStartSelect ? examOptions[0]?.value || "" : examOptions[examOptions.length - 1]?.value || "";
+  });
+
+  if (scoreTrendSubjectSelect) {
+    const previous = scoreTrendSubjectSelect.value || "all";
+    const subjects = Array.from(new Set(chronological.flatMap((exam) => exam.subjects || []))).sort((a, b) => SUBJECT_ORDER.indexOf(a) - SUBJECT_ORDER.indexOf(b));
+    scoreTrendSubjectSelect.innerHTML = "";
+    const allOption = document.createElement("option");
+    allOption.value = "all";
+    allOption.textContent = "全部科目";
+    scoreTrendSubjectSelect.appendChild(allOption);
+    subjects.forEach((subject) => {
+      const option = document.createElement("option");
+      option.value = subject;
+      option.textContent = subject;
+      scoreTrendSubjectSelect.appendChild(option);
+    });
+    scoreTrendSubjectSelect.value = previous === "all" || subjects.includes(previous) ? previous : "all";
+  }
+
+  if (scoreTrendClassSelect) {
+    const previous = scoreTrendClassSelect.value;
+    const classes = Array.from(new Set(state.students.map(getStudentClassName).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+    scoreTrendClassSelect.innerHTML = "";
+    if (!classes.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "暂无班级字段";
+      scoreTrendClassSelect.appendChild(option);
+    } else {
+      classes.forEach((className) => {
+        const option = document.createElement("option");
+        option.value = className;
+        option.textContent = className;
+        scoreTrendClassSelect.appendChild(option);
+      });
+    }
+    scoreTrendClassSelect.value = classes.includes(previous) ? previous : classes[0] || "";
+  }
+
+  if (scoreTrendStudentSelect) {
+    const previous = scoreTrendStudentSelect.value;
+    scoreTrendStudentSelect.innerHTML = "";
+    state.students
+      .slice()
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "", "zh-Hans-CN"))
+      .forEach((student) => {
+        const option = document.createElement("option");
+        option.value = `id:${student.id}`;
+        option.textContent = student.name || "未命名";
+        scoreTrendStudentSelect.appendChild(option);
+      });
+    scoreTrendStudentSelect.value = Array.from(scoreTrendStudentSelect.options).some((option) => option.value === previous)
+      ? previous
+      : scoreTrendStudentSelect.options[0]?.value || "";
+  }
+}
+
+function syncScoreDashboardViewControls() {
+  const showTrend = scoreDashboardViewMode === "trend";
+  scoreSingleViewBtn?.classList.toggle("active", !showTrend);
+  scoreTrendViewBtn?.classList.toggle("active", showTrend);
+  document.querySelector(".score-dashboard-view")?.classList.toggle("score-trend-mode", showTrend);
+  document.querySelectorAll(".score-single-control").forEach((item) => item.classList.toggle("hidden", showTrend));
+  scoreTrendToolbar?.classList.toggle("hidden", !showTrend);
+  scoreDashboardContent?.classList.toggle("hidden", showTrend);
+  scoreTrendDashboardContent?.classList.toggle("hidden", !showTrend);
+  scoreTrendStartWrap?.classList.toggle("hidden", (scoreTrendRangeSelect?.value || "all") !== "custom");
+  scoreTrendEndWrap?.classList.toggle("hidden", (scoreTrendRangeSelect?.value || "all") !== "custom");
+  scoreTrendClassWrap?.classList.toggle("hidden", (scoreTrendTargetSelect?.value || "all") !== "class");
+  scoreTrendStudentWrap?.classList.toggle("hidden", (scoreTrendTargetSelect?.value || "all") !== "student");
+}
+
+function resetScoreDashboardScroll() {
+  const view = document.querySelector(".score-dashboard-view");
+  if (view) {
+    view.scrollTop = 0;
+  }
+}
+
 function renderScoreDashboard() {
   if (!scoreDashboardExamSelect || !scoreDashboardStats || !scoreDashboardContent || !scoreDashboardEmpty) {
     return;
@@ -4940,6 +5531,8 @@ function renderScoreDashboard() {
     if (scoreDashboardTableBtn) {
       scoreDashboardTableBtn.disabled = true;
     }
+    scoreTrendDashboardContent?.classList.add("hidden");
+    scoreTrendToolbar?.classList.add("hidden");
     return;
   }
 
@@ -4956,9 +5549,14 @@ function renderScoreDashboard() {
     scoreDashboardTableBtn.disabled = false;
   }
   renderScoreDashboardMetricOptions(selectedExam);
-  scoreDashboardContent.classList.remove("hidden");
+  updateScoreTrendFilterOptions(exams);
   scoreDashboardEmpty.classList.add("hidden");
-  renderScoreDashboardExam(selectedExam);
+  syncScoreDashboardViewControls();
+  if (scoreDashboardViewMode === "trend") {
+    renderScoreTrendDashboard();
+  } else {
+    renderScoreDashboardExam(selectedExam);
+  }
 }
 
 function renderScoreDashboardExam(exam) {
@@ -4993,6 +5591,731 @@ function renderScoreDashboardExam(exam) {
   renderScoreDashboardRankList(rows, metric);
   renderScoreDistribution(validRows, metric);
   renderSubjectAverages(exam);
+}
+
+function renderScoreTrendDashboard() {
+  if (!scoreTrendDashboardContent || !scoreTrendStats || !scoreTrendCharts || !scoreTrendBoards) {
+    return;
+  }
+  const analysis = buildScoreTrendAnalysis();
+  const { settings, exams, examStats, students, warnings } = analysis;
+  if (scoreDashboardSubtitle) {
+    const targetText =
+      settings.target === "class" && settings.className
+        ? `班级：${settings.className}`
+        : settings.target === "student"
+          ? `学生：${getScoreStudentByKey(settings.studentKey)?.name || "单个学生"}`
+          : "全体学生";
+    const firstExam = exams[0];
+    const latestExam = exams[exams.length - 1];
+    const rangeText = [firstExam?.date || firstExam?.name, latestExam?.date || latestExam?.name].filter(Boolean).join(" 至 ") || "按日期从早到晚";
+    scoreDashboardSubtitle.textContent = `${exams.length} 次考试 · ${rangeText} · ${targetText}`;
+  }
+
+  if (scoreTrendWarnings) {
+    scoreTrendWarnings.innerHTML = "";
+    warnings.forEach((warning) => {
+      const item = document.createElement("div");
+      item.className = "score-trend-warning";
+      item.textContent = warning;
+      scoreTrendWarnings.appendChild(item);
+    });
+    scoreTrendWarnings.classList.toggle("hidden", warnings.length === 0);
+  }
+
+  const first = examStats[0] || null;
+  const latest = examStats[examStats.length - 1] || null;
+  const uniqueStudents = new Set(students.flatMap((student) => student.validPoints.length ? [student.key] : []));
+  renderScoreTrendStats([
+    { label: "考试次数", value: String(exams.length), note: exams.length === 2 ? "对比模式" : "趋势模式", tone: "" },
+    { label: "有效学生数", value: String(uniqueStudents.size), note: "至少一次有成绩", tone: "" },
+    { label: "平均得分率变化", value: formatTrendDelta(getTrendChange(first?.averageRate, latest?.averageRate), "rate"), note: analysis.hasDifferentScoreScale ? "满分不同优先看此项" : "按可推断满分换算", tone: "good" },
+    { label: "平均总分变化", value: formatTrendDelta(getTrendChange(first?.averageScore, latest?.averageScore), "total"), note: analysis.hasDifferentScoreScale ? "总分不同，仅供参考" : "最新减起始", tone: analysis.hasDifferentScoreScale ? "warn" : "good" },
+    { label: "优秀率变化", value: formatTrendDelta(getTrendChange(first?.excellentRate, latest?.excellentRate), "rate"), note: `优秀线 ${analysis.thresholds.excellent}`, tone: "good" },
+    {
+      label: "缺考人数变化",
+      value: formatTrendDelta(getTrendChange(first?.absentCount, latest?.absentCount), "total"),
+      note: "缺考单独统计",
+      tone: latest?.absentCount ? "danger" : ""
+    }
+  ]);
+  renderScoreTrendCharts(analysis);
+  renderScoreTrendBoards(analysis);
+  renderScoreTrendContribution(analysis);
+  renderScoreTrendDistributions(analysis);
+  renderScoreTrendStudentDetail(analysis);
+}
+
+function renderScoreTrendStats(items) {
+  scoreTrendStats.innerHTML = "";
+  items.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = `score-stat-card ${item.tone || ""}`.trim();
+    const label = document.createElement("div");
+    label.className = "score-stat-label";
+    label.textContent = item.label;
+    const value = document.createElement("div");
+    value.className = "score-stat-value";
+    value.textContent = item.value;
+    const note = document.createElement("div");
+    note.className = "score-stat-note";
+    note.textContent = item.note || "";
+    card.append(label, value, note);
+    scoreTrendStats.appendChild(card);
+  });
+}
+
+function renderScoreTrendCharts(analysis) {
+  const { examStats, settings } = analysis;
+  scoreTrendCharts.innerHTML = "";
+  const isPairCompare = examStats.length === 2;
+  if (scoreTrendOverviewTitle) {
+    scoreTrendOverviewTitle.textContent = isPairCompare ? "总览对比区" : "趋势总览";
+  }
+  if (scoreTrendMeta) {
+    scoreTrendMeta.textContent = isPairCompare
+      ? `${examStats[0]?.exam?.name || "起始考试"} vs ${examStats[1]?.exam?.name || "结束考试"}`
+      : `${examStats.length} 次考试 · ${settings.subject === "all" ? "全部科目" : settings.subject}`;
+  }
+  if (!examStats.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "暂无可展示的对比数据。";
+    scoreTrendCharts.appendChild(empty);
+    return;
+  }
+  if (isPairCompare) {
+    scoreTrendCharts.appendChild(createScoreTrendMetricCompareCard(examStats));
+    return;
+  }
+  const subjectSeries = analysis.unionSubjects.slice(0, 6).map((subject) => ({
+    label: subject,
+    values: examStats.map((stat) => {
+      const values = stat.rows.map((row) => parseScoreValue(row.scores?.[subject])).filter((value) => Number.isFinite(value));
+      return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    })
+  }));
+  const chartSets = [
+    { title: "平均得分率趋势", series: [{ label: "平均得分率", values: examStats.map((stat) => stat.averageRate), suffix: "%" }] },
+    { title: "平均总分趋势", series: [{ label: "平均总分", values: examStats.map((stat) => stat.averageScore) }] },
+    {
+      title: "最高分、最低分、中位数趋势",
+      series: [
+        { label: "最高分", values: examStats.map((stat) => stat.max) },
+        { label: "最低分", values: examStats.map((stat) => stat.min) },
+        { label: "中位数", values: examStats.map((stat) => stat.median) }
+      ]
+    },
+    {
+      title: "及格率、良好率、优秀率趋势",
+      series: [
+        { label: "及格率", values: examStats.map((stat) => stat.passRate), suffix: "%" },
+        { label: "良好率", values: examStats.map((stat) => stat.goodRate), suffix: "%" },
+        { label: "优秀率", values: examStats.map((stat) => stat.excellentRate), suffix: "%" }
+      ]
+    },
+    { title: "各科平均分趋势", series: subjectSeries }
+  ];
+  chartSets.forEach((chart) => scoreTrendCharts.appendChild(createScoreTrendChartCard(chart.title, chart.series, examStats)));
+}
+
+function createScoreTrendMetricCompareCard(examStats) {
+  const start = examStats[0];
+  const end = examStats[1];
+  const rows = [
+    ["平均总分", start.averageScore, end.averageScore, ""],
+    ["最高分", start.max, end.max, ""],
+    ["最低分", start.min, end.min, ""],
+    ["中位数", start.median, end.median, ""],
+    ["优秀率", start.excellentRate, end.excellentRate, "%"],
+    ["缺考人数", start.absentCount, end.absentCount, "人"]
+  ];
+  return createScoreTrendCompareBarCard("起始考试 vs 结束考试核心指标对比", rows);
+}
+
+function createScoreTrendCompareBarCard(title, rows) {
+  const card = document.createElement("div");
+  card.className = "score-trend-chart-card score-trend-compare-card";
+  const heading = document.createElement("div");
+  heading.className = "score-trend-chart-title";
+  heading.textContent = title;
+  card.appendChild(heading);
+  const maxValue = Math.max(...rows.flatMap((row) => [row[1], row[2]]).filter((value) => Number.isFinite(value)), 1);
+  const list = document.createElement("div");
+  list.className = "score-trend-compare-bars";
+  rows.forEach(([label, startValue, endValue, suffix]) => {
+    const row = document.createElement("div");
+    row.className = "score-trend-compare-bar-row";
+    const name = document.createElement("span");
+    name.textContent = label;
+    const bars = document.createElement("div");
+    bars.className = "score-trend-compare-bar-pair";
+    [
+      ["起始", startValue, "start"],
+      ["结束", endValue, "end"]
+    ].forEach(([barLabel, value, tone]) => {
+      const item = document.createElement("div");
+      item.className = `score-trend-compare-bar ${tone}`;
+      const fill = document.createElement("i");
+      fill.style.width = Number.isFinite(value) ? `${Math.max(4, (value / maxValue) * 100)}%` : "0";
+      const text = document.createElement("b");
+      text.textContent = `${barLabel} ${Number.isFinite(value) ? formatDashboardNumber(value) : "-"}${suffix}`;
+      item.append(fill, text);
+      bars.appendChild(item);
+    });
+    row.append(name, bars);
+    list.appendChild(row);
+  });
+  card.appendChild(list);
+  return card;
+}
+
+function createScoreTrendChartCard(title, series, examStats) {
+  const card = document.createElement("div");
+  card.className = "score-trend-chart-card";
+  const heading = document.createElement("div");
+  heading.className = "score-trend-chart-title";
+  heading.textContent = title;
+  card.appendChild(heading);
+  card.appendChild(createScoreTrendSvg(series, examStats));
+  const legend = document.createElement("div");
+  legend.className = "chart-legend";
+  series.forEach((item, index) => {
+    const chip = document.createElement("span");
+    chip.className = "chart-legend-item";
+    const dot = document.createElement("i");
+    dot.style.background = getTrendSeriesColor(index);
+    chip.append(dot, document.createTextNode(item.label));
+    legend.appendChild(chip);
+  });
+  card.appendChild(legend);
+  return card;
+}
+
+function getTrendSeriesColor(index) {
+  return ["#0a84ff", "#52b788", "#d9a441", "#d9687a", "#7c6ee6", "#14a3a5"][index % 6];
+}
+
+function createScoreTrendSvg(series, examStats) {
+  const width = 520;
+  const height = 220;
+  const padding = { top: 20, right: 22, bottom: 44, left: 42 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const values = series.flatMap((item) => item.values).filter((value) => Number.isFinite(value));
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 1;
+  const spread = Math.max(max - min, 1);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.classList.add("score-trend-svg");
+  [0, 0.5, 1].forEach((ratio) => {
+    const y = padding.top + chartHeight * ratio;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", padding.left);
+    line.setAttribute("x2", width - padding.right);
+    line.setAttribute("y1", y);
+    line.setAttribute("y2", y);
+    line.setAttribute("class", "trend-grid-line");
+    svg.appendChild(line);
+  });
+  series.forEach((item, seriesIndex) => {
+    const points = item.values
+      .map((value, index) => {
+        if (!Number.isFinite(value)) {
+          return null;
+        }
+        const x = padding.left + (examStats.length <= 1 ? chartWidth / 2 : (index / (examStats.length - 1)) * chartWidth);
+        const y = padding.top + (1 - (value - min) / spread) * chartHeight;
+        return { x, y, value, index };
+      })
+      .filter(Boolean);
+    if (points.length > 1) {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      path.setAttribute("points", points.map((point) => `${point.x},${point.y}`).join(" "));
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", getTrendSeriesColor(seriesIndex));
+      path.setAttribute("stroke-width", "3");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      svg.appendChild(path);
+    }
+    points.forEach((point) => {
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", point.x);
+      circle.setAttribute("cy", point.y);
+      circle.setAttribute("r", "4");
+      circle.setAttribute("fill", getTrendSeriesColor(seriesIndex));
+      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      title.textContent = `${examStats[point.index]?.exam?.name || "考试"}：${formatDashboardNumber(point.value)}${item.suffix || ""}`;
+      circle.appendChild(title);
+      svg.appendChild(circle);
+    });
+  });
+  examStats.forEach((stat, index) => {
+    const x = padding.left + (examStats.length <= 1 ? chartWidth / 2 : (index / (examStats.length - 1)) * chartWidth);
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", x);
+    label.setAttribute("y", height - 16);
+    label.setAttribute("class", "trend-x-label");
+    label.textContent = truncateChartLabel(stat.exam.name || stat.exam.date || "考试", 6);
+    svg.appendChild(label);
+  });
+  return svg;
+}
+
+function buildTrendDistributionBuckets(values, useRate) {
+  const clean = values.filter((value) => Number.isFinite(value));
+  if (!clean.length) {
+    return [];
+  }
+  const max = useRate ? 100 : Math.max(...clean);
+  const min = useRate ? 0 : Math.min(...clean);
+  const step = useRate ? 10 : Math.max(10, Math.ceil((max - min || 1) / 6 / 10) * 10);
+  const start = useRate ? 0 : Math.floor(min / step) * step;
+  const end = useRate ? 100 : Math.ceil(max / step) * step;
+  const count = Math.max(1, Math.ceil((end - start) / step));
+  return Array.from({ length: count }, (_, index) => ({
+    min: start + index * step,
+    max: index === count - 1 ? end : start + (index + 1) * step,
+    label: `${formatBucketEdge(start + index * step)}-${formatBucketEdge(index === count - 1 ? end : start + (index + 1) * step)}`
+  }));
+}
+
+function shouldUseRateDistribution(analysis) {
+  const rateValues = analysis.examStats.flatMap((stat) => stat.validRows.map((row) => row.rate)).filter((value) => Number.isFinite(value));
+  return rateValues.length > 0 && (analysis.hasDifferentScoreScale || analysis.settings.metric === "rate");
+}
+
+function buildTrendDistributionModel(analysis) {
+  const { examStats, settings } = analysis;
+  const useRate = shouldUseRateDistribution(analysis);
+  const valueOf = (row) => (useRate ? row.rate : row.score);
+  const values = examStats.flatMap((stat) => stat.validRows.map(valueOf));
+  const buckets = buildTrendDistributionBuckets(values, useRate);
+  const rows = examStats.map((stat) => {
+    const total = stat.validRows.filter((row) => Number.isFinite(valueOf(row))).length;
+    return {
+      stat,
+      total,
+      absentCount: stat.absentCount,
+      zeroCount: stat.zeroCount,
+      unrecordedCount: stat.unrecordedCount,
+      buckets: buckets.map((bucket, index) => {
+        const isLast = index === buckets.length - 1;
+        const count = stat.validRows.filter((row) => {
+          const value = valueOf(row);
+          return Number.isFinite(value) && value >= bucket.min && (isLast ? value <= bucket.max : value < bucket.max);
+        }).length;
+        return {
+          ...bucket,
+          count,
+          share: total ? (count / total) * 100 : 0
+        };
+      })
+    };
+  });
+  const totals = rows.map((row) => row.total);
+  const forceShare = totals.length > 1 && new Set(totals).size > 1;
+  return {
+    buckets,
+    rows,
+    useRate,
+    valueMode: forceShare || settings.distributionMode === "share" ? "share" : "count",
+    forceShare
+  };
+}
+
+function formatDistributionValue(item, valueMode) {
+  return valueMode === "share" ? `${formatDashboardNumber(item.share)}%` : `${item.count}人`;
+}
+
+function renderTrendDistributionViewSwitch(analysis, model) {
+  if (analysis.examStats.length < 3) {
+    scoreTrendDistributionView = "compare";
+    return null;
+  }
+  if (!["heatmap", "compare", "share"].includes(scoreTrendDistributionView)) {
+    scoreTrendDistributionView = "heatmap";
+  }
+  const switcher = document.createElement("div");
+  switcher.className = "score-trend-distribution-tabs";
+  [
+    ["heatmap", "趋势热力图"],
+    ["compare", "起始 vs 结束"],
+    ["share", "占比分布"]
+  ].forEach(([value, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = value === scoreTrendDistributionView ? "active" : "";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      scoreTrendDistributionView = value;
+      renderScoreDashboard();
+    });
+    switcher.appendChild(button);
+  });
+  return switcher;
+}
+
+function renderScoreTrendDistributions(analysis) {
+  const { examStats } = analysis;
+  scoreTrendDistribution.innerHTML = "";
+  const model = buildTrendDistributionModel(analysis);
+  if (scoreTrendDistributionMeta) {
+    const scaleText = model.useRate ? "得分率分段" : "总分分段";
+    const valueText = model.valueMode === "share" ? "占比" : "人数";
+    scoreTrendDistributionMeta.textContent = `${scaleText} · ${valueText}${model.forceShare ? " · 参考人数不同优先占比" : ""}`;
+  }
+  const switcher = renderTrendDistributionViewSwitch(analysis, model);
+  if (switcher) {
+    scoreTrendDistribution.appendChild(switcher);
+  }
+  const buckets = model.buckets;
+  if (!buckets.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "暂无可统计的分布数据。";
+    scoreTrendDistribution.appendChild(empty);
+    return;
+  }
+  const view = examStats.length === 2 ? "compare" : scoreTrendDistributionView;
+  if (view === "share") {
+    scoreTrendDistribution.appendChild(createTrendDistributionStackedChart(model));
+  } else if (view === "heatmap") {
+    scoreTrendDistribution.appendChild(createTrendDistributionHeatmap(model));
+  } else {
+    scoreTrendDistribution.appendChild(createTrendDistributionCompareChart(model));
+  }
+  scoreTrendDistribution.appendChild(createTrendDistributionConclusion(model));
+  scoreTrendDistribution.appendChild(createTrendDistributionStatus(model));
+}
+
+function createTrendDistributionCompareChart(model) {
+  const start = model.rows[0];
+  const end = model.rows[model.rows.length - 1];
+  const maxValue = Math.max(...[start, end].flatMap((row) => row.buckets.map((bucket) => model.valueMode === "share" ? bucket.share : bucket.count)), 1);
+  const chart = document.createElement("div");
+  chart.className = "score-trend-paired-bars";
+  chart.style.setProperty("--bucket-count", String(model.buckets.length));
+  model.buckets.forEach((bucket, index) => {
+    const group = document.createElement("div");
+    group.className = "score-trend-paired-group";
+    const bars = document.createElement("div");
+    bars.className = "score-trend-paired-bar-wrap";
+    [
+      [start, "start"],
+      [end, "end"]
+    ].forEach(([row, tone]) => {
+      const item = row.buckets[index];
+      const value = model.valueMode === "share" ? item.share : item.count;
+      const bar = document.createElement("span");
+      bar.className = `score-trend-paired-bar ${tone}`;
+      bar.style.height = `${Math.max(3, (value / maxValue) * 100)}%`;
+      bar.title = `${bucket.label}${model.useRate ? "%" : ""} · ${row.stat.exam.name || "考试"} · ${item.count}人 · ${formatDashboardNumber(item.share)}%`;
+      bars.appendChild(bar);
+    });
+    const label = document.createElement("b");
+    label.textContent = `${bucket.label}${model.useRate ? "%" : ""}`;
+    group.append(bars, label);
+    chart.appendChild(group);
+  });
+  return chart;
+}
+
+function createTrendDistributionHeatmap(model) {
+  const maxValue = Math.max(...model.rows.flatMap((row) => row.buckets.map((bucket) => model.valueMode === "share" ? bucket.share : bucket.count)), 1);
+  const heatmap = document.createElement("div");
+  heatmap.className = "score-trend-heatmap";
+  heatmap.style.setProperty("--exam-count", String(model.rows.length));
+  const corner = document.createElement("span");
+  corner.className = "score-trend-heatmap-corner";
+  corner.textContent = "分段";
+  heatmap.appendChild(corner);
+  model.rows.forEach((row) => {
+    const exam = document.createElement("b");
+    exam.textContent = row.stat.exam.name || "考试";
+    heatmap.appendChild(exam);
+  });
+  model.buckets.forEach((bucket, bucketIndex) => {
+    const label = document.createElement("span");
+    label.textContent = `${bucket.label}${model.useRate ? "%" : ""}`;
+    heatmap.appendChild(label);
+    model.rows.forEach((row) => {
+      const item = row.buckets[bucketIndex];
+      const value = model.valueMode === "share" ? item.share : item.count;
+      const cell = document.createElement("i");
+      cell.style.setProperty("--heat-alpha", String(Math.min(0.68, 0.1 + (value / maxValue) * 0.56)));
+      cell.textContent = formatDistributionValue(item, model.valueMode);
+      cell.title = `${bucket.label}${model.useRate ? "%" : ""} · ${row.stat.exam.name || "考试"} · ${item.count}人 · ${formatDashboardNumber(item.share)}%`;
+      heatmap.appendChild(cell);
+    });
+  });
+  return heatmap;
+}
+
+function createTrendDistributionStackedChart(model) {
+  const chart = document.createElement("div");
+  chart.className = "score-trend-stacked-bars";
+  model.rows.forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "score-trend-stacked-row";
+    const label = document.createElement("strong");
+    label.textContent = row.stat.exam.name || "考试";
+    const bar = document.createElement("div");
+    bar.className = "score-trend-stacked-bar";
+    row.buckets.forEach((bucket, index) => {
+      const piece = document.createElement("span");
+      piece.style.width = `${bucket.share}%`;
+      piece.style.background = getTrendSeriesColor(index);
+      piece.title = `${bucket.label}${model.useRate ? "%" : ""} · ${bucket.count}人 · ${formatDashboardNumber(bucket.share)}%`;
+      bar.appendChild(piece);
+    });
+    item.append(label, bar);
+    chart.appendChild(item);
+  });
+  return chart;
+}
+
+function createTrendDistributionConclusion(model) {
+  const box = document.createElement("div");
+  box.className = "score-trend-distribution-conclusion";
+  const start = model.rows[0];
+  const end = model.rows[model.rows.length - 1];
+  const highStart = start.buckets[start.buckets.length - 1]?.count || 0;
+  const highEnd = end.buckets[end.buckets.length - 1]?.count || 0;
+  const lowStart = start.buckets[0]?.count || 0;
+  const lowEnd = end.buckets[0]?.count || 0;
+  const changes = model.buckets.map((bucket, index) => ({
+    label: `${bucket.label}${model.useRate ? "%" : ""}`,
+    delta: (end.buckets[index]?.share || 0) - (start.buckets[index]?.share || 0),
+    countDelta: (end.buckets[index]?.count || 0) - (start.buckets[index]?.count || 0)
+  }));
+  const increased = [...changes].sort((a, b) => b.delta - a.delta)[0];
+  const decreased = [...changes].sort((a, b) => a.delta - b.delta)[0];
+  [
+    `高分段人数 ${highStart} → ${highEnd}（${formatTrendDelta(highEnd - highStart, "total")}人）`,
+    `低分段人数 ${lowStart} → ${lowEnd}（${formatTrendDelta(lowEnd - lowStart, "total")}人）`,
+    increased ? `增长最多：${increased.label}（${formatTrendDelta(increased.delta, "rate")}，${formatTrendDelta(increased.countDelta, "total")}人）` : "",
+    decreased ? `下降最多：${decreased.label}（${formatTrendDelta(decreased.delta, "rate")}，${formatTrendDelta(decreased.countDelta, "total")}人）` : ""
+  ].filter(Boolean).forEach((text) => {
+    const item = document.createElement("span");
+    item.textContent = text;
+    box.appendChild(item);
+  });
+  return box;
+}
+
+function createTrendDistributionStatus(model) {
+  const status = document.createElement("div");
+  status.className = "score-trend-distribution-status";
+  model.rows.forEach((row) => {
+    const item = document.createElement("span");
+    item.textContent = `${row.stat.exam.name || "考试"}：缺考 ${row.absentCount} · 0分 ${row.zeroCount} · 未录入 ${row.unrecordedCount}`;
+    status.appendChild(item);
+  });
+  return status;
+}
+
+function renderScoreTrendBoards(analysis) {
+  const { students, settings, thresholds } = analysis;
+  scoreTrendBoards.innerHTML = "";
+  if (scoreTrendBoardMeta) {
+    scoreTrendBoardMeta.textContent = `${students.filter((student) => student.validPoints.length >= 2).length} 人可比较`;
+  }
+  const comparable = students.filter((student) => student.validPoints.length >= 2 && Number.isFinite(student.improvement));
+  const improved = [...comparable].sort((a, b) => b.improvement - a.improvement).slice(0, 8);
+  const declined = [...comparable].sort((a, b) => a.improvement - b.improvement).slice(0, 8);
+  [
+    ["进步最大学生", improved, "improvement"],
+    ["退步明显学生", declined, "improvement"]
+  ].forEach(([title, list, mode]) => scoreTrendBoards.appendChild(createScoreTrendBoard(title, list, mode, settings)));
+}
+
+function createScoreTrendBoard(title, list, mode, settings) {
+  const section = document.createElement("div");
+  section.className = "score-trend-board";
+  const heading = document.createElement("div");
+  heading.className = "score-trend-board-title";
+  heading.textContent = title;
+  section.appendChild(heading);
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "暂无可比较学生。";
+    section.appendChild(empty);
+    return section;
+  }
+  list.forEach((student, index) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "score-trend-student-row";
+    row.addEventListener("click", () => {
+      selectedTrendStudentKey = student.key;
+      if (scoreTrendTargetSelect?.value === "student" && scoreTrendStudentSelect) {
+        scoreTrendTargetSelect.value = "student";
+        scoreTrendStudentSelect.value = student.studentId ? `id:${student.studentId}` : student.key;
+      }
+      openScoreTrendStudentDetail(student);
+    });
+    const rank = document.createElement("span");
+    rank.textContent = `#${index + 1}`;
+    const name = document.createElement("strong");
+    name.textContent = student.name;
+    const note = document.createElement("em");
+    if (mode === "volatility") {
+      note.textContent = `波动 ${formatDashboardNumber(student.volatility)}`;
+    } else if (mode === "stable") {
+      note.textContent = `中位百分位 ${formatTrendMetric(student.averagePercentile, "percentile")}`;
+    } else if (mode === "critical") {
+      note.textContent = `距临界线 ${formatDashboardNumber(student.criticalDistance)}`;
+    } else {
+      const classRank = getRankChangeSummary(student.points, "rankClass", "班排", true);
+      const schoolRank = getRankChangeSummary(student.points, "rankSchool", "级排", true);
+      note.textContent = `总分 ${formatTrendDelta(student.improvement, settings.metric)} · ${classRank} · ${schoolRank}`;
+    }
+    row.append(rank, name, note);
+    section.appendChild(row);
+  });
+  return section;
+}
+
+function getSubjectContributionRows(analysis) {
+  const { examStats, unionSubjects } = analysis;
+  const start = examStats[0];
+  const end = examStats[examStats.length - 1];
+  if (!start || !end) {
+    return [];
+  }
+  return unionSubjects
+    .map((subject) => {
+      const startValues = start.rows.map((row) => parseScoreValue(row.scores?.[subject])).filter((value) => Number.isFinite(value));
+      const endValues = end.rows.map((row) => parseScoreValue(row.scores?.[subject])).filter((value) => Number.isFinite(value));
+      const startAverage = startValues.length ? startValues.reduce((sum, value) => sum + value, 0) / startValues.length : null;
+      const endAverage = endValues.length ? endValues.reduce((sum, value) => sum + value, 0) / endValues.length : null;
+      return {
+        subject,
+        startAverage,
+        endAverage,
+        delta: getTrendChange(startAverage, endAverage)
+      };
+    })
+    .filter((item) => Number.isFinite(item.delta))
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+}
+
+function renderScoreTrendContribution(analysis) {
+  if (!scoreTrendContribution) {
+    return;
+  }
+  const rows = getSubjectContributionRows(analysis);
+  scoreTrendContribution.innerHTML = "";
+  if (scoreTrendContributionMeta) {
+    scoreTrendContributionMeta.textContent = rows.length ? `${rows.length} 个科目有对比数据` : "暂无共同科目";
+  }
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "暂无可比较的各科平均分变化。";
+    scoreTrendContribution.appendChild(empty);
+    return;
+  }
+  const maxDelta = Math.max(...rows.map((item) => Math.abs(item.delta)), 1);
+  rows.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "score-trend-contribution-row";
+    const name = document.createElement("strong");
+    name.textContent = item.subject;
+    const track = document.createElement("div");
+    track.className = "score-trend-contribution-track";
+    const fill = document.createElement("i");
+    fill.className = item.delta >= 0 ? "positive" : "negative";
+    fill.style.width = `${Math.max(6, (Math.abs(item.delta) / maxDelta) * 100)}%`;
+    track.appendChild(fill);
+    const value = document.createElement("span");
+    value.textContent = `平均分 ${formatTrendDelta(item.delta, "total")}（${formatDashboardNumber(item.startAverage)} → ${formatDashboardNumber(item.endAverage)}）`;
+    row.append(name, track, value);
+    scoreTrendContribution.appendChild(row);
+  });
+}
+
+function getMainChangedSubjects(student, analysis) {
+  const subjects = analysis.unionSubjects || [];
+  const start = student.points[0];
+  const end = student.points[student.points.length - 1];
+  return subjects
+    .map((subject) => ({
+      subject,
+      delta: getTrendChange(parseScoreValue(start?.scores?.[subject]), parseScoreValue(end?.scores?.[subject]))
+    }))
+    .filter((item) => Number.isFinite(item.delta))
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 2)
+    .map((item) => `${item.subject}${formatTrendDelta(item.delta, "total")}`)
+    .join("，") || "-";
+}
+
+function renderScoreTrendStudentDetail(analysis) {
+  const { students, examStats } = analysis;
+  scoreTrendStudentDetail.innerHTML = "";
+  if (scoreTrendStudentTitle) {
+    scoreTrendStudentTitle.textContent = "学生明细表";
+  }
+  const comparable = students.filter((student) => student.points.length && (student.points[0] || student.points[student.points.length - 1]));
+  if (scoreTrendStudentMeta) {
+    scoreTrendStudentMeta.textContent = `${comparable.length} 名学生`;
+  }
+  if (!comparable.length || examStats.length < 2) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "暂无可展示的学生明细。";
+    scoreTrendStudentDetail.appendChild(empty);
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "score-trend-detail-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["姓名", "起始考试总分", "结束考试总分", "总分变化", "班排变化", "级排变化", "主要变化科目"].forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  const tbody = document.createElement("tbody");
+  comparable
+    .slice()
+    .sort((a, b) => (b.improvement || 0) - (a.improvement || 0))
+    .forEach((student) => {
+      const start = student.points[0];
+      const end = student.points[student.points.length - 1];
+      const tr = document.createElement("tr");
+      tr.className = "score-trend-detail-row";
+      tr.tabIndex = 0;
+      tr.addEventListener("click", () => openScoreTrendStudentDetail(student));
+      tr.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openScoreTrendStudentDetail(student);
+        }
+      });
+      [
+        student.name,
+        formatTrendMetric(start?.score, "total"),
+        formatTrendMetric(end?.score, "total"),
+        formatTrendDelta(getTrendChange(start?.score, end?.score), "total"),
+        getRankChangeSummary(student.points, "rankClass", "班排"),
+        getRankChangeSummary(student.points, "rankSchool", "级排"),
+        getMainChangedSubjects(student, analysis)
+      ].forEach((value) => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  table.append(thead, tbody);
+  scoreTrendStudentDetail.appendChild(table);
 }
 
 function getScoreNameByMetric(rows, value) {
@@ -7044,6 +8367,413 @@ function getStudentAiTrendContext(student) {
     payload,
     cacheSignature: getAiCacheSignature("student-trend", { studentId: student.id, payload })
   };
+}
+
+function getStudentSeatLabel(studentId) {
+  const index = state.seatOrder.findIndex((id) => id === studentId);
+  if (index < 0) {
+    return "";
+  }
+  const row = Math.floor(index / COLS) + 1;
+  const col = (index % COLS) + 1;
+  return `第${row}排第${col}列`;
+}
+
+function getStudentTagLabels(student) {
+  const ids = [...sanitizeTags(student?.manualTags), ...sanitizeTags(student?.autoTags)];
+  return Array.from(new Set(ids.map((id) => TAG_BY_ID.get(id)?.labelZh || "").filter(Boolean)));
+}
+
+function getStudentExamFullScore(exam) {
+  const saved = getSavedExamRecords().find((item) => item.id === exam.id || (item.name === exam.name && item.date === exam.date));
+  if (saved) {
+    return getExplicitTrendFullScore(saved, "all");
+  }
+  return null;
+}
+
+function getStudentExamTotalScore(exam) {
+  return parseScoreValue(exam.total?.score) ?? sumExamScores(exam.scores);
+}
+
+function collectStudentCommentContext(studentId, teacherNote = "") {
+  const student = state.students.find((item) => item.id === studentId);
+  if (!student) {
+    return null;
+  }
+  const exams = Array.isArray(student.exams)
+    ? [...student.exams].sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b)))
+    : [];
+  const latest = exams[exams.length - 1] || null;
+  const first = exams[0] || null;
+  const latestSubjects = latest
+    ? (latest.subjects || [])
+        .map((subject) => ({
+          subject,
+          score: parseScoreValue(latest.scores?.[subject]),
+          rankClass: parseRankValue(latest.scores?.[subject]?.rankClass)
+        }))
+        .filter((item) => Number.isFinite(item.score))
+        .sort((a, b) => b.score - a.score)
+    : [];
+  const trendSubjects = first && latest
+    ? (latest.subjects || [])
+        .map((subject) => ({
+          subject,
+          delta: getTrendChange(parseScoreValue(first.scores?.[subject]), parseScoreValue(latest.scores?.[subject]))
+        }))
+        .filter((item) => Number.isFinite(item.delta))
+        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+        .slice(0, 3)
+    : [];
+  const latestTotal = latest ? getStudentExamTotalScore(latest) : null;
+  const firstTotal = first ? getStudentExamTotalScore(first) : null;
+  const latestFullScore = latest ? getStudentExamFullScore(latest) : null;
+  const firstFullScore = first ? getStudentExamFullScore(first) : null;
+  const latestRate = Number.isFinite(latestTotal) && Number.isFinite(latestFullScore) && latestFullScore > 0 ? (latestTotal / latestFullScore) * 100 : null;
+  const firstRate = Number.isFinite(firstTotal) && Number.isFinite(firstFullScore) && firstFullScore > 0 ? (firstTotal / firstFullScore) * 100 : null;
+  const tags = getStudentTagLabels(student);
+  return {
+    student: {
+      id: student.id,
+      name: student.name || "未命名",
+      className: getStudentClassName(student),
+      seat: getStudentSeatLabel(student.id)
+    },
+    latestExam: latest
+      ? {
+          name: latest.name || "考试",
+          date: latest.date || "",
+          totalScore: latestTotal,
+          scoreRate: latestRate,
+          classRank: parseRankValue(latest.total?.rankClass),
+          schoolRank: parseRankValue(latest.total?.rankSchool),
+          subjects: latestSubjects.map((item) => ({
+            subject: item.subject,
+            score: item.score,
+            rankClass: item.rankClass
+          }))
+        }
+      : null,
+    trend: {
+      examCount: exams.length,
+      totalScoreChange: getTrendChange(firstTotal, latestTotal),
+      scoreRateChange: getTrendChange(firstRate, latestRate),
+      classRankChange: getTrendChange(parseRankValue(first?.total?.rankClass), parseRankValue(latest?.total?.rankClass)),
+      schoolRankChange: getTrendChange(parseRankValue(first?.total?.rankSchool), parseRankValue(latest?.total?.rankSchool)),
+      changedSubjects: trendSubjects
+    },
+    strengths: latestSubjects.slice(0, 2).map((item) => item.subject),
+    weaknesses: latestSubjects.slice(-2).reverse().map((item) => item.subject),
+    tags,
+    teacherNote: teacherNote.trim()
+  };
+}
+
+function getStudentCommentReadiness(context) {
+  if (!context) {
+    return { ok: false, message: "未找到学生。" };
+  }
+  const hasExam = Boolean(context.latestExam);
+  const hasTrend = context.trend.examCount >= 2;
+  const hasTags = context.tags.length > 0;
+  const hasTeacherNote = Boolean(context.teacherNote);
+  if (!hasExam && !hasTags && !hasTeacherNote) {
+    return { ok: false, message: "当前学生缺少成绩、标签和教师补充评价，请先补充至少一项信息。" };
+  }
+  if (!hasExam && !hasTeacherNote) {
+    return { ok: false, message: "暂无最近考试成绩，请先补充教师评价后再生成。" };
+  }
+  const hints = [];
+  if (!hasTrend) {
+    hints.push("多次考试趋势不足，将主要参考最近一次成绩、标签和教师评价。");
+  }
+  if (!hasTeacherNote) {
+    hints.push("可补充课堂表现或作业情况，评语会更自然。");
+  }
+  return { ok: true, message: hints.join(" ") };
+}
+
+function buildStudentCommentPayload(studentId) {
+  const teacherNote = aiCommentTeacherNote?.value || "";
+  const style = aiCommentStyleSelect?.value || "warm";
+  const context = collectStudentCommentContext(studentId, teacherNote);
+  return {
+    style,
+    context,
+    requirements: {
+      length: "100-150 Chinese characters",
+      useOnlyProvidedFacts: true,
+      tone: {
+        warm: "温和鼓励",
+        formal: "客观正式",
+        brief: "简洁家长会风格"
+      }[style] || "温和鼓励"
+    }
+  };
+}
+
+function renderAiCommentContext(studentId) {
+  const context = collectStudentCommentContext(studentId, aiCommentTeacherNote?.value || "");
+  if (!context) {
+    return;
+  }
+  if (aiCommentTitle) {
+    aiCommentTitle.textContent = `${context.student.name} · 评语助手`;
+  }
+  if (aiCommentStudentInfo) {
+    aiCommentStudentInfo.innerHTML = "";
+    [
+      ["姓名", context.student.name],
+      ["班级", context.student.className || "未填写"],
+      ["座位", context.student.seat || "未安排"]
+    ].forEach(([label, value]) => {
+      const item = document.createElement("div");
+      const name = document.createElement("span");
+      name.textContent = label;
+      const content = document.createElement("strong");
+      content.textContent = value;
+      item.append(name, content);
+      aiCommentStudentInfo.appendChild(item);
+    });
+  }
+  if (aiCommentScoreSummary) {
+    aiCommentScoreSummary.innerHTML = "";
+    const rows = [];
+    if (context.latestExam) {
+      rows.push(`最近考试：${context.latestExam.name}${context.latestExam.date ? ` · ${context.latestExam.date}` : ""}`);
+      rows.push(`总分：${formatTrendMetric(context.latestExam.totalScore, "total")}${Number.isFinite(context.latestExam.scoreRate) ? ` · 得分率 ${formatTrendMetric(context.latestExam.scoreRate, "rate")}` : ""}`);
+      rows.push(`排名：${context.latestExam.classRank ? `班排 ${context.latestExam.classRank}` : "班排缺失"}${context.latestExam.schoolRank ? ` · 级排 ${context.latestExam.schoolRank}` : ""}`);
+    } else {
+      rows.push("暂无最近考试成绩。");
+    }
+    if (context.trend.examCount >= 2) {
+      rows.push(`趋势：总分${formatTrendDelta(context.trend.totalScoreChange, "total")}，得分率${formatTrendDelta(context.trend.scoreRateChange, "rate")}，班排${formatTrendDelta(context.trend.classRankChange, "rank")}`);
+    }
+    if (context.strengths.length) {
+      rows.push(`优势科目：${context.strengths.join("、")}`);
+    }
+    if (context.weaknesses.length) {
+      rows.push(`薄弱科目：${context.weaknesses.join("、")}`);
+    }
+    rows.forEach((text) => {
+      const item = document.createElement("div");
+      item.textContent = text;
+      aiCommentScoreSummary.appendChild(item);
+    });
+  }
+  if (aiCommentTags) {
+    aiCommentTags.innerHTML = "";
+    if (!context.tags.length) {
+      const empty = document.createElement("span");
+      empty.className = "tag-chip";
+      empty.textContent = "暂无标签";
+      aiCommentTags.appendChild(empty);
+    } else {
+      context.tags.forEach((tag) => {
+        const chip = document.createElement("span");
+        chip.className = "tag-chip active";
+        chip.textContent = tag;
+        aiCommentTags.appendChild(chip);
+      });
+    }
+  }
+  const readiness = getStudentCommentReadiness(context);
+  if (aiCommentStatus) {
+    aiCommentStatus.textContent = readiness.message || "请核对摘要，可补充课堂表现后生成。";
+    aiCommentStatus.dataset.tone = readiness.ok ? "muted" : "error";
+  }
+  if (aiCommentGenerateBtn) {
+    aiCommentGenerateBtn.disabled = !readiness.ok;
+  }
+  if (aiCommentRegenerateBtn) {
+    aiCommentRegenerateBtn.disabled = !readiness.ok;
+  }
+}
+
+function updateAiCommentWordCount() {
+  if (aiCommentWordCount) {
+    aiCommentWordCount.textContent = `${(aiCommentResult?.value || "").trim().length} 字`;
+  }
+}
+
+function setAiCommentLoading(isLoading, message = "") {
+  [aiCommentGenerateBtn, aiCommentRegenerateBtn, aiCommentCopyBtn, aiCommentSaveBtn].forEach((button) => {
+    if (button) {
+      button.disabled = isLoading;
+    }
+  });
+  if (aiCommentGenerateBtn) {
+    aiCommentGenerateBtn.textContent = isLoading ? "生成中" : "生成评语";
+  }
+  if (aiCommentStatus && message) {
+    aiCommentStatus.textContent = message;
+    aiCommentStatus.dataset.tone = isLoading ? "muted" : aiCommentStatus.dataset.tone || "muted";
+  }
+}
+
+function openAiCommentDrawer(studentId = activeStudentId) {
+  const student = state.students.find((item) => item.id === studentId);
+  if (!student || !aiCommentDrawer) {
+    return;
+  }
+  activeStudentId = studentId;
+  const saved = student.aiComments?.latest || null;
+  if (aiCommentTeacherNote) {
+    aiCommentTeacherNote.value = saved?.teacherNote || "";
+  }
+  if (aiCommentStyleSelect) {
+    aiCommentStyleSelect.value = saved?.style || "warm";
+  }
+  if (aiCommentResult) {
+    aiCommentResult.value = saved?.text || "";
+  }
+  aiCommentDrawer.classList.remove("hidden");
+  aiCommentDrawer.setAttribute("aria-hidden", "false");
+  renderAiCommentContext(studentId);
+  updateAiCommentWordCount();
+  setTimeout(() => aiCommentTeacherNote?.focus(), 0);
+}
+
+function closeAiCommentDrawer() {
+  aiCommentDrawer?.classList.add("hidden");
+  aiCommentDrawer?.setAttribute("aria-hidden", "true");
+}
+
+async function generateStudentComment(studentId = activeStudentId, options = {}) {
+  const payload = buildStudentCommentPayload(studentId);
+  const readiness = getStudentCommentReadiness(payload.context);
+  if (!readiness.ok) {
+    if (aiCommentStatus) {
+      aiCommentStatus.textContent = readiness.message;
+      aiCommentStatus.dataset.tone = "error";
+    }
+    return null;
+  }
+  if (window.location.protocol === "file:") {
+    if (aiCommentStatus) {
+      aiCommentStatus.textContent = "当前是本地文件打开方式，浏览器会拦截 AI 网络请求。请通过正式网页打开后再使用。";
+      aiCommentStatus.dataset.tone = "error";
+    }
+    return null;
+  }
+  if (!navigator.onLine) {
+    if (aiCommentStatus) {
+      aiCommentStatus.textContent = "当前处于离线状态，联网后可生成评语。";
+      aiCommentStatus.dataset.tone = "error";
+    }
+    return null;
+  }
+  if (!validateAiPayloadSize(payload)) {
+    if (aiCommentStatus) {
+      aiCommentStatus.textContent = "当前摘要过大，已停止发送。请减少补充内容后再试。";
+      aiCommentStatus.dataset.tone = "error";
+    }
+    return null;
+  }
+  const cacheSignature = getAiCacheSignature(AI_COMMENT_CACHE_SCOPE, { studentId, payload });
+  if (!options.force) {
+    const cached = getCachedAiResult(cacheSignature);
+    if (cached?.comment && aiCommentResult) {
+      aiCommentResult.value = cached.comment;
+      updateAiCommentWordCount();
+      if (aiCommentStatus) {
+        aiCommentStatus.textContent = "已显示缓存评语，可编辑后保存。";
+        aiCommentStatus.dataset.tone = "success";
+      }
+      return cached;
+    }
+  }
+  setAiCommentLoading(true, "正在生成评语...");
+  try {
+    const auth = await ensureAiAuth();
+    if (!auth) {
+      return null;
+    }
+    const baseUrl = getAiWorkerBaseUrl();
+    const sendRequest = (token) => fetch(`${baseUrl}/generate-comment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+    let response = await sendRequest(auth.token);
+    if (response.status === 401) {
+      clearAiAuth(false);
+      const retryAuth = await requestAiAuth();
+      if (!retryAuth) {
+        return null;
+      }
+      response = await sendRequest(retryAuth.token);
+    }
+    if (!response.ok) {
+      throw new Error(response.status === 403 ? "unauthorized" : "ai_failed");
+    }
+    const data = await response.json();
+    const comment = (data.comment || "").trim();
+    if (!comment) {
+      throw new Error("ai_failed");
+    }
+    storeCachedAiResult(cacheSignature, { comment });
+    if (aiCommentResult) {
+      aiCommentResult.value = comment;
+    }
+    updateAiCommentWordCount();
+    if (aiCommentStatus) {
+      aiCommentStatus.textContent = data.needsMoreInfo ? `已生成，但建议补充：${(data.missingInfo || []).join("、")}` : "已生成，可继续编辑或保存。";
+      aiCommentStatus.dataset.tone = data.needsMoreInfo ? "warn" : "success";
+    }
+    return data;
+  } catch (error) {
+    if (aiCommentStatus) {
+      aiCommentStatus.textContent = error.message === "unauthorized" ? "AI 功能未授权。" : "AI 评语暂时不可用，请稍后重试。";
+      aiCommentStatus.dataset.tone = "error";
+    }
+    return null;
+  } finally {
+    setAiCommentLoading(false);
+  }
+}
+
+function saveStudentComment(studentId = activeStudentId) {
+  const student = state.students.find((item) => item.id === studentId);
+  const text = (aiCommentResult?.value || "").trim();
+  if (!student || !text) {
+    showToast("暂无可保存的评语", "error");
+    return;
+  }
+  student.aiComments = student.aiComments && typeof student.aiComments === "object" ? student.aiComments : {};
+  student.aiComments.latest = {
+    text,
+    style: aiCommentStyleSelect?.value || "warm",
+    teacherNote: aiCommentTeacherNote?.value || "",
+    updatedAt: new Date().toISOString()
+  };
+  saveState();
+  renderSearchResults();
+  showToast("评语已保存", "success");
+  if (aiCommentStatus) {
+    aiCommentStatus.textContent = "评语已保存到该学生。";
+    aiCommentStatus.dataset.tone = "success";
+  }
+}
+
+async function copyStudentComment() {
+  const text = (aiCommentResult?.value || "").trim();
+  if (!text) {
+    showToast("暂无可复制的评语", "error");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast("评语已复制", "success");
+  } catch (error) {
+    aiCommentResult?.select();
+    document.execCommand("copy");
+    showToast("评语已复制", "success");
+  }
 }
 
 function getExamSortValue(exam) {
@@ -9559,6 +11289,10 @@ if (scoreDashboardMetricSelect) {
     return;
   }
   input.addEventListener("input", () => {
+    if (scoreDashboardViewMode === "trend") {
+      renderScoreDashboard();
+      return;
+    }
     const exam = getSavedExamRecords().find((item) => item.id === scoreDashboardExamSelect?.value);
     if (exam) {
       renderScoreDashboardExam(exam);
@@ -9574,6 +11308,44 @@ if (scoreDashboardTableBtn) {
     }
   });
 }
+
+if (scoreSingleViewBtn) {
+  scoreSingleViewBtn.addEventListener("click", () => {
+    scoreDashboardViewMode = "single";
+    renderScoreDashboard();
+    resetScoreDashboardScroll();
+  });
+}
+
+if (scoreTrendViewBtn) {
+  scoreTrendViewBtn.addEventListener("click", () => {
+    scoreDashboardViewMode = "trend";
+    renderScoreDashboard();
+    resetScoreDashboardScroll();
+  });
+}
+
+[
+  scoreTrendRangeSelect,
+  scoreTrendStartSelect,
+  scoreTrendEndSelect,
+  scoreTrendTargetSelect,
+  scoreTrendClassSelect,
+  scoreTrendStudentSelect,
+  scoreTrendMetricSelect,
+  scoreTrendSubjectSelect,
+  scoreTrendDistributionMode
+].forEach((control) => {
+  if (!control) {
+    return;
+  }
+  control.addEventListener("change", () => {
+    if (control === scoreTrendStudentSelect) {
+      selectedTrendStudentKey = control.value;
+    }
+    renderScoreDashboard();
+  });
+});
 
 if (savedExamTableClose) {
   savedExamTableClose.addEventListener("click", closeSavedExamTable);
@@ -9906,6 +11678,41 @@ if (aiTrendBtn) {
   aiTrendBtn.addEventListener("click", () => {
     handleStudentAiTrendClick();
   });
+}
+if (aiCommentBtn) {
+  aiCommentBtn.addEventListener("click", () => {
+    openAiCommentDrawer();
+  });
+}
+if (aiCommentClose) {
+  aiCommentClose.addEventListener("click", closeAiCommentDrawer);
+}
+if (aiCommentDrawer) {
+  aiCommentDrawer.addEventListener("click", (event) => {
+    if (event.target === aiCommentDrawer) {
+      closeAiCommentDrawer();
+    }
+  });
+}
+if (aiCommentTeacherNote) {
+  aiCommentTeacherNote.addEventListener("input", () => {
+    renderAiCommentContext(activeStudentId);
+  });
+}
+if (aiCommentResult) {
+  aiCommentResult.addEventListener("input", updateAiCommentWordCount);
+}
+if (aiCommentGenerateBtn) {
+  aiCommentGenerateBtn.addEventListener("click", () => generateStudentComment(activeStudentId));
+}
+if (aiCommentRegenerateBtn) {
+  aiCommentRegenerateBtn.addEventListener("click", () => generateStudentComment(activeStudentId, { force: true }));
+}
+if (aiCommentCopyBtn) {
+  aiCommentCopyBtn.addEventListener("click", copyStudentComment);
+}
+if (aiCommentSaveBtn) {
+  aiCommentSaveBtn.addEventListener("click", () => saveStudentComment(activeStudentId));
 }
 if (classAiTrendBtn) {
   classAiTrendBtn.addEventListener("click", () => {
