@@ -391,6 +391,7 @@ async function handleGenerateStudentComment(request, env, corsHeaders) {
   if (missingInfo.length >= 3 && !toText(body.value.context.teacherNote)) {
     return jsonResponse({ comment: "", needsMoreInfo: true, missingInfo }, 200, corsHeaders);
   }
+  const commentLength = getStudentCommentLengthSettings(body.value);
 
   try {
     const response = await fetch("https://api.deepseek.com/chat/completions", {
@@ -407,7 +408,7 @@ async function handleGenerateStudentComment(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的班主任评语助手。只根据用户提供的单个学生信息、成绩摘要、标签和教师补充评价写期末评语。禁止编造未提供事实，禁止夸大或做医学/心理诊断。语言自然，不模板化，兼具鼓励和建设性提醒。必须返回 JSON，字段为 comment、needsMoreInfo、missingInfo。comment 必须是中文 100 到 150 字。若信息不足，needsMoreInfo 为 true，missingInfo 说明需要补充哪些信息，comment 可以为空。"
+              `你是谨慎的班主任评语助手。只根据用户提供的单个学生信息、成绩摘要、标签和教师补充评价写期末评语。禁止编造未提供事实，禁止夸大或做医学/心理诊断。语言自然，不模板化，适合作为期末评语，兼具鼓励和建设性提醒。必须返回 JSON，字段为 comment、needsMoreInfo、missingInfo。comment 必须是中文，目标长度为${commentLength.instruction}。若信息不足，needsMoreInfo 为 true，missingInfo 说明需要补充哪些信息，comment 可以为空。`
           },
           {
             role: "user",
@@ -425,7 +426,7 @@ async function handleGenerateStudentComment(request, env, corsHeaders) {
     if (!parsed) {
       return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
     }
-    return jsonResponse(sanitizeStudentCommentResult(parsed, missingInfo), 200, corsHeaders);
+    return jsonResponse(sanitizeStudentCommentResult(parsed, missingInfo, commentLength), 200, corsHeaders);
   } catch (error) {
     return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
   }
@@ -493,10 +494,13 @@ function isValidScoreMappingPayload(payload) {
 function isValidStudentCommentPayload(payload) {
   const context = payload?.context;
   const student = context?.student;
+  const length = getStudentCommentLengthSettings(payload);
   return (
     payload &&
     typeof payload === "object" &&
+    Boolean(toText(payload.studentId)) &&
     ["warm", "formal", "brief"].includes(payload.style) &&
+    Boolean(length) &&
     context &&
     typeof context === "object" &&
     student &&
@@ -507,6 +511,24 @@ function isValidStudentCommentPayload(payload) {
     Array.isArray(context.strengths) &&
     Array.isArray(context.weaknesses)
   );
+}
+
+function getStudentCommentLengthSettings(payload) {
+  const mode = toText(payload?.commentLengthMode || "standard");
+  const customTarget = Math.round(Number(payload?.targetWordCount));
+  if (mode === "short") {
+    return { mode, instruction: "80 到 100 字", maxChars: 130 };
+  }
+  if (mode === "standard") {
+    return { mode, instruction: "100 到 150 字", maxChars: 180 };
+  }
+  if (mode === "long") {
+    return { mode, instruction: "150 到 200 字", maxChars: 230 };
+  }
+  if (mode === "custom" && Number.isFinite(customTarget) && customTarget >= 50 && customTarget <= 300) {
+    return { mode, instruction: `约 ${customTarget} 字，允许上下浮动 15 字`, maxChars: Math.min(330, customTarget + 35) };
+  }
+  return null;
 }
 
 function getStudentCommentMissingInfo(context) {
@@ -696,9 +718,9 @@ function sanitizeScoreMappingResult(result, payload) {
   };
 }
 
-function sanitizeStudentCommentResult(result, fallbackMissingInfo = []) {
+function sanitizeStudentCommentResult(result, fallbackMissingInfo = [], lengthSettings = null) {
   const rawComment = String(toText(result.comment) || "").replace(/\s+/g, "");
-  const comment = rawComment.slice(0, 180);
+  const comment = rawComment.slice(0, lengthSettings?.maxChars || 180);
   const missingInfo = Array.isArray(result.missingInfo)
     ? result.missingInfo.map((item) => toText(item)).filter(Boolean).slice(0, 6)
     : fallbackMissingInfo;

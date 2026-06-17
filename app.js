@@ -16,6 +16,14 @@ const AI_AUTH_SESSION_TOKEN_KEY = "seat-manager-ai-session-token";
 const AI_AUTH_SESSION_EXPIRES_KEY = "seat-manager-ai-session-expires";
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
 const AI_COMMENT_CACHE_SCOPE = "student-comment";
+const AI_COMMENT_DRAFT_KEY_PREFIX = "seat-manager-ai-comment-draft";
+const AI_COMMENT_DEFAULT_LENGTH_MODE = "standard";
+const AI_COMMENT_DEFAULT_TARGET_WORD_COUNT = 120;
+const AI_COMMENT_LENGTH_OPTIONS = {
+  short: { label: "80～100 字", min: 80, max: 100, instruction: "80 到 100 字" },
+  standard: { label: "100～150 字", min: 100, max: 150, instruction: "100 到 150 字" },
+  long: { label: "150～200 字", min: 150, max: 200, instruction: "150 到 200 字" }
+};
 const AI_REMEMBER_DAYS = 30;
 const AI_REQUEST_LIMIT_BYTES = 20 * 1024;
 const SYNC_AUTH_TOKEN_KEY = "seat-manager-sync-token";
@@ -249,13 +257,15 @@ const aiCommentStudentInfo = document.getElementById("aiCommentStudentInfo");
 const aiCommentScoreSummary = document.getElementById("aiCommentScoreSummary");
 const aiCommentTags = document.getElementById("aiCommentTags");
 const aiCommentTeacherNote = document.getElementById("aiCommentTeacherNote");
+const aiCommentLengthMode = document.getElementById("aiCommentLengthMode");
+const aiCommentCustomLengthWrap = document.getElementById("aiCommentCustomLengthWrap");
+const aiCommentTargetWordCount = document.getElementById("aiCommentTargetWordCount");
 const aiCommentStyleSelect = document.getElementById("aiCommentStyleSelect");
 const aiCommentResult = document.getElementById("aiCommentResult");
 const aiCommentWordCount = document.getElementById("aiCommentWordCount");
 const aiCommentGenerateBtn = document.getElementById("aiCommentGenerateBtn");
 const aiCommentRegenerateBtn = document.getElementById("aiCommentRegenerateBtn");
 const aiCommentCopyBtn = document.getElementById("aiCommentCopyBtn");
-const aiCommentSaveBtn = document.getElementById("aiCommentSaveBtn");
 const autoAcademicEnabled = document.getElementById("autoAcademicEnabled");
 const autoAcademicRangeMode = document.getElementById("autoAcademicRangeMode");
 const autoAcademicRecentWrap = document.getElementById("autoAcademicRecentWrap");
@@ -1333,7 +1343,7 @@ function registerOfflineApp() {
   });
 
   navigator.serviceWorker
-    .register("./sw.js?v=20260617-dashboard-ai-comment")
+    .register("./sw.js?v=20260617-comment-drawer-v2")
     .then((registration) => {
       if (registration.waiting) {
         showUpdatePrompt(registration.waiting);
@@ -5493,7 +5503,13 @@ function syncScoreDashboardViewControls() {
   scoreSingleViewBtn?.classList.toggle("active", !showTrend);
   scoreTrendViewBtn?.classList.toggle("active", showTrend);
   document.querySelector(".score-dashboard-view")?.classList.toggle("score-trend-mode", showTrend);
-  document.querySelectorAll(".score-single-control").forEach((item) => item.classList.toggle("hidden", showTrend));
+  document.querySelectorAll(".score-single-control").forEach((item) => {
+    item.classList.toggle("is-placeholder", showTrend);
+    item.setAttribute("aria-hidden", showTrend ? "true" : "false");
+    if ("tabIndex" in item) {
+      item.tabIndex = showTrend ? -1 : 0;
+    }
+  });
   scoreTrendToolbar?.classList.toggle("hidden", !showTrend);
   scoreDashboardContent?.classList.toggle("hidden", showTrend);
   scoreTrendDashboardContent?.classList.toggle("hidden", !showTrend);
@@ -5995,6 +6011,19 @@ function createTrendDistributionCompareChart(model) {
   const start = model.rows[0];
   const end = model.rows[model.rows.length - 1];
   const maxValue = Math.max(...[start, end].flatMap((row) => row.buckets.map((bucket) => model.valueMode === "share" ? bucket.share : bucket.count)), 1);
+  const wrapper = document.createElement("div");
+  wrapper.className = "score-trend-paired-chart-wrap";
+  const legend = document.createElement("div");
+  legend.className = "score-trend-distribution-legend";
+  [
+    [start, "start"],
+    [end, "end"]
+  ].forEach(([row, tone]) => {
+    const item = document.createElement("span");
+    item.className = `score-trend-distribution-legend-item ${tone}`;
+    item.textContent = row.stat.exam.name || "考试";
+    legend.appendChild(item);
+  });
   const chart = document.createElement("div");
   chart.className = "score-trend-paired-bars";
   chart.style.setProperty("--bucket-count", String(model.buckets.length));
@@ -6020,7 +6049,8 @@ function createTrendDistributionCompareChart(model) {
     group.append(bars, label);
     chart.appendChild(group);
   });
-  return chart;
+  wrapper.append(legend, chart);
+  return wrapper;
 }
 
 function createTrendDistributionHeatmap(model) {
@@ -8494,16 +8524,149 @@ function getStudentCommentReadiness(context) {
   return { ok: true, message: hints.join(" ") };
 }
 
+function getStudentCommentCacheKey(studentId) {
+  return `${AI_COMMENT_DRAFT_KEY_PREFIX}:${studentId || "unknown"}`;
+}
+
+function normalizeCommentLengthSettings(mode = AI_COMMENT_DEFAULT_LENGTH_MODE, targetWordCount = AI_COMMENT_DEFAULT_TARGET_WORD_COUNT) {
+  const normalizedMode = mode === "custom" || Object.prototype.hasOwnProperty.call(AI_COMMENT_LENGTH_OPTIONS, mode) ? mode : AI_COMMENT_DEFAULT_LENGTH_MODE;
+  const target = Math.min(300, Math.max(50, Math.round(Number(targetWordCount) || AI_COMMENT_DEFAULT_TARGET_WORD_COUNT)));
+  if (normalizedMode === "custom") {
+    return {
+      commentLengthMode: "custom",
+      targetWordCount: target,
+      lengthRange: `${target} 字左右`,
+      lengthInstruction: `约 ${target} 字，允许上下浮动 15 字`
+    };
+  }
+  const option = AI_COMMENT_LENGTH_OPTIONS[normalizedMode] || AI_COMMENT_LENGTH_OPTIONS[AI_COMMENT_DEFAULT_LENGTH_MODE];
+  return {
+    commentLengthMode: normalizedMode,
+    targetWordCount: Math.round((option.min + option.max) / 2),
+    lengthRange: option.label,
+    lengthInstruction: option.instruction
+  };
+}
+
+function getAiCommentLengthSettings() {
+  return normalizeCommentLengthSettings(aiCommentLengthMode?.value || AI_COMMENT_DEFAULT_LENGTH_MODE, aiCommentTargetWordCount?.value || AI_COMMENT_DEFAULT_TARGET_WORD_COUNT);
+}
+
+function syncAiCommentLengthControls() {
+  const mode = aiCommentLengthMode?.value || AI_COMMENT_DEFAULT_LENGTH_MODE;
+  aiCommentCustomLengthWrap?.classList.toggle("hidden", mode !== "custom");
+  if (aiCommentTargetWordCount) {
+    aiCommentTargetWordCount.disabled = mode !== "custom";
+    if (!Number.isFinite(Number(aiCommentTargetWordCount.value))) {
+      aiCommentTargetWordCount.value = String(AI_COMMENT_DEFAULT_TARGET_WORD_COUNT);
+    }
+  }
+  updateAiCommentWordCount();
+}
+
+function normalizeStudentCommentDraft(data) {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  const length = normalizeCommentLengthSettings(data.lengthMode || data.commentLengthMode, data.targetWordCount);
+  return {
+    generatedComment: String(data.generatedComment || data.text || "").trim(),
+    teacherNote: String(data.teacherNote || ""),
+    style: ["warm", "formal", "brief"].includes(data.style) ? data.style : "warm",
+    lengthMode: length.commentLengthMode,
+    targetWordCount: length.targetWordCount,
+    updatedAt: data.updatedAt || ""
+  };
+}
+
+function loadStudentCommentCache(studentId) {
+  const student = state.students.find((item) => item.id === studentId);
+  const saved = normalizeStudentCommentDraft(student?.aiComments?.draft) || normalizeStudentCommentDraft(student?.aiComments?.latest);
+  if (saved) {
+    return saved;
+  }
+  try {
+    return normalizeStudentCommentDraft(JSON.parse(localStorage.getItem(getStudentCommentCacheKey(studentId)) || "null"));
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveStudentCommentCache(studentId, data) {
+  const student = state.students.find((item) => item.id === studentId);
+  if (!student) {
+    return null;
+  }
+  const draft = normalizeStudentCommentDraft({
+    ...data,
+    updatedAt: data?.updatedAt || new Date().toISOString()
+  });
+  if (!draft) {
+    return null;
+  }
+  student.aiComments = student.aiComments && typeof student.aiComments === "object" ? student.aiComments : {};
+  student.aiComments.draft = draft;
+  try {
+    localStorage.setItem(getStudentCommentCacheKey(studentId), JSON.stringify(draft));
+  } catch (error) {
+    // 本地空间不足时仍保留在应用状态里。
+  }
+  saveState();
+  return draft;
+}
+
+function clearStudentCommentDraft(studentId) {
+  const student = state.students.find((item) => item.id === studentId);
+  if (student?.aiComments?.draft) {
+    delete student.aiComments.draft;
+    saveState();
+  }
+  try {
+    localStorage.removeItem(getStudentCommentCacheKey(studentId));
+  } catch (error) {
+    // 忽略本地存储清理失败。
+  }
+}
+
+function getCurrentStudentCommentDraftData() {
+  const length = getAiCommentLengthSettings();
+  return {
+    generatedComment: (aiCommentResult?.value || "").trim(),
+    teacherNote: aiCommentTeacherNote?.value || "",
+    style: aiCommentStyleSelect?.value || "warm",
+    lengthMode: length.commentLengthMode,
+    targetWordCount: length.targetWordCount,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function persistCurrentStudentCommentDraft(studentId = activeStudentId) {
+  if (!studentId) {
+    return null;
+  }
+  return saveStudentCommentCache(studentId, getCurrentStudentCommentDraftData());
+}
+
 function buildStudentCommentPayload(studentId) {
   const teacherNote = aiCommentTeacherNote?.value || "";
   const style = aiCommentStyleSelect?.value || "warm";
+  const length = getAiCommentLengthSettings();
   const context = collectStudentCommentContext(studentId, teacherNote);
   return {
+    studentId,
+    studentName: context?.student?.name || "",
     style,
+    commentLengthMode: length.commentLengthMode,
+    targetWordCount: length.targetWordCount,
+    lengthRange: length.lengthRange,
+    lengthInstruction: length.lengthInstruction,
     context,
     requirements: {
-      length: "100-150 Chinese characters",
+      length: length.lengthInstruction,
       useOnlyProvidedFacts: true,
+      noFabrication: true,
+      naturalLanguage: true,
+      constructive: true,
       tone: {
         warm: "温和鼓励",
         formal: "客观正式",
@@ -8511,6 +8674,33 @@ function buildStudentCommentPayload(studentId) {
       }[style] || "温和鼓励"
     }
   };
+}
+
+function setButtonLabel(button, label) {
+  if (!button) {
+    return;
+  }
+  const textSpan = button.querySelector("span:last-child");
+  if (textSpan) {
+    textSpan.textContent = label;
+  } else {
+    button.textContent = label;
+  }
+}
+
+function updateAiCommentActionState() {
+  const context = collectStudentCommentContext(activeStudentId, aiCommentTeacherNote?.value || "");
+  const readiness = getStudentCommentReadiness(context);
+  const hasResult = Boolean((aiCommentResult?.value || "").trim());
+  if (aiCommentGenerateBtn) {
+    aiCommentGenerateBtn.disabled = aiCommentGenerateBtn.dataset.loading === "true" || !readiness.ok;
+  }
+  if (aiCommentRegenerateBtn) {
+    aiCommentRegenerateBtn.disabled = aiCommentGenerateBtn?.dataset.loading === "true" || !readiness.ok;
+  }
+  if (aiCommentCopyBtn) {
+    aiCommentCopyBtn.disabled = aiCommentGenerateBtn?.dataset.loading === "true" || !hasResult;
+  }
 }
 
 function renderAiCommentContext(studentId) {
@@ -8583,33 +8773,30 @@ function renderAiCommentContext(studentId) {
     aiCommentStatus.textContent = readiness.message || "请核对摘要，可补充课堂表现后生成。";
     aiCommentStatus.dataset.tone = readiness.ok ? "muted" : "error";
   }
-  if (aiCommentGenerateBtn) {
-    aiCommentGenerateBtn.disabled = !readiness.ok;
-  }
-  if (aiCommentRegenerateBtn) {
-    aiCommentRegenerateBtn.disabled = !readiness.ok;
-  }
+  updateAiCommentActionState();
 }
 
 function updateAiCommentWordCount() {
   if (aiCommentWordCount) {
-    aiCommentWordCount.textContent = `${(aiCommentResult?.value || "").trim().length} 字`;
+    const length = getAiCommentLengthSettings();
+    aiCommentWordCount.textContent = `${(aiCommentResult?.value || "").trim().length} 字 · 目标 ${length.lengthRange}`;
   }
+  updateAiCommentActionState();
 }
 
 function setAiCommentLoading(isLoading, message = "") {
-  [aiCommentGenerateBtn, aiCommentRegenerateBtn, aiCommentCopyBtn, aiCommentSaveBtn].forEach((button) => {
-    if (button) {
-      button.disabled = isLoading;
-    }
-  });
   if (aiCommentGenerateBtn) {
-    aiCommentGenerateBtn.textContent = isLoading ? "生成中" : "生成评语";
+    aiCommentGenerateBtn.dataset.loading = isLoading ? "true" : "false";
+    setButtonLabel(aiCommentGenerateBtn, isLoading ? "生成中" : "生成评语");
+  }
+  if (aiCommentResult) {
+    aiCommentResult.disabled = isLoading;
   }
   if (aiCommentStatus && message) {
     aiCommentStatus.textContent = message;
     aiCommentStatus.dataset.tone = isLoading ? "muted" : aiCommentStatus.dataset.tone || "muted";
   }
+  updateAiCommentActionState();
 }
 
 function openAiCommentDrawer(studentId = activeStudentId) {
@@ -8618,16 +8805,24 @@ function openAiCommentDrawer(studentId = activeStudentId) {
     return;
   }
   activeStudentId = studentId;
-  const saved = student.aiComments?.latest || null;
+  const saved = loadStudentCommentCache(studentId);
   if (aiCommentTeacherNote) {
     aiCommentTeacherNote.value = saved?.teacherNote || "";
   }
   if (aiCommentStyleSelect) {
     aiCommentStyleSelect.value = saved?.style || "warm";
   }
-  if (aiCommentResult) {
-    aiCommentResult.value = saved?.text || "";
+  if (aiCommentLengthMode) {
+    aiCommentLengthMode.value = saved?.lengthMode || AI_COMMENT_DEFAULT_LENGTH_MODE;
   }
+  if (aiCommentTargetWordCount) {
+    aiCommentTargetWordCount.value = String(saved?.targetWordCount || AI_COMMENT_DEFAULT_TARGET_WORD_COUNT);
+  }
+  if (aiCommentResult) {
+    aiCommentResult.value = saved?.generatedComment || "";
+    aiCommentResult.disabled = false;
+  }
+  syncAiCommentLengthControls();
   aiCommentDrawer.classList.remove("hidden");
   aiCommentDrawer.setAttribute("aria-hidden", "false");
   renderAiCommentContext(studentId);
@@ -8636,6 +8831,7 @@ function openAiCommentDrawer(studentId = activeStudentId) {
 }
 
 function closeAiCommentDrawer() {
+  persistCurrentStudentCommentDraft(activeStudentId);
   aiCommentDrawer?.classList.add("hidden");
   aiCommentDrawer?.setAttribute("aria-hidden", "true");
 }
@@ -8676,9 +8872,10 @@ async function generateStudentComment(studentId = activeStudentId, options = {})
     const cached = getCachedAiResult(cacheSignature);
     if (cached?.comment && aiCommentResult) {
       aiCommentResult.value = cached.comment;
+      persistCurrentStudentCommentDraft(studentId);
       updateAiCommentWordCount();
       if (aiCommentStatus) {
-        aiCommentStatus.textContent = "已显示缓存评语，可编辑后保存。";
+        aiCommentStatus.textContent = "已恢复同条件生成结果，可继续编辑或复制。";
         aiCommentStatus.dataset.tone = "success";
       }
       return cached;
@@ -8720,9 +8917,10 @@ async function generateStudentComment(studentId = activeStudentId, options = {})
     if (aiCommentResult) {
       aiCommentResult.value = comment;
     }
+    persistCurrentStudentCommentDraft(studentId);
     updateAiCommentWordCount();
     if (aiCommentStatus) {
-      aiCommentStatus.textContent = data.needsMoreInfo ? `已生成，但建议补充：${(data.missingInfo || []).join("、")}` : "已生成，可继续编辑或保存。";
+      aiCommentStatus.textContent = data.needsMoreInfo ? `已生成，但建议补充：${(data.missingInfo || []).join("、")}` : "已生成，可继续编辑或复制。";
       aiCommentStatus.dataset.tone = data.needsMoreInfo ? "warn" : "success";
     }
     return data;
@@ -8734,29 +8932,6 @@ async function generateStudentComment(studentId = activeStudentId, options = {})
     return null;
   } finally {
     setAiCommentLoading(false);
-  }
-}
-
-function saveStudentComment(studentId = activeStudentId) {
-  const student = state.students.find((item) => item.id === studentId);
-  const text = (aiCommentResult?.value || "").trim();
-  if (!student || !text) {
-    showToast("暂无可保存的评语", "error");
-    return;
-  }
-  student.aiComments = student.aiComments && typeof student.aiComments === "object" ? student.aiComments : {};
-  student.aiComments.latest = {
-    text,
-    style: aiCommentStyleSelect?.value || "warm",
-    teacherNote: aiCommentTeacherNote?.value || "",
-    updatedAt: new Date().toISOString()
-  };
-  saveState();
-  renderSearchResults();
-  showToast("评语已保存", "success");
-  if (aiCommentStatus) {
-    aiCommentStatus.textContent = "评语已保存到该学生。";
-    aiCommentStatus.dataset.tone = "success";
   }
 }
 
@@ -8773,6 +8948,10 @@ async function copyStudentComment() {
     aiCommentResult?.select();
     document.execCommand("copy");
     showToast("评语已复制", "success");
+  }
+  if (aiCommentStatus) {
+    aiCommentStatus.textContent = "已复制";
+    aiCommentStatus.dataset.tone = "success";
   }
 }
 
@@ -11697,10 +11876,31 @@ if (aiCommentDrawer) {
 if (aiCommentTeacherNote) {
   aiCommentTeacherNote.addEventListener("input", () => {
     renderAiCommentContext(activeStudentId);
+    persistCurrentStudentCommentDraft(activeStudentId);
+  });
+}
+if (aiCommentStyleSelect) {
+  aiCommentStyleSelect.addEventListener("change", () => {
+    persistCurrentStudentCommentDraft(activeStudentId);
+  });
+}
+if (aiCommentLengthMode) {
+  aiCommentLengthMode.addEventListener("change", () => {
+    syncAiCommentLengthControls();
+    persistCurrentStudentCommentDraft(activeStudentId);
+  });
+}
+if (aiCommentTargetWordCount) {
+  aiCommentTargetWordCount.addEventListener("input", () => {
+    syncAiCommentLengthControls();
+    persistCurrentStudentCommentDraft(activeStudentId);
   });
 }
 if (aiCommentResult) {
-  aiCommentResult.addEventListener("input", updateAiCommentWordCount);
+  aiCommentResult.addEventListener("input", () => {
+    updateAiCommentWordCount();
+    persistCurrentStudentCommentDraft(activeStudentId);
+  });
 }
 if (aiCommentGenerateBtn) {
   aiCommentGenerateBtn.addEventListener("click", () => generateStudentComment(activeStudentId));
@@ -11710,9 +11910,6 @@ if (aiCommentRegenerateBtn) {
 }
 if (aiCommentCopyBtn) {
   aiCommentCopyBtn.addEventListener("click", copyStudentComment);
-}
-if (aiCommentSaveBtn) {
-  aiCommentSaveBtn.addEventListener("click", () => saveStudentComment(activeStudentId));
 }
 if (classAiTrendBtn) {
   classAiTrendBtn.addEventListener("click", () => {

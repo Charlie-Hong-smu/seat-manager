@@ -1,4 +1,4 @@
-const ASSET_VERSION = "20260617-dashboard-ai-comment";
+const ASSET_VERSION = "20260617-comment-drawer-v2";
 const CACHE_VERSION = `seat-manager-v${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",

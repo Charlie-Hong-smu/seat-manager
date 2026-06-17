@@ -6,7 +6,7 @@
     <title>班主任座位管理</title>
     <meta name="theme-color" content="#f5f5f7" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="style.css?v=20260617-dashboard-ai-comment" />
+    <link rel="stylesheet" href="style.css?v=20260617-comment-drawer-v2" />
   </head>
   <body>
     <div class="bg-watermark" aria-hidden="true"></div>
@@ -437,7 +437,7 @@
 
               <div class="main-board-page score-dashboard-view" aria-label="成绩看板">
                 <div class="panel-header seating-header score-dashboard-header">
-                  <div>
+                  <div class="score-dashboard-title">
                     <h2>成绩看板</h2>
                     <p id="scoreDashboardSubtitle">选择一次考试，查看班级整体和学生表现。</p>
                   </div>
@@ -745,6 +745,21 @@
             <textarea id="aiCommentTeacherNote" class="input ai-comment-note" rows="4" placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。"></textarea>
           </section>
           <section class="ai-comment-section">
+            <h4>字数设置</h4>
+            <div class="ai-comment-length-grid">
+              <select id="aiCommentLengthMode" class="select" aria-label="评语目标字数">
+                <option value="short">80～100 字</option>
+                <option value="standard" selected>100～150 字</option>
+                <option value="long">150～200 字</option>
+                <option value="custom">自定义</option>
+              </select>
+              <label id="aiCommentCustomLengthWrap" class="ai-comment-custom-length hidden">
+                <span>目标</span>
+                <input id="aiCommentTargetWordCount" class="input" type="number" min="50" max="300" step="1" value="120" aria-label="自定义目标字数" />
+              </label>
+            </div>
+          </section>
+          <section class="ai-comment-section">
             <h4>风格选择</h4>
             <select id="aiCommentStyleSelect" class="select">
               <option value="warm">温和鼓励</option>
@@ -761,10 +776,9 @@
           </section>
         </div>
         <div class="ai-comment-footer">
-          <button id="aiCommentGenerateBtn" class="primary" type="button">生成评语</button>
-          <button id="aiCommentRegenerateBtn" class="btn-secondary" type="button">重新生成</button>
-          <button id="aiCommentCopyBtn" class="ghost" type="button">复制</button>
-          <button id="aiCommentSaveBtn" class="btn-secondary" type="button">保存</button>
+          <button id="aiCommentGenerateBtn" class="primary ai-comment-main-action" type="button"><span class="button-icon" aria-hidden="true">AI</span><span>生成评语</span></button>
+          <button id="aiCommentRegenerateBtn" class="primary ai-comment-main-action" type="button"><span class="button-icon" aria-hidden="true">↻</span><span>重新生成</span></button>
+          <button id="aiCommentCopyBtn" class="ghost ai-comment-copy-action" type="button">复制</button>
         </div>
       </aside>
     </div>
@@ -1034,6 +1048,6 @@
     </div>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260617-dashboard-ai-comment"></script>
+    <script src="app.js?v=20260617-comment-drawer-v2"></script>
   </body>
 </html>
