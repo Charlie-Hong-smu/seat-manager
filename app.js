@@ -1333,7 +1333,7 @@ function registerOfflineApp() {
   });
 
   navigator.serviceWorker
-    .register("./sw.js?v=20260605-seat-swap-flip")
+    .register("./sw.js?v=20260617-dashboard-ai-comment")
     .then((registration) => {
       if (registration.waiting) {
         showUpdatePrompt(registration.waiting);
