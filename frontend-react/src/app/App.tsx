@@ -9,6 +9,7 @@ import { StudentDetail } from "./components/StudentDetail";
 import { CommentWorkbench } from "./components/CommentWorkbench";
 import { GradesPage } from "./components/GradesPage";
 import { TopHeader } from "./components/TopHeader";
+import { CloudSyncModal } from "./components/CloudSyncModal";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
@@ -17,8 +18,10 @@ import {
   type SeatOrder,
 } from "./state/seatActions";
 import { clearAuth, isAuthenticated } from "./state/authStorage";
+import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { createStudent } from "./state/studentActions";
 import { saveLegacySnapshot } from "./state/legacyWriteAdapter";
+import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
 import type { AppStudent, Gender } from "./state/types";
 
@@ -26,18 +29,20 @@ type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
 
 export default function App() {
-  const seatManagerState = useSeatManagerState();
+  const initialState = useSeatManagerState();
+  const [appState, setAppState] = useState(() => initialState);
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [sidebarTab, setSidebarTab] = useState<AppTab>("common");
   const [mainView, setMainView] = useState<MainView>("seat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [students, setStudents] = useState<AppStudent[]>(() => seatManagerState.students);
+  const [students, setStudents] = useState<AppStudent[]>(() => initialState.students);
   const [selectedStudent, setSelectedStudent] = useState<AppStudent | null>(null);
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
-  const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => seatManagerState.seatOrder);
+  const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => initialState.seatOrder);
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
-  const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(seatManagerState.lockedSeats));
+  const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(initialState.lockedSeats));
   const [accountOpen, setAccountOpen] = useState(false);
+  const [showCloudSync, setShowCloudSync] = useState(false);
   const hasMounted = useRef(false);
 
   useEffect(() => {
@@ -99,6 +104,24 @@ export default function App() {
     commitSeatOrder(placeStudentInFirstEmptySeat(seatOrder, student.id, students.length + 1));
   }
 
+  function saveCurrentLegacySnapshot() {
+    saveLegacySnapshot({
+      students,
+      seatOrder,
+      lockedSeats: [...lockedSeats],
+    });
+  }
+
+  function reloadFromLegacyState() {
+    const next = createSeatManagerState(readLegacyRootState());
+    setAppState(next);
+    setStudents(next.students);
+    setSeatOrder(next.seatOrder);
+    setLockedSeats(new Set(next.lockedSeats));
+    setSeatHistory([]);
+    setSelectedStudent(null);
+  }
+
   const studentCount = students.length;
   const seatCount = seatOrder.length;
 
@@ -118,6 +141,7 @@ export default function App() {
           onToggleSidebar={() => setSidebarCollapsed(v => !v)}
           onToggleAccount={() => setAccountOpen(v => !v)}
           onCloseAccount={() => setAccountOpen(false)}
+          onOpenCloudSync={() => setShowCloudSync(true)}
           onLogout={() => {
             clearAuth();
             setLoggedIn(false);
@@ -128,7 +152,7 @@ export default function App() {
         <Sidebar
           activeTab={sidebarTab}
           students={students}
-          gradeExams={seatManagerState.gradeExams}
+          gradeExams={appState.gradeExams}
           canUndoSeatOrder={seatHistory.length > 0}
           onRandomizeSeats={handleRandomizeSeats}
           onOrderSeatsByList={handleOrderSeatsByList}
@@ -163,6 +187,15 @@ export default function App() {
           {showCommentWorkbench && (
             <CommentWorkbench students={students} onClose={() => setShowCommentWorkbench(false)} />
           )}
+
+          {showCloudSync && (
+            <CloudSyncModal
+              open={showCloudSync}
+              onClose={() => setShowCloudSync(false)}
+              onBeforeUpload={saveCurrentLegacySnapshot}
+              onRestored={reloadFromLegacyState}
+            />
+          )}
         </>
       }
     >
@@ -181,7 +214,7 @@ export default function App() {
 
       {mainView === "grades" && (
         <div className="h-full overflow-auto">
-          <GradesPage exams={seatManagerState.gradeExams} />
+          <GradesPage exams={appState.gradeExams} />
         </div>
       )}
     </AppShell>

@@ -8,6 +8,7 @@ interface TopHeaderProps {
   onToggleSidebar: () => void;
   onToggleAccount: () => void;
   onCloseAccount: () => void;
+  onOpenCloudSync: () => void;
   onLogout: () => void;
 }
 
@@ -19,6 +20,7 @@ export function TopHeader({
   onToggleSidebar,
   onToggleAccount,
   onCloseAccount,
+  onOpenCloudSync,
   onLogout,
 }: TopHeaderProps) {
   return (
@@ -73,6 +75,7 @@ export function TopHeader({
                     key={item.label}
                     onClick={() => {
                       onCloseAccount();
+                      if (item.label === "云同步") onOpenCloudSync();
                       if (item.label === "退出登录") onLogout();
                     }}
                     className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${item.danger ? "text-red-500" : "text-gray-600"}`}
