@@ -10,6 +10,7 @@ import { CommentWorkbench } from "./components/CommentWorkbench";
 import { GradesPage } from "./components/GradesPage";
 import { TopHeader } from "./components/TopHeader";
 import { CloudSyncModal } from "./components/CloudSyncModal";
+import { InstallHelpModal } from "./components/InstallHelpModal";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
@@ -27,6 +28,10 @@ import type { AppStudent, Gender } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
 
 export default function App() {
   const initialState = useSeatManagerState();
@@ -43,6 +48,9 @@ export default function App() {
   const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(initialState.lockedSeats));
   const [accountOpen, setAccountOpen] = useState(false);
   const [showCloudSync, setShowCloudSync] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [installMessage, setInstallMessage] = useState("当前浏览器没有直接提供安装确认，请按下面方式手动添加。");
   const hasMounted = useRef(false);
 
   useEffect(() => {
@@ -59,6 +67,26 @@ export default function App() {
       lockedSeats: [...lockedSeats],
     });
   }, [students, seatOrder, lockedSeats, loggedIn]);
+
+  useEffect(() => {
+    function handleBeforeInstallPrompt(event: Event) {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    }
+
+    function handleAppInstalled() {
+      setInstallPrompt(null);
+      setInstallMessage("已安装到桌面。");
+      setShowInstallHelp(true);
+    }
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
 
   function toggleLock(idx: number) {
     setLockedSeats(prev => {
@@ -122,6 +150,29 @@ export default function App() {
     setSelectedStudent(null);
   }
 
+  async function handleInstallApp() {
+    if (!installPrompt) {
+      setInstallMessage("当前浏览器没有直接提供安装确认，请按下面方式手动添加。");
+      setShowInstallHelp(true);
+      return;
+    }
+
+    const promptEvent = installPrompt;
+    setInstallPrompt(null);
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      if (choice.outcome === "dismissed") {
+        setInstallMessage("已取消安装。需要时也可以按下面方式手动添加。");
+        setShowInstallHelp(true);
+      }
+    } catch (error) {
+      console.warn("安装确认未能打开", error);
+      setInstallMessage("安装确认未能打开，请按下面方式手动添加。");
+      setShowInstallHelp(true);
+    }
+  }
+
   const studentCount = students.length;
   const seatCount = seatOrder.length;
 
@@ -141,6 +192,7 @@ export default function App() {
           onToggleSidebar={() => setSidebarCollapsed(v => !v)}
           onToggleAccount={() => setAccountOpen(v => !v)}
           onCloseAccount={() => setAccountOpen(false)}
+          onInstallApp={handleInstallApp}
           onOpenCloudSync={() => setShowCloudSync(true)}
           onLogout={() => {
             clearAuth();
@@ -195,6 +247,10 @@ export default function App() {
               onBeforeUpload={saveCurrentLegacySnapshot}
               onRestored={reloadFromLegacyState}
             />
+          )}
+
+          {showInstallHelp && (
+            <InstallHelpModal message={installMessage} onClose={() => setShowInstallHelp(false)} />
           )}
         </>
       }
