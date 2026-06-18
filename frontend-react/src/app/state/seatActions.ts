@@ -18,6 +18,26 @@ export function buildSeatOrderByStudentList(students: AppStudent[]): SeatOrder {
   return seatOrder;
 }
 
+export function placeStudentInFirstEmptySeat(seatOrder: SeatOrder, studentId: StudentId, studentCount: number): SeatOrder {
+  const nextCapacity = getSeatCapacityForStudents(studentCount);
+  const next = [...seatOrder];
+
+  while (next.length < nextCapacity) {
+    next.push(null);
+  }
+
+  if (next.includes(studentId)) {
+    return next;
+  }
+
+  const emptyIndex = next.indexOf(null);
+  if (emptyIndex !== -1) {
+    next[emptyIndex] = studentId;
+  }
+
+  return next;
+}
+
 export function swapSeatOrder(seatOrder: SeatOrder, fromIndex: number, toIndex: number, lockedSeats: Set<number>): SeatOrder {
   if (fromIndex === toIndex || lockedSeats.has(fromIndex) || lockedSeats.has(toIndex)) {
     return seatOrder;

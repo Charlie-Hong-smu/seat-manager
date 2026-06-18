@@ -11,12 +11,14 @@ import { GradesPage } from "./components/GradesPage";
 import { TopHeader } from "./components/TopHeader";
 import {
   buildSeatOrderByStudentList,
+  placeStudentInFirstEmptySeat,
   shuffleUnlockedSeats,
   swapSeatOrder,
   type SeatOrder,
 } from "./state/seatActions";
+import { createStudent } from "./state/studentActions";
 import { useSeatManagerState } from "./state/store";
-import type { AppStudent } from "./state/types";
+import type { AppStudent, Gender } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
@@ -27,6 +29,7 @@ export default function App() {
   const [sidebarTab, setSidebarTab] = useState<AppTab>("common");
   const [mainView, setMainView] = useState<MainView>("seat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [students, setStudents] = useState<AppStudent[]>(() => seatManagerState.students);
   const [selectedStudent, setSelectedStudent] = useState<AppStudent | null>(null);
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
   const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => seatManagerState.seatOrder);
@@ -59,7 +62,7 @@ export default function App() {
   }
 
   function handleOrderSeatsByList() {
-    commitSeatOrder(buildSeatOrderByStudentList(seatManagerState.students));
+    commitSeatOrder(buildSeatOrderByStudentList(students));
   }
 
   function handleUndoSeatOrder() {
@@ -72,7 +75,13 @@ export default function App() {
     });
   }
 
-  const studentCount = seatManagerState.students.length;
+  function handleAddStudent(name: string, gender: Gender, alias?: string) {
+    const student = createStudent({ name, gender, alias });
+    setStudents(prev => [...prev, student]);
+    commitSeatOrder(placeStudentInFirstEmptySeat(seatOrder, student.id, students.length + 1));
+  }
+
+  const studentCount = students.length;
   const seatCount = seatOrder.length;
 
   if (!loggedIn) {
@@ -97,11 +106,12 @@ export default function App() {
       sidebar={
         <Sidebar
           activeTab={sidebarTab}
-          students={seatManagerState.students}
+          students={students}
           canUndoSeatOrder={seatHistory.length > 0}
           onRandomizeSeats={handleRandomizeSeats}
           onOrderSeatsByList={handleOrderSeatsByList}
           onUndoSeatOrder={handleUndoSeatOrder}
+          onAddStudent={handleAddStudent}
           onTabChange={tab => {
             setSidebarTab(tab);
             if (tab === "scores") setMainView("grades");
@@ -123,7 +133,7 @@ export default function App() {
           {selectedStudent && (
             <StudentDetail
               student={selectedStudent}
-              students={seatManagerState.students}
+              students={students}
               onClose={() => setSelectedStudent(null)}
             />
           )}
@@ -137,7 +147,7 @@ export default function App() {
       {mainView === "seat" && (
         <div className="h-full bg-white overflow-hidden flex flex-col px-6 py-4">
           <SeatBoard
-            students={seatManagerState.students}
+            students={students}
             seatOrder={seatOrder}
             onSelectStudent={setSelectedStudent}
             onMoveSeat={handleMoveSeat}

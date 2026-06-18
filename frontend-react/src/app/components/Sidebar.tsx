@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight,
 } from "lucide-react";
 import { EXAMS } from "./mockData";
-import type { AppStudent } from "../state/types";
+import type { AppStudent, Gender } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
 
@@ -17,6 +17,7 @@ interface Props {
   onRandomizeSeats: () => void;
   onOrderSeatsByList: () => void;
   onUndoSeatOrder: () => void;
+  onAddStudent: (name: string, gender: Gender, alias?: string) => void;
   onTabChange: (tab: Tab) => void;
   onShowGrades: () => void;
   onHideGrades: () => void;
@@ -63,14 +64,19 @@ function CommonTab({
   onRandomizeSeats,
   onOrderSeatsByList,
   onUndoSeatOrder,
+  onAddStudent,
 }: {
   students: AppStudent[];
   canUndoSeatOrder: boolean;
   onRandomizeSeats: () => void;
   onOrderSeatsByList: () => void;
   onUndoSeatOrder: () => void;
+  onAddStudent: (name: string, gender: Gender, alias?: string) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [newStudentName, setNewStudentName] = useState("");
+  const [newStudentGender, setNewStudentGender] = useState<Gender>("");
+  const [newStudentAlias, setNewStudentAlias] = useState("");
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
@@ -89,6 +95,17 @@ function CommonTab({
       picked.push(pool[idx]);
     }
     setDrawResult(picked);
+  }
+
+  function handleAddStudent() {
+    const name = newStudentName.trim();
+    if (!name) {
+      return;
+    }
+    onAddStudent(name, newStudentGender, newStudentAlias);
+    setNewStudentName("");
+    setNewStudentGender("");
+    setNewStudentAlias("");
   }
 
   return (
@@ -172,20 +189,33 @@ function CommonTab({
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <input
+              value={newStudentName}
+              onChange={e => setNewStudentName(e.target.value)}
               className="flex-1 min-w-0 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
               placeholder="姓名"
               maxLength={20}
             />
-            <select className="px-2 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 cursor-pointer">
+            <select
+              value={newStudentGender}
+              onChange={e => setNewStudentGender(e.target.value as Gender)}
+              className="px-2 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 cursor-pointer"
+            >
               <option value="">未知</option>
               <option value="男">男</option>
               <option value="女">女</option>
             </select>
-            <button className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
+            <button
+              onClick={handleAddStudent}
+              disabled={!newStudentName.trim()}
+              className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ fontWeight: 600 }}
+            >
               <Plus className="w-4 h-4" />
             </button>
           </div>
           <input
+            value={newStudentAlias}
+            onChange={e => setNewStudentAlias(e.target.value)}
             className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
             placeholder="别名/拼音（可选）"
           />
@@ -483,6 +513,7 @@ export function Sidebar({
   onRandomizeSeats,
   onOrderSeatsByList,
   onUndoSeatOrder,
+  onAddStudent,
   onTabChange,
   onShowGrades,
   onHideGrades,
@@ -523,6 +554,7 @@ export function Sidebar({
             onRandomizeSeats={onRandomizeSeats}
             onOrderSeatsByList={onOrderSeatsByList}
             onUndoSeatOrder={onUndoSeatOrder}
+            onAddStudent={onAddStudent}
           />
         )}
         {activeTab === "import"  && <ImportTab />}
