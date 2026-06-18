@@ -1,8 +1,8 @@
 # React Frontend
 
-这是“小张专用座位管理器”的新版 React/Vite/Tailwind 前端实验目录。
+这是“小张专用座位管理器”的新版 React/Vite/Tailwind 前端目录。
 
-当前阶段只展示 Figma Make 导出的 UI 原型，使用 `src/app/components/mockData.ts` 中的模拟数据，不接入旧版完整业务逻辑。
+当前阶段已接入旧版本地数据读取桥，可显示真实学生、座位、保存考试和 AI 评语草稿缓存。没有旧数据时会回退到 `src/app/components/mockData.ts` 的模拟数据。
 
 ```bash
 npm install
