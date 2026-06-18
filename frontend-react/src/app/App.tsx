@@ -7,19 +7,21 @@ import { SeatBoard } from "./components/SeatBoard";
 import { StudentModal } from "./components/StudentModal";
 import { CommentWorkbench } from "./components/CommentWorkbench";
 import { GradesPage } from "./components/GradesPage";
-import { Student, STUDENTS, INITIAL_SEATS } from "./components/mockData";
+import { useSeatManagerState } from "./state/store";
+import type { AppStudent } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
 
 export default function App() {
+  const seatManagerState = useSeatManagerState();
   const [loggedIn, setLoggedIn] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<AppTab>("common");
   const [mainView, setMainView] = useState<MainView>("seat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<AppStudent | null>(null);
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
-  const [lockedSeats, setLockedSeats] = useState<Set<number>>(new Set());
+  const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(seatManagerState.lockedSeats));
   const [accountOpen, setAccountOpen] = useState(false);
 
   function toggleLock(idx: number) {
@@ -30,8 +32,8 @@ export default function App() {
     });
   }
 
-  const studentCount = STUDENTS.length;
-  const seatCount = INITIAL_SEATS.length;
+  const studentCount = seatManagerState.students.length;
+  const seatCount = seatManagerState.seatOrder.length;
 
   if (!loggedIn) {
     return <LoginScreen onLogin={() => setLoggedIn(true)} />;
@@ -113,6 +115,7 @@ export default function App() {
         {!sidebarCollapsed && (
           <Sidebar
             activeTab={sidebarTab}
+            students={seatManagerState.students}
             onTabChange={tab => {
               setSidebarTab(tab);
               if (tab === "scores") setMainView("grades");
@@ -157,6 +160,8 @@ export default function App() {
             {mainView === "seat" && (
               <div className="h-full bg-white overflow-hidden flex flex-col px-6 py-4">
                 <SeatBoard
+                  students={seatManagerState.students}
+                  seatOrder={seatManagerState.seatOrder}
                   onSelectStudent={setSelectedStudent}
                   lockedSeats={lockedSeats}
                   onToggleLock={toggleLock}
@@ -177,6 +182,7 @@ export default function App() {
       {selectedStudent && (
         <StudentModal
           student={selectedStudent}
+          students={seatManagerState.students}
           onClose={() => setSelectedStudent(null)}
         />
       )}

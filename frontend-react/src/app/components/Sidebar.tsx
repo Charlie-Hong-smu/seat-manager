@@ -5,12 +5,14 @@ import {
   Dices, FileUp, FileDown, Save, Trash2,
   ChevronDown, ChevronRight,
 } from "lucide-react";
-import { STUDENTS, EXAMS } from "./mockData";
+import { EXAMS } from "./mockData";
+import type { AppStudent } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
 
 interface Props {
   activeTab: Tab;
+  students: AppStudent[];
   onTabChange: (tab: Tab) => void;
   onShowGrades: () => void;
   onHideGrades: () => void;
@@ -51,17 +53,17 @@ function RuleChip({ label, detail, type }: { label: string; detail: string; type
 }
 
 // ── Tab: 常用 ─────────────────────────────────────────────────────────────────
-function CommonTab() {
+function CommonTab({ students }: { students: AppStudent[] }) {
   const [search, setSearch] = useState("");
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
   const [showConstraints, setShowConstraints] = useState(false);
 
-  const filtered = STUDENTS.filter(s => s.name.includes(search));
+  const filtered = students.filter(s => s.name.includes(search));
 
   function handleDraw() {
-    const pool = STUDENTS.map(s => s.name);
+    const pool = students.map(s => s.name);
     const picked: string[] = [];
     const used = new Set<number>();
     for (let i = 0; i < drawCount && pool.length; i++) {
@@ -198,7 +200,7 @@ function CommonTab() {
               <input
                 type="number"
                 min={1}
-                max={60}
+              max={Math.max(1, students.length)}
                 value={drawCount}
                 onChange={e => setDrawCount(Number(e.target.value))}
                 className="w-16 px-2 py-1 text-sm border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-blue-300 text-center"
@@ -453,7 +455,7 @@ function HistoryTab() {
 }
 
 // ── Main Sidebar ───────────────────────────────────────────────────────────────
-export function Sidebar({ activeTab, onTabChange, onShowGrades, onHideGrades, mainView }: Props) {
+export function Sidebar({ activeTab, students, onTabChange, onShowGrades, onHideGrades, mainView }: Props) {
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-100 w-80 shrink-0">
       {/* Tab Pills */}
@@ -482,7 +484,7 @@ export function Sidebar({ activeTab, onTabChange, onShowGrades, onHideGrades, ma
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto p-4 min-h-0">
-        {activeTab === "common"  && <CommonTab />}
+        {activeTab === "common"  && <CommonTab students={students} />}
         {activeTab === "import"  && <ImportTab />}
         {activeTab === "scores"  && <ScoresTab onShowGrades={onShowGrades} />}
         {activeTab === "history" && <HistoryTab />}

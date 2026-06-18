@@ -1,32 +1,35 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Lock, Star, Maximize2, Minimize2 } from "lucide-react";
-import { STUDENTS, INITIAL_SEATS, Student } from "./mockData";
+import type { AppStudent, StudentId } from "../state/types";
 
 interface Props {
-  onSelectStudent: (student: Student) => void;
+  students: AppStudent[];
+  seatOrder: Array<StudentId | null>;
+  onSelectStudent: (student: AppStudent) => void;
   lockedSeats: Set<number>;
   onToggleLock: (idx: number) => void;
 }
 
 const COLS = 8;
-const ROWS = INITIAL_SEATS.length / COLS;
 
 function SeatCard({
   studentId,
+  studentById,
   seatIndex,
   isLocked,
   cardMode,
   onSelect,
   onToggleLock,
 }: {
-  studentId: number | null;
+  studentId: StudentId | null;
+  studentById: Map<StudentId, AppStudent>;
   seatIndex: number;
   isLocked: boolean;
   cardMode: "compact" | "detail";
-  onSelect: (s: Student) => void;
+  onSelect: (s: AppStudent) => void;
   onToggleLock: (idx: number) => void;
 }) {
-  const student = studentId ? STUDENTS.find(s => s.id === studentId) : null;
+  const student = studentId ? studentById.get(studentId) : null;
 
   if (!studentId || !student) {
     return (
@@ -97,13 +100,15 @@ function SeatCard({
   );
 }
 
-export function SeatBoard({ onSelectStudent, lockedSeats, onToggleLock }: Props) {
+export function SeatBoard({ students, seatOrder, onSelectStudent, lockedSeats, onToggleLock }: Props) {
   const [cardMode, setCardMode] = useState<"compact" | "detail">("compact");
+  const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
+  const rowCount = Math.ceil(seatOrder.length / COLS);
 
-  const rows = Array.from({ length: ROWS }, (_, r) =>
+  const rows = Array.from({ length: rowCount }, (_, r) =>
     Array.from({ length: COLS }, (_, c) => ({
       seatIndex: r * COLS + c,
-      studentId: INITIAL_SEATS[r * COLS + c],
+      studentId: seatOrder[r * COLS + c] ?? null,
     }))
   );
 
@@ -164,6 +169,7 @@ export function SeatBoard({ onSelectStudent, lockedSeats, onToggleLock }: Props)
                       <SeatCard
                         key={cell.seatIndex}
                         studentId={cell.studentId}
+                        studentById={studentById}
                         seatIndex={cell.seatIndex}
                         isLocked={lockedSeats.has(cell.seatIndex)}
                         cardMode={cardMode}

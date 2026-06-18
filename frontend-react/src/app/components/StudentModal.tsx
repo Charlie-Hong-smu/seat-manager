@@ -1,16 +1,12 @@
 import { useState } from "react";
 import { X, Trash2, Plus, Star, TrendingUp, TrendingDown, ChevronDown } from "lucide-react";
-import {
-  Student, STUDENTS, EXAMS, SAMPLE_RECORDS,
-  getStudentExamScores, getBestSubject, getWeakSubject,
-} from "./mockData";
+import type { AppStudent, RecordType, StudentExamSummary, StudentId } from "../state/types";
 
 interface Props {
-  student: Student;
+  student: AppStudent;
+  students: AppStudent[];
   onClose: () => void;
 }
-
-type RecordType = "reward" | "punish" | "note";
 
 interface LocalRecord {
   id: string;
@@ -27,10 +23,26 @@ const WEEKS = [
   "2026-05-17",
 ];
 
-export function StudentModal({ student, onClose }: Props) {
+function getScoreEntries(scores: Record<string, number>): Array<[string, number]> {
+  return Object.entries(scores).filter(([, score]) => Number.isFinite(score));
+}
+
+function getBestSubject(scores: Record<string, number>): string {
+  return getScoreEntries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+}
+
+function getWeakSubject(scores: Record<string, number>): string {
+  return getScoreEntries(scores).sort((a, b) => a[1] - b[1])[0]?.[0] ?? "";
+}
+
+function getExamTotal(exam: StudentExamSummary): number {
+  return exam.total ?? getScoreEntries(exam.scores).reduce((sum, [, score]) => sum + score, 0);
+}
+
+export function StudentModal({ student, students, onClose }: Props) {
   const [noteInput, setNoteInput] = useState("");
   const [localRecords, setLocalRecords] = useState<LocalRecord[]>(() =>
-    SAMPLE_RECORDS.filter(r => r.studentId === student.id).map(r => ({
+    student.records.map(r => ({
       id: r.id,
       type: r.type,
       note: r.note,
@@ -39,10 +51,10 @@ export function StudentModal({ student, onClose }: Props) {
   );
   const [selectedWeek, setSelectedWeek] = useState(WEEKS[0]);
   const [syncSearch, setSyncSearch] = useState("");
-  const [syncSelected, setSyncSelected] = useState<Set<number>>(new Set());
+  const [syncSelected, setSyncSelected] = useState<Set<StudentId>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const examScores = getStudentExamScores(student.id);
+  const examScores = student.exams;
 
   function addRecord(type: RecordType) {
     if (type !== "note" && !noteInput.trim() && !window.confirm("不填备注直接添加？")) return;
@@ -56,9 +68,9 @@ export function StudentModal({ student, onClose }: Props) {
     setNoteInput("");
   }
 
-  const syncCandidates = STUDENTS.filter(s => s.id !== student.id && s.name.includes(syncSearch));
+  const syncCandidates = students.filter(s => s.id !== student.id && s.name.includes(syncSearch));
 
-  function toggleSync(id: number) {
+  function toggleSync(id: StudentId) {
     setSyncSelected(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -130,7 +142,7 @@ export function StudentModal({ student, onClose }: Props) {
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
               <span className="text-sm text-gray-600" style={{ fontWeight: 600 }}>同步到其他学生（可选）</span>
               <div className="flex gap-2">
-                <button onClick={() => setSyncSelected(new Set(STUDENTS.filter(s => s.id !== student.id).map(s => s.id)))} className="text-xs text-blue-600 hover:underline">全选</button>
+                <button onClick={() => setSyncSelected(new Set(students.filter(s => s.id !== student.id).map(s => s.id)))} className="text-xs text-blue-600 hover:underline">全选</button>
                 <button onClick={() => setSyncSelected(new Set())} className="text-xs text-gray-400 hover:underline">清空</button>
               </div>
             </div>
@@ -189,9 +201,11 @@ export function StudentModal({ student, onClose }: Props) {
           <div className="border-t border-gray-100 pt-5">
             <h4 className="text-gray-700 mb-3" style={{ fontSize: "0.9375rem" }}>考试成绩</h4>
             <div className="space-y-4">
-              {examScores.map(({ exam, score }) => {
-                const best = getBestSubject(score.scores);
-                const weak = getWeakSubject(score.scores);
+              {examScores.map(exam => {
+                const scoreEntries = getScoreEntries(exam.scores);
+                const best = getBestSubject(exam.scores);
+                const weak = getWeakSubject(exam.scores);
+                const total = getExamTotal(exam);
                 return (
                   <div key={exam.id} className="border border-gray-100 rounded-2xl overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
@@ -201,8 +215,7 @@ export function StudentModal({ student, onClose }: Props) {
                     <div className="p-4">
                       {/* Subject scores grid */}
                       <div className="grid grid-cols-3 gap-2 mb-3">
-                        {exam.subjects.map(sub => {
-                          const subScore = score.scores[sub] ?? 0;
+                        {scoreEntries.map(([sub, subScore]) => {
                           const isBest = sub === best;
                           const isWeak = sub === weak;
                           return (
@@ -221,12 +234,14 @@ export function StudentModal({ student, onClose }: Props) {
                       <div className="flex items-center gap-4 text-sm">
                         <div className="flex items-center gap-1.5 text-gray-600">
                           <span className="text-gray-400">总分</span>
-                          <span className="text-blue-700" style={{ fontWeight: 800, fontSize: "1.125rem" }}>{score.total}</span>
+                          <span className="text-blue-700" style={{ fontWeight: 800, fontSize: "1.125rem" }}>{Math.round(total * 10) / 10}</span>
                         </div>
-                        <div className="flex items-center gap-1 text-gray-400">
-                          <span>总排名</span>
-                          <span className="text-gray-700" style={{ fontWeight: 700 }}>第 {score.classRank} 名</span>
-                        </div>
+                        {exam.rank && (
+                          <div className="flex items-center gap-1 text-gray-400">
+                            <span>总排名</span>
+                            <span className="text-gray-700" style={{ fontWeight: 700 }}>第 {exam.rank} 名</span>
+                          </div>
+                        )}
                         <div className="ml-auto flex items-center gap-3">
                           <div className="flex items-center gap-1 text-xs text-emerald-600">
                             <TrendingUp className="w-3 h-3" />{best}
