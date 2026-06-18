@@ -140,7 +140,7 @@ export default function App() {
           )}
 
           {showCommentWorkbench && (
-            <CommentWorkbench onClose={() => setShowCommentWorkbench(false)} />
+            <CommentWorkbench students={students} onClose={() => setShowCommentWorkbench(false)} />
           )}
         </>
       }

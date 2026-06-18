@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { X, Play, Pause, RotateCcw, Copy, Download, Search, CheckSquare, Square, ChevronRight, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
-import { STUDENTS, EXAMS, Student, getBestSubject, getWeakSubject, getStudentExamScores } from "./mockData";
+import { X, Play, Pause, RotateCcw, Copy, Download, Search, CheckSquare, Square, ChevronRight, Sparkles, TrendingUp, TrendingDown, Save } from "lucide-react";
+import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
+import type { AppStudent, StudentId } from "../state/types";
 
 interface CommentState {
-  studentId: number;
+  studentId: StudentId;
   text: string;
   generated: boolean;
   needsInfo: boolean;
@@ -11,18 +12,22 @@ interface CommentState {
   style: string;
 }
 
-function buildInitialComments(): CommentState[] {
-  return STUDENTS.map(s => ({
+function buildInitialComments(students: AppStudent[]): CommentState[] {
+  return students.map(s => {
+    const draft = readStudentCommentDraft(s);
+    return {
     studentId: s.id,
-    text: "",
-    generated: false,
-    needsInfo: s.academicTags.length === 0 && s.id % 8 === 0,
-    lengthMode: "standard",
-    style: "warm",
-  }));
+    text: draft.generatedComment,
+    generated: Boolean(draft.generatedComment),
+    needsInfo: s.academicTags.length === 0 && !draft.teacherNote,
+    lengthMode: draft.lengthMode,
+    style: draft.style,
+  };
+  });
 }
 
 interface Props {
+  students: AppStudent[];
   onClose: () => void;
 }
 
@@ -41,9 +46,17 @@ const STYLES = [
 const MOCK_COMMENT = (name: string) =>
   `${name}同学在本学期表现出了积极进取的学习态度，课堂上认真听讲，能够主动参与课堂讨论。在学习过程中展现了较强的理解能力，成绩稳步提升。希望在新学期中继续保持这种学习热情，同时注重薄弱科目的巩固练习，相信你一定能取得更加优异的成绩。加油！`;
 
-export function CommentWorkbench({ onClose }: Props) {
-  const [comments, setComments] = useState<CommentState[]>(buildInitialComments);
-  const [selectedId, setSelectedId] = useState<number>(STUDENTS[0].id);
+function getBestSubject(scores: Record<string, number>): string {
+  return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+
+function getWeakSubject(scores: Record<string, number>): string {
+  return Object.entries(scores).sort((a, b) => a[1] - b[1])[0]?.[0] || "";
+}
+
+export function CommentWorkbench({ students, onClose }: Props) {
+  const [comments, setComments] = useState<CommentState[]>(() => buildInitialComments(students));
+  const [selectedId, setSelectedId] = useState<StudentId>(students[0]?.id || "");
   const [filterSearch, setFilterSearch] = useState("");
   const [filterUngenerated, setFilterUngenerated] = useState(false);
   const [filterNeedsInfo, setFilterNeedsInfo] = useState(false);
@@ -56,27 +69,48 @@ export function CommentWorkbench({ onClose }: Props) {
   const needsInfoCount = comments.filter(c => c.needsInfo).length;
 
   const filteredStudents = useMemo(() => {
-    return STUDENTS.filter(s => {
+    return students.filter(s => {
       const state = comments.find(c => c.studentId === s.id)!;
       if (filterSearch && !s.name.includes(filterSearch)) return false;
       if (filterUngenerated && state.generated) return false;
       if (filterNeedsInfo && !state.needsInfo) return false;
       return true;
     });
-  }, [comments, filterSearch, filterUngenerated, filterNeedsInfo]);
+  }, [comments, filterSearch, filterUngenerated, filterNeedsInfo, students]);
 
-  const selectedStudent = STUDENTS.find(s => s.id === selectedId)!;
-  const selectedComment = comments.find(c => c.studentId === selectedId)!;
-  const examScores = getStudentExamScores(selectedId);
-  const latestExam = examScores[0];
+  const selectedStudent = students.find(s => s.id === selectedId) || students[0];
+  const selectedComment = comments.find(c => c.studentId === selectedStudent?.id) || comments[0];
+  const latestExam = selectedStudent?.exams[0];
 
-  function updateComment(id: number, patch: Partial<CommentState>) {
+  function updateComment(id: StudentId, patch: Partial<CommentState>) {
     setComments(prev => prev.map(c => c.studentId === id ? { ...c, ...patch } : c));
   }
 
   function generateSingle() {
+    if (!selectedStudent || !selectedComment) return;
     const text = MOCK_COMMENT(selectedStudent.name);
+    saveStudentCommentDraft(selectedStudent.id, {
+      generatedComment: text,
+      teacherNote,
+      style: selectedComment.style as "warm" | "formal" | "brief",
+      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
+      targetWordCount: 120,
+      updatedAt: new Date().toISOString(),
+    });
     updateComment(selectedId, { text, generated: true });
+  }
+
+  function saveSelectedComment() {
+    if (!selectedStudent || !selectedComment) return;
+    const saved = saveStudentCommentDraft(selectedStudent.id, {
+      generatedComment: selectedComment.text,
+      teacherNote,
+      style: selectedComment.style as "warm" | "formal" | "brief",
+      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
+      targetWordCount: 120,
+      updatedAt: new Date().toISOString(),
+    });
+    updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
   }
 
   function startBatch() {
@@ -90,9 +124,18 @@ export function CommentWorkbench({ onClose }: Props) {
         setBatchRunning(false);
         return;
       }
-      const student = STUDENTS.find(s => s.id === pending[i].studentId)!;
+      const student = students.find(s => s.id === pending[i].studentId)!;
+      const text = MOCK_COMMENT(student.name);
+      saveStudentCommentDraft(student.id, {
+        generatedComment: text,
+        teacherNote: "",
+        style: pending[i].style as "warm" | "formal" | "brief",
+        lengthMode: pending[i].lengthMode as "short" | "standard" | "long" | "custom",
+        targetWordCount: 120,
+        updatedAt: new Date().toISOString(),
+      });
       updateComment(pending[i].studentId, {
-        text: MOCK_COMMENT(student.name),
+        text,
         generated: true,
       });
       i++;
@@ -108,22 +151,35 @@ export function CommentWorkbench({ onClose }: Props) {
     const text = comments
       .filter(c => c.generated)
       .map(c => {
-        const s = STUDENTS.find(st => st.id === c.studentId)!;
+        const s = students.find(st => st.id === c.studentId)!;
         return `【${s.name}】\n${c.text}`;
       })
       .join("\n\n");
     navigator.clipboard.writeText(text).catch(() => {});
   }
 
-  const tagSummary = (s: Student) =>
+  const tagSummary = (s: AppStudent) =>
     s.academicTags.length > 0 ? s.academicTags.slice(0, 2).join("、") : "暂无标签";
 
-  const scoreSummary = (id: number) => {
-    const exams = getStudentExamScores(id);
-    if (!exams.length) return "暂无成绩";
-    const e = exams[0];
-    return `${e.exam.name}成绩·总…`;
+  const scoreSummary = (student: AppStudent) => {
+    const exam = student.exams[0];
+    if (!exam) return "暂无成绩";
+    return `${exam.name} · 总分 ${exam.total ?? "—"}`;
   };
+
+  if (!selectedStudent || !selectedComment) {
+    return (
+      <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col overflow-hidden">
+        <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-gray-900">评语工作台</h2>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 grid place-items-center text-gray-400">暂无学生</div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col overflow-hidden">
@@ -137,7 +193,7 @@ export function CommentWorkbench({ onClose }: Props) {
         {/* Progress metrics */}
         <div className="flex items-center gap-5">
           {[
-            { label: "学生", value: STUDENTS.length, color: "text-gray-700" },
+            { label: "学生", value: students.length, color: "text-gray-700" },
             { label: "已生成", value: generatedCount, color: "text-emerald-600" },
             { label: "待生成", value: pendingCount, color: "text-blue-600" },
             { label: "需补充", value: needsInfoCount, color: "text-amber-600" },
@@ -163,7 +219,7 @@ export function CommentWorkbench({ onClose }: Props) {
         >
           {batchRunning ? <><Pause className="w-3.5 h-3.5" />暂停</> : <><Play className="w-3.5 h-3.5" />批量生成</>}
         </button>
-        <button onClick={() => setComments(buildInitialComments())} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
+        <button onClick={() => setComments(buildInitialComments(students))} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
           <RotateCcw className="w-3.5 h-3.5" />重置
         </button>
 
@@ -201,7 +257,7 @@ export function CommentWorkbench({ onClose }: Props) {
             <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
               <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${batchProgress}%` }} />
             </div>
-            <span className="text-xs text-gray-500 shrink-0">{batchProgress}% · {generatedCount}/{STUDENTS.length} 已生成</span>
+            <span className="text-xs text-gray-500 shrink-0">{batchProgress}% · {generatedCount}/{students.length} 已生成</span>
           </div>
         )}
       </div>
@@ -244,7 +300,7 @@ export function CommentWorkbench({ onClose }: Props) {
                   </div>
                   <div className="col-span-2 text-sm text-gray-800 truncate" style={{ fontWeight: 600 }}>{s.name}</div>
                   <div className="col-span-2 text-xs text-gray-500 truncate">{tagSummary(s)}</div>
-                  <div className="col-span-3 text-xs text-gray-400 truncate">{scoreSummary(s.id)}</div>
+                  <div className="col-span-3 text-xs text-gray-400 truncate">{scoreSummary(s)}</div>
                   <div className="col-span-1">
                     <div className="flex items-center gap-1">
                       <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
@@ -299,24 +355,24 @@ export function CommentWorkbench({ onClose }: Props) {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex items-center gap-2 text-gray-600">
                     <span className="text-gray-400">最近考试</span>
-                    <span className="text-gray-700" style={{ fontWeight: 600 }}>{latestExam.exam.name} · {latestExam.exam.date}</span>
+                    <span className="text-gray-700" style={{ fontWeight: 600 }}>{latestExam.name} · {latestExam.date || "未填写日期"}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">总分</span>
-                    <span className="text-blue-700" style={{ fontWeight: 800 }}>{latestExam.score.total}</span>
+                    <span className="text-blue-700" style={{ fontWeight: 800 }}>{latestExam.total ?? "—"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-gray-600">
                     <span className="text-gray-400">排名</span>
-                    <span style={{ fontWeight: 600 }}>第 {latestExam.score.classRank} 名</span>
+                    <span style={{ fontWeight: 600 }}>{latestExam.rank ? `第 ${latestExam.rank} 名` : "暂无排名"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                     <span className="text-emerald-700" style={{ fontWeight: 600 }}>
-                      {getBestSubject(latestExam.score.scores)}
+                      {getBestSubject(latestExam.scores)}
                     </span>
                     <TrendingDown className="w-3.5 h-3.5 text-red-400 ml-1" />
                     <span className="text-red-500" style={{ fontWeight: 600 }}>
-                      {getWeakSubject(latestExam.score.scores)}
+                      {getWeakSubject(latestExam.scores)}
                     </span>
                   </div>
                 </div>
@@ -398,6 +454,13 @@ export function CommentWorkbench({ onClose }: Props) {
               >
                 <Sparkles className="w-4 h-4" />
                 {selectedComment.generated ? "重新生成" : "单独生成"}
+              </button>
+              <button
+                onClick={saveSelectedComment}
+                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
+                style={{ fontWeight: 600 }}
+              >
+                <Save className="w-4 h-4" />
               </button>
               <button
                 onClick={() => {

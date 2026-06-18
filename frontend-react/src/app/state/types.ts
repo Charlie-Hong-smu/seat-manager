@@ -44,6 +44,18 @@ export interface GradeExam {
   rows: GradeRow[];
 }
 
+export type CommentStyle = "warm" | "formal" | "brief";
+export type CommentLengthMode = "short" | "standard" | "long" | "custom";
+
+export interface StudentCommentDraft {
+  generatedComment: string;
+  teacherNote: string;
+  style: CommentStyle;
+  lengthMode: CommentLengthMode;
+  targetWordCount: number;
+  updatedAt: string;
+}
+
 export interface AppStudent {
   id: StudentId;
   name: string;
