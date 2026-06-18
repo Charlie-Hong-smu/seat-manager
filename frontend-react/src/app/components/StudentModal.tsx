@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { X, Trash2, Plus, Star, TrendingUp, TrendingDown, ChevronDown } from "lucide-react";
+import { X, Trash2, Plus, Sparkles, Star, TrendingUp, TrendingDown, ChevronDown } from "lucide-react";
 import type { AppStudent, RecordType, StudentExamSummary, StudentId } from "../state/types";
 
 interface Props {
   student: AppStudent;
   students: AppStudent[];
   onClose: () => void;
+  onOpenAiComment?: () => void;
 }
 
 interface LocalRecord {
@@ -39,7 +40,7 @@ function getExamTotal(exam: StudentExamSummary): number {
   return exam.total ?? getScoreEntries(exam.scores).reduce((sum, [, score]) => sum + score, 0);
 }
 
-export function StudentModal({ student, students, onClose }: Props) {
+export function StudentModal({ student, students, onClose, onOpenAiComment }: Props) {
   const [noteInput, setNoteInput] = useState("");
   const [localRecords, setLocalRecords] = useState<LocalRecord[]>(() =>
     student.records.map(r => ({
@@ -105,6 +106,11 @@ export function StudentModal({ student, students, onClose }: Props) {
               </>
             ) : (
               <>
+                {onOpenAiComment && (
+                  <button onClick={onOpenAiComment} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-600 border border-violet-200 rounded-xl hover:bg-violet-50 transition-colors" style={{ fontWeight: 600 }}>
+                    <Sparkles className="w-3.5 h-3.5" />AI评语
+                  </button>
+                )}
                 <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 border border-red-200 rounded-xl hover:bg-red-50 transition-colors" style={{ fontWeight: 600 }}>
                   <Trash2 className="w-3.5 h-3.5" />删除学生
                 </button>
