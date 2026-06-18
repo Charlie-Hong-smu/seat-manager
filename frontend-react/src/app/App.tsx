@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/LoginScreen";
@@ -16,7 +16,9 @@ import {
   swapSeatOrder,
   type SeatOrder,
 } from "./state/seatActions";
+import { clearAuth, isAuthenticated } from "./state/authStorage";
 import { createStudent } from "./state/studentActions";
+import { saveLegacySnapshot } from "./state/legacyWriteAdapter";
 import { useSeatManagerState } from "./state/store";
 import type { AppStudent, Gender } from "./state/types";
 
@@ -25,7 +27,7 @@ type MainView = "seat" | "grades";
 
 export default function App() {
   const seatManagerState = useSeatManagerState();
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [sidebarTab, setSidebarTab] = useState<AppTab>("common");
   const [mainView, setMainView] = useState<MainView>("seat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -36,6 +38,22 @@ export default function App() {
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
   const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(seatManagerState.lockedSeats));
   const [accountOpen, setAccountOpen] = useState(false);
+  const hasMounted = useRef(false);
+
+  useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      return;
+    }
+    if (!loggedIn) {
+      return;
+    }
+    saveLegacySnapshot({
+      students,
+      seatOrder,
+      lockedSeats: [...lockedSeats],
+    });
+  }, [students, seatOrder, lockedSeats, loggedIn]);
 
   function toggleLock(idx: number) {
     setLockedSeats(prev => {
@@ -100,7 +118,10 @@ export default function App() {
           onToggleSidebar={() => setSidebarCollapsed(v => !v)}
           onToggleAccount={() => setAccountOpen(v => !v)}
           onCloseAccount={() => setAccountOpen(false)}
-          onLogout={() => setLoggedIn(false)}
+          onLogout={() => {
+            clearAuth();
+            setLoggedIn(false);
+          }}
         />
       }
       sidebar={

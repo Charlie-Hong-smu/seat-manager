@@ -13,3 +13,17 @@ export function readLegacyRootState(): unknown {
     return null;
   }
 }
+
+export function writeLegacyRootState(nextState: unknown): boolean {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return false;
+  }
+
+  try {
+    window.localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(nextState));
+    return true;
+  } catch (error) {
+    console.warn("无法保存旧版本地数据", error);
+    return false;
+  }
+}

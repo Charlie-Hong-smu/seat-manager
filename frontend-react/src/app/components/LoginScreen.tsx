@@ -1,27 +1,54 @@
 import { useState } from "react";
 import { Lock, BookOpen } from "lucide-react";
 
+import { hasLoginPassword, setAuthenticated, setupPassword, verifyPassword } from "../state/authStorage";
+
 interface Props {
   onLogin: () => void;
 }
 
 export function LoginScreen({ onLogin }: Props) {
+  const [setupMode] = useState(() => !hasLoginPassword());
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!password) {
       setError("请输入密码");
       return;
     }
+    if (setupMode && password.length < 4) {
+      setError("密码至少需要 4 位");
+      return;
+    }
+    if (setupMode && password !== confirmPassword) {
+      setError("两次输入的密码不一致");
+      return;
+    }
+
     setLoading(true);
     setError("");
-    setTimeout(() => {
+    try {
+      if (setupMode) {
+        await setupPassword(password);
+        setAuthenticated(remember);
+        onLogin();
+        return;
+      }
+      if (await verifyPassword(password)) {
+        setAuthenticated(remember);
+        onLogin();
+        return;
+      }
+      setError("密码不正确，请重试");
+      setPassword("");
+    } finally {
       setLoading(false);
-      onLogin();
-    }, 600);
+    }
   }
 
   return (
@@ -45,7 +72,7 @@ export function LoginScreen({ onLogin }: Props) {
             <h1 className="text-gray-900 mb-1" style={{ fontSize: "1.75rem", fontWeight: 800, lineHeight: 1.1 }}>
               小张专用<br />座位管理器
             </h1>
-            <p className="text-sm text-gray-400 mt-2">请输入密码后继续使用。</p>
+            <p className="text-sm text-gray-400 mt-2">{setupMode ? "首次使用请设置本机登录密码。" : "请输入密码后继续使用。"}</p>
           </div>
 
           {/* Fields */}
@@ -58,16 +85,37 @@ export function LoginScreen({ onLogin }: Props) {
                   type="password"
                   value={password}
                   onChange={e => { setPassword(e.target.value); setError(""); }}
-                  placeholder="请输入密码"
-                  autoComplete="current-password"
+                  placeholder={setupMode ? "请设置密码" : "请输入密码"}
+                  autoComplete={setupMode ? "new-password" : "current-password"}
                   className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:border-blue-400 focus:ring-3 focus:ring-blue-100 transition-all"
                 />
               </div>
             </label>
+            {setupMode && (
+              <label className="block">
+                <span className="text-xs text-gray-500 mb-1.5 block">确认密码</span>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-gray-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={e => { setConfirmPassword(e.target.value); setError(""); }}
+                    placeholder="再次输入密码"
+                    autoComplete="new-password"
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:border-blue-400 focus:ring-3 focus:ring-blue-100 transition-all"
+                  />
+                </div>
+              </label>
+            )}
           </div>
 
           <label className="flex items-center gap-2 mb-4 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 rounded accent-blue-600" />
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={event => setRemember(event.target.checked)}
+              className="w-4 h-4 rounded accent-blue-600"
+            />
             <span className="text-sm text-gray-500">记住我</span>
           </label>
 
@@ -85,7 +133,7 @@ export function LoginScreen({ onLogin }: Props) {
           </button>
 
           <p className="text-center text-xs text-gray-300 mt-5">
-            提示：任意密码均可进入演示模式
+            密码只保存在当前浏览器本地
           </p>
         </div>
       </form>
