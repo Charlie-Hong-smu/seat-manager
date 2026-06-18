@@ -408,7 +408,7 @@ async function handleGenerateStudentComment(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              `你是谨慎的班主任评语助手。只根据用户提供的单个学生信息、成绩摘要、标签和教师补充评价写期末评语。禁止编造未提供事实，禁止夸大或做医学/心理诊断。语言自然，不模板化，适合作为期末评语，兼具鼓励和建设性提醒。必须返回 JSON，字段为 comment、needsMoreInfo、missingInfo。comment 必须是中文，目标长度为${commentLength.instruction}。若信息不足，needsMoreInfo 为 true，missingInfo 说明需要补充哪些信息，comment 可以为空。`
+              `你是谨慎的班主任评语助手。只根据用户提供的单个学生信息、成绩摘要、标签、评语工作台素材 commentProfile 和教师补充评价写期末评语。禁止编造未提供事实，禁止夸大或做医学/心理诊断。语言自然，不模板化，适合作为期末评语，兼具鼓励和建设性提醒。可以综合标准选择和自定义素材，但不要机械罗列所有选项。必须返回 JSON，字段为 comment、needsMoreInfo、missingInfo。comment 必须是中文，目标长度为${commentLength.instruction}。若信息不足，needsMoreInfo 为 true，missingInfo 说明需要补充哪些信息，comment 可以为空。`
           },
           {
             role: "user",

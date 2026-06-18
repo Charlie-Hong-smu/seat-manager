@@ -93,6 +93,115 @@ const ACADEMIC_SUBJECT_GROUP = {
   政治: "lvl_politics",
   生物: "lvl_biology"
 };
+const DEFAULT_COMMENT_RUBRIC = {
+  version: 1,
+  criteria: [
+    {
+      id: "personality",
+      label: "性格特点",
+      type: "multi",
+      syncToTags: true,
+      builtIn: true,
+      options: [
+        { id: "steady", label: "稳重踏实", linkedTagId: "comment_personality_steady" },
+        { id: "cheerful", label: "开朗大方", linkedTagId: "comment_personality_cheerful" },
+        { id: "cooperative", label: "乐于合作", linkedTagId: "supporter" },
+        { id: "quiet", label: "较为内敛", linkedTagId: "quiet" }
+      ]
+    },
+    {
+      id: "study_attitude",
+      label: "学习态度",
+      type: "multi",
+      syncToTags: true,
+      builtIn: true,
+      options: [
+        { id: "serious", label: "学习认真", linkedTagId: "comment_attitude_serious" },
+        { id: "active", label: "主动性较强", linkedTagId: "leader" },
+        { id: "stable", label: "状态稳定", linkedTagId: "comment_attitude_stable" },
+        { id: "needs_initiative", label: "需要加强主动性", linkedTagId: "comment_attitude_needs_initiative" }
+      ]
+    },
+    {
+      id: "classroom",
+      label: "课堂表现",
+      type: "multi",
+      syncToTags: true,
+      builtIn: true,
+      options: [
+        { id: "focused", label: "课堂专注", linkedTagId: "focused" },
+        { id: "participates", label: "积极参与", linkedTagId: "comment_classroom_participates" },
+        { id: "answers", label: "回答问题积极", linkedTagId: "comment_classroom_answers" },
+        { id: "distracted", label: "课堂专注需加强", linkedTagId: "distractible" }
+      ]
+    },
+    {
+      id: "homework",
+      label: "作业情况",
+      type: "multi",
+      syncToTags: true,
+      builtIn: true,
+      options: [
+        { id: "steady", label: "作业稳定", linkedTagId: "comment_homework_steady" },
+        { id: "careful", label: "书写认真", linkedTagId: "comment_homework_careful" },
+        { id: "delay", label: "偶有拖交", linkedTagId: "comment_homework_delay" },
+        { id: "quality", label: "质量需提升", linkedTagId: "comment_homework_quality" }
+      ]
+    },
+    {
+      id: "score_performance",
+      label: "成绩表现",
+      type: "multi",
+      syncToTags: true,
+      builtIn: true,
+      options: [
+        { id: "excellent", label: "成绩优秀", linkedTagId: "comment_score_excellent" },
+        { id: "progress", label: "进步明显", linkedTagId: "comment_score_progress" },
+        { id: "stable", label: "成绩稳定", linkedTagId: "comment_score_stable" },
+        { id: "foundation", label: "基础薄弱", linkedTagId: "comment_score_foundation" }
+      ]
+    },
+    {
+      id: "strengths",
+      label: "主要优点",
+      type: "multi",
+      syncToTags: false,
+      builtIn: true,
+      options: [
+        { id: "responsible", label: "责任心较强" },
+        { id: "thinking", label: "思维较活跃" },
+        { id: "self_discipline", label: "自律意识较好" },
+        { id: "helpful", label: "乐于帮助同学" }
+      ]
+    },
+    {
+      id: "improvements",
+      label: "待改进点",
+      type: "multi",
+      syncToTags: false,
+      builtIn: true,
+      options: [
+        { id: "vocabulary", label: "英语词汇需加强" },
+        { id: "math_accuracy", label: "数学审题需细致" },
+        { id: "review", label: "复习计划需更稳定" },
+        { id: "confidence", label: "表达自信可提升" }
+      ]
+    },
+    {
+      id: "suggestions",
+      label: "期末建议",
+      type: "multi",
+      syncToTags: false,
+      builtIn: true,
+      options: [
+        { id: "keep_rhythm", label: "保持学习节奏" },
+        { id: "strengthen_basics", label: "夯实基础知识" },
+        { id: "ask_more", label: "多主动提问" },
+        { id: "summarize_errors", label: "重视错题复盘" }
+      ]
+    }
+  ]
+};
 const COMPLEMENT_RULES = [
   { id: "talk_quiet", labelZh: "爱讲话 ↔ 沉默", leftTagId: "talkative", rightTagId: "quiet" },
   { id: "focus_balance", labelZh: "容易分心 ↔ 专注", leftTagId: "distractible", rightTagId: "focused" },
@@ -248,6 +357,42 @@ const scoreTrendDistribution = document.getElementById("scoreTrendDistribution")
 const scoreTrendStudentTitle = document.getElementById("scoreTrendStudentTitle");
 const scoreTrendStudentMeta = document.getElementById("scoreTrendStudentMeta");
 const scoreTrendStudentDetail = document.getElementById("scoreTrendStudentDetail");
+const commentWorkbenchBtn = document.getElementById("commentWorkbenchBtn");
+const commentWorkbenchFromDetailBtn = document.getElementById("commentWorkbenchFromDetailBtn");
+const commentWorkbenchModal = document.getElementById("commentWorkbenchModal");
+const commentWorkbenchClose = document.getElementById("commentWorkbenchClose");
+const commentWorkbenchTotal = document.getElementById("commentWorkbenchTotal");
+const commentWorkbenchGenerated = document.getElementById("commentWorkbenchGenerated");
+const commentWorkbenchPending = document.getElementById("commentWorkbenchPending");
+const commentWorkbenchNeedsInfo = document.getElementById("commentWorkbenchNeedsInfo");
+const commentBatchGenerateBtn = document.getElementById("commentBatchGenerateBtn");
+const commentBatchPauseBtn = document.getElementById("commentBatchPauseBtn");
+const commentBatchResumeBtn = document.getElementById("commentBatchResumeBtn");
+const commentWorkbenchSearchInput = document.getElementById("commentWorkbenchSearchInput");
+const commentFilterUngenerated = document.getElementById("commentFilterUngenerated");
+const commentFilterNeedsInfo = document.getElementById("commentFilterNeedsInfo");
+const commentCopyAllBtn = document.getElementById("commentCopyAllBtn");
+const commentExportCsvBtn = document.getElementById("commentExportCsvBtn");
+const commentBatchProgress = document.getElementById("commentBatchProgress");
+const commentWorkbenchTableMeta = document.getElementById("commentWorkbenchTableMeta");
+const commentWorkbenchTable = document.getElementById("commentWorkbenchTable");
+const commentWorkbenchDetailTitle = document.getElementById("commentWorkbenchDetailTitle");
+const commentOpenStudentDetailBtn = document.getElementById("commentOpenStudentDetailBtn");
+const commentWorkbenchSelectedInfo = document.getElementById("commentWorkbenchSelectedInfo");
+const commentWorkbenchScoreSummary = document.getElementById("commentWorkbenchScoreSummary");
+const commentWorkbenchTags = document.getElementById("commentWorkbenchTags");
+const commentAddCriterionBtn = document.getElementById("commentAddCriterionBtn");
+const commentRubricManager = document.getElementById("commentRubricManager");
+const commentCriteriaEditor = document.getElementById("commentCriteriaEditor");
+const commentWorkbenchTeacherNote = document.getElementById("commentWorkbenchTeacherNote");
+const commentWorkbenchLengthMode = document.getElementById("commentWorkbenchLengthMode");
+const commentWorkbenchCustomLengthWrap = document.getElementById("commentWorkbenchCustomLengthWrap");
+const commentWorkbenchTargetWordCount = document.getElementById("commentWorkbenchTargetWordCount");
+const commentWorkbenchStyleSelect = document.getElementById("commentWorkbenchStyleSelect");
+const commentWorkbenchWordCount = document.getElementById("commentWorkbenchWordCount");
+const commentWorkbenchResult = document.getElementById("commentWorkbenchResult");
+const commentSingleGenerateBtn = document.getElementById("commentSingleGenerateBtn");
+const commentSingleCopyBtn = document.getElementById("commentSingleCopyBtn");
 const aiCommentBtn = document.getElementById("aiCommentBtn");
 const aiCommentDrawer = document.getElementById("aiCommentDrawer");
 const aiCommentClose = document.getElementById("aiCommentClose");
@@ -427,6 +572,13 @@ let activeSavedExamTableId = "";
 const inputSuggestMap = new Map();
 const studentAiTrendJobs = new Map();
 let batchAiTrendRunning = false;
+let activeCommentWorkbenchStudentId = "";
+let commentBatchQueue = [];
+let commentBatchRunning = false;
+let commentBatchPaused = false;
+let commentBatchDone = 0;
+let commentBatchTotal = 0;
+let commentBatchSelectedIds = new Set();
 let deferredInstallPrompt = null;
 
 function isAuthenticated() {
@@ -1071,6 +1223,115 @@ function sanitizeTags(tags) {
   return sanitized;
 }
 
+function makeSafeId(value, fallback = "item") {
+  const text = (value || "").toString().trim().toLowerCase();
+  const safe = text
+    .replace(/[^a-z0-9_\u4e00-\u9fa5]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32);
+  return safe || `${fallback}_${uid().slice(-6)}`;
+}
+
+function getDefaultCommentRubric() {
+  return cloneJson(DEFAULT_COMMENT_RUBRIC, { version: 1, criteria: [] });
+}
+
+function normalizeCriterionOption(option, criterionId, index = 0) {
+  const id = makeSafeId(option?.id || option?.label || `option_${index}`, `option_${index}`);
+  const label = (option?.label || option?.labelZh || id).toString().trim();
+  return {
+    id,
+    label,
+    linkedTagId: option?.linkedTagId || "",
+    builtIn: Boolean(option?.builtIn)
+  };
+}
+
+function normalizeCommentRubric() {
+  const defaults = getDefaultCommentRubric();
+  const raw = state.commentRubric && typeof state.commentRubric === "object" ? state.commentRubric : {};
+  const rawCriteria = Array.isArray(raw.criteria) ? raw.criteria : [];
+  const byId = new Map();
+  defaults.criteria.forEach((criterion) => byId.set(criterion.id, criterion));
+  rawCriteria.forEach((criterion) => {
+    if (!criterion || typeof criterion !== "object") {
+      return;
+    }
+    const id = makeSafeId(criterion.id || criterion.label || "criterion", "criterion");
+    const base = byId.get(id) || {};
+    const baseOptions = Array.isArray(base.options) ? base.options : [];
+    const rawOptions = Array.isArray(criterion.options) ? criterion.options : [];
+    const optionsById = new Map();
+    baseOptions.forEach((option, index) => optionsById.set(option.id, normalizeCriterionOption({ ...option, builtIn: true }, id, index)));
+    rawOptions.forEach((option, index) => {
+      const normalized = normalizeCriterionOption(option, id, index);
+      optionsById.set(normalized.id, { ...optionsById.get(normalized.id), ...normalized, builtIn: Boolean(optionsById.get(normalized.id)?.builtIn || option?.builtIn) });
+    });
+    byId.set(id, {
+      id,
+      label: (criterion.label || base.label || id).toString().trim(),
+      type: criterion.type === "single" ? "single" : "multi",
+      syncToTags: criterion.syncToTags === undefined ? Boolean(base.syncToTags) : Boolean(criterion.syncToTags),
+      hidden: Boolean(criterion.hidden),
+      builtIn: Boolean(base.builtIn || criterion.builtIn),
+      options: Array.from(optionsById.values()).filter((option) => option.label)
+    });
+  });
+  state.commentRubric = {
+    version: 1,
+    criteria: Array.from(byId.values()).filter((criterion) => criterion.label)
+  };
+  registerCommentRubricTags();
+  return state.commentRubric;
+}
+
+function registerTagDescriptor(tag) {
+  if (!tag?.id || TAG_BY_ID.has(tag.id)) {
+    return;
+  }
+  const descriptor = {
+    id: tag.id,
+    labelZh: tag.labelZh || tag.label || tag.id,
+    kind: tag.kind || "behavior",
+    groupId: tag.groupId || `comment_${tag.id}`,
+    groupNameZh: tag.groupNameZh || "评语特征"
+  };
+  TAG_CATALOG.push(descriptor);
+  TAG_BY_ID.set(descriptor.id, descriptor);
+  if (!TAG_GROUPS.has(descriptor.groupId)) {
+    const group = { id: descriptor.groupId, name: descriptor.groupNameZh, kind: descriptor.kind, tags: [] };
+    TAG_GROUPS.set(descriptor.groupId, group);
+    if (descriptor.kind === "academic") {
+      ACADEMIC_TAG_GROUPS.push(group);
+    } else {
+      BEHAVIOR_TAG_GROUPS.push(group);
+    }
+  }
+  TAG_GROUPS.get(descriptor.groupId)?.tags.push(descriptor);
+}
+
+function registerCommentRubricTags() {
+  const rubric = state.commentRubric?.criteria || [];
+  rubric.forEach((criterion) => {
+    if (!criterion.syncToTags) {
+      return;
+    }
+    (criterion.options || []).forEach((option) => {
+      const tagId = option.linkedTagId || `comment_${criterion.id}_${option.id}`;
+      option.linkedTagId = tagId;
+      if (!TAG_BY_ID.has(tagId)) {
+        registerTagDescriptor({
+          id: tagId,
+          labelZh: option.label,
+          kind: "behavior",
+          groupId: `comment_${criterion.id}_${option.id}`,
+          groupNameZh: criterion.label
+        });
+      }
+    });
+  });
+}
+
 function getTagByGroup(tags, groupId) {
   for (let i = tags.length - 1; i >= 0; i -= 1) {
     const tag = TAG_BY_ID.get(tags[i]);
@@ -1343,7 +1604,7 @@ function registerOfflineApp() {
   });
 
   navigator.serviceWorker
-    .register("./sw.js?v=20260617-comment-drawer-v2")
+    .register("./sw.js?v=20260618-comment-workbench-v1")
     .then((registration) => {
       if (registration.waiting) {
         showUpdatePrompt(registration.waiting);
@@ -1489,6 +1750,7 @@ function loadState() {
     seatHistory: [],
     exams: [],
     savedExams: [],
+    commentRubric: getDefaultCommentRubric(),
     lastBackupAt: "",
     settings: {
       sidebarCollapsed: false,
@@ -1535,17 +1797,22 @@ function saveState() {
 }
 
 function normalizeState() {
+  normalizeCommentRubric();
   state.students = Array.isArray(state.students) ? state.students : [];
-  state.students = state.students.map((student) => ({
-    ...student,
-    gender: student.gender || "",
-    aliases: Array.isArray(student.aliases) ? student.aliases.filter(Boolean).map((x) => x.toString().trim()).filter(Boolean) : [],
-    records: Array.isArray(student.records) ? student.records : [],
-    manualTags: sanitizeTags(student.manualTags),
-    autoTags: sanitizeTags(student.autoTags),
-    exams: Array.isArray(student.exams) ? student.exams : [],
-    aiComments: student.aiComments && typeof student.aiComments === "object" ? student.aiComments : {}
-  }));
+  state.students = state.students.map((student) => {
+    const normalized = {
+      ...student,
+      gender: student.gender || "",
+      aliases: Array.isArray(student.aliases) ? student.aliases.filter(Boolean).map((x) => x.toString().trim()).filter(Boolean) : [],
+      records: Array.isArray(student.records) ? student.records : [],
+      manualTags: sanitizeTags(student.manualTags),
+      autoTags: sanitizeTags(student.autoTags),
+      exams: Array.isArray(student.exams) ? student.exams : [],
+      aiComments: student.aiComments && typeof student.aiComments === "object" ? student.aiComments : {}
+    };
+    normalizeStudentCommentProfile(normalized);
+    return normalized;
+  });
   state.seatOrder = Array.isArray(state.seatOrder) ? state.seatOrder : [];
   state.lockedSeats = Array.isArray(state.lockedSeats)
     ? state.lockedSeats.map((value) => Number.parseInt(value, 10)).filter((value) => Number.isInteger(value) && value >= 0)
@@ -6375,61 +6642,13 @@ function renderScoreDashboardStats(items) {
   });
 }
 
-function renderScoreDashboardRankList(rows, metric) {
-  if (!scoreDashboardRankList) {
-    return;
-  }
-  scoreDashboardRankList.innerHTML = "";
-  if (scoreRankTitle) {
-    scoreRankTitle.textContent = `学生${metric.label}排行`;
-  }
-  if (scoreRankMeta) {
-    scoreRankMeta.textContent = `${rows.filter((row) => Number.isFinite(row.metricValue)).length} 人有${metric.label}`;
-  }
-  rows.forEach((row, index) => {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "score-rank-row";
-    item.disabled = !row.studentId;
-    if (row.studentId) {
-      item.addEventListener("click", () => openRecordModal(row.studentId));
-    }
-    const rank = document.createElement("div");
-    rank.className = "score-rank-index";
-    rank.textContent = `#${index + 1}`;
-    const main = document.createElement("div");
-    main.className = "score-rank-main";
-    const name = document.createElement("div");
-    name.className = "score-rank-name";
-    name.textContent = row.name || "未命名";
-    const tags = document.createElement("div");
-    tags.className = "score-rank-tags";
-    const rankText = [
-      row.rankClass ? `班排 ${row.rankClass}` : "",
-      row.rankSchool ? `校排 ${row.rankSchool}` : "",
-      row.strong ? `强项 ${row.strong}` : "",
-      row.weak && row.weak !== row.strong ? `待补 ${row.weak}` : ""
-    ].filter(Boolean);
-    tags.textContent = rankText.join(" · ") || "暂无排名或科目摘要";
-    main.append(name, tags);
-    const score = document.createElement("div");
-    score.className = "score-rank-score";
-    score.textContent = Number.isFinite(row.metricValue) ? formatDashboardNumber(row.metricValue) : "-";
-    const scoreNote = document.createElement("span");
-    scoreNote.textContent = row.metricComputed ? "科目合计" : metric.label;
-    score.appendChild(scoreNote);
-    item.append(rank, main, score);
-    scoreDashboardRankList.appendChild(item);
-  });
-}
-
 function renderScoreDistribution(rows, metric) {
   if (!scoreDistributionChart) {
     return;
   }
   scoreDistributionChart.innerHTML = "";
   if (scoreDistributionTitle) {
-    scoreDistributionTitle.textContent = `${metric.label}分布`;
+    scoreDistributionTitle.textContent = "成绩分布";
   }
   if (scoreDistributionMeta) {
     scoreDistributionMeta.textContent = `${rows.length} 个有效${metric.label}`;
@@ -6441,46 +6660,41 @@ function renderScoreDistribution(rows, metric) {
     scoreDistributionChart.appendChild(empty);
     return;
   }
-  const buckets = buildScoreDistributionBuckets(rows).map((bucket) => ({
-    ...bucket,
-    metricLabel: metric.label
-  }));
-  const maxCount = Math.max(...buckets.map((bucket) => bucket.students.length), 1);
-  const chart = document.createElement("div");
-  chart.className = "score-histogram";
-  const yAxis = document.createElement("div");
-  yAxis.className = "score-histogram-y";
-  [maxCount, Math.ceil(maxCount / 2), 0].forEach((value) => {
-    const tick = document.createElement("span");
-    tick.textContent = String(value);
-    yAxis.appendChild(tick);
-  });
-  const plot = document.createElement("div");
-  plot.className = "score-histogram-plot";
-  plot.style.setProperty("--bucket-count", String(buckets.length));
-  buckets.forEach((bucket) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "score-histogram-bar";
-    button.disabled = bucket.students.length === 0;
-    button.style.setProperty("--bar-height", `${Math.max(4, (bucket.students.length / maxCount) * 100)}%`);
-    button.setAttribute("aria-label", `${bucket.label}，${bucket.students.length} 人`);
-    button.addEventListener("click", () => openScoreBucketModal(bucket));
-    const fill = document.createElement("span");
-    fill.className = "score-histogram-fill";
+  const thresholds = getScoreDashboardThresholds();
+  const groups = [
+    { label: `优秀 (≥${thresholds.excellent})`, className: "excellent", students: rows.filter((row) => row.metricValue >= thresholds.excellent) },
+    { label: `良好 (${thresholds.good}-${thresholds.excellent - 1})`, className: "good", students: rows.filter((row) => row.metricValue >= thresholds.good && row.metricValue < thresholds.excellent) },
+    { label: `及格 (${thresholds.pass}-${thresholds.good - 1})`, className: "pass", students: rows.filter((row) => row.metricValue >= thresholds.pass && row.metricValue < thresholds.good) },
+    { label: `不及格 (<${thresholds.pass})`, className: "danger", students: rows.filter((row) => row.metricValue < thresholds.pass) }
+  ];
+  const list = document.createElement("div");
+  list.className = "score-distribution-list";
+  groups.forEach((group) => {
+    const pct = rows.length ? Math.round((group.students.length / rows.length) * 100) : 0;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `score-distribution-item ${group.className}`;
+    item.disabled = group.students.length === 0;
+    item.addEventListener("click", () => {
+      openScoreBucketModal({
+        label: group.label,
+        metricLabel: metric.label,
+        students: group.students
+      });
+    });
+    const dot = document.createElement("i");
+    const label = document.createElement("span");
+    label.textContent = group.label;
+    const track = document.createElement("b");
+    const fill = document.createElement("em");
+    fill.style.width = `${pct}%`;
+    track.appendChild(fill);
     const count = document.createElement("strong");
-    count.textContent = String(bucket.students.length);
-    const label = document.createElement("small");
-    const minLabel = document.createElement("span");
-    minLabel.textContent = formatBucketEdge(bucket.min);
-    const maxLabel = document.createElement("span");
-    maxLabel.textContent = formatBucketEdge(bucket.max);
-    label.append(minLabel, maxLabel);
-    button.append(fill, count, label);
-    plot.appendChild(button);
+    count.textContent = `${group.students.length} 人 (${pct}%)`;
+    item.append(dot, label, track, count);
+    list.appendChild(item);
   });
-  chart.append(yAxis, plot);
-  scoreDistributionChart.appendChild(chart);
+  scoreDistributionChart.appendChild(list);
 }
 
 function buildScoreDistributionBuckets(rows) {
@@ -6593,24 +6807,26 @@ function renderSubjectAverages(exam) {
     return { subject, average, count: values.length };
   });
   const maxAverage = Math.max(...subjectStats.map((item) => item.average || 0), 1);
+  const chart = document.createElement("div");
+  chart.className = "score-subject-bar-chart";
+  chart.style.setProperty("--subject-count", String(Math.max(subjectStats.length, 1)));
   subjectStats.forEach((item) => {
-    const row = document.createElement("div");
-    row.className = "score-subject-row";
-    const name = document.createElement("div");
-    name.className = "score-subject-name";
-    name.textContent = item.subject;
-    const track = document.createElement("div");
-    track.className = "score-bar-track";
-    const fill = document.createElement("div");
-    fill.className = "score-bar-fill";
-    fill.style.width = Number.isFinite(item.average) ? `${Math.max(4, (item.average / maxAverage) * 100)}%` : "0";
-    track.appendChild(fill);
-    const value = document.createElement("div");
-    value.className = "score-subject-value";
+    const bar = document.createElement("div");
+    bar.className = "score-subject-bar-item";
+    const value = document.createElement("strong");
     value.textContent = Number.isFinite(item.average) ? formatDashboardNumber(item.average) : "-";
-    row.append(name, track, value);
-    scoreSubjectAverages.appendChild(row);
+    const track = document.createElement("div");
+    track.className = "score-subject-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "score-subject-bar-fill";
+    fill.style.height = Number.isFinite(item.average) ? `${Math.max(8, (item.average / Math.max(maxAverage, 100)) * 100)}%` : "0";
+    track.appendChild(fill);
+    const name = document.createElement("span");
+    name.textContent = item.subject;
+    bar.append(value, track, name);
+    chart.appendChild(bar);
   });
+  scoreSubjectAverages.appendChild(chart);
 }
 
 function setMainBoardMode(mode) {
@@ -8426,6 +8642,49 @@ function getStudentExamTotalScore(exam) {
   return parseScoreValue(exam.total?.score) ?? sumExamScores(exam.scores);
 }
 
+function getStudentCommentProfileSummary(student) {
+  const profile = normalizeStudentCommentProfile(student);
+  const criteriaSummary = [];
+  const customOptions = [];
+  (state.commentRubric?.criteria || []).forEach((criterion) => {
+    if (criterion.hidden) {
+      return;
+    }
+    const selectedIds = profile.criteriaValues[criterion.id] || [];
+    const criterionCustom = profile.customOptions[criterion.id] || [];
+    const labels = [];
+    selectedIds.forEach((optionId) => {
+      const option = (criterion.options || []).find((item) => item.id === optionId);
+      if (option?.label) {
+        labels.push(option.label);
+      }
+    });
+    criterionCustom.forEach((item) => {
+      if (item.label) {
+        labels.push(item.label);
+        customOptions.push({ criterionId: criterion.id, criterionLabel: criterion.label, label: item.label });
+      }
+    });
+    if (labels.length) {
+      criteriaSummary.push({
+        criterionId: criterion.id,
+        label: criterion.label,
+        values: labels
+      });
+    }
+  });
+  return {
+    criteriaSummary,
+    customOptions,
+    teacherNote: profile.teacherNote || "",
+    style: profile.style || "warm",
+    lengthMode: profile.lengthMode || AI_COMMENT_DEFAULT_LENGTH_MODE,
+    targetWordCount: profile.targetWordCount || AI_COMMENT_DEFAULT_TARGET_WORD_COUNT,
+    generatedComment: profile.generatedComment || "",
+    status: profile.status || "draft"
+  };
+}
+
 function collectStudentCommentContext(studentId, teacherNote = "") {
   const student = state.students.find((item) => item.id === studentId);
   if (!student) {
@@ -8463,6 +8722,8 @@ function collectStudentCommentContext(studentId, teacherNote = "") {
   const latestRate = Number.isFinite(latestTotal) && Number.isFinite(latestFullScore) && latestFullScore > 0 ? (latestTotal / latestFullScore) * 100 : null;
   const firstRate = Number.isFinite(firstTotal) && Number.isFinite(firstFullScore) && firstFullScore > 0 ? (firstTotal / firstFullScore) * 100 : null;
   const tags = getStudentTagLabels(student);
+  const commentProfile = getStudentCommentProfileSummary(student);
+  const mergedTeacherNote = (teacherNote || commentProfile.teacherNote || "").trim();
   return {
     student: {
       id: student.id,
@@ -8496,7 +8757,12 @@ function collectStudentCommentContext(studentId, teacherNote = "") {
     strengths: latestSubjects.slice(0, 2).map((item) => item.subject),
     weaknesses: latestSubjects.slice(-2).reverse().map((item) => item.subject),
     tags,
-    teacherNote: teacherNote.trim()
+    commentProfile: {
+      criteriaSummary: commentProfile.criteriaSummary,
+      customOptions: commentProfile.customOptions,
+      teacherNote: mergedTeacherNote
+    },
+    teacherNote: mergedTeacherNote
   };
 }
 
@@ -8579,8 +8845,73 @@ function normalizeStudentCommentDraft(data) {
   };
 }
 
+function normalizeCriteriaValues(values) {
+  const normalized = {};
+  if (!values || typeof values !== "object") {
+    return normalized;
+  }
+  Object.entries(values).forEach(([criterionId, optionIds]) => {
+    const ids = Array.isArray(optionIds) ? optionIds : optionIds ? [optionIds] : [];
+    normalized[criterionId] = Array.from(new Set(ids.map((id) => makeSafeId(id, "option")).filter(Boolean)));
+  });
+  return normalized;
+}
+
+function normalizeCustomOptions(options) {
+  const normalized = {};
+  if (!options || typeof options !== "object") {
+    return normalized;
+  }
+  Object.entries(options).forEach(([criterionId, items]) => {
+    const list = Array.isArray(items) ? items : [];
+    normalized[criterionId] = list
+      .map((item, index) => ({
+        id: makeSafeId(item?.id || item?.label || `custom_${index}`, "custom"),
+        label: (item?.label || "").toString().trim(),
+        linkedTagId: item?.linkedTagId || "",
+        custom: true
+      }))
+      .filter((item) => item.label);
+  });
+  return normalized;
+}
+
+function normalizeStudentCommentProfile(student) {
+  student.aiComments = student.aiComments && typeof student.aiComments === "object" ? student.aiComments : {};
+  const draft = normalizeStudentCommentDraft(student.aiComments.draft) || normalizeStudentCommentDraft(student.aiComments.latest);
+  const raw = student.aiComments.profile && typeof student.aiComments.profile === "object" ? student.aiComments.profile : {};
+  const length = normalizeCommentLengthSettings(raw.lengthMode || raw.commentLengthMode || draft?.lengthMode, raw.targetWordCount || draft?.targetWordCount);
+  const profile = {
+    criteriaValues: normalizeCriteriaValues(raw.criteriaValues),
+    customOptions: normalizeCustomOptions(raw.customOptions),
+    teacherNote: String(raw.teacherNote ?? draft?.teacherNote ?? ""),
+    style: ["warm", "formal", "brief"].includes(raw.style) ? raw.style : draft?.style || "warm",
+    lengthMode: length.commentLengthMode,
+    targetWordCount: length.targetWordCount,
+    generatedComment: String(raw.generatedComment || draft?.generatedComment || draft?.text || ""),
+    status: ["pending", "ready", "needsInfo", "generating", "generated", "edited", "failed", "skipped", "draft"].includes(raw.status) ? raw.status : raw.generatedComment || draft?.generatedComment ? "generated" : "draft",
+    updatedAt: raw.updatedAt || draft?.updatedAt || ""
+  };
+  student.aiComments.profile = profile;
+  return profile;
+}
+
 function loadStudentCommentCache(studentId) {
   const student = state.students.find((item) => item.id === studentId);
+  if (student) {
+    const profile = normalizeStudentCommentProfile(student);
+    const fromProfile = normalizeStudentCommentDraft({
+      generatedComment: profile.generatedComment,
+      teacherNote: profile.teacherNote,
+      style: profile.style,
+      lengthMode: profile.lengthMode,
+      targetWordCount: profile.targetWordCount,
+      updatedAt: profile.updatedAt
+    });
+    if (fromProfile) {
+      return fromProfile;
+    }
+  }
   const saved = normalizeStudentCommentDraft(student?.aiComments?.draft) || normalizeStudentCommentDraft(student?.aiComments?.latest);
   if (saved) {
     return saved;
@@ -8606,6 +8937,14 @@ function saveStudentCommentCache(studentId, data) {
   }
   student.aiComments = student.aiComments && typeof student.aiComments === "object" ? student.aiComments : {};
   student.aiComments.draft = draft;
+  const profile = normalizeStudentCommentProfile(student);
+  profile.generatedComment = draft.generatedComment;
+  profile.teacherNote = draft.teacherNote;
+  profile.style = draft.style;
+  profile.lengthMode = draft.lengthMode;
+  profile.targetWordCount = draft.targetWordCount;
+  profile.status = draft.generatedComment ? profile.status === "edited" ? "edited" : "generated" : profile.status || "draft";
+  profile.updatedAt = draft.updatedAt;
   try {
     localStorage.setItem(getStudentCommentCacheKey(studentId), JSON.stringify(draft));
   } catch (error) {
@@ -8661,6 +9000,7 @@ function buildStudentCommentPayload(studentId) {
     lengthRange: length.lengthRange,
     lengthInstruction: length.lengthInstruction,
     context,
+    commentProfile: context?.commentProfile || { criteriaSummary: [], customOptions: [], teacherNote: "" },
     requirements: {
       length: length.lengthInstruction,
       useOnlyProvidedFacts: true,
@@ -8745,6 +9085,9 @@ function renderAiCommentContext(studentId) {
     }
     if (context.weaknesses.length) {
       rows.push(`薄弱科目：${context.weaknesses.join("、")}`);
+    }
+    if (context.commentProfile?.criteriaSummary?.length) {
+      rows.push(`评语素材：${context.commentProfile.criteriaSummary.map((item) => `${item.label}：${item.values.join("、")}`).join("；")}`);
     }
     rows.forEach((text) => {
       const item = document.createElement("div");
@@ -8953,6 +9296,754 @@ async function copyStudentComment() {
     aiCommentStatus.textContent = "已复制";
     aiCommentStatus.dataset.tone = "success";
   }
+}
+
+function getCommentWorkbenchStudents() {
+  return state.students.slice().sort((a, b) => (a.name || "").localeCompare(b.name || "", "zh-Hans-CN"));
+}
+
+function getCommentProfileMaterialCount(student) {
+  const profile = normalizeStudentCommentProfile(student);
+  const criteriaCount = Object.values(profile.criteriaValues).reduce((total, list) => total + (Array.isArray(list) ? list.length : 0), 0);
+  const customCount = Object.values(profile.customOptions).reduce((total, list) => total + (Array.isArray(list) ? list.length : 0), 0);
+  const hasTeacherNote = Boolean(profile.teacherNote.trim());
+  const hasTags = getStudentTagLabels(student).length > 0;
+  const hasExam = Array.isArray(student.exams) && student.exams.length > 0;
+  return criteriaCount + customCount + (hasTeacherNote ? 1 : 0) + (hasTags ? 1 : 0) + (hasExam ? 1 : 0);
+}
+
+function getCommentProfileStatus(student) {
+  const profile = normalizeStudentCommentProfile(student);
+  if (profile.status === "generating" || profile.status === "failed" || profile.status === "edited" || profile.status === "skipped") {
+    return profile.status;
+  }
+  if (profile.generatedComment.trim()) {
+    return profile.status === "edited" ? "edited" : "generated";
+  }
+  return getCommentProfileMaterialCount(student) >= 2 ? "ready" : "needsInfo";
+}
+
+function getCommentStatusLabel(status) {
+  return {
+    pending: "待处理",
+    ready: "可生成",
+    needsInfo: "需补充",
+    generating: "生成中",
+    generated: "已生成",
+    edited: "已编辑",
+    failed: "失败",
+    skipped: "已跳过",
+    draft: "草稿"
+  }[status] || "草稿";
+}
+
+function getStudentScoreSummaryText(student) {
+  const context = collectStudentCommentContext(student.id, "");
+  if (!context?.latestExam) {
+    return "暂无考试";
+  }
+  const parts = [
+    context.latestExam.name,
+    Number.isFinite(context.latestExam.totalScore) ? `总分 ${formatTrendMetric(context.latestExam.totalScore, "total")}` : "",
+    context.latestExam.classRank ? `班排 ${context.latestExam.classRank}` : ""
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function syncCommentProfileTags(student) {
+  const profile = normalizeStudentCommentProfile(student);
+  const managedTagIds = new Set();
+  (state.commentRubric?.criteria || []).forEach((criterion) => {
+    if (!criterion.syncToTags) {
+      return;
+    }
+    (criterion.options || []).forEach((option) => {
+      if (option.linkedTagId && option.linkedTagId.startsWith("comment_")) {
+        managedTagIds.add(option.linkedTagId);
+      }
+    });
+    (profile.customOptions[criterion.id] || []).forEach((option) => {
+      if (option.linkedTagId && option.linkedTagId.startsWith("comment_")) {
+        managedTagIds.add(option.linkedTagId);
+      }
+    });
+  });
+  student.manualTags = sanitizeTags((student.manualTags || []).filter((id) => !managedTagIds.has(id)));
+  (state.commentRubric?.criteria || []).forEach((criterion) => {
+    if (!criterion.syncToTags) {
+      return;
+    }
+    const selected = new Set(profile.criteriaValues[criterion.id] || []);
+    (criterion.options || []).forEach((option) => {
+      if (selected.has(option.id) && option.linkedTagId && TAG_BY_ID.has(option.linkedTagId)) {
+        student.manualTags.push(option.linkedTagId);
+      }
+    });
+    (profile.customOptions[criterion.id] || []).forEach((option) => {
+      if (option.linkedTagId && TAG_BY_ID.has(option.linkedTagId)) {
+        student.manualTags.push(option.linkedTagId);
+      }
+    });
+  });
+  student.manualTags = sanitizeTags(student.manualTags);
+}
+
+function getCommentWorkbenchLengthSettings() {
+  return normalizeCommentLengthSettings(commentWorkbenchLengthMode?.value || AI_COMMENT_DEFAULT_LENGTH_MODE, commentWorkbenchTargetWordCount?.value || AI_COMMENT_DEFAULT_TARGET_WORD_COUNT);
+}
+
+function syncCommentWorkbenchLengthControls() {
+  const isCustom = (commentWorkbenchLengthMode?.value || AI_COMMENT_DEFAULT_LENGTH_MODE) === "custom";
+  commentWorkbenchCustomLengthWrap?.classList.toggle("hidden", !isCustom);
+  if (commentWorkbenchTargetWordCount) {
+    commentWorkbenchTargetWordCount.disabled = !isCustom;
+  }
+  updateCommentWorkbenchWordCount();
+}
+
+function updateCommentWorkbenchWordCount() {
+  if (!commentWorkbenchWordCount) {
+    return;
+  }
+  const length = getCommentWorkbenchLengthSettings();
+  commentWorkbenchWordCount.textContent = `${(commentWorkbenchResult?.value || "").trim().length} 字 · 目标 ${length.lengthRange}`;
+}
+
+function saveActiveCommentWorkbenchProfile(status = "") {
+  const student = state.students.find((item) => item.id === activeCommentWorkbenchStudentId);
+  if (!student) {
+    return null;
+  }
+  const profile = normalizeStudentCommentProfile(student);
+  const length = getCommentWorkbenchLengthSettings();
+  profile.teacherNote = commentWorkbenchTeacherNote?.value || "";
+  profile.style = commentWorkbenchStyleSelect?.value || "warm";
+  profile.lengthMode = length.commentLengthMode;
+  profile.targetWordCount = length.targetWordCount;
+  profile.generatedComment = commentWorkbenchResult?.value || "";
+  if (status) {
+    profile.status = status;
+  } else if (profile.generatedComment.trim() && profile.status === "generated") {
+    profile.status = "edited";
+  }
+  profile.updatedAt = new Date().toISOString();
+  syncCommentProfileTags(student);
+  saveStudentCommentCache(student.id, {
+    generatedComment: profile.generatedComment,
+    teacherNote: profile.teacherNote,
+    style: profile.style,
+    lengthMode: profile.lengthMode,
+    targetWordCount: profile.targetWordCount,
+    updatedAt: profile.updatedAt
+  });
+  saveState();
+  return profile;
+}
+
+function applyProfileToAiCommentControls(student) {
+  const profile = normalizeStudentCommentProfile(student);
+  if (aiCommentTeacherNote) {
+    aiCommentTeacherNote.value = profile.teacherNote || "";
+  }
+  if (aiCommentStyleSelect) {
+    aiCommentStyleSelect.value = profile.style || "warm";
+  }
+  if (aiCommentLengthMode) {
+    aiCommentLengthMode.value = profile.lengthMode || AI_COMMENT_DEFAULT_LENGTH_MODE;
+  }
+  if (aiCommentTargetWordCount) {
+    aiCommentTargetWordCount.value = String(profile.targetWordCount || AI_COMMENT_DEFAULT_TARGET_WORD_COUNT);
+  }
+  if (aiCommentResult) {
+    aiCommentResult.value = profile.generatedComment || "";
+  }
+  syncAiCommentLengthControls();
+}
+
+function renderCommentWorkbenchSummary() {
+  const students = getCommentWorkbenchStudents();
+  const counts = students.reduce((acc, student) => {
+    const status = getCommentProfileStatus(student);
+    if (status === "generated" || status === "edited") {
+      acc.generated += 1;
+    } else if (status === "needsInfo") {
+      acc.needsInfo += 1;
+    } else {
+      acc.pending += 1;
+    }
+    return acc;
+  }, { generated: 0, pending: 0, needsInfo: 0 });
+  if (commentWorkbenchTotal) commentWorkbenchTotal.textContent = String(students.length);
+  if (commentWorkbenchGenerated) commentWorkbenchGenerated.textContent = String(counts.generated);
+  if (commentWorkbenchPending) commentWorkbenchPending.textContent = String(counts.pending);
+  if (commentWorkbenchNeedsInfo) commentWorkbenchNeedsInfo.textContent = String(counts.needsInfo);
+}
+
+function renderCommentWorkbenchTable() {
+  if (!commentWorkbenchTable) {
+    return;
+  }
+  const onlyUngenerated = Boolean(commentFilterUngenerated?.checked);
+  const onlyNeedsInfo = Boolean(commentFilterNeedsInfo?.checked);
+  const searchText = (commentWorkbenchSearchInput?.value || "").trim();
+  const normalizedSearch = normalizeName(searchText);
+  const students = getCommentWorkbenchStudents().filter((student) => {
+    const status = getCommentProfileStatus(student);
+    if (onlyNeedsInfo && status !== "needsInfo") return false;
+    if (onlyUngenerated && (status === "generated" || status === "edited")) return false;
+    if (searchText) {
+      const name = student.name || "";
+      const aliasMatch = (student.aliases || []).some((alias) => (
+        alias.includes(searchText) || normalizeName(alias).includes(normalizedSearch)
+      ));
+      const tagMatch = getStudentTagLabels(student).some((label) => label.includes(searchText));
+      if (!name.includes(searchText) && !normalizeName(name).includes(normalizedSearch) && !aliasMatch && !tagMatch) {
+        return false;
+      }
+    }
+    return true;
+  });
+  if (commentWorkbenchTableMeta) {
+    commentWorkbenchTableMeta.textContent = searchText ? `${students.length} 人 · 已筛选` : `${students.length} 人`;
+  }
+  commentWorkbenchTable.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "comment-workbench-row comment-workbench-row-head";
+  ["选择", "学生姓名", "标签摘要", "成绩摘要", "素材完整度", "生成状态", "字数/风格", "操作"].forEach((text) => {
+    const cell = document.createElement("span");
+    cell.textContent = text;
+    header.appendChild(cell);
+  });
+  commentWorkbenchTable.appendChild(header);
+  if (!students.length) {
+    const empty = document.createElement("div");
+    empty.className = "comment-workbench-empty";
+    empty.textContent = "暂无符合条件的学生。";
+    commentWorkbenchTable.appendChild(empty);
+    return;
+  }
+  students.forEach((student) => {
+    const profile = normalizeStudentCommentProfile(student);
+    const status = getCommentProfileStatus(student);
+    const row = document.createElement("div");
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.className = `comment-workbench-row ${student.id === activeCommentWorkbenchStudentId ? "active" : ""}`;
+    const checkboxWrap = document.createElement("span");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = commentBatchSelectedIds.has(student.id);
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (checkbox.checked) {
+        commentBatchSelectedIds.add(student.id);
+      } else {
+        commentBatchSelectedIds.delete(student.id);
+      }
+    });
+    checkboxWrap.appendChild(checkbox);
+    const tags = getStudentTagLabels(student).slice(0, 4);
+    const material = Math.min(100, Math.round((getCommentProfileMaterialCount(student) / 5) * 100));
+    const cells = [
+      student.name || "未命名",
+      tags.length ? tags.join("、") : "暂无标签",
+      getStudentScoreSummaryText(student),
+      `${material}%`,
+      getCommentStatusLabel(status),
+      `${normalizeCommentLengthSettings(profile.lengthMode, profile.targetWordCount).lengthRange} · ${({ warm: "温和", formal: "正式", brief: "简洁" }[profile.style] || "温和")}`
+    ].map((text, index) => {
+      const cell = document.createElement("span");
+      cell.textContent = text;
+      if (index === 4) {
+        cell.className = `comment-status ${status}`;
+      }
+      return cell;
+    });
+    const actions = document.createElement("span");
+    actions.className = "comment-row-actions";
+    [
+      ["编辑", () => selectCommentWorkbenchStudent(student.id)],
+      ["生成", () => generateWorkbenchStudentComment(student.id)],
+      ["复制", () => copyWorkbenchStudentComment(student.id)],
+      ["详情", () => openRecordModal(student.id)]
+    ].forEach(([label, handler]) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ghost";
+      btn.textContent = label;
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        handler();
+      });
+      actions.appendChild(btn);
+    });
+    row.append(checkboxWrap, ...cells, actions);
+    row.addEventListener("click", () => selectCommentWorkbenchStudent(student.id));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectCommentWorkbenchStudent(student.id);
+      }
+    });
+    commentWorkbenchTable.appendChild(row);
+  });
+}
+
+function renderCommentWorkbenchStudentDetail() {
+  const student = state.students.find((item) => item.id === activeCommentWorkbenchStudentId);
+  if (!student) {
+    if (commentWorkbenchDetailTitle) commentWorkbenchDetailTitle.textContent = "请选择学生";
+    return;
+  }
+  const profile = normalizeStudentCommentProfile(student);
+  if (commentWorkbenchDetailTitle) {
+    commentWorkbenchDetailTitle.textContent = `${student.name || "未命名"} · 评语资料`;
+  }
+  if (commentWorkbenchSelectedInfo) {
+    commentWorkbenchSelectedInfo.textContent = `${getCommentStatusLabel(getCommentProfileStatus(student))} · ${profile.updatedAt ? `更新于 ${profile.updatedAt.slice(0, 16).replace("T", " ")}` : "尚未更新"}`;
+  }
+  renderCommentWorkbenchScoreSummary(student);
+  renderCommentWorkbenchTags(student);
+  renderCommentRubricManager();
+  renderCommentCriteriaEditor(student);
+  if (commentWorkbenchTeacherNote) commentWorkbenchTeacherNote.value = profile.teacherNote || "";
+  if (commentWorkbenchLengthMode) commentWorkbenchLengthMode.value = profile.lengthMode || AI_COMMENT_DEFAULT_LENGTH_MODE;
+  if (commentWorkbenchTargetWordCount) commentWorkbenchTargetWordCount.value = String(profile.targetWordCount || AI_COMMENT_DEFAULT_TARGET_WORD_COUNT);
+  if (commentWorkbenchStyleSelect) commentWorkbenchStyleSelect.value = profile.style || "warm";
+  if (commentWorkbenchResult) commentWorkbenchResult.value = profile.generatedComment || "";
+  syncCommentWorkbenchLengthControls();
+}
+
+function renderCommentWorkbenchScoreSummary(student) {
+  if (!commentWorkbenchScoreSummary) return;
+  const context = collectStudentCommentContext(student.id, "");
+  commentWorkbenchScoreSummary.innerHTML = "";
+  const rows = [];
+  if (context?.latestExam) {
+    rows.push(`最近考试：${context.latestExam.name}${context.latestExam.date ? ` · ${context.latestExam.date}` : ""}`);
+    rows.push(`总分：${formatTrendMetric(context.latestExam.totalScore, "total")}${Number.isFinite(context.latestExam.scoreRate) ? ` · 得分率 ${formatTrendMetric(context.latestExam.scoreRate, "rate")}` : ""}`);
+    rows.push(`排名：${context.latestExam.classRank ? `班排 ${context.latestExam.classRank}` : "班排缺失"}${context.latestExam.schoolRank ? ` · 级排 ${context.latestExam.schoolRank}` : ""}`);
+  } else {
+    rows.push("暂无最近考试成绩。");
+  }
+  if (context?.strengths?.length) rows.push(`优势科目：${context.strengths.join("、")}`);
+  if (context?.weaknesses?.length) rows.push(`薄弱科目：${context.weaknesses.join("、")}`);
+  rows.forEach((text) => {
+    const item = document.createElement("div");
+    item.textContent = text;
+    commentWorkbenchScoreSummary.appendChild(item);
+  });
+}
+
+function renderCommentWorkbenchTags(student) {
+  if (!commentWorkbenchTags) return;
+  commentWorkbenchTags.innerHTML = "";
+  const tags = getStudentTagLabels(student);
+  if (!tags.length) {
+    const empty = document.createElement("span");
+    empty.className = "tag-chip";
+    empty.textContent = "暂无标签";
+    commentWorkbenchTags.appendChild(empty);
+    return;
+  }
+  tags.forEach((label) => {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip active";
+    chip.textContent = label;
+    commentWorkbenchTags.appendChild(chip);
+  });
+}
+
+function renderCommentRubricManager() {
+  if (!commentRubricManager) return;
+  commentRubricManager.innerHTML = "";
+  (state.commentRubric?.criteria || []).forEach((criterion) => {
+    const row = document.createElement("div");
+    row.className = "comment-rubric-row";
+    const nameInput = document.createElement("input");
+    nameInput.className = "input";
+    nameInput.value = criterion.label;
+    nameInput.disabled = criterion.builtIn;
+    nameInput.addEventListener("change", () => {
+      criterion.label = nameInput.value.trim() || criterion.label;
+      saveState();
+      renderCommentWorkbench();
+    });
+    const syncLabel = document.createElement("label");
+    syncLabel.className = "checkbox compact";
+    const syncInput = document.createElement("input");
+    syncInput.type = "checkbox";
+    syncInput.checked = Boolean(criterion.syncToTags);
+    syncInput.addEventListener("change", () => {
+      criterion.syncToTags = syncInput.checked;
+      registerCommentRubricTags();
+      state.students.forEach(syncCommentProfileTags);
+      saveState();
+      renderCommentWorkbench();
+    });
+    syncLabel.append(syncInput, document.createTextNode("同步标签"));
+    const hideButton = document.createElement("button");
+    hideButton.type = "button";
+    hideButton.className = "ghost";
+    hideButton.textContent = criterion.builtIn ? (criterion.hidden ? "显示" : "隐藏") : "删除";
+    hideButton.addEventListener("click", () => {
+      if (criterion.builtIn) {
+        criterion.hidden = !criterion.hidden;
+      } else {
+        state.commentRubric.criteria = state.commentRubric.criteria.filter((item) => item.id !== criterion.id);
+      }
+      saveState();
+      renderCommentWorkbench();
+    });
+    row.append(nameInput, syncLabel, hideButton);
+    commentRubricManager.appendChild(row);
+    const customOptions = (criterion.options || []).filter((option) => !option.builtIn);
+    if (customOptions.length) {
+      const optionList = document.createElement("div");
+      optionList.className = "comment-rubric-options";
+      customOptions.forEach((option) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "tag-chip";
+        chip.textContent = `删除 ${option.label}`;
+        chip.addEventListener("click", () => {
+          criterion.options = (criterion.options || []).filter((item) => item.id !== option.id);
+          state.students.forEach((student) => {
+            const profile = normalizeStudentCommentProfile(student);
+            profile.criteriaValues[criterion.id] = (profile.criteriaValues[criterion.id] || []).filter((id) => id !== option.id);
+            syncCommentProfileTags(student);
+          });
+          saveState();
+          renderCommentWorkbench();
+        });
+        optionList.appendChild(chip);
+      });
+      commentRubricManager.appendChild(optionList);
+    }
+  });
+}
+
+function renderCommentCriteriaEditor(student) {
+  if (!commentCriteriaEditor) return;
+  const profile = normalizeStudentCommentProfile(student);
+  commentCriteriaEditor.innerHTML = "";
+  (state.commentRubric?.criteria || []).filter((criterion) => !criterion.hidden).forEach((criterion) => {
+    const group = document.createElement("div");
+    group.className = "comment-criteria-group";
+    const head = document.createElement("div");
+    head.className = "comment-criteria-head";
+    const title = document.createElement("strong");
+    title.textContent = criterion.label;
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "ghost";
+    clear.textContent = "清空";
+    clear.addEventListener("click", () => {
+      profile.criteriaValues[criterion.id] = [];
+      profile.customOptions[criterion.id] = [];
+      profile.status = "draft";
+      profile.updatedAt = new Date().toISOString();
+      syncCommentProfileTags(student);
+      saveState();
+      renderCommentWorkbench();
+    });
+    head.append(title, clear);
+    const chips = document.createElement("div");
+    chips.className = "tag-chip-list";
+    const selected = new Set(profile.criteriaValues[criterion.id] || []);
+    (criterion.options || []).forEach((option) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = `tag-chip ${selected.has(option.id) ? "active" : ""}`;
+      chip.textContent = option.label;
+      chip.addEventListener("click", () => toggleCommentCriterionOption(student, criterion, option.id));
+      chips.appendChild(chip);
+    });
+    (profile.customOptions[criterion.id] || []).forEach((option) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "tag-chip active";
+      chip.textContent = option.label;
+      chip.title = "点击删除自定义选项";
+      chip.addEventListener("click", () => {
+        profile.customOptions[criterion.id] = (profile.customOptions[criterion.id] || []).filter((item) => item.id !== option.id);
+        profile.status = "draft";
+        profile.updatedAt = new Date().toISOString();
+        syncCommentProfileTags(student);
+        saveState();
+        renderCommentWorkbench();
+      });
+      chips.appendChild(chip);
+    });
+    const custom = document.createElement("button");
+    custom.type = "button";
+    custom.className = "tag-chip";
+    custom.textContent = "+ 自定义";
+    custom.addEventListener("click", () => addStudentCommentCustomOption(student, criterion));
+    chips.appendChild(custom);
+    const addPreset = document.createElement("button");
+    addPreset.type = "button";
+    addPreset.className = "tag-chip comment-add-option-chip";
+    addPreset.textContent = "+ 选项";
+    addPreset.addEventListener("click", () => addCommentCriterionOption(criterion.id));
+    chips.appendChild(addPreset);
+    group.append(head, chips);
+    commentCriteriaEditor.appendChild(group);
+  });
+}
+
+function toggleCommentCriterionOption(student, criterion, optionId) {
+  const profile = normalizeStudentCommentProfile(student);
+  const current = new Set(profile.criteriaValues[criterion.id] || []);
+  if (current.has(optionId)) {
+    current.delete(optionId);
+  } else {
+    if (criterion.type === "single") {
+      current.clear();
+    }
+    current.add(optionId);
+  }
+  profile.criteriaValues[criterion.id] = Array.from(current);
+  profile.status = profile.generatedComment ? "edited" : "draft";
+  profile.updatedAt = new Date().toISOString();
+  syncCommentProfileTags(student);
+  saveState();
+  renderCommentWorkbench();
+}
+
+function addStudentCommentCustomOption(student, criterion) {
+  const label = window.prompt(`为「${criterion.label}」添加自定义素材`);
+  if (!label?.trim()) return;
+  const profile = normalizeStudentCommentProfile(student);
+  const item = {
+    id: makeSafeId(label, "custom"),
+    label: label.trim(),
+    linkedTagId: criterion.syncToTags && label.trim().length <= 6 ? `comment_${criterion.id}_custom_${makeSafeId(label, "custom")}` : "",
+    custom: true
+  };
+  if (item.linkedTagId && !TAG_BY_ID.has(item.linkedTagId)) {
+    registerTagDescriptor({ id: item.linkedTagId, labelZh: item.label, groupId: `comment_${criterion.id}_custom_${item.id}`, groupNameZh: criterion.label });
+  }
+  profile.customOptions[criterion.id] = [...(profile.customOptions[criterion.id] || []), item];
+  profile.status = profile.generatedComment ? "edited" : "draft";
+  profile.updatedAt = new Date().toISOString();
+  syncCommentProfileTags(student);
+  saveState();
+  renderCommentWorkbench();
+}
+
+function addCommentCriterionOption(criterionId) {
+  const criterion = state.commentRubric?.criteria?.find((item) => item.id === criterionId);
+  if (!criterion) return;
+  const label = window.prompt(`给「${criterion.label}」新增预设选项`);
+  if (!label?.trim()) return;
+  const id = makeSafeId(label, "option");
+  const option = {
+    id,
+    label: label.trim(),
+    linkedTagId: criterion.syncToTags && label.trim().length <= 6 ? `comment_${criterion.id}_${id}` : "",
+    builtIn: false
+  };
+  criterion.options = [...(criterion.options || []), option];
+  registerCommentRubricTags();
+  saveState();
+  renderCommentWorkbench();
+}
+
+function addCommentCriterion() {
+  const label = window.prompt("请输入新标准名称");
+  if (!label?.trim()) return;
+  const id = makeSafeId(label, "criterion");
+  state.commentRubric.criteria.push({
+    id,
+    label: label.trim(),
+    type: "multi",
+    syncToTags: false,
+    builtIn: false,
+    options: []
+  });
+  saveState();
+  renderCommentWorkbench();
+}
+
+function selectCommentWorkbenchStudent(studentId) {
+  activeCommentWorkbenchStudentId = studentId;
+  renderCommentWorkbench();
+}
+
+function renderCommentWorkbench() {
+  normalizeCommentRubric();
+  state.students.forEach(normalizeStudentCommentProfile);
+  if (!activeCommentWorkbenchStudentId && state.students[0]) {
+    activeCommentWorkbenchStudentId = getCommentWorkbenchStudents()[0]?.id || "";
+  }
+  renderCommentWorkbenchSummary();
+  renderCommentWorkbenchTable();
+  renderCommentWorkbenchStudentDetail();
+}
+
+function openCommentWorkbench(studentId = activeStudentId) {
+  if (!commentWorkbenchModal) return;
+  normalizeState();
+  activeCommentWorkbenchStudentId = studentId || activeCommentWorkbenchStudentId || getCommentWorkbenchStudents()[0]?.id || "";
+  if (!commentBatchSelectedIds.size) {
+    commentBatchSelectedIds = new Set(getCommentWorkbenchStudents().map((student) => student.id));
+  }
+  commentWorkbenchModal.classList.remove("hidden");
+  commentWorkbenchModal.setAttribute("aria-hidden", "false");
+  renderCommentWorkbench();
+}
+
+function closeCommentWorkbench() {
+  saveActiveCommentWorkbenchProfile();
+  commentWorkbenchModal?.classList.add("hidden");
+  commentWorkbenchModal?.setAttribute("aria-hidden", "true");
+}
+
+async function generateWorkbenchStudentComment(studentId = activeCommentWorkbenchStudentId, { force = true } = {}) {
+  const student = state.students.find((item) => item.id === studentId);
+  if (!student) return null;
+  if (student.id === activeCommentWorkbenchStudentId) {
+    saveActiveCommentWorkbenchProfile("ready");
+  }
+  const profile = normalizeStudentCommentProfile(student);
+  if ((profile.status === "generated" || profile.status === "edited") && !force) {
+    return { skipped: true };
+  }
+  profile.status = "generating";
+  profile.updatedAt = new Date().toISOString();
+  saveState();
+  renderCommentWorkbench();
+  applyProfileToAiCommentControls(student);
+  const data = await generateStudentComment(student.id, { force });
+  const comment = (aiCommentResult?.value || data?.comment || "").trim();
+  const latestProfile = normalizeStudentCommentProfile(student);
+  if (comment) {
+    latestProfile.generatedComment = comment;
+    latestProfile.status = "generated";
+    latestProfile.updatedAt = new Date().toISOString();
+    saveStudentCommentCache(student.id, {
+      generatedComment: comment,
+      teacherNote: latestProfile.teacherNote,
+      style: latestProfile.style,
+      lengthMode: latestProfile.lengthMode,
+      targetWordCount: latestProfile.targetWordCount,
+      updatedAt: latestProfile.updatedAt
+    });
+  } else if (!data?.skipped) {
+    latestProfile.status = "failed";
+    latestProfile.updatedAt = new Date().toISOString();
+    saveState();
+  }
+  if (student.id === activeCommentWorkbenchStudentId && commentWorkbenchResult) {
+    commentWorkbenchResult.value = latestProfile.generatedComment || "";
+  }
+  renderCommentWorkbench();
+  return data;
+}
+
+async function runCommentBatchQueue() {
+  if (commentBatchRunning) return;
+  commentBatchRunning = true;
+  commentBatchPaused = false;
+  while (commentBatchQueue.length && !commentBatchPaused) {
+    const studentId = commentBatchQueue.shift();
+    commentBatchDone += 1;
+    if (commentBatchProgress) {
+      commentBatchProgress.textContent = `正在生成 ${commentBatchDone}/${commentBatchTotal}`;
+    }
+    try {
+      await generateWorkbenchStudentComment(studentId, { force: false });
+    } catch (error) {
+      const student = state.students.find((item) => item.id === studentId);
+      if (student) {
+        const profile = normalizeStudentCommentProfile(student);
+        profile.status = "failed";
+        profile.updatedAt = new Date().toISOString();
+        saveState();
+      }
+    }
+  }
+  commentBatchRunning = false;
+  if (commentBatchProgress) {
+    commentBatchProgress.textContent = commentBatchPaused ? `已暂停，剩余 ${commentBatchQueue.length} 人。` : "批量生成完成。";
+  }
+  renderCommentWorkbench();
+}
+
+function startCommentBatchGeneration() {
+  saveActiveCommentWorkbenchProfile();
+  const candidates = getCommentWorkbenchStudents().filter((student) => {
+    if (!commentBatchSelectedIds.has(student.id)) return false;
+    const status = getCommentProfileStatus(student);
+    return ["ready", "failed", "pending", "draft"].includes(status);
+  });
+  commentBatchQueue = candidates.map((student) => student.id);
+  commentBatchTotal = commentBatchQueue.length;
+  commentBatchDone = 0;
+  if (!commentBatchTotal) {
+    showToast("没有需要生成的学生", "info");
+    if (commentBatchProgress) commentBatchProgress.textContent = "没有需要生成的学生。";
+    return;
+  }
+  runCommentBatchQueue();
+}
+
+function pauseCommentBatchGeneration() {
+  commentBatchPaused = true;
+}
+
+function resumeCommentBatchGeneration() {
+  if (!commentBatchQueue.length) return;
+  commentBatchPaused = false;
+  runCommentBatchQueue();
+}
+
+function copyWorkbenchStudentComment(studentId = activeCommentWorkbenchStudentId) {
+  const student = state.students.find((item) => item.id === studentId);
+  const text = normalizeStudentCommentProfile(student || {}).generatedComment.trim();
+  if (!text) {
+    showToast("暂无可复制的评语", "error");
+    return;
+  }
+  navigator.clipboard?.writeText(text).then(() => showToast("评语已复制", "success")).catch(() => {
+    showToast("复制失败，请手动选择文本", "error");
+  });
+}
+
+function copyAllGeneratedComments() {
+  const lines = getCommentWorkbenchStudents()
+    .map((student) => {
+      const text = normalizeStudentCommentProfile(student).generatedComment.trim();
+      return text ? `${student.name || "未命名"}：${text}` : "";
+    })
+    .filter(Boolean);
+  if (!lines.length) {
+    showToast("暂无已生成评语", "error");
+    return;
+  }
+  navigator.clipboard?.writeText(lines.join("\n")).then(() => showToast("已复制全部评语", "success")).catch(() => showToast("复制失败", "error"));
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function exportCommentWorkbenchCsv() {
+  const rows = [["姓名", "生成状态", "评语", "老师补充", "标签摘要", "更新时间"]];
+  getCommentWorkbenchStudents().forEach((student) => {
+    const profile = normalizeStudentCommentProfile(student);
+    rows.push([
+      student.name || "",
+      getCommentStatusLabel(getCommentProfileStatus(student)),
+      profile.generatedComment || "",
+      profile.teacherNote || "",
+      getStudentTagLabels(student).join("、"),
+      profile.updatedAt || ""
+    ]);
+  });
+  const content = rows.map((row) => row.map(csvCell).join(",")).join("\n");
+  downloadFile(`期末评语-${new Date().toISOString().slice(0, 10)}.csv`, content);
 }
 
 function getExamSortValue(exam) {
@@ -11862,6 +12953,75 @@ if (aiCommentBtn) {
   aiCommentBtn.addEventListener("click", () => {
     openAiCommentDrawer();
   });
+}
+if (commentWorkbenchBtn) {
+  commentWorkbenchBtn.addEventListener("click", () => openCommentWorkbench());
+}
+if (commentWorkbenchFromDetailBtn) {
+  commentWorkbenchFromDetailBtn.addEventListener("click", () => openCommentWorkbench(activeStudentId));
+}
+if (commentWorkbenchClose) {
+  commentWorkbenchClose.addEventListener("click", closeCommentWorkbench);
+}
+if (commentWorkbenchModal) {
+  commentWorkbenchModal.addEventListener("click", (event) => {
+    if (event.target === commentWorkbenchModal) {
+      closeCommentWorkbench();
+    }
+  });
+}
+if (commentBatchGenerateBtn) {
+  commentBatchGenerateBtn.addEventListener("click", startCommentBatchGeneration);
+}
+if (commentBatchPauseBtn) {
+  commentBatchPauseBtn.addEventListener("click", pauseCommentBatchGeneration);
+}
+if (commentBatchResumeBtn) {
+  commentBatchResumeBtn.addEventListener("click", resumeCommentBatchGeneration);
+}
+[commentFilterUngenerated, commentFilterNeedsInfo].forEach((input) => {
+  input?.addEventListener("change", renderCommentWorkbenchTable);
+});
+if (commentWorkbenchSearchInput) {
+  commentWorkbenchSearchInput.addEventListener("input", renderCommentWorkbenchTable);
+}
+if (commentCopyAllBtn) {
+  commentCopyAllBtn.addEventListener("click", copyAllGeneratedComments);
+}
+if (commentExportCsvBtn) {
+  commentExportCsvBtn.addEventListener("click", exportCommentWorkbenchCsv);
+}
+if (commentOpenStudentDetailBtn) {
+  commentOpenStudentDetailBtn.addEventListener("click", () => {
+    if (activeCommentWorkbenchStudentId) {
+      openRecordModal(activeCommentWorkbenchStudentId);
+    }
+  });
+}
+if (commentAddCriterionBtn) {
+  commentAddCriterionBtn.addEventListener("click", addCommentCriterion);
+}
+[commentWorkbenchTeacherNote, commentWorkbenchStyleSelect, commentWorkbenchLengthMode, commentWorkbenchTargetWordCount, commentWorkbenchResult].forEach((input) => {
+  input?.addEventListener("input", () => {
+    if (input === commentWorkbenchLengthMode || input === commentWorkbenchTargetWordCount) {
+      syncCommentWorkbenchLengthControls();
+    }
+    const status = input === commentWorkbenchResult && (commentWorkbenchResult?.value || "").trim() ? "edited" : "";
+    saveActiveCommentWorkbenchProfile(status);
+    renderCommentWorkbenchSummary();
+    renderCommentWorkbenchTable();
+  });
+  input?.addEventListener("change", () => {
+    syncCommentWorkbenchLengthControls();
+    saveActiveCommentWorkbenchProfile();
+    renderCommentWorkbench();
+  });
+});
+if (commentSingleGenerateBtn) {
+  commentSingleGenerateBtn.addEventListener("click", () => generateWorkbenchStudentComment(activeCommentWorkbenchStudentId, { force: true }));
+}
+if (commentSingleCopyBtn) {
+  commentSingleCopyBtn.addEventListener("click", () => copyWorkbenchStudentComment(activeCommentWorkbenchStudentId));
 }
 if (aiCommentClose) {
   aiCommentClose.addEventListener("click", closeAiCommentDrawer);

@@ -6,7 +6,7 @@
     <title>班主任座位管理</title>
     <meta name="theme-color" content="#f5f5f7" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="style.css?v=20260617-comment-drawer-v2" />
+    <link rel="stylesheet" href="style.css?v=20260618-comment-workbench-v1" />
   </head>
   <body>
     <div class="bg-watermark" aria-hidden="true"></div>
@@ -329,6 +329,7 @@
                   <div class="class-ai-actions">
                     <button id="classAiTrendBtn" class="ghost" type="button">生成班级分析</button>
                     <button id="batchAiTrendBtn" class="ghost" type="button">生成学生建议</button>
+                    <button id="commentWorkbenchBtn" class="ghost" type="button">评语工作台</button>
                   </div>
                   <div id="studentAiBatchStatus" class="ai-batch-status hidden" aria-live="polite"></div>
                 </div>
@@ -665,6 +666,7 @@
                 </select>
               <button id="aiTrendBtn" class="ghost" type="button">生成趋势建议</button>
               <button id="aiCommentBtn" class="ghost" type="button">评语助手</button>
+              <button id="commentWorkbenchFromDetailBtn" class="ghost" type="button">进入评语工作台</button>
               <button id="exportTrendsBtn" class="ghost">导出</button>
             </div>
           </div>
@@ -781,6 +783,116 @@
           <button id="aiCommentCopyBtn" class="ghost ai-comment-copy-action" type="button">复制</button>
         </div>
       </aside>
+    </div>
+
+    <div id="commentWorkbenchModal" class="modal comment-workbench-modal hidden" aria-hidden="true">
+      <div class="comment-workbench-card">
+        <div class="comment-workbench-header">
+          <div>
+            <div class="modal-subtitle">全班评语管理</div>
+            <h3>评语工作台</h3>
+          </div>
+          <div class="comment-workbench-metrics" aria-label="评语进度">
+            <span>学生 <strong id="commentWorkbenchTotal">0</strong></span>
+            <span>已生成 <strong id="commentWorkbenchGenerated">0</strong></span>
+            <span>待生成 <strong id="commentWorkbenchPending">0</strong></span>
+            <span>需补充 <strong id="commentWorkbenchNeedsInfo">0</strong></span>
+          </div>
+          <button id="commentWorkbenchClose" class="ghost" type="button">关闭</button>
+        </div>
+        <div class="comment-workbench-toolbar">
+          <div class="comment-workbench-actions">
+            <button id="commentBatchGenerateBtn" class="primary" type="button">批量生成</button>
+            <button id="commentBatchPauseBtn" class="btn-secondary" type="button">暂停</button>
+            <button id="commentBatchResumeBtn" class="btn-secondary" type="button">继续</button>
+            <input id="commentWorkbenchSearchInput" class="input comment-workbench-search" type="search" placeholder="搜索学生" />
+            <label class="checkbox compact"><input id="commentFilterUngenerated" type="checkbox" />只看未生成</label>
+            <label class="checkbox compact"><input id="commentFilterNeedsInfo" type="checkbox" />只看需补充</label>
+            <button id="commentCopyAllBtn" class="ghost" type="button">复制全部</button>
+            <button id="commentExportCsvBtn" class="ghost" type="button">导出评语</button>
+          </div>
+          <div id="commentBatchProgress" class="comment-batch-progress">尚未开始批量生成。</div>
+        </div>
+        <div class="comment-workbench-layout">
+          <section class="comment-workbench-table-card">
+            <div class="comment-workbench-table-head">
+              <h4>学生评语表格</h4>
+              <span id="commentWorkbenchTableMeta" class="muted"></span>
+            </div>
+            <div id="commentWorkbenchTable" class="comment-workbench-table"></div>
+          </section>
+          <section class="comment-workbench-detail-card">
+            <div class="comment-workbench-detail-head">
+              <div>
+                <div class="modal-subtitle">当前学生</div>
+                <h4 id="commentWorkbenchDetailTitle">请选择学生</h4>
+              </div>
+              <button id="commentOpenStudentDetailBtn" class="ghost" type="button">查看详情</button>
+            </div>
+            <div id="commentWorkbenchSelectedInfo" class="comment-workbench-selected-info"></div>
+            <div class="comment-workbench-section">
+              <h5>成绩摘要</h5>
+              <div id="commentWorkbenchScoreSummary" class="ai-comment-summary"></div>
+            </div>
+            <div class="comment-workbench-section">
+              <h5>已有学生标签</h5>
+              <div id="commentWorkbenchTags" class="tag-chip-list"></div>
+            </div>
+            <div class="comment-workbench-section">
+              <div class="comment-workbench-section-head">
+                <h5>评语标准选择</h5>
+              </div>
+              <details class="comment-rubric-detail">
+                <summary>标准库管理</summary>
+                <div class="comment-rubric-manager-head">
+                  <span class="muted">管理标准名称、同步标签和自定义标准。</span>
+                  <button id="commentAddCriterionBtn" class="ghost" type="button">新增标准</button>
+                </div>
+                <div id="commentRubricManager" class="comment-rubric-manager"></div>
+              </details>
+              <div id="commentCriteriaEditor" class="comment-criteria-editor"></div>
+            </div>
+            <div class="comment-workbench-section">
+              <h5>老师自然语言补充</h5>
+              <textarea id="commentWorkbenchTeacherNote" class="input comment-workbench-note" rows="4" placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。"></textarea>
+            </div>
+            <div class="comment-workbench-form-grid">
+              <label>
+                <span>字数设置</span>
+                <select id="commentWorkbenchLengthMode" class="select">
+                  <option value="short">80～100 字</option>
+                  <option value="standard">100～150 字</option>
+                  <option value="long">150～200 字</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </label>
+              <label id="commentWorkbenchCustomLengthWrap" class="hidden">
+                <span>目标字数</span>
+                <input id="commentWorkbenchTargetWordCount" class="input" type="number" min="50" max="300" step="1" value="120" />
+              </label>
+              <label>
+                <span>风格选择</span>
+                <select id="commentWorkbenchStyleSelect" class="select">
+                  <option value="warm">温和鼓励</option>
+                  <option value="formal">客观正式</option>
+                  <option value="brief">简洁家长会风格</option>
+                </select>
+              </label>
+            </div>
+            <div class="comment-workbench-section">
+              <div class="comment-workbench-section-head">
+                <h5>AI 生成结果</h5>
+                <span id="commentWorkbenchWordCount" class="muted">0 字</span>
+              </div>
+              <textarea id="commentWorkbenchResult" class="input comment-workbench-result" rows="8" placeholder="生成后可在这里直接编辑评语。"></textarea>
+            </div>
+            <div class="comment-workbench-detail-actions">
+              <button id="commentSingleGenerateBtn" class="primary" type="button">单独生成</button>
+              <button id="commentSingleCopyBtn" class="ghost" type="button">复制</button>
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
 
     <div id="syncModal" class="modal hidden" aria-hidden="true">
@@ -1048,6 +1160,6 @@
     </div>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260617-comment-drawer-v2"></script>
+    <script src="app.js?v=20260618-comment-workbench-v1"></script>
   </body>
 </html>
