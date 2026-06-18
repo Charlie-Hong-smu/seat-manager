@@ -8,15 +8,12 @@ import {
   YAxis,
 } from "recharts";
 
+import type { GradeExam } from "../state/types";
+
 interface TrendDashboardProps {
+  exams: GradeExam[];
   subjects: string[];
 }
-
-const EXAM_TREND = [
-  { exam: "3月小考",  语文: 76, 数学: 72, 英语: 75, 物理: 69, 化学: 71, 生物: 62 },
-  { exam: "期中考试", 语文: 80, 数学: 79, 英语: 79, 物理: 74, 化学: 76, 生物: 64 },
-  { exam: "期末考试", 语文: 83, 数学: 82, 英语: 81, 物理: 77, 化学: 79, 生物: 67 },
-];
 
 const SUBJECT_COLORS: Record<string, string> = {
   语文: "#3b82f6",
@@ -27,7 +24,24 @@ const SUBJECT_COLORS: Record<string, string> = {
   生物: "#06b6d4",
 };
 
-export function TrendDashboard({ subjects }: TrendDashboardProps) {
+function getSubjectAverage(exam: GradeExam, subject: string): number | null {
+  const values = exam.rows
+    .map(row => row.scores[subject]?.score)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (!values.length) {
+    return null;
+  }
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
+export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
+  const trendData = [...exams]
+    .reverse()
+    .map(exam => subjects.reduce<Record<string, string | number | null>>((row, subject) => {
+      row[subject] = getSubjectAverage(exam, subject);
+      return row;
+    }, { exam: exam.name }));
+
   return (
     <>
       <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
@@ -46,7 +60,7 @@ export function TrendDashboard({ subjects }: TrendDashboardProps) {
           </div>
         </div>
         <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={EXAM_TREND} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <LineChart data={trendData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
             <XAxis dataKey="exam" tick={{ fontSize: 13, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
             <YAxis domain={[55, 95]} tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} width={28} />
@@ -59,9 +73,9 @@ export function TrendDashboard({ subjects }: TrendDashboardProps) {
                 key={`trend-line-${sub}`}
                 type="monotone"
                 dataKey={sub}
-                stroke={SUBJECT_COLORS[sub]}
+                stroke={SUBJECT_COLORS[sub] || "#64748b"}
                 strokeWidth={2}
-                dot={{ r: 4, fill: SUBJECT_COLORS[sub] }}
+                dot={{ r: 4, fill: SUBJECT_COLORS[sub] || "#64748b" }}
                 activeDot={{ r: 6 }}
               />
             ))}
@@ -79,7 +93,7 @@ export function TrendDashboard({ subjects }: TrendDashboardProps) {
             <thead>
               <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
                 <th className="text-left px-6 py-3">科目</th>
-                {EXAM_TREND.map(e => (
+                {trendData.map(e => (
                   <th key={e.exam} className="text-center px-6 py-3">{e.exam}</th>
                 ))}
                 <th className="text-center px-6 py-3">总变化</th>
@@ -87,21 +101,24 @@ export function TrendDashboard({ subjects }: TrendDashboardProps) {
             </thead>
             <tbody>
               {subjects.map(sub => {
-                const vals = EXAM_TREND.map(e => e[sub as keyof typeof e] as number);
-                const total = vals[vals.length - 1] - vals[0];
+                const vals = trendData.map(e => (typeof e[sub] === "number" ? e[sub] as number : null));
+                const first = vals.find((value): value is number => value !== null);
+                const last = [...vals].reverse().find((value): value is number => value !== null);
+                const total = first !== undefined && last !== undefined ? Math.round((last - first) * 10) / 10 : null;
                 return (
                   <tr key={sub} className="border-t border-gray-50 hover:bg-gray-50/60 transition-colors">
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SUBJECT_COLORS[sub] }} />
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SUBJECT_COLORS[sub] || "#64748b" }} />
                         <span className="text-gray-700" style={{ fontWeight: 600 }}>{sub}</span>
                       </div>
                     </td>
                     {vals.map((v, i) => {
-                      const diff = i === 0 ? null : v - vals[i - 1];
+                      const previous = i === 0 ? null : vals[i - 1];
+                      const diff = v !== null && previous !== null ? Math.round((v - previous) * 10) / 10 : null;
                       return (
                         <td key={i} className="text-center px-6 py-3">
-                          <span className="tabular-nums text-gray-800" style={{ fontWeight: 600 }}>{v}</span>
+                          <span className="tabular-nums text-gray-800" style={{ fontWeight: 600 }}>{v ?? "—"}</span>
                           {diff !== null && (
                             <span className={`ml-1.5 text-xs tabular-nums ${diff > 0 ? "text-emerald-500" : diff < 0 ? "text-red-400" : "text-gray-400"}`}>
                               {diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "—"}
@@ -111,8 +128,8 @@ export function TrendDashboard({ subjects }: TrendDashboardProps) {
                       );
                     })}
                     <td className="text-center px-6 py-3">
-                      <span className={`text-sm tabular-nums ${total > 0 ? "text-emerald-600" : total < 0 ? "text-red-500" : "text-gray-400"}`} style={{ fontWeight: 700 }}>
-                        {total > 0 ? `+${total}` : total}
+                      <span className={`text-sm tabular-nums ${total === null ? "text-gray-300" : total > 0 ? "text-emerald-600" : total < 0 ? "text-red-500" : "text-gray-400"}`} style={{ fontWeight: 700 }}>
+                        {total === null ? "—" : total > 0 ? `+${total}` : total}
                       </span>
                     </td>
                   </tr>

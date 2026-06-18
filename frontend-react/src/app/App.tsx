@@ -107,6 +107,7 @@ export default function App() {
         <Sidebar
           activeTab={sidebarTab}
           students={students}
+          gradeExams={seatManagerState.gradeExams}
           canUndoSeatOrder={seatHistory.length > 0}
           onRandomizeSeats={handleRandomizeSeats}
           onOrderSeatsByList={handleOrderSeatsByList}
@@ -159,7 +160,7 @@ export default function App() {
 
       {mainView === "grades" && (
         <div className="h-full overflow-auto">
-          <GradesPage />
+          <GradesPage exams={seatManagerState.gradeExams} />
         </div>
       )}
     </AppShell>

@@ -19,6 +19,31 @@ export interface StudentExamSummary {
   rank?: string;
 }
 
+export interface GradeScoreCell {
+  score: number | null;
+  rankClass?: number | null;
+  rankSchool?: number | null;
+}
+
+export interface GradeRow {
+  id: string;
+  name: string;
+  studentId?: StudentId;
+  scores: Record<string, GradeScoreCell>;
+  total: number | null;
+  rankClass?: number | null;
+  rankSchool?: number | null;
+}
+
+export interface GradeExam {
+  id: string;
+  name: string;
+  date: string;
+  savedAt?: string;
+  subjects: string[];
+  rows: GradeRow[];
+}
+
 export interface AppStudent {
   id: StudentId;
   name: string;
@@ -46,4 +71,5 @@ export interface SeatManagerState {
   aiComments: unknown;
   commentRubric: unknown;
   settings: Record<string, unknown>;
+  gradeExams: GradeExam[];
 }

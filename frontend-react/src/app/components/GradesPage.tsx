@@ -1,71 +1,92 @@
 import { useState } from "react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
 } from "recharts";
 import {
-  Search, Trophy, TrendingUp, Users, Award,
-  ArrowUpDown, ChevronDown,
+  Search,
+  Trophy,
+  TrendingUp,
+  Users,
+  Award,
+  ArrowUpDown,
+  ChevronDown,
 } from "lucide-react";
+
 import { TrendDashboard } from "./TrendDashboard";
-
-// ── Mock Data ──────────────────────────────────────────────────────────────────
-const SUBJECTS = ["语文", "数学", "英语", "物理", "化学", "生物"];
-
-const STUDENTS = [
-  { id: 1,  name: "赵超",   语文: 92, 数学: 95, 英语: 88, 物理: 90, 化学: 85, 生物: 54.5 },
-  { id: 2,  name: "何冠森", 语文: 85, 数学: 90, 英语: 82, 物理: 87, 化学: 80, 生物: 55.5 },
-  { id: 3,  name: "林晓雨", 语文: 78, 数学: 88, 英语: 90, 物理: 75, 化学: 82, 生物: 70  },
-  { id: 4,  name: "张明宇", 语文: 88, 数学: 72, 英语: 76, 物理: 80, 化学: 78, 生物: 68  },
-  { id: 5,  name: "陈思涵", 语文: 95, 数学: 85, 英语: 92, 物理: 70, 化学: 74, 生物: 60  },
-  { id: 6,  name: "王浩然", 语文: 70, 数学: 65, 英语: 68, 物理: 72, 化学: 66, 生物: 58  },
-  { id: 7,  name: "刘雅婷", 语文: 82, 数学: 79, 英语: 85, 物理: 78, 化学: 80, 生物: 75  },
-  { id: 8,  name: "李俊杰", 语文: 60, 数学: 55, 英语: 62, 物理: 58, 化学: 60, 生物: 52  },
-  { id: 9,  name: "吴佳欣", 语文: 88, 数学: 92, 英语: 80, 物理: 85, 化学: 88, 生物: 72  },
-  { id: 10, name: "孙志远", 语文: 75, 数学: 80, 英语: 78, 物理: 82, 化学: 76, 生物: 65  },
-];
-
-const EXAMS = [
-  { id: "mid-0509",  label: "期中考试 · 2026-05-09" },
-  { id: "mid-2025",  label: "期末考试 · 2025-12-20" },
-  { id: "mock-0301", label: "模拟考试 · 2026-03-01" },
-];
+import type { GradeExam, GradeRow } from "../state/types";
 
 const THRESHOLDS = { pass: 60, good: 75, excellent: 90 };
 
-// ── Derived ────────────────────────────────────────────────────────────────────
-function getTotal(s: (typeof STUDENTS)[0]) {
-  return SUBJECTS.reduce((sum, sub) => sum + (s[sub as keyof typeof s] as number), 0);
+interface GradesPageProps {
+  exams: GradeExam[];
 }
-function getGradeLabel(avg: number) {
+
+function getRowTotal(row: GradeRow): number | null {
+  if (typeof row.total === "number" && Number.isFinite(row.total)) {
+    return row.total;
+  }
+
+  let total = 0;
+  let hasScore = false;
+  Object.values(row.scores).forEach(cell => {
+    if (typeof cell.score === "number" && Number.isFinite(cell.score)) {
+      total += cell.score;
+      hasScore = true;
+    }
+  });
+  return hasScore ? Math.round(total * 10) / 10 : null;
+}
+
+function getMetricValue(row: GradeRow, key: string): number | null {
+  if (key === "total") {
+    return getRowTotal(row);
+  }
+  return row.scores[key]?.score ?? null;
+}
+
+function getRowAverage(row: GradeRow, subjects: string[]): number | null {
+  const values = subjects
+    .map(subject => row.scores[subject]?.score)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (!values.length) {
+    return null;
+  }
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
+function getGradeLabel(avg: number | null) {
+  if (avg === null) return "缺考";
   if (avg >= THRESHOLDS.excellent) return "优秀";
-  if (avg >= THRESHOLDS.good)      return "良好";
-  if (avg >= THRESHOLDS.pass)      return "及格";
+  if (avg >= THRESHOLDS.good) return "良好";
+  if (avg >= THRESHOLDS.pass) return "及格";
   return "不及格";
 }
 
-const distributionData = [
-  { label: "优秀 (≥90)",   color: "bg-emerald-400", count: 0 },
-  { label: "良好 (75-89)", color: "bg-blue-400",    count: 0 },
-  { label: "及格 (60-74)", color: "bg-amber-400",   count: 0 },
-  { label: "不及格 (<60)", color: "bg-red-400",     count: 0 },
-];
-STUDENTS.forEach(s => {
-  const avg = getTotal(s) / SUBJECTS.length;
-  if      (avg >= 90) distributionData[0].count++;
-  else if (avg >= 75) distributionData[1].count++;
-  else if (avg >= 60) distributionData[2].count++;
-  else                distributionData[3].count++;
-});
+function formatScore(value: number | null): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value * 10) / 10) : "—";
+}
 
-const subjectAvgData = SUBJECTS.map(sub => ({
-  subject: sub,
-  avg: Math.round(STUDENTS.reduce((sum, s) => sum + (s[sub as keyof typeof s] as number), 0) / STUDENTS.length),
-}));
+function compareValues(a: string | number | null, b: string | number | null, asc: boolean): number {
+  if (typeof a === "string" || typeof b === "string") {
+    return asc ? String(a || "").localeCompare(String(b || ""), "zh-Hans-CN") : String(b || "").localeCompare(String(a || ""), "zh-Hans-CN");
+  }
+  const av = typeof a === "number" ? a : Number.NEGATIVE_INFINITY;
+  const bv = typeof b === "number" ? b : Number.NEGATIVE_INFINITY;
+  return asc ? av - bv : bv - av;
+}
 
-// ── StatCard ───────────────────────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub, accent }: {
-  icon: React.ReactNode; label: string; value: string; sub?: string; accent: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  accent: string;
 }) {
   return (
     <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col gap-2">
@@ -81,9 +102,8 @@ function StatCard({ icon, label, value, sub, accent }: {
   );
 }
 
-// ── GradeBadge ─────────────────────────────────────────────────────────────────
-function GradeBadge({ label, count, color }: { label: string; count: number; color: string }) {
-  const pct = Math.round((count / STUDENTS.length) * 100);
+function GradeBadge({ label, count, color, total }: { label: string; count: number; color: string; total: number }) {
+  const pct = total ? Math.round((count / total) * 100) : 0;
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
       <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
@@ -98,87 +118,122 @@ function GradeBadge({ label, count, color }: { label: string; count: number; col
   );
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────────
-export function GradesPage() {
-  const [selectedExam, setSelectedExam] = useState(EXAMS[0]);
-  const [selectedSubject, setSelectedSubject] = useState("总分");
+export function GradesPage({ exams }: GradesPageProps) {
+  const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id || "");
+  const [selectedSubject, setSelectedSubject] = useState("total");
   const [examOpen, setExamOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"single" | "trend">("single");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortKey, setSortKey] = useState<string>("total");
+  const [sortKey, setSortKey] = useState("total");
   const [sortAsc, setSortAsc] = useState(false);
 
-  const studentsWithTotal = STUDENTS.map(s => ({
-    ...s,
-    total: getTotal(s),
-    avg: Math.round((getTotal(s) / SUBJECTS.length) * 10) / 10,
+  const selectedExam = exams.find(exam => exam.id === selectedExamId) || exams[0];
+  const subjects = selectedExam?.subjects || [];
+  const rows = selectedExam?.rows || [];
+  const metricKey = selectedSubject === "total" || subjects.includes(selectedSubject) ? selectedSubject : "total";
+
+  const rowsWithMetrics = rows.map(row => ({
+    ...row,
+    totalScore: getRowTotal(row),
+    averageScore: getRowAverage(row, subjects),
   }));
 
-  const filtered = [...studentsWithTotal]
-    .filter(s => s.name.includes(searchQuery))
+  const filtered = [...rowsWithMetrics]
+    .filter(row => row.name.includes(searchQuery))
     .sort((a, b) => {
-      const ak = (a as any)[sortKey] ?? 0;
-      const bk = (b as any)[sortKey] ?? 0;
-      return sortAsc ? ak - bk : bk - ak;
+      const av = sortKey === "name" ? a.name : sortKey === "total" ? a.totalScore : a.scores[sortKey]?.score ?? null;
+      const bv = sortKey === "name" ? b.name : sortKey === "total" ? b.totalScore : b.scores[sortKey]?.score ?? null;
+      return compareValues(av, bv, sortAsc);
     });
 
-  const totals       = studentsWithTotal.map(s => s.total);
-  const maxTotal     = Math.max(...totals);
-  const minTotal     = Math.min(...totals);
-  const avgTotal     = Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 10) / 10;
-  const passCount    = studentsWithTotal.filter(s => s.avg >= THRESHOLDS.pass).length;
-  const excellentCount = studentsWithTotal.filter(s => s.avg >= THRESHOLDS.excellent).length;
+  const totals = rowsWithMetrics
+    .map(row => row.totalScore)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const maxTotal = totals.length ? Math.max(...totals) : null;
+  const minTotal = totals.length ? Math.min(...totals) : null;
+  const avgTotal = totals.length ? Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 10) / 10 : null;
+  const passCount = rowsWithMetrics.filter(row => (row.averageScore ?? 0) >= THRESHOLDS.pass).length;
+  const excellentCount = rowsWithMetrics.filter(row => (row.averageScore ?? 0) >= THRESHOLDS.excellent).length;
+  const subjectAvgData = subjects.map(subject => {
+    const values = rows
+      .map(row => row.scores[subject]?.score)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const avg = values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10 : 0;
+    return { subject, avg };
+  });
+  const distributionData = [
+    { label: "优秀 (≥90)", color: "bg-emerald-400", count: rowsWithMetrics.filter(row => getGradeLabel(row.averageScore) === "优秀").length },
+    { label: "良好 (75-89)", color: "bg-blue-400", count: rowsWithMetrics.filter(row => getGradeLabel(row.averageScore) === "良好").length },
+    { label: "及格 (60-74)", color: "bg-amber-400", count: rowsWithMetrics.filter(row => getGradeLabel(row.averageScore) === "及格").length },
+    { label: "不及格 (<60)", color: "bg-red-400", count: rowsWithMetrics.filter(row => getGradeLabel(row.averageScore) === "不及格").length },
+  ];
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortAsc(v => !v);
-    else { setSortKey(key); setSortAsc(false); }
+    else {
+      setSortKey(key);
+      setSortAsc(false);
+    }
   };
+
+  if (!selectedExam) {
+    return (
+      <div className="h-full bg-gray-50 p-6">
+        <div className="bg-white border border-gray-100 rounded-2xl p-8 text-center text-gray-400">
+          暂无考试数据
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col bg-gray-50 min-h-full">
-
-      {/* ── Filter bar ─────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3 flex-wrap">
-        {/* Exam selector */}
         <div className="relative">
           <button
             onClick={() => setExamOpen(v => !v)}
             className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-100 transition-colors"
             style={{ fontWeight: 600 }}
           >
-            {selectedExam.label}
+            {selectedExam.name} · {selectedExam.date || "未填写日期"}
             <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
           </button>
           {examOpen && (
             <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-10 overflow-hidden min-w-max">
-              {EXAMS.map(exam => (
+              {exams.map(exam => (
                 <button
                   key={exam.id}
-                  onClick={() => { setSelectedExam(exam); setExamOpen(false); }}
+                  onClick={() => {
+                    setSelectedExamId(exam.id);
+                    setExamOpen(false);
+                    setSelectedSubject("total");
+                    setSortKey("total");
+                  }}
                   className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${exam.id === selectedExam.id ? "text-blue-600 bg-blue-50" : "text-gray-700"}`}
                 >
-                  {exam.label}
+                  {exam.name} · {exam.date || "未填写日期"}
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Subject pills */}
         <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto">
-          {["总分", ...SUBJECTS].map(sub => (
+          {["total", ...subjects].map(subject => (
             <button
-              key={sub}
-              onClick={() => setSelectedSubject(sub)}
-              className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${selectedSubject === sub ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              style={{ fontWeight: selectedSubject === sub ? 700 : 500 }}
+              key={subject}
+              onClick={() => {
+                setSelectedSubject(subject);
+                setSortKey(subject);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${metricKey === subject ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              style={{ fontWeight: metricKey === subject ? 700 : 500 }}
             >
-              {sub}
+              {subject === "total" ? "总分" : subject}
             </button>
           ))}
         </div>
 
-        {/* View tabs */}
         <div className="ml-auto flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
           {(["single", "trend"] as const).map(tab => (
             <button
@@ -193,45 +248,41 @@ export function GradesPage() {
         </div>
       </div>
 
-      {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="p-6 flex flex-col gap-5">
         {activeTab === "single" ? (
           <>
-            {/* Stat cards */}
             <div className="grid grid-cols-4 gap-4">
               <StatCard
                 icon={<Users className="w-4 h-4 text-blue-600" />}
                 label="参考人数"
-                value={`${STUDENTS.length} 人`}
-                sub="全部完成"
+                value={`${rows.length} 人`}
+                sub={`${subjects.length} 个科目`}
                 accent="bg-blue-50"
               />
               <StatCard
                 icon={<TrendingUp className="w-4 h-4 text-violet-600" />}
                 label="班级平均分"
-                value={String(avgTotal)}
-                sub={`满分 ${SUBJECTS.length * 100}`}
+                value={formatScore(avgTotal)}
+                sub={`满分 ${subjects.length * 100}`}
                 accent="bg-violet-50"
               />
               <StatCard
                 icon={<Trophy className="w-4 h-4 text-amber-600" />}
                 label="最高 / 最低分"
-                value={`${maxTotal} / ${minTotal}`}
+                value={`${formatScore(maxTotal)} / ${formatScore(minTotal)}`}
                 sub="总分区间"
                 accent="bg-amber-50"
               />
               <StatCard
                 icon={<Award className="w-4 h-4 text-emerald-600" />}
                 label="优秀率"
-                value={`${Math.round((excellentCount / STUDENTS.length) * 100)}%`}
-                sub={`及格率 ${Math.round((passCount / STUDENTS.length) * 100)}%`}
+                value={`${rows.length ? Math.round((excellentCount / rows.length) * 100) : 0}%`}
+                sub={`及格率 ${rows.length ? Math.round((passCount / rows.length) * 100) : 0}%`}
                 accent="bg-emerald-50"
               />
             </div>
 
-            {/* Charts row */}
             <div className="grid grid-cols-5 gap-4">
-              {/* Bar chart — 3/5 width */}
               <div className="col-span-3 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
                 <h3 className="text-gray-700 mb-4">各科平均分对比</h3>
                 <ResponsiveContainer width="100%" height={200}>
@@ -245,17 +296,15 @@ export function GradesPage() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Grade breakdown — 2/5 width */}
               <div className="col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
                 <h3 className="text-gray-700 mb-1">成绩分布</h3>
                 <p className="text-xs text-gray-400 mb-4">基于各科平均分</p>
-                {distributionData.map(d => (
-                  <GradeBadge key={d.label} label={d.label} count={d.count} color={d.color} />
+                {distributionData.map(item => (
+                  <GradeBadge key={item.label} label={item.label} count={item.count} color={item.color} total={rows.length} />
                 ))}
               </div>
             </div>
 
-            {/* Student table */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
                 <h3 className="text-gray-700">学生成绩</h3>
@@ -278,9 +327,9 @@ export function GradesPage() {
                       <th className="text-left px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("name")}>
                         <span className="flex items-center gap-1">姓名 <ArrowUpDown className="w-3 h-3" /></span>
                       </th>
-                      {SUBJECTS.map(sub => (
-                        <th key={sub} className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort(sub)}>
-                          <span className="flex items-center justify-center gap-1">{sub} <ArrowUpDown className="w-3 h-3" /></span>
+                      {subjects.map(subject => (
+                        <th key={subject} className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort(subject)}>
+                          <span className="flex items-center justify-center gap-1">{subject} <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
                       ))}
                       <th className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("total")}>
@@ -290,27 +339,28 @@ export function GradesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((student, idx) => {
-                      const rank = [...studentsWithTotal].sort((a, b) => b.total - a.total).findIndex(s => s.id === student.id) + 1;
-                      const grade = getGradeLabel(student.avg);
+                    {filtered.map((row, index) => {
+                      const rank = [...rowsWithMetrics].sort((a, b) => compareValues(a.totalScore, b.totalScore, false)).findIndex(item => item.id === row.id) + 1;
+                      const grade = getGradeLabel(row.averageScore);
                       const gradeColor = {
-                        优秀:  "text-emerald-600 bg-emerald-50 border border-emerald-100",
-                        良好:  "text-blue-600 bg-blue-50 border border-blue-100",
-                        及格:  "text-amber-600 bg-amber-50 border border-amber-100",
+                        优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
+                        良好: "text-blue-600 bg-blue-50 border border-blue-100",
+                        及格: "text-amber-600 bg-amber-50 border border-amber-100",
                         不及格: "text-red-500 bg-red-50 border border-red-100",
+                        缺考: "text-gray-500 bg-gray-50 border border-gray-100",
                       }[grade];
                       return (
-                        <tr key={student.id} className="border-t border-gray-50 hover:bg-gray-50/60 transition-colors">
-                          <td className="px-6 py-3 text-gray-300 tabular-nums">{rank}</td>
-                          <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{student.name}</td>
-                          {SUBJECTS.map(sub => {
-                            const score = student[sub as keyof typeof student] as number;
-                            const color = score >= 90 ? "text-emerald-600" : score >= 75 ? "text-blue-600" : score >= 60 ? "text-gray-700" : "text-red-500";
+                        <tr key={row.id} className="border-t border-gray-50 hover:bg-gray-50/60 transition-colors">
+                          <td className="px-6 py-3 text-gray-300 tabular-nums">{row.rankClass || rank || index + 1}</td>
+                          <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{row.name}</td>
+                          {subjects.map(subject => {
+                            const score = row.scores[subject]?.score ?? null;
+                            const color = score === null ? "text-gray-300" : score >= 90 ? "text-emerald-600" : score >= 75 ? "text-blue-600" : score >= 60 ? "text-gray-700" : "text-red-500";
                             return (
-                              <td key={sub} className={`text-center px-4 py-3 tabular-nums ${color}`}>{score}</td>
+                              <td key={subject} className={`text-center px-4 py-3 tabular-nums ${color}`}>{formatScore(score)}</td>
                             );
                           })}
-                          <td className="text-center px-4 py-3 tabular-nums text-gray-800" style={{ fontWeight: 700 }}>{student.total}</td>
+                          <td className="text-center px-4 py-3 tabular-nums text-gray-800" style={{ fontWeight: 700 }}>{formatScore(row.totalScore)}</td>
                           <td className="text-center px-4 py-3">
                             <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
                           </td>
@@ -323,7 +373,7 @@ export function GradesPage() {
             </div>
           </>
         ) : (
-          <TrendDashboard subjects={SUBJECTS} />
+          <TrendDashboard exams={exams} subjects={subjects} />
         )}
       </div>
     </div>

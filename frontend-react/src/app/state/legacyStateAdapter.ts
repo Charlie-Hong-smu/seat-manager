@@ -1,5 +1,16 @@
 import { EXAMS, INITIAL_SEATS, SAMPLE_RECORDS, STUDENTS } from "../components/mockData";
-import type { AppStudent, Gender, RecordType, SeatManagerState, StudentExamSummary, StudentId, StudentRecord } from "./types";
+import type {
+  AppStudent,
+  Gender,
+  GradeExam,
+  GradeRow,
+  GradeScoreCell,
+  RecordType,
+  SeatManagerState,
+  StudentExamSummary,
+  StudentId,
+  StudentRecord,
+} from "./types";
 
 const COLS = 8;
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
@@ -82,6 +93,14 @@ function normalizeGender(value: unknown): Gender {
   return value === "男" || value === "女" ? value : "";
 }
 
+function normalizeName(name: unknown): string {
+  return toStringValue(name)
+    .replace(/\u3000/g, " ")
+    .replace(/[()（）][^()（）]*[()（）]/g, "")
+    .replace(/(同学|学生)$/g, "")
+    .replace(/\s+/g, "");
+}
+
 function getTagLabels(ids: string[]): string[] {
   return ids.map(id => TAG_LABELS[id] || id).filter(Boolean);
 }
@@ -117,6 +136,39 @@ function pickScores(value: Record<string, unknown>): Record<string, number> {
     }
     return scores;
   }, {});
+}
+
+function toRank(value: unknown): number | null {
+  const parsed = toNumber(value);
+  return parsed && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseScoreCell(value: unknown): GradeScoreCell {
+  if (isRecord(value)) {
+    return {
+      score: toNumber(value.score) ?? null,
+      rankClass: toRank(value.rankClass),
+      rankSchool: toRank(value.rankSchool),
+    };
+  }
+
+  return {
+    score: toNumber(value) ?? null,
+    rankClass: null,
+    rankSchool: null,
+  };
+}
+
+function sumScoreCells(scores: Record<string, GradeScoreCell>): number | null {
+  let total = 0;
+  let hasScore = false;
+  Object.values(scores).forEach(cell => {
+    if (typeof cell.score === "number" && Number.isFinite(cell.score)) {
+      total += cell.score;
+      hasScore = true;
+    }
+  });
+  return hasScore ? Math.round(total * 10) / 10 : null;
 }
 
 function normalizeExam(value: unknown, index: number): StudentExamSummary | null {
@@ -261,6 +313,111 @@ function createMockStudents(): AppStudent[] {
   });
 }
 
+function createMockGradeExams(): GradeExam[] {
+  return EXAMS.map(exam => ({
+    id: exam.id,
+    name: exam.name,
+    date: exam.date,
+    subjects: exam.subjects,
+    rows: exam.scores.map(score => {
+      const student = STUDENTS.find(item => item.id === score.studentId);
+      const scores = exam.subjects.reduce<Record<string, GradeScoreCell>>((map, subject) => {
+        map[subject] = { score: score.scores[subject] ?? null };
+        return map;
+      }, {});
+
+      return {
+        id: `${exam.id}-${score.studentId}`,
+        name: student?.name || String(score.studentId),
+        studentId: String(score.studentId),
+        scores,
+        total: score.total,
+        rankClass: score.classRank,
+      };
+    }),
+  }));
+}
+
+function createStudentNameLookup(students: AppStudent[]): Map<string, AppStudent[]> {
+  const lookup = new Map<string, AppStudent[]>();
+  students.forEach(student => {
+    [student.name, ...student.aliases].forEach(name => {
+      const key = normalizeName(name);
+      if (!key) {
+        return;
+      }
+      const list = lookup.get(key) || [];
+      list.push(student);
+      lookup.set(key, list);
+    });
+  });
+  return lookup;
+}
+
+function normalizeSavedExamRecord(record: unknown, index: number, students: AppStudent[]): GradeExam | null {
+  if (!isRecord(record)) {
+    return null;
+  }
+
+  const subjects = toStringArray(record.subjects);
+  const rawEntries = toUnknownArray(record.entries);
+  if (!subjects.length || !rawEntries.length) {
+    return null;
+  }
+
+  const nameLookup = createStudentNameLookup(students);
+  const rows = rawEntries.reduce<GradeRow[]>((items, entry, entryIndex) => {
+    if (!isRecord(entry)) {
+      return items;
+    }
+
+    const name = toStringValue(entry.name);
+    if (!name) {
+      return items;
+    }
+
+    const rawScores = isRecord(entry.scores) ? entry.scores : {};
+    const scores = subjects.reduce<Record<string, GradeScoreCell>>((map, subject) => {
+      map[subject] = parseScoreCell(rawScores[subject]);
+      return map;
+    }, {});
+    const totalCell = parseScoreCell(entry.total);
+    const matchedStudent = nameLookup.get(normalizeName(name))?.shift();
+
+    items.push({
+      id: `${toStringValue(record.id, `exam-${index}`)}-${entryIndex}`,
+      name,
+      studentId: matchedStudent?.id,
+      scores,
+      total: totalCell.score ?? sumScoreCells(scores),
+      rankClass: totalCell.rankClass,
+      rankSchool: totalCell.rankSchool,
+    });
+    return items;
+  }, []);
+
+  if (!rows.length) {
+    return null;
+  }
+
+  return {
+    id: toStringValue(record.id, `exam-${index}`),
+    name: toStringValue(record.name, "考试"),
+    date: toStringValue(record.date),
+    savedAt: toStringValue(record.savedAt),
+    subjects,
+    rows,
+  };
+}
+
+function normalizeGradeExams(rawSavedExams: unknown, students: AppStudent[]): GradeExam[] {
+  const exams = toUnknownArray(rawSavedExams)
+    .map((record, index) => normalizeSavedExamRecord(record, index, students))
+    .filter((item): item is GradeExam => Boolean(item));
+
+  return exams.length ? exams : createMockGradeExams();
+}
+
 export function createMockSeatManagerState(): SeatManagerState {
   const students = createMockStudents();
   const seatOrder = INITIAL_SEATS.map(id => (id === null ? null : String(id)));
@@ -278,6 +435,7 @@ export function createMockSeatManagerState(): SeatManagerState {
     aiComments: null,
     commentRubric: null,
     settings: {},
+    gradeExams: createMockGradeExams(),
   };
 }
 
@@ -310,5 +468,6 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     aiComments: raw.aiComments ?? null,
     commentRubric: raw.commentRubric ?? null,
     settings,
+    gradeExams: normalizeGradeExams(raw.savedExams, students),
   };
 }

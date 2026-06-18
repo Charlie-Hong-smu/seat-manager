@@ -5,14 +5,14 @@ import {
   Dices, FileUp, FileDown, Save, Trash2,
   ChevronDown, ChevronRight,
 } from "lucide-react";
-import { EXAMS } from "./mockData";
-import type { AppStudent, Gender } from "../state/types";
+import type { AppStudent, Gender, GradeExam } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
 
 interface Props {
   activeTab: Tab;
   students: AppStudent[];
+  gradeExams: GradeExam[];
   canUndoSeatOrder: boolean;
   onRandomizeSeats: () => void;
   onOrderSeatsByList: () => void;
@@ -358,8 +358,9 @@ function ImportTab() {
 }
 
 // ── Tab: 成绩 ─────────────────────────────────────────────────────────────────
-function ScoresTab({ onShowGrades }: { onShowGrades: () => void }) {
-  const [selectedExam, setSelectedExam] = useState(EXAMS[0].id);
+function ScoresTab({ exams, onShowGrades }: { exams: GradeExam[]; onShowGrades: () => void }) {
+  const [selectedExam, setSelectedExam] = useState(exams[0]?.id || "");
+  const selectedExamRecord = exams.find(exam => exam.id === selectedExam) || exams[0];
   const [showSaveForm, setShowSaveForm] = useState(false);
 
   return (
@@ -371,8 +372,8 @@ function ScoresTab({ onShowGrades }: { onShowGrades: () => void }) {
             value={selectedExam}
             onChange={e => setSelectedExam(e.target.value)}
           >
-            {EXAMS.map(e => (
-              <option key={e.id} value={e.id}>{e.name} · {e.date}</option>
+            {exams.map(e => (
+              <option key={e.id} value={e.id}>{e.name} · {e.date || "未填写日期"}</option>
             ))}
           </select>
           <button
@@ -389,7 +390,7 @@ function ScoresTab({ onShowGrades }: { onShowGrades: () => void }) {
         <div className="flex flex-col gap-2">
           <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 cursor-pointer">
             <option value="total">总分</option>
-            {EXAMS[0].subjects.map(s => <option key={s} value={s}>{s}</option>)}
+            {(selectedExamRecord?.subjects || []).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <details className="border border-gray-100 rounded-xl overflow-hidden">
             <summary className="px-3 py-2 text-xs text-gray-600 cursor-pointer hover:bg-gray-50 flex justify-between items-center" style={{ fontWeight: 600, listStyle: "none" }}>
@@ -440,7 +441,7 @@ function ScoresTab({ onShowGrades }: { onShowGrades: () => void }) {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="text-sm text-gray-700 mb-3" style={{ fontWeight: 700 }}>历史考试</div>
         <div className="divide-y divide-gray-50 border border-gray-100 rounded-xl overflow-hidden">
-          {EXAMS.map(exam => (
+          {exams.map(exam => (
             <button key={exam.id} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 transition-colors text-left">
               <div>
                 <div className="text-sm text-gray-800" style={{ fontWeight: 600 }}>{exam.name}</div>
@@ -509,6 +510,7 @@ function HistoryTab() {
 export function Sidebar({
   activeTab,
   students,
+  gradeExams,
   canUndoSeatOrder,
   onRandomizeSeats,
   onOrderSeatsByList,
@@ -558,7 +560,7 @@ export function Sidebar({
           />
         )}
         {activeTab === "import"  && <ImportTab />}
-        {activeTab === "scores"  && <ScoresTab onShowGrades={onShowGrades} />}
+        {activeTab === "scores"  && <ScoresTab exams={gradeExams} onShowGrades={onShowGrades} />}
         {activeTab === "history" && <HistoryTab />}
       </div>
     </div>
