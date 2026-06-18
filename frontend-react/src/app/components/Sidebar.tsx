@@ -13,6 +13,10 @@ type Tab = "common" | "import" | "scores" | "history";
 interface Props {
   activeTab: Tab;
   students: AppStudent[];
+  canUndoSeatOrder: boolean;
+  onRandomizeSeats: () => void;
+  onOrderSeatsByList: () => void;
+  onUndoSeatOrder: () => void;
   onTabChange: (tab: Tab) => void;
   onShowGrades: () => void;
   onHideGrades: () => void;
@@ -53,7 +57,19 @@ function RuleChip({ label, detail, type }: { label: string; detail: string; type
 }
 
 // ── Tab: 常用 ─────────────────────────────────────────────────────────────────
-function CommonTab({ students }: { students: AppStudent[] }) {
+function CommonTab({
+  students,
+  canUndoSeatOrder,
+  onRandomizeSeats,
+  onOrderSeatsByList,
+  onUndoSeatOrder,
+}: {
+  students: AppStudent[];
+  canUndoSeatOrder: boolean;
+  onRandomizeSeats: () => void;
+  onOrderSeatsByList: () => void;
+  onUndoSeatOrder: () => void;
+}) {
   const [search, setSearch] = useState("");
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
@@ -80,14 +96,19 @@ function CommonTab({ students }: { students: AppStudent[] }) {
       {/* 座位调整 */}
       <SectionCard title="座位调整" subtitle="固定 8 列，自动扩展行数">
         <div className="flex flex-col gap-2">
-          <button className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
+          <button onClick={onRandomizeSeats} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
             <Shuffle className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />随机调整座位
           </button>
           <div className="grid grid-cols-2 gap-2">
-            <button className="py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-xs transition-colors" style={{ fontWeight: 600 }}>
+            <button onClick={onOrderSeatsByList} className="py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-xs transition-colors" style={{ fontWeight: 600 }}>
               <RotateCcw className="w-3 h-3 inline mr-1 -mt-0.5" />按名单顺序
             </button>
-            <button disabled className="py-2 bg-gray-50 border border-gray-200 text-gray-400 rounded-xl text-xs cursor-not-allowed" style={{ fontWeight: 600 }}>
+            <button
+              disabled={!canUndoSeatOrder}
+              onClick={onUndoSeatOrder}
+              className="py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-xs transition-colors disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-50"
+              style={{ fontWeight: 600 }}
+            >
               <Undo2 className="w-3 h-3 inline mr-1 -mt-0.5" />撤销上一步
             </button>
           </div>
@@ -455,7 +476,18 @@ function HistoryTab() {
 }
 
 // ── Main Sidebar ───────────────────────────────────────────────────────────────
-export function Sidebar({ activeTab, students, onTabChange, onShowGrades, onHideGrades, mainView }: Props) {
+export function Sidebar({
+  activeTab,
+  students,
+  canUndoSeatOrder,
+  onRandomizeSeats,
+  onOrderSeatsByList,
+  onUndoSeatOrder,
+  onTabChange,
+  onShowGrades,
+  onHideGrades,
+  mainView,
+}: Props) {
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-100 w-80 shrink-0">
       {/* Tab Pills */}
@@ -484,7 +516,15 @@ export function Sidebar({ activeTab, students, onTabChange, onShowGrades, onHide
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto p-4 min-h-0">
-        {activeTab === "common"  && <CommonTab students={students} />}
+        {activeTab === "common"  && (
+          <CommonTab
+            students={students}
+            canUndoSeatOrder={canUndoSeatOrder}
+            onRandomizeSeats={onRandomizeSeats}
+            onOrderSeatsByList={onOrderSeatsByList}
+            onUndoSeatOrder={onUndoSeatOrder}
+          />
+        )}
         {activeTab === "import"  && <ImportTab />}
         {activeTab === "scores"  && <ScoresTab onShowGrades={onShowGrades} />}
         {activeTab === "history" && <HistoryTab />}

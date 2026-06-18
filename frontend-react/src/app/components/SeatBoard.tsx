@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { type DragEvent, useMemo, useState } from "react";
 import { Lock, Star, Maximize2, Minimize2 } from "lucide-react";
 import type { AppStudent, StudentId } from "../state/types";
 
@@ -6,6 +6,7 @@ interface Props {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
   onSelectStudent: (student: AppStudent) => void;
+  onMoveSeat: (fromIndex: number, toIndex: number) => void;
   lockedSeats: Set<number>;
   onToggleLock: (idx: number) => void;
 }
@@ -17,23 +18,59 @@ function SeatCard({
   studentById,
   seatIndex,
   isLocked,
+  isDragging,
   cardMode,
   onSelect,
+  onMoveSeat,
+  onDragStateChange,
   onToggleLock,
 }: {
   studentId: StudentId | null;
   studentById: Map<StudentId, AppStudent>;
   seatIndex: number;
   isLocked: boolean;
+  isDragging: boolean;
   cardMode: "compact" | "detail";
   onSelect: (s: AppStudent) => void;
+  onMoveSeat: (fromIndex: number, toIndex: number) => void;
+  onDragStateChange: (seatIndex: number | null) => void;
   onToggleLock: (idx: number) => void;
 }) {
   const student = studentId ? studentById.get(studentId) : null;
 
+  function handleDragStart(event: DragEvent<HTMLElement>) {
+    if (isLocked || !studentId) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.setData("text/plain", String(seatIndex));
+    event.dataTransfer.effectAllowed = "move";
+    onDragStateChange(seatIndex);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>) {
+    if (!isLocked) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    const fromIndex = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
+    if (Number.isInteger(fromIndex) && !isLocked) {
+      onMoveSeat(fromIndex, seatIndex);
+    }
+    onDragStateChange(null);
+  }
+
   if (!studentId || !student) {
     return (
-      <div className={`rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 flex items-center justify-center text-gray-300 text-xs select-none ${cardMode === "compact" ? "h-12" : "h-20"}`}>
+      <div
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        className={`rounded-xl border-2 border-dashed flex items-center justify-center text-gray-300 text-xs select-none transition-colors ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/40"} ${cardMode === "compact" ? "h-12" : "h-20"}`}
+      >
         空
       </div>
     );
@@ -45,9 +82,14 @@ function SeatCard({
   return (
     <button
       onClick={() => onSelect(student)}
-      className={`relative w-full rounded-xl border border-gray-200 bg-white hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30 transition-all text-left group ${
+      draggable={!isLocked}
+      onDragStart={handleDragStart}
+      onDragEnd={() => onDragStateChange(null)}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className={`relative w-full rounded-xl border border-gray-200 bg-white hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30 transition-all text-left group ${isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"} ${
         isLocked ? "border-amber-300 bg-amber-50/30" : ""
-      } ${cardMode === "compact" ? "h-12 px-3" : "h-20 px-3 pt-2.5 pb-2"}`}
+      } ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""} ${cardMode === "compact" ? "h-12 px-3" : "h-20 px-3 pt-2.5 pb-2"}`}
     >
       {/* Lock indicator */}
       {isLocked && (
@@ -100,8 +142,9 @@ function SeatCard({
   );
 }
 
-export function SeatBoard({ students, seatOrder, onSelectStudent, lockedSeats, onToggleLock }: Props) {
+export function SeatBoard({ students, seatOrder, onSelectStudent, onMoveSeat, lockedSeats, onToggleLock }: Props) {
   const [cardMode, setCardMode] = useState<"compact" | "detail">("compact");
+  const [draggingSeat, setDraggingSeat] = useState<number | null>(null);
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const rowCount = Math.ceil(seatOrder.length / COLS);
 
@@ -172,8 +215,11 @@ export function SeatBoard({ students, seatOrder, onSelectStudent, lockedSeats, o
                         studentById={studentById}
                         seatIndex={cell.seatIndex}
                         isLocked={lockedSeats.has(cell.seatIndex)}
+                        isDragging={draggingSeat === cell.seatIndex}
                         cardMode={cardMode}
                         onSelect={onSelectStudent}
+                        onMoveSeat={onMoveSeat}
+                        onDragStateChange={setDraggingSeat}
                         onToggleLock={onToggleLock}
                       />
                     );

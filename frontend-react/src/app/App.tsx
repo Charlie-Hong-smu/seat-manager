@@ -9,6 +9,12 @@ import { StudentDetail } from "./components/StudentDetail";
 import { CommentWorkbench } from "./components/CommentWorkbench";
 import { GradesPage } from "./components/GradesPage";
 import { TopHeader } from "./components/TopHeader";
+import {
+  buildSeatOrderByStudentList,
+  shuffleUnlockedSeats,
+  swapSeatOrder,
+  type SeatOrder,
+} from "./state/seatActions";
 import { useSeatManagerState } from "./state/store";
 import type { AppStudent } from "./state/types";
 
@@ -23,6 +29,8 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<AppStudent | null>(null);
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
+  const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => seatManagerState.seatOrder);
+  const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
   const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(seatManagerState.lockedSeats));
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -34,8 +42,38 @@ export default function App() {
     });
   }
 
+  function commitSeatOrder(next: SeatOrder) {
+    setSeatHistory(prev => [seatOrder, ...prev].slice(0, 20));
+    setSeatOrder(next);
+  }
+
+  function handleMoveSeat(fromIndex: number, toIndex: number) {
+    const next = swapSeatOrder(seatOrder, fromIndex, toIndex, lockedSeats);
+    if (next !== seatOrder) {
+      commitSeatOrder(next);
+    }
+  }
+
+  function handleRandomizeSeats() {
+    commitSeatOrder(shuffleUnlockedSeats(seatOrder, lockedSeats));
+  }
+
+  function handleOrderSeatsByList() {
+    commitSeatOrder(buildSeatOrderByStudentList(seatManagerState.students));
+  }
+
+  function handleUndoSeatOrder() {
+    setSeatHistory(prev => {
+      const [last, ...rest] = prev;
+      if (last) {
+        setSeatOrder(last);
+      }
+      return rest;
+    });
+  }
+
   const studentCount = seatManagerState.students.length;
-  const seatCount = seatManagerState.seatOrder.length;
+  const seatCount = seatOrder.length;
 
   if (!loggedIn) {
     return <LoginScreen onLogin={() => setLoggedIn(true)} />;
@@ -60,6 +98,10 @@ export default function App() {
         <Sidebar
           activeTab={sidebarTab}
           students={seatManagerState.students}
+          canUndoSeatOrder={seatHistory.length > 0}
+          onRandomizeSeats={handleRandomizeSeats}
+          onOrderSeatsByList={handleOrderSeatsByList}
+          onUndoSeatOrder={handleUndoSeatOrder}
           onTabChange={tab => {
             setSidebarTab(tab);
             if (tab === "scores") setMainView("grades");
@@ -96,8 +138,9 @@ export default function App() {
         <div className="h-full bg-white overflow-hidden flex flex-col px-6 py-4">
           <SeatBoard
             students={seatManagerState.students}
-            seatOrder={seatManagerState.seatOrder}
+            seatOrder={seatOrder}
             onSelectStudent={setSelectedStudent}
+            onMoveSeat={handleMoveSeat}
             lockedSeats={lockedSeats}
             onToggleLock={toggleLock}
           />
