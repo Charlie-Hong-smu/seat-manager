@@ -130,8 +130,8 @@ function normalizeRecord(value: unknown, index: number): StudentRecord | null {
 function pickScores(value: Record<string, unknown>): Record<string, number> {
   const explicitScores = isRecord(value.scores) ? value.scores : value;
   return SUBJECT_ORDER.reduce<Record<string, number>>((scores, subject) => {
-    const score = toNumber(explicitScores[subject]);
-    if (score !== undefined) {
+    const score = parseScoreCell(explicitScores[subject]).score;
+    if (score !== null) {
       scores[subject] = score;
     }
     return scores;
@@ -180,14 +180,15 @@ function normalizeExam(value: unknown, index: number): StudentExamSummary | null
   if (!Object.keys(scores).length) {
     return null;
   }
+  const totalCell = parseScoreCell(value.total);
 
   return {
     id: toStringValue(value.id, `exam-${index}`),
     name: toStringValue(value.name) || toStringValue(value.examName) || toStringValue(value.title) || "考试记录",
     date: toStringValue(value.date),
     scores,
-    total: toNumber(value.total) ?? toNumber(value.totalScore),
-    rank: toStringValue(value.rank) || toStringValue(value.classRank) || toStringValue(value.schoolRank),
+    total: totalCell.score ?? toNumber(value.total) ?? toNumber(value.totalScore),
+    rank: toStringValue(value.rank) || toStringValue(value.classRank) || toStringValue(value.schoolRank) || (totalCell.rankClass ? String(totalCell.rankClass) : ""),
   };
 }
 

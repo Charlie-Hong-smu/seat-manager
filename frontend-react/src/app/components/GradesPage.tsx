@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -131,6 +131,14 @@ export function GradesPage({ exams }: GradesPageProps) {
   const subjects = selectedExam?.subjects || [];
   const rows = selectedExam?.rows || [];
   const metricKey = selectedSubject === "total" || subjects.includes(selectedSubject) ? selectedSubject : "total";
+
+  useEffect(() => {
+    if (exams.length && !exams.some(exam => exam.id === selectedExamId)) {
+      setSelectedExamId(exams[0].id);
+      setSelectedSubject("total");
+      setSortKey("total");
+    }
+  }, [exams, selectedExamId]);
 
   const rowsWithMetrics = rows.map(row => ({
     ...row,

@@ -44,6 +44,31 @@ export interface GradeExam {
   rows: GradeRow[];
 }
 
+export interface SavedGradeExamEntry {
+  name: string;
+  scores: Record<string, GradeScoreCell>;
+  total: GradeScoreCell;
+}
+
+export interface SavedGradeExamRecord {
+  id: string;
+  name: string;
+  date: string;
+  savedAt: string;
+  studentCount: number;
+  subjectCount: number;
+  subjects: string[];
+  entries: SavedGradeExamEntry[];
+}
+
+export interface ScoreImportDraft {
+  filename: string;
+  subjects: string[];
+  entries: SavedGradeExamEntry[];
+  rowCount: number;
+  warnings: string[];
+}
+
 export type CommentStyle = "warm" | "formal" | "brief";
 export type CommentLengthMode = "short" | "standard" | "long" | "custom";
 

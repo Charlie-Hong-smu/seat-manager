@@ -21,10 +21,10 @@ import {
 import { clearAuth, isAuthenticated } from "./state/authStorage";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { createStudent } from "./state/studentActions";
-import { saveLegacySnapshot } from "./state/legacyWriteAdapter";
+import { saveGradeExamRecord, saveLegacySnapshot } from "./state/legacyWriteAdapter";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
-import type { AppStudent, Gender } from "./state/types";
+import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
@@ -150,6 +150,25 @@ export default function App() {
     setSelectedStudent(null);
   }
 
+  function handleSaveScoreImport(record: SavedGradeExamRecord): GradeExam | null {
+    const next = saveGradeExamRecord({
+      record,
+      students,
+      seatOrder,
+      lockedSeats: [...lockedSeats],
+    });
+    if (!next) {
+      return null;
+    }
+    setAppState(next);
+    setStudents(next.students);
+    setSeatOrder(next.seatOrder);
+    setLockedSeats(new Set(next.lockedSeats));
+    setSeatHistory([]);
+    setMainView("grades");
+    return next.gradeExams.find(exam => exam.id === record.id) || next.gradeExams[0] || null;
+  }
+
   async function handleInstallApp() {
     if (!installPrompt) {
       setInstallMessage("当前浏览器没有直接提供安装确认，请按下面方式手动添加。");
@@ -210,6 +229,7 @@ export default function App() {
           onOrderSeatsByList={handleOrderSeatsByList}
           onUndoSeatOrder={handleUndoSeatOrder}
           onAddStudent={handleAddStudent}
+          onSaveScoreImport={handleSaveScoreImport}
           onTabChange={tab => {
             setSidebarTab(tab);
             if (tab === "scores") setMainView("grades");

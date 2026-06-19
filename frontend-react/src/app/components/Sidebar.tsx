@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LayoutGrid, Upload, BarChart2, History,
   Shuffle, RotateCcw, Undo2, Plus, Search,
   Dices, FileUp, FileDown, Save, Trash2,
   ChevronDown, ChevronRight,
 } from "lucide-react";
-import type { AppStudent, Gender, GradeExam } from "../state/types";
+import { createSavedGradeExamRecord, parseScoreFile } from "../state/scoreImport";
+import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
 
@@ -18,6 +19,7 @@ interface Props {
   onOrderSeatsByList: () => void;
   onUndoSeatOrder: () => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
+  onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
   onTabChange: (tab: Tab) => void;
   onShowGrades: () => void;
   onHideGrades: () => void;
@@ -358,10 +360,79 @@ function ImportTab() {
 }
 
 // ── Tab: 成绩 ─────────────────────────────────────────────────────────────────
-function ScoresTab({ exams, onShowGrades }: { exams: GradeExam[]; onShowGrades: () => void }) {
+function ScoresTab({
+  exams,
+  onShowGrades,
+  onSaveScoreImport,
+}: {
+  exams: GradeExam[];
+  onShowGrades: () => void;
+  onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
+}) {
   const [selectedExam, setSelectedExam] = useState(exams[0]?.id || "");
   const selectedExamRecord = exams.find(exam => exam.id === selectedExam) || exams[0];
   const [showSaveForm, setShowSaveForm] = useState(false);
+  const [scoreDraft, setScoreDraft] = useState<ScoreImportDraft | null>(null);
+  const [scoreStatus, setScoreStatus] = useState("上传 .xlsx 或 .csv 后会自动解析。");
+  const [scoreBusy, setScoreBusy] = useState(false);
+  const [examName, setExamName] = useState("");
+  const [examDate, setExamDate] = useState(new Date().toISOString().slice(0, 10));
+
+  useEffect(() => {
+    if (exams.length && !exams.some(exam => exam.id === selectedExam)) {
+      setSelectedExam(exams[0].id);
+    }
+  }, [exams, selectedExam]);
+
+  async function handleScoreFileChange(file?: File) {
+    if (!file) {
+      return;
+    }
+    setScoreBusy(true);
+    setScoreDraft(null);
+    setScoreStatus("正在解析成绩表...");
+    try {
+      const draft = await parseScoreFile(file);
+      setScoreDraft(draft);
+      setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
+      setExamDate(new Date().toISOString().slice(0, 10));
+      setShowSaveForm(true);
+      setScoreStatus(`已解析 ${draft.entries.length} 名学生、${draft.subjects.length} 个科目。`);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      const message = {
+        empty_file: "文件为空，无法解析。",
+        unsupported_file: "暂不支持该文件格式，请使用 .xlsx、.xls、.csv 或 .tsv。",
+        mapping_failed: "未识别到姓名列或科目列，请检查表头。",
+        xlsx_unavailable: "Excel 解析库加载失败，请稍后重试。",
+      }[reason] || "成绩表解析失败，请检查文件格式。";
+      setScoreStatus(message);
+    } finally {
+      setScoreBusy(false);
+    }
+  }
+
+  function handleSaveScoreDraft() {
+    if (!scoreDraft) {
+      setScoreStatus("请先上传并解析成绩表。");
+      return;
+    }
+    const name = examName.trim();
+    if (!name) {
+      setScoreStatus("请填写考试名称。");
+      return;
+    }
+    const saved = onSaveScoreImport(createSavedGradeExamRecord(scoreDraft, { name, date: examDate }));
+    if (!saved) {
+      setScoreStatus("保存失败，请稍后重试。");
+      return;
+    }
+    setSelectedExam(saved.id);
+    setScoreDraft(null);
+    setShowSaveForm(false);
+    setScoreStatus(`已保存「${saved.name}」，共 ${saved.rows.length} 名学生、${saved.subjects.length} 个科目。`);
+    onShowGrades();
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -412,11 +483,27 @@ function ScoresTab({ exams, onShowGrades }: { exams: GradeExam[]; onShowGrades: 
         <div className="flex flex-col gap-2">
           <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-3 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors">
             <FileUp className="w-4 h-4 text-gray-300" />
-            <span className="text-xs text-gray-400">点击上传成绩文件 (.xlsx / .csv)</span>
-            <input type="file" className="hidden" accept=".xlsx,.xls,.csv" />
+            <span className="text-xs text-gray-400">{scoreBusy ? "正在解析..." : "点击上传成绩文件 (.xlsx / .csv)"}</span>
+            <input
+              type="file"
+              className="hidden"
+              accept=".xlsx,.xls,.csv,.tsv"
+              onChange={event => {
+                void handleScoreFileChange(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
           </label>
-          <button className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>解析成绩表</button>
-          <p className="text-xs text-gray-400">格式：每行1名学生，每列1科目</p>
+          {scoreDraft && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-700">
+              <div style={{ fontWeight: 700 }}>{scoreDraft.filename}</div>
+              <div className="mt-1">{scoreDraft.entries.length} 名学生 · {scoreDraft.subjects.join("、")}</div>
+              {scoreDraft.warnings.length > 0 && (
+                <div className="mt-1 text-amber-600">{scoreDraft.warnings.join(" ")}</div>
+              )}
+            </div>
+          )}
+          <p className={`text-xs ${scoreDraft ? "text-blue-500" : "text-gray-400"}`}>{scoreStatus}</p>
         </div>
       </SectionCard>
 
@@ -431,9 +518,31 @@ function ScoresTab({ exams, onShowGrades }: { exams: GradeExam[]; onShowGrades: 
         </button>
         {showSaveForm && (
           <div className="mt-3 flex flex-col gap-2">
-            <input className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none" placeholder="考试名称" maxLength={30} />
-            <input className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none" type="date" />
-            <button disabled className="w-full py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm cursor-not-allowed" style={{ fontWeight: 600 }}>保存考试</button>
+            <input
+              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none"
+              placeholder="考试名称"
+              maxLength={30}
+              value={examName}
+              onChange={event => setExamName(event.target.value)}
+            />
+            <input
+              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none"
+              type="date"
+              value={examDate}
+              onChange={event => setExamDate(event.target.value)}
+            />
+            <button
+              disabled={!scoreDraft || scoreBusy}
+              onClick={handleSaveScoreDraft}
+              className={`w-full py-2.5 rounded-xl text-sm transition-colors ${
+                scoreDraft && !scoreBusy
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+              style={{ fontWeight: 600 }}
+            >
+              <Save className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />保存考试
+            </button>
           </div>
         )}
       </div>
@@ -516,6 +625,7 @@ export function Sidebar({
   onOrderSeatsByList,
   onUndoSeatOrder,
   onAddStudent,
+  onSaveScoreImport,
   onTabChange,
   onShowGrades,
   onHideGrades,
@@ -560,7 +670,13 @@ export function Sidebar({
           />
         )}
         {activeTab === "import"  && <ImportTab />}
-        {activeTab === "scores"  && <ScoresTab exams={gradeExams} onShowGrades={onShowGrades} />}
+        {activeTab === "scores"  && (
+          <ScoresTab
+            exams={gradeExams}
+            onShowGrades={onShowGrades}
+            onSaveScoreImport={onSaveScoreImport}
+          />
+        )}
         {activeTab === "history" && <HistoryTab />}
       </div>
     </div>
