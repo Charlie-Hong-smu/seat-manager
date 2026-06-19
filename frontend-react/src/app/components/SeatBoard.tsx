@@ -1,4 +1,4 @@
-import { type DragEvent, useMemo, useState } from "react";
+import { type DragEvent, type KeyboardEvent, useMemo, useState } from "react";
 import { Lock, Star, Maximize2, Minimize2 } from "lucide-react";
 import type { AppStudent, StudentId } from "../state/types";
 
@@ -64,6 +64,15 @@ function SeatCard({
     onDragStateChange(null);
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (student) {
+        onSelect(student);
+      }
+    }
+  }
+
   if (!studentId || !student) {
     return (
       <div
@@ -80,8 +89,11 @@ function SeatCard({
   const genderDot = student.gender === "男" ? "bg-blue-400" : student.gender === "女" ? "bg-pink-400" : "bg-gray-300";
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(student)}
+      onKeyDown={handleKeyDown}
       draggable={!isLocked}
       onDragStart={handleDragStart}
       onDragEnd={() => onDragStateChange(null)}
@@ -138,7 +150,7 @@ function SeatCard({
           )}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
