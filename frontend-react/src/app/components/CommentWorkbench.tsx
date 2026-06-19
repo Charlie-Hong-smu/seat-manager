@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { X, Play, Pause, RotateCcw, Copy, Download, Search, CheckSquare, Square, ChevronRight, Sparkles, TrendingUp, TrendingDown, Save } from "lucide-react";
+import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
-import type { AppStudent, StudentId } from "../state/types";
+import type { AppStudent, StudentCommentDraft, StudentId } from "../state/types";
 
 interface CommentState {
   studentId: StudentId;
@@ -43,9 +44,6 @@ const STYLES = [
   { value: "brief",  label: "简洁家长会" },
 ];
 
-const MOCK_COMMENT = (name: string) =>
-  `${name}同学在本学期表现出了积极进取的学习态度，课堂上认真听讲，能够主动参与课堂讨论。在学习过程中展现了较强的理解能力，成绩稳步提升。希望在新学期中继续保持这种学习热情，同时注重薄弱科目的巩固练习，相信你一定能取得更加优异的成绩。加油！`;
-
 function getBestSubject(scores: Record<string, number>): string {
   return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
 }
@@ -63,6 +61,11 @@ export function CommentWorkbench({ students, onClose }: Props) {
   const [teacherNote, setTeacherNote] = useState("");
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
+  const [accessCode, setAccessCode] = useState("");
+  const [rememberAuth, setRememberAuth] = useState(true);
+  const [hasAuth, setHasAuth] = useState(() => hasStoredAiAuth());
+  const [aiStatus, setAiStatus] = useState("AI 会使用学生成绩、标签和教师补充评价生成。");
+  const pauseRequested = useRef(false);
 
   const generatedCount = comments.filter(c => c.generated).length;
   const pendingCount = comments.filter(c => !c.generated).length;
@@ -86,18 +89,47 @@ export function CommentWorkbench({ students, onClose }: Props) {
     setComments(prev => prev.map(c => c.studentId === id ? { ...c, ...patch } : c));
   }
 
-  function generateSingle() {
-    if (!selectedStudent || !selectedComment) return;
-    const text = MOCK_COMMENT(selectedStudent.name);
-    saveStudentCommentDraft(selectedStudent.id, {
-      generatedComment: text,
-      teacherNote,
-      style: selectedComment.style as "warm" | "formal" | "brief",
-      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
+  function buildDraft(comment: CommentState, note = teacherNote): StudentCommentDraft {
+    return {
+      generatedComment: comment.text,
+      teacherNote: note,
+      style: comment.style as "warm" | "formal" | "brief",
+      lengthMode: comment.lengthMode as "short" | "standard" | "long" | "custom",
       targetWordCount: 120,
       updatedAt: new Date().toISOString(),
-    });
-    updateComment(selectedId, { text, generated: true });
+    };
+  }
+
+  function getAiErrorMessage(reason: string): string {
+    return {
+      ai_auth_required: "请输入 AI 授权码后再生成。",
+      ai_unauthorized: "AI 授权码不正确，请重新输入。",
+      ai_auth_failed: "AI 授权暂时不可用，请稍后重试。",
+      ai_file_protocol: "当前是本地文件打开方式，请通过网页地址打开后再使用 AI。",
+      ai_offline: "当前离线，联网后可生成评语。",
+      ai_payload_too_large: "当前素材过多，请减少补充内容后再试。",
+      ai_rate_limited: "今日 AI 调用较多，请稍后再试。",
+    }[reason] || "AI 评语暂时不可用，请稍后重试。";
+  }
+
+  async function generateSingle() {
+    if (!selectedStudent || !selectedComment) return;
+    setAiStatus(`正在生成 ${selectedStudent.name} 的评语...`);
+    try {
+      const draft = buildDraft(selectedComment);
+      const result = await generateStudentAiComment(selectedStudent, draft, { accessCode, remember: rememberAuth, force: true });
+      if (!result.comment) {
+        setAiStatus(result.missingInfo?.length ? `需要补充：${result.missingInfo.join("、")}` : "信息不足，暂未生成评语。");
+        return;
+      }
+      updateComment(selectedId, { text: result.comment, generated: true, needsInfo: Boolean(result.needsMoreInfo) });
+      setAccessCode("");
+      setHasAuth(true);
+      setAiStatus(`已生成 ${selectedStudent.name} 的评语。`);
+    } catch (error) {
+      setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
+      setHasAuth(hasStoredAiAuth());
+    }
   }
 
   function saveSelectedComment() {
@@ -113,38 +145,57 @@ export function CommentWorkbench({ students, onClose }: Props) {
     updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
   }
 
-  function startBatch() {
+  async function startBatch() {
     setBatchRunning(true);
+    pauseRequested.current = false;
     setBatchProgress(0);
     const pending = comments.filter(c => !c.generated);
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i >= pending.length) {
-        clearInterval(interval);
-        setBatchRunning(false);
-        return;
+    if (!pending.length) {
+      setAiStatus("没有待生成的学生。");
+      setBatchRunning(false);
+      return;
+    }
+    try {
+      for (let i = 0; i < pending.length; i += 1) {
+        if (pauseRequested.current) {
+          setAiStatus(`已暂停，剩余 ${pending.length - i} 人。`);
+          break;
+        }
+        const student = students.find(s => s.id === pending[i].studentId);
+        if (!student) {
+          continue;
+        }
+        setAiStatus(`正在生成 ${i + 1}/${pending.length}：${student.name}`);
+        const result = await generateStudentAiComment(student, buildDraft(pending[i], ""), {
+          accessCode,
+          remember: rememberAuth,
+          force: true,
+        });
+        if (result.comment) {
+          updateComment(student.id, {
+            text: result.comment,
+            generated: true,
+            needsInfo: Boolean(result.needsMoreInfo),
+          });
+        }
+        setBatchProgress(Math.round(((i + 1) / pending.length) * 100));
       }
-      const student = students.find(s => s.id === pending[i].studentId)!;
-      const text = MOCK_COMMENT(student.name);
-      saveStudentCommentDraft(student.id, {
-        generatedComment: text,
-        teacherNote: "",
-        style: pending[i].style as "warm" | "formal" | "brief",
-        lengthMode: pending[i].lengthMode as "short" | "standard" | "long" | "custom",
-        targetWordCount: 120,
-        updatedAt: new Date().toISOString(),
-      });
-      updateComment(pending[i].studentId, {
-        text,
-        generated: true,
-      });
-      i++;
-      setBatchProgress(Math.round((i / pending.length) * 100));
-    }, 180);
+      setAccessCode("");
+      setHasAuth(true);
+      if (!pauseRequested.current) {
+        setAiStatus("批量生成完成。");
+      }
+    } catch (error) {
+      setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
+      setHasAuth(hasStoredAiAuth());
+    } finally {
+      setBatchRunning(false);
+    }
   }
 
   function pauseBatch() {
-    setBatchRunning(false);
+    pauseRequested.current = true;
+    setAiStatus("正在暂停，当前学生生成完成后停止。");
   }
 
   function copyAll() {
@@ -242,6 +293,22 @@ export function CommentWorkbench({ students, onClose }: Props) {
           只看需补充
         </label>
 
+        {!hasAuth && (
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={accessCode}
+              onChange={event => setAccessCode(event.target.value)}
+              placeholder="AI 授权码"
+              className="px-3 py-2 text-sm bg-violet-50 border border-violet-100 rounded-xl outline-none focus:border-violet-300 w-32"
+            />
+            <label className="flex items-center gap-1 text-xs text-violet-700 cursor-pointer">
+              <input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-violet-600" />
+              记住
+            </label>
+          </div>
+        )}
+
         <div className="ml-auto flex items-center gap-2">
           <button onClick={copyAll} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors" style={{ fontWeight: 600 }}>
             <Copy className="w-3.5 h-3.5" />复制全部
@@ -250,6 +317,8 @@ export function CommentWorkbench({ students, onClose }: Props) {
             <Download className="w-3.5 h-3.5" />导出评语
           </button>
         </div>
+
+        <p className="w-full text-xs text-blue-600">{aiStatus}</p>
 
         {/* Progress bar */}
         {(batchRunning || batchProgress > 0) && (
@@ -449,7 +518,8 @@ export function CommentWorkbench({ students, onClose }: Props) {
             <div className="flex items-center gap-2 pb-2">
               <button
                 onClick={generateSingle}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors"
+                disabled={batchRunning}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors disabled:opacity-60"
                 style={{ fontWeight: 600 }}
               >
                 <Sparkles className="w-4 h-4" />

@@ -1,4 +1,5 @@
 import type { AppStudent, CommentLengthMode, CommentStyle, StudentCommentDraft, StudentId } from "./types";
+import { readLegacyRootState, writeLegacyRootState } from "./storage";
 
 const AI_COMMENT_DRAFT_KEY_PREFIX = "seat-manager-ai-comment-draft";
 const DEFAULT_LENGTH_MODE: CommentLengthMode = "standard";
@@ -59,21 +60,72 @@ function getDraftFromStudent(student: AppStudent): StudentCommentDraft | null {
   return profile || draft || latest;
 }
 
+function getDraftFromBrowserStorage(studentId: StudentId): StudentCommentDraft | null {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      return normalizeStudentCommentDraft(JSON.parse(window.localStorage.getItem(getStudentCommentCacheKey(studentId)) || "null"));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function isNewerDraft(candidate: StudentCommentDraft | null, current: StudentCommentDraft | null): boolean {
+  if (!candidate) {
+    return false;
+  }
+  if (!current) {
+    return true;
+  }
+  return Date.parse(candidate.updatedAt || "") > Date.parse(current.updatedAt || "");
+}
+
+function saveDraftToLegacyStudent(studentId: StudentId, draft: StudentCommentDraft): void {
+  const root = readLegacyRootState();
+  if (!root || typeof root !== "object" || !Array.isArray((root as { students?: unknown }).students)) {
+    return;
+  }
+
+  const nextRoot = root as { students: Array<Record<string, unknown>> };
+  const student = nextRoot.students.find(item => String(item.id || "") === studentId);
+  if (!student) {
+    return;
+  }
+
+  const aiComments = student.aiComments && typeof student.aiComments === "object" && !Array.isArray(student.aiComments)
+    ? student.aiComments as Record<string, unknown>
+    : {};
+  const profile = aiComments.profile && typeof aiComments.profile === "object" && !Array.isArray(aiComments.profile)
+    ? aiComments.profile as Record<string, unknown>
+    : {};
+
+  aiComments.draft = draft;
+  aiComments.profile = {
+    ...profile,
+    generatedComment: draft.generatedComment,
+    teacherNote: draft.teacherNote,
+    style: draft.style,
+    lengthMode: draft.lengthMode,
+    targetWordCount: draft.targetWordCount,
+    status: draft.generatedComment ? "generated" : profile.status || "draft",
+    updatedAt: draft.updatedAt,
+  };
+  student.aiComments = aiComments;
+  writeLegacyRootState(nextRoot);
+}
+
 export function readStudentCommentDraft(student: AppStudent): StudentCommentDraft {
   const fromStudent = getDraftFromStudent(student);
+  const fromStorage = getDraftFromBrowserStorage(student.id);
+  if (isNewerDraft(fromStorage, fromStudent)) {
+    return fromStorage as StudentCommentDraft;
+  }
   if (fromStudent) {
     return fromStudent;
   }
-
-  if (typeof window !== "undefined" && window.localStorage) {
-    try {
-      const cached = normalizeStudentCommentDraft(JSON.parse(window.localStorage.getItem(getStudentCommentCacheKey(student.id)) || "null"));
-      if (cached) {
-        return cached;
-      }
-    } catch {
-      // Ignore malformed legacy cache entries.
-    }
+  if (fromStorage) {
+    return fromStorage;
   }
 
   return {
@@ -99,6 +151,7 @@ export function saveStudentCommentDraft(studentId: StudentId, draft: StudentComm
       // Keep the React draft even when browser storage is unavailable.
     }
   }
+  saveDraftToLegacyStudent(studentId, next);
 
   return next;
 }
