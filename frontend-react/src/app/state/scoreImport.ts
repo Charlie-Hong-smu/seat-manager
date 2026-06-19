@@ -181,7 +181,7 @@ async function loadXlsx(): Promise<XlsxApi> {
   return xlsxLoadPromise;
 }
 
-async function readRowsFromFile(file: File): Promise<string[][]> {
+export async function readRowsFromFile(file: File): Promise<string[][]> {
   const filename = file.name.toLowerCase();
   if (filename.endsWith(".csv") || filename.endsWith(".tsv")) {
     const text = await file.text();

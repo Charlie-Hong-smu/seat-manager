@@ -23,6 +23,7 @@ import { clearAuth, isAuthenticated } from "./state/authStorage";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { createStudent } from "./state/studentActions";
 import { saveGradeExamRecord, saveLegacySnapshot } from "./state/legacyWriteAdapter";
+import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
 import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord } from "./state/types";
@@ -171,6 +172,18 @@ export default function App() {
     return next.gradeExams.find(exam => exam.id === record.id) || next.gradeExams[0] || null;
   }
 
+  async function handleImportRoster(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
+    saveCurrentLegacySnapshot();
+    const result = await importRosterFile(file, options);
+    setAppState(result.state);
+    setStudents(result.state.students);
+    setSeatOrder(result.state.seatOrder);
+    setLockedSeats(new Set(result.state.lockedSeats));
+    setSeatHistory([]);
+    setSelectedStudent(null);
+    return result;
+  }
+
   async function handleInstallApp() {
     if (!installPrompt) {
       setInstallMessage("当前浏览器没有直接提供安装确认，请按下面方式手动添加。");
@@ -234,6 +247,7 @@ export default function App() {
           onUndoSeatOrder={handleUndoSeatOrder}
           onAddStudent={handleAddStudent}
           onSaveScoreImport={handleSaveScoreImport}
+          onImportRoster={handleImportRoster}
           onBeforeBackupExport={saveCurrentLegacySnapshot}
           onBackupImported={reloadFromLegacyState}
           onTabChange={tab => {

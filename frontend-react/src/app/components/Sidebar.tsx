@@ -15,6 +15,7 @@ import {
   type BackupImportPreview,
 } from "../state/backupStorage";
 import { createSavedGradeExamRecord, parseScoreFile } from "../state/scoreImport";
+import type { RosterImportOptions, RosterImportResult } from "../state/rosterImport";
 import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft, StudentId } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
@@ -30,6 +31,7 @@ interface Props {
   onUndoSeatOrder: () => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
+  onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
   onBeforeBackupExport: () => void;
   onBackupImported: () => void;
   onTabChange: (tab: Tab) => void;
@@ -301,17 +303,43 @@ function CommonTab({
 function ImportTab({
   students,
   seatOrder,
+  onImportRoster,
   onBeforeBackupExport,
   onBackupImported,
 }: {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
+  onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
   onBeforeBackupExport: () => void;
   onBackupImported: () => void;
 }) {
+  const [rosterFile, setRosterFile] = useState<File | null>(null);
+  const [replaceExisting, setReplaceExisting] = useState(true);
+  const [keepHistory, setKeepHistory] = useState(true);
+  const [rosterStatus, setRosterStatus] = useState("支持姓名、性别、行、列字段。");
+  const [rosterBusy, setRosterBusy] = useState(false);
   const [backupPreview, setBackupPreview] = useState<BackupImportPreview | null>(null);
   const [backupStatus, setBackupStatus] = useState("选择 JSON 备份文件后可恢复整份本地数据。");
   const [lastBackupAt, setLastBackupAt] = useState(() => getLastBackupAt());
+
+  async function handleRosterImport() {
+    if (!rosterFile) {
+      setRosterStatus("请先选择名单文件。");
+      return;
+    }
+    setRosterBusy(true);
+    setRosterStatus("正在导入名单...");
+    try {
+      const result = await onImportRoster(rosterFile, { replaceExisting, keepHistory: replaceExisting ? keepHistory : true });
+      setRosterFile(null);
+      setRosterStatus(`导入成功：${result.studentCount} 名学生、${result.seatCount} 个座位${result.hasPlacement ? "，已应用行列位置" : ""}。`);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      setRosterStatus(reason === "empty_roster" ? "没有识别到学生姓名，请检查文件格式。" : "名单导入失败，请确认文件无损。");
+    } finally {
+      setRosterBusy(false);
+    }
+  }
 
   async function handleBackupFile(file?: File) {
     if (!file) {
@@ -365,17 +393,40 @@ function ImportTab({
           body: (
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                <input type="checkbox" defaultChecked className="accent-blue-600" />覆盖现有名单
+                <input type="checkbox" checked={replaceExisting} onChange={event => setReplaceExisting(event.target.checked)} className="accent-blue-600" />覆盖现有名单
               </label>
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                <input type="checkbox" defaultChecked className="accent-blue-600" />覆盖时保留历史数据
+                <input
+                  type="checkbox"
+                  checked={keepHistory}
+                  disabled={!replaceExisting}
+                  onChange={event => setKeepHistory(event.target.checked)}
+                  className="accent-blue-600 disabled:opacity-40"
+                />覆盖时保留历史数据
               </label>
               <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-3 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors">
                 <FileUp className="w-4 h-4 text-gray-300" />
-                <span className="text-xs text-gray-400">点击选择文件 (.xlsx / .csv)</span>
-                <input type="file" className="hidden" accept=".xlsx,.xls,.csv" />
+                <span className="text-xs text-gray-400">{rosterFile ? rosterFile.name : "点击选择文件 (.xlsx / .csv)"}</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".xlsx,.xls,.csv,.tsv"
+                  onChange={event => {
+                    setRosterFile(event.target.files?.[0] || null);
+                    setRosterStatus("文件已选择，点击导入名单开始处理。");
+                    event.target.value = "";
+                  }}
+                />
               </label>
-              <button className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>导入名单</button>
+              <button
+                disabled={rosterBusy}
+                onClick={handleRosterImport}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors disabled:opacity-60"
+                style={{ fontWeight: 600 }}
+              >
+                {rosterBusy ? "导入中" : "导入名单"}
+              </button>
+              <p className="text-xs text-blue-600">{rosterStatus}</p>
             </div>
           ),
         },
@@ -717,6 +768,7 @@ export function Sidebar({
   onUndoSeatOrder,
   onAddStudent,
   onSaveScoreImport,
+  onImportRoster,
   onBeforeBackupExport,
   onBackupImported,
   onTabChange,
@@ -766,6 +818,7 @@ export function Sidebar({
           <ImportTab
             students={students}
             seatOrder={seatOrder}
+            onImportRoster={onImportRoster}
             onBeforeBackupExport={onBeforeBackupExport}
             onBackupImported={onBackupImported}
           />
