@@ -79,6 +79,54 @@ export interface StudentCommentDraft {
   lengthMode: CommentLengthMode;
   targetWordCount: number;
   updatedAt: string;
+  criteriaSummary?: CommentCriteriaSummary[];
+  customOptions?: CommentCustomOptionSummary[];
+}
+
+export interface CommentCriterionOption {
+  id: string;
+  label: string;
+  linkedTagId: string;
+  builtIn: boolean;
+}
+
+export interface CommentCriterion {
+  id: string;
+  label: string;
+  type: "multi" | "single";
+  syncToTags: boolean;
+  hidden: boolean;
+  builtIn: boolean;
+  options: CommentCriterionOption[];
+}
+
+export interface CommentRubric {
+  version: number;
+  criteria: CommentCriterion[];
+}
+
+export interface CommentCustomOptionSummary {
+  criterionId: string;
+  criterionLabel: string;
+  label: string;
+}
+
+export interface CommentCriteriaSummary {
+  criterionId: string;
+  label: string;
+  values: string[];
+}
+
+export interface StudentCommentProfile {
+  criteriaValues: Record<string, string[]>;
+  customOptions: Record<string, CommentCriterionOption[]>;
+  teacherNote: string;
+  style: CommentStyle;
+  lengthMode: CommentLengthMode;
+  targetWordCount: number;
+  generatedComment: string;
+  status: string;
+  updatedAt: string;
 }
 
 export interface AppStudent {

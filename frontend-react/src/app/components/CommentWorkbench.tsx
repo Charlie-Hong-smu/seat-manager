@@ -1,8 +1,15 @@
-import { useMemo, useRef, useState } from "react";
-import { X, Play, Pause, RotateCcw, Copy, Download, Search, CheckSquare, Square, ChevronRight, Sparkles, TrendingUp, TrendingDown, Save } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { X, Play, Pause, RotateCcw, Copy, Download, Search, CheckSquare, Square, ChevronRight, Sparkles, TrendingUp, TrendingDown, Save, Settings2, Plus, Trash2 } from "lucide-react";
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
-import type { AppStudent, StudentCommentDraft, StudentId } from "../state/types";
+import {
+  readCommentRubric,
+  readStudentCommentProfile,
+  saveCommentRubric,
+  saveStudentCommentProfile,
+  summarizeCommentProfile,
+} from "../state/commentRubricStorage";
+import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
 
 interface CommentState {
   studentId: StudentId;
@@ -131,9 +138,24 @@ function downloadTextFile(filename: string, content: string, type: string): void
   URL.revokeObjectURL(link.href);
 }
 
+function makeSafeId(value: string, fallback = "item"): string {
+  const safe = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_\u4e00-\u9fa5]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32);
+  return safe || `${fallback}_${Date.now().toString(36)}`;
+}
+
 export function CommentWorkbench({ students, onClose }: Props) {
   const initialBatchState = useMemo(() => loadCommentBatchState(students), [students]);
+  const initialRubric = useMemo(() => readCommentRubric(), []);
   const [comments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
+  const [rubric, setRubric] = useState<CommentRubric>(() => initialRubric);
+  const [commentProfiles, setCommentProfiles] = useState<Record<StudentId, StudentCommentProfile>>(() =>
+    Object.fromEntries(students.map(student => [student.id, readStudentCommentProfile(student)]))
+  );
   const [selectedId, setSelectedId] = useState<StudentId>(students[0]?.id || "");
   const [filterSearch, setFilterSearch] = useState("");
   const [filterUngenerated, setFilterUngenerated] = useState(false);
@@ -165,10 +187,39 @@ export function CommentWorkbench({ students, onClose }: Props) {
 
   const selectedStudent = students.find(s => s.id === selectedId) || students[0];
   const selectedComment = comments.find(c => c.studentId === selectedStudent?.id) || comments[0];
+  const selectedProfile = selectedStudent ? commentProfiles[selectedStudent.id] || readStudentCommentProfile(selectedStudent) : null;
+  const selectedSummary = selectedProfile ? summarizeCommentProfile(rubric, selectedProfile) : { criteriaSummary: [], customOptions: [] };
   const latestExam = selectedStudent?.exams[0];
+
+  useEffect(() => {
+    if (selectedProfile) {
+      setTeacherNote(selectedProfile.teacherNote);
+    }
+  }, [selectedId, selectedProfile?.updatedAt]);
 
   function updateComment(id: StudentId, patch: Partial<CommentState>) {
     setComments(prev => prev.map(c => c.studentId === id ? { ...c, ...patch } : c));
+  }
+
+  function persistRubric(next: CommentRubric) {
+    const saved = saveCommentRubric(next);
+    setRubric(saved);
+    setCommentProfiles(prev => {
+      Object.entries(prev).forEach(([studentId, profile]) => {
+        saveStudentCommentProfile(studentId, saved, profile);
+      });
+      return { ...prev };
+    });
+  }
+
+  function updateSelectedProfile(updater: (profile: StudentCommentProfile) => StudentCommentProfile) {
+    if (!selectedStudent || !selectedProfile) {
+      return;
+    }
+    const nextProfile = updater({ ...selectedProfile });
+    const saved = saveStudentCommentProfile(selectedStudent.id, rubric, nextProfile);
+    setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: saved }));
+    setTeacherNote(saved.teacherNote);
   }
 
   function commitBatchState(next: CommentBatchState) {
@@ -187,6 +238,8 @@ export function CommentWorkbench({ students, onClose }: Props) {
   }
 
   function buildDraft(comment: CommentState, note = teacherNote): StudentCommentDraft {
+    const profile = commentProfiles[comment.studentId];
+    const summary = profile ? summarizeCommentProfile(rubric, profile) : { criteriaSummary: [], customOptions: [] };
     return {
       generatedComment: comment.text,
       teacherNote: note,
@@ -194,6 +247,8 @@ export function CommentWorkbench({ students, onClose }: Props) {
       lengthMode: comment.lengthMode as "short" | "standard" | "long" | "custom",
       targetWordCount: 120,
       updatedAt: new Date().toISOString(),
+      criteriaSummary: summary.criteriaSummary,
+      customOptions: summary.customOptions,
     };
   }
 
@@ -220,6 +275,18 @@ export function CommentWorkbench({ students, onClose }: Props) {
         return;
       }
       updateComment(selectedId, { text: result.comment, generated: true, needsInfo: Boolean(result.needsMoreInfo), failed: false });
+      if (selectedProfile) {
+        setCommentProfiles(prev => ({
+          ...prev,
+          [selectedId]: {
+            ...selectedProfile,
+            teacherNote,
+            generatedComment: result.comment,
+            status: "generated",
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+      }
       if (batchState.failed.includes(selectedId)) {
         commitBatchState({
           ...batchState,
@@ -237,6 +304,18 @@ export function CommentWorkbench({ students, onClose }: Props) {
 
   function saveSelectedComment() {
     if (!selectedStudent || !selectedComment) return;
+    if (selectedProfile) {
+      const savedProfile = saveStudentCommentProfile(selectedStudent.id, rubric, {
+        ...selectedProfile,
+        teacherNote,
+        style: selectedComment.style as "warm" | "formal" | "brief",
+        lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
+        generatedComment: selectedComment.text,
+        status: selectedComment.text.trim() ? "edited" : "draft",
+        updatedAt: new Date().toISOString(),
+      });
+      setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
+    }
     const saved = saveStudentCommentDraft(selectedStudent.id, {
       generatedComment: selectedComment.text,
       teacherNote,
@@ -246,6 +325,145 @@ export function CommentWorkbench({ students, onClose }: Props) {
       updatedAt: new Date().toISOString(),
     });
     updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
+  }
+
+  function toggleCriterionOption(criterion: CommentCriterion, optionId: string) {
+    updateSelectedProfile(profile => {
+      const current = new Set(profile.criteriaValues[criterion.id] || []);
+      if (current.has(optionId)) {
+        current.delete(optionId);
+      } else {
+        if (criterion.type === "single") {
+          current.clear();
+        }
+        current.add(optionId);
+      }
+      return {
+        ...profile,
+        criteriaValues: { ...profile.criteriaValues, [criterion.id]: [...current] },
+        status: profile.generatedComment ? "edited" : "draft",
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }
+
+  function clearCriterion(criterionId: string) {
+    updateSelectedProfile(profile => ({
+      ...profile,
+      criteriaValues: { ...profile.criteriaValues, [criterionId]: [] },
+      customOptions: { ...profile.customOptions, [criterionId]: [] },
+      status: profile.generatedComment ? "edited" : "draft",
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function addStudentCustomOption(criterion: CommentCriterion) {
+    const label = window.prompt(`为「${criterion.label}」添加自定义素材`);
+    if (!label?.trim()) return;
+    const id = makeSafeId(label, "custom");
+    const item = {
+      id,
+      label: label.trim(),
+      linkedTagId: criterion.syncToTags && label.trim().length <= 6 ? `comment_${criterion.id}_custom_${id}` : "",
+      builtIn: false,
+    };
+    updateSelectedProfile(profile => ({
+      ...profile,
+      customOptions: {
+        ...profile.customOptions,
+        [criterion.id]: [...(profile.customOptions[criterion.id] || []), item],
+      },
+      status: profile.generatedComment ? "edited" : "draft",
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function removeStudentCustomOption(criterionId: string, optionId: string) {
+    updateSelectedProfile(profile => ({
+      ...profile,
+      customOptions: {
+        ...profile.customOptions,
+        [criterionId]: (profile.customOptions[criterionId] || []).filter(option => option.id !== optionId),
+      },
+      status: profile.generatedComment ? "edited" : "draft",
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function updateCriterion(criterionId: string, patch: Partial<CommentCriterion>) {
+    persistRubric({
+      ...rubric,
+      criteria: rubric.criteria.map(criterion => criterion.id === criterionId ? { ...criterion, ...patch } : criterion),
+    });
+  }
+
+  function deleteOrHideCriterion(criterion: CommentCriterion) {
+    if (criterion.builtIn) {
+      updateCriterion(criterion.id, { hidden: !criterion.hidden });
+      return;
+    }
+    persistRubric({
+      ...rubric,
+      criteria: rubric.criteria.filter(item => item.id !== criterion.id),
+    });
+  }
+
+  function addCriterion() {
+    const label = window.prompt("请输入新标准名称");
+    if (!label?.trim()) return;
+    const id = makeSafeId(label, "criterion");
+    persistRubric({
+      ...rubric,
+      criteria: [
+        ...rubric.criteria,
+        {
+          id,
+          label: label.trim(),
+          type: "multi",
+          syncToTags: false,
+          hidden: false,
+          builtIn: false,
+          options: [],
+        },
+      ],
+    });
+  }
+
+  function addCriterionOption(criterion: CommentCriterion) {
+    const label = window.prompt(`给「${criterion.label}」新增预设选项`);
+    if (!label?.trim()) return;
+    const id = makeSafeId(label, "option");
+    updateCriterion(criterion.id, {
+      options: [
+        ...criterion.options,
+        {
+          id,
+          label: label.trim(),
+          linkedTagId: criterion.syncToTags && label.trim().length <= 6 ? `comment_${criterion.id}_${id}` : "",
+          builtIn: false,
+        },
+      ],
+    });
+  }
+
+  function removeCriterionOption(criterion: CommentCriterion, optionId: string) {
+    updateCriterion(criterion.id, {
+      options: criterion.options.filter(option => option.id !== optionId),
+    });
+    setCommentProfiles(prev => {
+      const next: Record<StudentId, StudentCommentProfile> = {};
+      Object.entries(prev).forEach(([studentId, profile]) => {
+        const cleaned = {
+          ...profile,
+          criteriaValues: {
+            ...profile.criteriaValues,
+            [criterion.id]: (profile.criteriaValues[criterion.id] || []).filter(id => id !== optionId),
+          },
+        };
+        next[studentId] = saveStudentCommentProfile(studentId, rubric, cleaned);
+      });
+      return next;
+    });
   }
 
   function isRecoverableAuthError(reason: string): boolean {
@@ -677,7 +895,7 @@ export function CommentWorkbench({ students, onClose }: Props) {
             <div>
               <div className="text-xs text-gray-500 mb-2" style={{ fontWeight: 700 }}>已有学生标签</div>
               <div className="flex flex-wrap gap-1.5">
-                {selectedStudent.academicTags.length > 0 ? selectedStudent.academicTags.map(tag => {
+                {[...selectedStudent.academicTags, ...selectedStudent.tags].length > 0 ? [...selectedStudent.academicTags, ...selectedStudent.tags].map(tag => {
                   const isStrong = tag.endsWith("强");
                   return (
                     <span key={tag} className={`text-xs px-2.5 py-1 rounded-full border ${isStrong ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-400 border-red-100"}`} style={{ fontWeight: 600 }}>
@@ -687,6 +905,128 @@ export function CommentWorkbench({ students, onClose }: Props) {
                 }) : <span className="text-xs text-gray-400">暂无标签</span>}
               </div>
             </div>
+
+            {/* Comment rubric */}
+            {selectedProfile && (
+              <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+                  <div>
+                    <div className="text-xs text-gray-500" style={{ fontWeight: 700 }}>评语标准选择</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      已选 {selectedSummary.criteriaSummary.reduce((total, item) => total + item.values.length, 0) + selectedSummary.customOptions.length} 项
+                    </div>
+                  </div>
+                  <button
+                    onClick={addCriterion}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 border border-blue-100 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors"
+                    style={{ fontWeight: 700 }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />新增标准
+                  </button>
+                </div>
+
+                <details className="border-b border-gray-100">
+                  <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-xs text-gray-500 hover:bg-gray-50" style={{ fontWeight: 700 }}>
+                    <Settings2 className="w-3.5 h-3.5" />标准库管理
+                  </summary>
+                  <div className="px-4 pb-4 space-y-3">
+                    {rubric.criteria.map(criterion => (
+                      <div key={criterion.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={criterion.label}
+                            disabled={criterion.builtIn}
+                            onChange={event => updateCriterion(criterion.id, { label: event.target.value || criterion.label })}
+                            className="flex-1 min-w-0 px-3 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none disabled:text-gray-400"
+                          />
+                          <label className="flex items-center gap-1.5 text-xs text-gray-500 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={criterion.syncToTags}
+                              onChange={event => updateCriterion(criterion.id, { syncToTags: event.target.checked })}
+                              className="accent-blue-600"
+                            />
+                            同步标签
+                          </label>
+                          <button
+                            onClick={() => deleteOrHideCriterion(criterion)}
+                            className="px-2.5 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg bg-white hover:bg-gray-100"
+                            style={{ fontWeight: 700 }}
+                          >
+                            {criterion.builtIn ? (criterion.hidden ? "显示" : "隐藏") : "删除"}
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {criterion.options.filter(option => !option.builtIn).map(option => (
+                            <button
+                              key={option.id}
+                              onClick={() => removeCriterionOption(criterion, option.id)}
+                              className="flex items-center gap-1 px-2 py-1 text-xs text-red-500 border border-red-100 bg-white rounded-full hover:bg-red-50"
+                            >
+                              <Trash2 className="w-3 h-3" />{option.label}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => addCriterionOption(criterion)}
+                            className="px-2 py-1 text-xs text-blue-600 border border-blue-100 bg-white rounded-full hover:bg-blue-50"
+                            style={{ fontWeight: 700 }}
+                          >
+                            + 选项
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+
+                <div className="p-4 space-y-4">
+                  {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
+                    const selected = new Set(selectedProfile.criteriaValues[criterion.id] || []);
+                    const customOptions = selectedProfile.customOptions[criterion.id] || [];
+                    return (
+                      <div key={criterion.id} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-500" style={{ fontWeight: 700 }}>{criterion.label}</span>
+                          <button onClick={() => clearCriterion(criterion.id)} className="text-xs text-gray-400 hover:text-gray-600">清空</button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {criterion.options.map(option => {
+                            const active = selected.has(option.id);
+                            return (
+                              <button
+                                key={option.id}
+                                onClick={() => toggleCriterionOption(criterion, option.id)}
+                                className={`px-2.5 py-1.5 rounded-full text-xs border transition-colors ${active ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                                style={{ fontWeight: 700 }}
+                              >
+                                {option.label}
+                              </button>
+                            );
+                          })}
+                          {customOptions.map(option => (
+                            <button
+                              key={option.id}
+                              onClick={() => removeStudentCustomOption(criterion.id, option.id)}
+                              className="px-2.5 py-1.5 rounded-full text-xs border bg-emerald-50 border-emerald-100 text-emerald-700"
+                              style={{ fontWeight: 700 }}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => addStudentCustomOption(criterion)}
+                            className="px-2.5 py-1.5 rounded-full text-xs border border-gray-200 text-gray-500 bg-white hover:bg-gray-50"
+                            style={{ fontWeight: 700 }}
+                          >
+                            + 自定义
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Settings */}
             <div className="grid grid-cols-2 gap-3">

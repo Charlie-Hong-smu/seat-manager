@@ -202,7 +202,30 @@ function normalizeLockedSeats(value: unknown, seatCount: number): number[] {
   return [...unique];
 }
 
-function normalizeStudent(value: unknown, index: number): AppStudent | null {
+function getCommentRubricTagLabels(rawRubric: unknown): Record<string, string> {
+  const labels: Record<string, string> = {};
+  if (!isRecord(rawRubric) || !Array.isArray(rawRubric.criteria)) {
+    return labels;
+  }
+  rawRubric.criteria.forEach(criterion => {
+    if (!isRecord(criterion) || !criterion.syncToTags || !Array.isArray(criterion.options)) {
+      return;
+    }
+    criterion.options.forEach(option => {
+      if (!isRecord(option)) {
+        return;
+      }
+      const linkedTagId = toStringValue(option.linkedTagId);
+      const label = toStringValue(option.label);
+      if (linkedTagId && label) {
+        labels[linkedTagId] = label;
+      }
+    });
+  });
+  return labels;
+}
+
+function normalizeStudent(value: unknown, index: number, extraTagLabels: Record<string, string>): AppStudent | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -215,8 +238,8 @@ function normalizeStudent(value: unknown, index: number): AppStudent | null {
 
   const manualTagIds = toStringArray(value.manualTags);
   const autoTagIds = toStringArray(value.autoTags);
-  const manualLabels = getTagLabels(manualTagIds);
-  const autoLabels = getTagLabels(autoTagIds);
+  const manualLabels = getTagLabels(manualTagIds, extraTagLabels);
+  const autoLabels = getTagLabels(autoTagIds, extraTagLabels);
   const allLabels = [...manualLabels, ...autoLabels];
 
   return {
@@ -403,7 +426,7 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
   }
 
   const students = toUnknownArray(raw.students)
-    .map(normalizeStudent)
+    .map((student, index) => normalizeStudent(student, index, getCommentRubricTagLabels(raw.commentRubric)))
     .filter((item): item is AppStudent => Boolean(item));
 
   if (!students.length) {

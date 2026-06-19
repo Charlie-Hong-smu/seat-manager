@@ -72,8 +72,8 @@ export function getTagLabel(id: string): string {
   return TAG_LABELS[id] || id;
 }
 
-export function getTagLabels(ids: string[]): string[] {
-  return ids.map(getTagLabel).filter(Boolean);
+export function getTagLabels(ids: string[], extraLabels: Record<string, string> = {}): string[] {
+  return ids.map(id => extraLabels[id] || getTagLabel(id)).filter(Boolean);
 }
 
 export function isAcademicTagLabel(label: string): boolean {

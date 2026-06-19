@@ -199,15 +199,15 @@ function buildPayload(student: AppStudent, draft: StudentCommentDraft) {
       weaknesses: scores.slice(-2).reverse().map(item => item.subject),
       tags,
       commentProfile: {
-        criteriaSummary: [],
-        customOptions: [],
+        criteriaSummary: draft.criteriaSummary || [],
+        customOptions: draft.customOptions || [],
         teacherNote: draft.teacherNote,
       },
       teacherNote: draft.teacherNote,
     },
     commentProfile: {
-      criteriaSummary: [],
-      customOptions: [],
+      criteriaSummary: draft.criteriaSummary || [],
+      customOptions: draft.customOptions || [],
       teacherNote: draft.teacherNote,
     },
     requirements: {
