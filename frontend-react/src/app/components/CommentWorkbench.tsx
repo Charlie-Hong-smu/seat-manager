@@ -9,18 +9,81 @@ interface CommentState {
   text: string;
   generated: boolean;
   needsInfo: boolean;
+  failed: boolean;
   lengthMode: string;
   style: string;
 }
 
-function buildInitialComments(students: AppStudent[]): CommentState[] {
+interface CommentBatchState {
+  queue: StudentId[];
+  failed: StudentId[];
+  done: number;
+  total: number;
+  status: "idle" | "running" | "paused" | "failed" | "complete";
+  updatedAt: string;
+}
+
+const COMMENT_BATCH_STATE_KEY = "seat-manager-ai-comment-batch-state-v1";
+
+function emptyBatchState(): CommentBatchState {
+  return {
+    queue: [],
+    failed: [],
+    done: 0,
+    total: 0,
+    status: "idle",
+    updatedAt: "",
+  };
+}
+
+function hasBrowserStorage(): boolean {
+  return typeof window !== "undefined" && Boolean(window.localStorage);
+}
+
+function loadCommentBatchState(students: AppStudent[]): CommentBatchState {
+  if (!hasBrowserStorage()) {
+    return emptyBatchState();
+  }
+  try {
+    const validIds = new Set(students.map(student => student.id));
+    const raw = JSON.parse(window.localStorage.getItem(COMMENT_BATCH_STATE_KEY) || "null") as Partial<CommentBatchState> | null;
+    if (!raw || typeof raw !== "object") {
+      return emptyBatchState();
+    }
+    return {
+      queue: Array.isArray(raw.queue) ? raw.queue.filter(id => validIds.has(id)) : [],
+      failed: Array.isArray(raw.failed) ? raw.failed.filter(id => validIds.has(id)) : [],
+      done: Number.isFinite(raw.done) ? Math.max(0, Number(raw.done)) : 0,
+      total: Number.isFinite(raw.total) ? Math.max(0, Number(raw.total)) : 0,
+      status: raw.status === "running" || raw.status === "paused" || raw.status === "failed" || raw.status === "complete" ? raw.status : "idle",
+      updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
+    };
+  } catch {
+    return emptyBatchState();
+  }
+}
+
+function saveCommentBatchState(state: CommentBatchState): void {
+  if (!hasBrowserStorage()) {
+    return;
+  }
+  if (!state.queue.length && !state.failed.length && (state.status === "idle" || state.status === "complete")) {
+    window.localStorage.removeItem(COMMENT_BATCH_STATE_KEY);
+    return;
+  }
+  window.localStorage.setItem(COMMENT_BATCH_STATE_KEY, JSON.stringify(state));
+}
+
+function buildInitialComments(students: AppStudent[], failedIds: StudentId[] = []): CommentState[] {
+  const failedSet = new Set(failedIds);
   return students.map(s => {
     const draft = readStudentCommentDraft(s);
     return {
     studentId: s.id,
     text: draft.generatedComment,
     generated: Boolean(draft.generatedComment),
-    needsInfo: s.academicTags.length === 0 && !draft.teacherNote,
+    needsInfo: failedSet.has(s.id) || (s.academicTags.length === 0 && !draft.teacherNote),
+    failed: failedSet.has(s.id),
     lengthMode: draft.lengthMode,
     style: draft.style,
   };
@@ -52,20 +115,39 @@ function getWeakSubject(scores: Record<string, number>): string {
   return Object.entries(scores).sort((a, b) => a[1] - b[1])[0]?.[0] || "";
 }
 
+function csvEscape(value: string | number): string {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
+}
+
+function downloadTextFile(filename: string, content: string, type: string): void {
+  const blob = new Blob([content], { type });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
 export function CommentWorkbench({ students, onClose }: Props) {
-  const [comments, setComments] = useState<CommentState[]>(() => buildInitialComments(students));
+  const initialBatchState = useMemo(() => loadCommentBatchState(students), [students]);
+  const [comments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
   const [selectedId, setSelectedId] = useState<StudentId>(students[0]?.id || "");
   const [filterSearch, setFilterSearch] = useState("");
   const [filterUngenerated, setFilterUngenerated] = useState(false);
   const [filterNeedsInfo, setFilterNeedsInfo] = useState(false);
   const [teacherNote, setTeacherNote] = useState("");
   const [batchRunning, setBatchRunning] = useState(false);
-  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchState, setBatchState] = useState<CommentBatchState>(() => initialBatchState);
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiAuth());
   const [aiStatus, setAiStatus] = useState("AI 会使用学生成绩、标签和教师补充评价生成。");
   const pauseRequested = useRef(false);
+  const batchProgress = batchState.total ? Math.round((batchState.done / batchState.total) * 100) : 0;
+  const resumableCount = batchState.queue.length + batchState.failed.length;
 
   const generatedCount = comments.filter(c => c.generated).length;
   const pendingCount = comments.filter(c => !c.generated).length;
@@ -87,6 +169,21 @@ export function CommentWorkbench({ students, onClose }: Props) {
 
   function updateComment(id: StudentId, patch: Partial<CommentState>) {
     setComments(prev => prev.map(c => c.studentId === id ? { ...c, ...patch } : c));
+  }
+
+  function commitBatchState(next: CommentBatchState) {
+    const normalized = {
+      ...next,
+      queue: Array.from(new Set(next.queue)),
+      failed: Array.from(new Set(next.failed)),
+      updatedAt: new Date().toISOString(),
+    };
+    setBatchState(normalized);
+    saveCommentBatchState(normalized);
+  }
+
+  function clearBatchState() {
+    commitBatchState(emptyBatchState());
   }
 
   function buildDraft(comment: CommentState, note = teacherNote): StudentCommentDraft {
@@ -122,7 +219,13 @@ export function CommentWorkbench({ students, onClose }: Props) {
         setAiStatus(result.missingInfo?.length ? `需要补充：${result.missingInfo.join("、")}` : "信息不足，暂未生成评语。");
         return;
       }
-      updateComment(selectedId, { text: result.comment, generated: true, needsInfo: Boolean(result.needsMoreInfo) });
+      updateComment(selectedId, { text: result.comment, generated: true, needsInfo: Boolean(result.needsMoreInfo), failed: false });
+      if (batchState.failed.includes(selectedId)) {
+        commitBatchState({
+          ...batchState,
+          failed: batchState.failed.filter(id => id !== selectedId),
+        });
+      }
       setAccessCode("");
       setHasAuth(true);
       setAiStatus(`已生成 ${selectedStudent.name} 的评语。`);
@@ -145,44 +248,91 @@ export function CommentWorkbench({ students, onClose }: Props) {
     updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
   }
 
-  async function startBatch() {
+  function isRecoverableAuthError(reason: string): boolean {
+    return reason === "ai_auth_required" || reason === "ai_unauthorized" || reason === "ai_auth_failed" || reason === "ai_rate_limited";
+  }
+
+  async function runBatchQueue(seed: CommentBatchState) {
+    if (batchRunning) return;
     setBatchRunning(true);
     pauseRequested.current = false;
-    setBatchProgress(0);
-    const pending = comments.filter(c => !c.generated);
-    if (!pending.length) {
-      setAiStatus("没有待生成的学生。");
-      setBatchRunning(false);
-      return;
-    }
+    const queue = [...seed.queue];
+    const failed = [...seed.failed];
+    let done = seed.done;
+    const total = seed.total || queue.length;
+    commitBatchState({ ...seed, queue, failed, done, total, status: "running" });
+
     try {
-      for (let i = 0; i < pending.length; i += 1) {
+      for (let i = 0; i < queue.length; i += 1) {
         if (pauseRequested.current) {
-          setAiStatus(`已暂停，剩余 ${pending.length - i} 人。`);
-          break;
+          const paused = { queue: queue.slice(i), failed, done, total, status: "paused" as const, updatedAt: "" };
+          commitBatchState(paused);
+          setAiStatus(`已暂停，剩余 ${paused.queue.length} 人。`);
+          return;
         }
-        const student = students.find(s => s.id === pending[i].studentId);
+        const studentId = queue[i];
+        const student = students.find(s => s.id === studentId);
         if (!student) {
+          done += 1;
           continue;
         }
-        setAiStatus(`正在生成 ${i + 1}/${pending.length}：${student.name}`);
-        const result = await generateStudentAiComment(student, buildDraft(pending[i], ""), {
-          accessCode,
-          remember: rememberAuth,
-          force: true,
-        });
-        if (result.comment) {
-          updateComment(student.id, {
-            text: result.comment,
-            generated: true,
-            needsInfo: Boolean(result.needsMoreInfo),
-          });
+        const comment = comments.find(c => c.studentId === studentId);
+        if (!comment) {
+          done += 1;
+          continue;
         }
-        setBatchProgress(Math.round(((i + 1) / pending.length) * 100));
+        setAiStatus(`正在生成 ${done + 1}/${total}：${student.name}`);
+        try {
+          const result = await generateStudentAiComment(student, buildDraft(comment, ""), {
+            accessCode,
+            remember: rememberAuth,
+            force: true,
+          });
+          done += 1;
+          if (result.comment) {
+            updateComment(student.id, {
+              text: result.comment,
+              generated: true,
+              needsInfo: Boolean(result.needsMoreInfo),
+              failed: false,
+            });
+          } else {
+            updateComment(student.id, { needsInfo: true, failed: false });
+          }
+          commitBatchState({
+            queue: queue.slice(i + 1),
+            failed,
+            done,
+            total,
+            status: "running",
+            updatedAt: "",
+          });
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "";
+          failed.push(student.id);
+          updateComment(student.id, { needsInfo: true, failed: true });
+          const remainingQueue = queue.slice(i + 1);
+          commitBatchState({
+            queue: remainingQueue,
+            failed,
+            done,
+            total,
+            status: "failed",
+            updatedAt: "",
+          });
+          setAiStatus(`${student.name} 生成失败：${getAiErrorMessage(reason)}`);
+          if (isRecoverableAuthError(reason)) {
+            return;
+          }
+        }
       }
       setAccessCode("");
       setHasAuth(true);
-      if (!pauseRequested.current) {
+      const finalState = { queue: [], failed, done: total, total, status: failed.length ? "failed" as const : "complete" as const, updatedAt: "" };
+      commitBatchState(finalState);
+      if (failed.length) {
+        setAiStatus(`批量生成完成，${failed.length} 人失败，可重试失败项。`);
+      } else {
         setAiStatus("批量生成完成。");
       }
     } catch (error) {
@@ -191,6 +341,42 @@ export function CommentWorkbench({ students, onClose }: Props) {
     } finally {
       setBatchRunning(false);
     }
+  }
+
+  function startBatch() {
+    const failedIds = new Set(batchState.failed);
+    const pending = comments.filter(c => !c.generated || failedIds.has(c.studentId));
+    if (!pending.length) {
+      setAiStatus("没有待生成的学生。");
+      clearBatchState();
+      return;
+    }
+    const next = {
+      queue: pending.map(c => c.studentId),
+      failed: [],
+      done: 0,
+      total: pending.length,
+      status: "running" as const,
+      updatedAt: "",
+    };
+    void runBatchQueue(next);
+  }
+
+  function resumeBatch() {
+    const retryIds = batchState.queue.length ? batchState.queue : batchState.failed;
+    if (!retryIds.length) {
+      setAiStatus("没有可继续的队列。");
+      return;
+    }
+    const next = {
+      queue: retryIds,
+      failed: batchState.queue.length ? batchState.failed : [],
+      done: batchState.queue.length ? batchState.done : 0,
+      total: batchState.queue.length ? batchState.total : retryIds.length,
+      status: "running" as const,
+      updatedAt: "",
+    };
+    void runBatchQueue(next);
   }
 
   function pauseBatch() {
@@ -209,6 +395,24 @@ export function CommentWorkbench({ students, onClose }: Props) {
     navigator.clipboard.writeText(text).catch(() => {});
   }
 
+  function exportCommentsCsv() {
+    const rows = [
+      ["姓名", "状态", "字数", "评语"],
+      ...students.map(student => {
+        const state = comments.find(c => c.studentId === student.id);
+        const status = state?.failed ? "失败待重试" : state?.generated ? "已生成" : state?.needsInfo ? "需补充" : "待生成";
+        return [
+          student.name,
+          status,
+          state?.text.length || 0,
+          state?.text || "",
+        ];
+      }),
+    ];
+    const content = `\ufeff${rows.map(row => row.map(csvEscape).join(",")).join("\n")}`;
+    downloadTextFile(`期末评语-${new Date().toISOString().slice(0, 10)}.csv`, content, "text/csv;charset=utf-8");
+  }
+
   const tagSummary = (s: AppStudent) =>
     s.academicTags.length > 0 ? s.academicTags.slice(0, 2).join("、") : "暂无标签";
 
@@ -217,6 +421,14 @@ export function CommentWorkbench({ students, onClose }: Props) {
     if (!exam) return "暂无成绩";
     return `${exam.name} · 总分 ${exam.total ?? "—"}`;
   };
+  const batchButtonLabel = batchRunning
+    ? "暂停"
+    : batchState.queue.length
+    ? "继续生成"
+    : batchState.failed.length
+    ? "重试失败"
+    : "批量生成";
+  const batchButtonAction = batchRunning ? pauseBatch : resumableCount ? resumeBatch : startBatch;
 
   if (!selectedStudent || !selectedComment) {
     return (
@@ -264,13 +476,22 @@ export function CommentWorkbench({ students, onClose }: Props) {
       {/* Toolbar */}
       <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3 flex-wrap">
         <button
-          onClick={batchRunning ? pauseBatch : startBatch}
+          onClick={batchButtonAction}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm transition-colors ${batchRunning ? "bg-gray-200 text-gray-700 hover:bg-gray-300" : "bg-blue-600 text-white hover:bg-blue-700"}`}
           style={{ fontWeight: 600 }}
         >
-          {batchRunning ? <><Pause className="w-3.5 h-3.5" />暂停</> : <><Play className="w-3.5 h-3.5" />批量生成</>}
+          {batchRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+          {batchButtonLabel}
         </button>
-        <button onClick={() => setComments(buildInitialComments(students))} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
+        <button
+          onClick={() => {
+            setComments(buildInitialComments(students));
+            clearBatchState();
+            setAiStatus("已重置工作台状态。");
+          }}
+          className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
+          style={{ fontWeight: 600 }}
+        >
           <RotateCcw className="w-3.5 h-3.5" />重置
         </button>
 
@@ -313,7 +534,7 @@ export function CommentWorkbench({ students, onClose }: Props) {
           <button onClick={copyAll} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors" style={{ fontWeight: 600 }}>
             <Copy className="w-3.5 h-3.5" />复制全部
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors" style={{ fontWeight: 600 }}>
+          <button onClick={exportCommentsCsv} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors" style={{ fontWeight: 600 }}>
             <Download className="w-3.5 h-3.5" />导出评语
           </button>
         </div>
@@ -321,12 +542,14 @@ export function CommentWorkbench({ students, onClose }: Props) {
         <p className="w-full text-xs text-blue-600">{aiStatus}</p>
 
         {/* Progress bar */}
-        {(batchRunning || batchProgress > 0) && (
+        {(batchRunning || batchProgress > 0 || resumableCount > 0) && (
           <div className="w-full flex items-center gap-3 pt-1">
             <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
               <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${batchProgress}%` }} />
             </div>
-            <span className="text-xs text-gray-500 shrink-0">{batchProgress}% · {generatedCount}/{students.length} 已生成</span>
+            <span className="text-xs text-gray-500 shrink-0">
+              {batchProgress}% · 剩余 {batchState.queue.length} · 失败 {batchState.failed.length}
+            </span>
           </div>
         )}
       </div>
@@ -379,7 +602,9 @@ export function CommentWorkbench({ students, onClose }: Props) {
                     </div>
                   </div>
                   <div className="col-span-2">
-                    {state.needsInfo ? (
+                    {state.failed ? (
+                      <span className="text-xs px-2 py-0.5 bg-red-50 border border-red-100 text-red-500 rounded-full" style={{ fontWeight: 600 }}>失败待重试</span>
+                    ) : state.needsInfo ? (
                       <span className="text-xs px-2 py-0.5 bg-amber-50 border border-amber-100 text-amber-600 rounded-full" style={{ fontWeight: 600 }}>需补充</span>
                     ) : state.generated ? (
                       <span className="text-xs px-2 py-0.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-full" style={{ fontWeight: 600 }}>已生成</span>
