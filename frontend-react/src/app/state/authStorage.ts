@@ -40,6 +40,18 @@ export async function setupPassword(password: string): Promise<void> {
   window.localStorage.setItem(CUSTOM_PASSWORD_HASH_KEY, await hashPassword(password));
 }
 
+export async function changePassword(currentPassword: string, nextPassword: string): Promise<"ok" | "invalid_current" | "too_short"> {
+  if (nextPassword.length < 4) {
+    return "too_short";
+  }
+  if (hasLoginPassword() && !await verifyPassword(currentPassword)) {
+    return "invalid_current";
+  }
+  await setupPassword(nextPassword);
+  clearAuth();
+  return "ok";
+}
+
 export function setAuthenticated(remember: boolean): void {
   if (!hasBrowserStorage()) {
     return;

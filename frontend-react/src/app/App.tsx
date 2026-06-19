@@ -11,6 +11,7 @@ import { GradesPage } from "./components/GradesPage";
 import { TopHeader } from "./components/TopHeader";
 import { CloudSyncModal } from "./components/CloudSyncModal";
 import { InstallHelpModal } from "./components/InstallHelpModal";
+import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
@@ -50,6 +51,7 @@ export default function App() {
   const [showCloudSync, setShowCloudSync] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [installMessage, setInstallMessage] = useState("当前浏览器没有直接提供安装确认，请按下面方式手动添加。");
   const hasMounted = useRef(false);
 
@@ -212,6 +214,7 @@ export default function App() {
           onToggleAccount={() => setAccountOpen(v => !v)}
           onCloseAccount={() => setAccountOpen(false)}
           onInstallApp={handleInstallApp}
+          onChangePassword={() => setShowChangePassword(true)}
           onOpenCloudSync={() => setShowCloudSync(true)}
           onLogout={() => {
             clearAuth();
@@ -271,6 +274,16 @@ export default function App() {
 
           {showInstallHelp && (
             <InstallHelpModal message={installMessage} onClose={() => setShowInstallHelp(false)} />
+          )}
+
+          {showChangePassword && (
+            <ChangePasswordModal
+              onClose={() => setShowChangePassword(false)}
+              onPasswordChanged={() => {
+                setShowChangePassword(false);
+                setLoggedIn(false);
+              }}
+            />
           )}
         </>
       }

@@ -9,6 +9,7 @@ interface TopHeaderProps {
   onToggleAccount: () => void;
   onCloseAccount: () => void;
   onInstallApp: () => void;
+  onChangePassword: () => void;
   onOpenCloudSync: () => void;
   onLogout: () => void;
 }
@@ -22,6 +23,7 @@ export function TopHeader({
   onToggleAccount,
   onCloseAccount,
   onInstallApp,
+  onChangePassword,
   onOpenCloudSync,
   onLogout,
 }: TopHeaderProps) {
@@ -78,6 +80,7 @@ export function TopHeader({
                     onClick={() => {
                       onCloseAccount();
                       if (item.label === "安装到桌面") onInstallApp();
+                      if (item.label === "修改密码") onChangePassword();
                       if (item.label === "云同步") onOpenCloudSync();
                       if (item.label === "退出登录") onLogout();
                     }}
