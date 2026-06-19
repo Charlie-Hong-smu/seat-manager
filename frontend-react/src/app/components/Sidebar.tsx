@@ -5,14 +5,24 @@ import {
   Dices, FileUp, FileDown, Save, Trash2,
   ChevronDown, ChevronRight,
 } from "lucide-react";
+import {
+  exportBackupJson,
+  exportSeatsCsv,
+  formatBackupTime,
+  getLastBackupAt,
+  parseBackupFile,
+  restoreBackup,
+  type BackupImportPreview,
+} from "../state/backupStorage";
 import { createSavedGradeExamRecord, parseScoreFile } from "../state/scoreImport";
-import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft } from "../state/types";
+import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft, StudentId } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
 
 interface Props {
   activeTab: Tab;
   students: AppStudent[];
+  seatOrder: Array<StudentId | null>;
   gradeExams: GradeExam[];
   canUndoSeatOrder: boolean;
   onRandomizeSeats: () => void;
@@ -20,6 +30,8 @@ interface Props {
   onUndoSeatOrder: () => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
+  onBeforeBackupExport: () => void;
+  onBackupImported: () => void;
   onTabChange: (tab: Tab) => void;
   onShowGrades: () => void;
   onHideGrades: () => void;
@@ -286,7 +298,62 @@ function CommonTab({
 }
 
 // ── Tab: 导入备份 ─────────────────────────────────────────────────────────────
-function ImportTab() {
+function ImportTab({
+  students,
+  seatOrder,
+  onBeforeBackupExport,
+  onBackupImported,
+}: {
+  students: AppStudent[];
+  seatOrder: Array<StudentId | null>;
+  onBeforeBackupExport: () => void;
+  onBackupImported: () => void;
+}) {
+  const [backupPreview, setBackupPreview] = useState<BackupImportPreview | null>(null);
+  const [backupStatus, setBackupStatus] = useState("选择 JSON 备份文件后可恢复整份本地数据。");
+  const [lastBackupAt, setLastBackupAt] = useState(() => getLastBackupAt());
+
+  async function handleBackupFile(file?: File) {
+    if (!file) {
+      return;
+    }
+    setBackupStatus("正在读取备份文件...");
+    try {
+      const preview = await parseBackupFile(file);
+      setBackupPreview(preview);
+      setBackupStatus(`已识别 ${preview.studentCount} 名学生、${preview.seatCount} 个座位。`);
+    } catch {
+      setBackupPreview(null);
+      setBackupStatus("备份文件格式不正确，请选择旧版或新版导出的 JSON。");
+    }
+  }
+
+  function handleExportBackup() {
+    onBeforeBackupExport();
+    const exportedAt = exportBackupJson();
+    setLastBackupAt(exportedAt);
+    setBackupStatus("备份 JSON 已导出。");
+  }
+
+  function handleRestoreBackup() {
+    if (!backupPreview) {
+      setBackupStatus("请先选择备份 JSON 文件。");
+      return;
+    }
+    const message = `${backupPreview.warning ? `${backupPreview.warning}\n` : ""}将覆盖当前本机数据，并在恢复前自动导出一份当前备份。是否继续？`;
+    if (!window.confirm(message)) {
+      setBackupStatus("已取消恢复。");
+      return;
+    }
+    if (!restoreBackup(backupPreview)) {
+      setBackupStatus("恢复失败，请稍后重试。");
+      return;
+    }
+    setBackupPreview(null);
+    setBackupStatus("备份已恢复，页面数据已刷新。");
+    onBackupImported();
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {[
@@ -319,13 +386,21 @@ function ImportTab() {
           desc: "",
           body: (
             <div className="flex flex-col gap-2">
-              <button className="w-full py-2 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
+              <button
+                onClick={() => exportSeatsCsv(students, seatOrder)}
+                className="w-full py-2 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
+                style={{ fontWeight: 600 }}
+              >
                 <FileDown className="w-3.5 h-3.5" />导出座位表 CSV
               </button>
-              <button className="w-full py-2 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
+              <button
+                onClick={handleExportBackup}
+                className="w-full py-2 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
+                style={{ fontWeight: 600 }}
+              >
                 <FileDown className="w-3.5 h-3.5" />导出备份 JSON
               </button>
-              <p className="text-xs text-gray-400">上次备份：从未</p>
+              <p className="text-xs text-gray-400">上次备份：{formatBackupTime(lastBackupAt)}</p>
             </div>
           ),
         },
@@ -338,10 +413,25 @@ function ImportTab() {
             <div className="flex flex-col gap-2">
               <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-3 cursor-pointer hover:border-amber-300 hover:bg-amber-50/30 transition-colors">
                 <FileUp className="w-4 h-4 text-gray-300" />
-                <span className="text-xs text-gray-400">选择 JSON 备份文件</span>
-                <input type="file" className="hidden" accept=".json" />
+                <span className="text-xs text-gray-400">{backupPreview ? "已选择备份文件" : "选择 JSON 备份文件"}</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".json"
+                  onChange={event => {
+                    void handleBackupFile(event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
               </label>
-              <button className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>导入备份 JSON</button>
+              {backupPreview && (
+                <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-700">
+                  <div style={{ fontWeight: 700 }}>{backupPreview.studentCount} 名学生 · {backupPreview.seatCount} 个座位</div>
+                  {backupPreview.warning && <div className="mt-1">{backupPreview.warning}</div>}
+                </div>
+              )}
+              <button onClick={handleRestoreBackup} className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>导入备份 JSON</button>
+              <p className="text-xs text-amber-600">{backupStatus}</p>
             </div>
           ),
         },
@@ -619,6 +709,7 @@ function HistoryTab() {
 export function Sidebar({
   activeTab,
   students,
+  seatOrder,
   gradeExams,
   canUndoSeatOrder,
   onRandomizeSeats,
@@ -626,6 +717,8 @@ export function Sidebar({
   onUndoSeatOrder,
   onAddStudent,
   onSaveScoreImport,
+  onBeforeBackupExport,
+  onBackupImported,
   onTabChange,
   onShowGrades,
   onHideGrades,
@@ -669,7 +762,14 @@ export function Sidebar({
             onAddStudent={onAddStudent}
           />
         )}
-        {activeTab === "import"  && <ImportTab />}
+        {activeTab === "import"  && (
+          <ImportTab
+            students={students}
+            seatOrder={seatOrder}
+            onBeforeBackupExport={onBeforeBackupExport}
+            onBackupImported={onBackupImported}
+          />
+        )}
         {activeTab === "scores"  && (
           <ScoresTab
             exams={gradeExams}

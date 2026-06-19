@@ -226,6 +226,7 @@ export default function App() {
         <Sidebar
           activeTab={sidebarTab}
           students={students}
+          seatOrder={seatOrder}
           gradeExams={appState.gradeExams}
           canUndoSeatOrder={seatHistory.length > 0}
           onRandomizeSeats={handleRandomizeSeats}
@@ -233,6 +234,8 @@ export default function App() {
           onUndoSeatOrder={handleUndoSeatOrder}
           onAddStudent={handleAddStudent}
           onSaveScoreImport={handleSaveScoreImport}
+          onBeforeBackupExport={saveCurrentLegacySnapshot}
+          onBackupImported={reloadFromLegacyState}
           onTabChange={tab => {
             setSidebarTab(tab);
             if (tab === "scores") setMainView("grades");
