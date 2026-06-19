@@ -1,11 +1,16 @@
-import { useState } from "react";
-import { X, Trash2, Plus, Sparkles, Star, TrendingUp, TrendingDown, ChevronDown } from "lucide-react";
-import type { AppStudent, RecordType, StudentExamSummary, StudentId } from "../state/types";
+import { useMemo, useState } from "react";
+import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save } from "lucide-react";
+import { createStudentRecord, updateStudentProfile } from "../state/studentActions";
+import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
+import type { AppStudent, Gender, RecordType, StudentExamSummary, StudentId, StudentRecord } from "../state/types";
 
 interface Props {
   student: AppStudent;
   students: AppStudent[];
   onClose: () => void;
+  onUpdateStudent: (student: AppStudent) => void;
+  onApplyRecord: (studentId: StudentId, record: StudentRecord, syncIds: StudentId[]) => void;
+  onDeleteStudent: (studentId: StudentId) => void;
   onOpenAiComment?: () => void;
 }
 
@@ -40,7 +45,32 @@ function getExamTotal(exam: StudentExamSummary): number {
   return exam.total ?? getScoreEntries(exam.scores).reduce((sum, [, score]) => sum + score, 0);
 }
 
-export function StudentModal({ student, students, onClose, onOpenAiComment }: Props) {
+function parseAliases(value: string): string[] {
+  return value
+    .split(/[、,，\n]/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function sortTagIds(ids: Iterable<string>): string {
+  return [...ids].sort().join("|");
+}
+
+export function StudentModal({
+  student,
+  students,
+  onClose,
+  onUpdateStudent,
+  onApplyRecord,
+  onDeleteStudent,
+  onOpenAiComment,
+}: Props) {
+  const [nameInput, setNameInput] = useState(student.name);
+  const [genderInput, setGenderInput] = useState<Gender>(student.gender);
+  const [aliasesInput, setAliasesInput] = useState(student.aliases.join("、"));
+  const [selectedBehaviorTags, setSelectedBehaviorTags] = useState<Set<string>>(
+    () => new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id)))
+  );
   const [noteInput, setNoteInput] = useState("");
   const [localRecords, setLocalRecords] = useState<LocalRecord[]>(() =>
     student.records.map(r => ({
@@ -54,19 +84,67 @@ export function StudentModal({ student, students, onClose, onOpenAiComment }: Pr
   const [syncSearch, setSyncSearch] = useState("");
   const [syncSelected, setSyncSelected] = useState<Set<StudentId>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [profileStatus, setProfileStatus] = useState("");
 
   const examScores = student.exams;
+  const preservedManualTagIds = useMemo(
+    () => student.manualTagIds.filter(id => !BEHAVIOR_TAG_IDS.has(id)),
+    [student.manualTagIds]
+  );
+  const initialBehaviorTagKey = useMemo(
+    () => sortTagIds(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id))),
+    [student.manualTagIds]
+  );
+  const selectedBehaviorTagKey = sortTagIds(selectedBehaviorTags);
+  const profileDirty =
+    nameInput.trim() !== student.name ||
+    genderInput !== student.gender ||
+    parseAliases(aliasesInput).join("|") !== student.aliases.join("|") ||
+    selectedBehaviorTagKey !== initialBehaviorTagKey;
+
+  function toggleBehaviorTag(id: string) {
+    setSelectedBehaviorTags(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    setProfileStatus("");
+  }
+
+  function saveProfile() {
+    if (!nameInput.trim()) {
+      setProfileStatus("姓名不能为空。");
+      return;
+    }
+
+    const nextStudent = updateStudentProfile(student, {
+      name: nameInput,
+      gender: genderInput,
+      aliases: parseAliases(aliasesInput),
+      manualTagIds: [...preservedManualTagIds, ...selectedBehaviorTags],
+    });
+    onUpdateStudent(nextStudent);
+    setProfileStatus("学生信息已保存。");
+  }
 
   function addRecord(type: RecordType) {
     if (type !== "note" && !noteInput.trim() && !window.confirm("不填备注直接添加？")) return;
-    const newRecord: LocalRecord = {
-      id: `local-${Date.now()}`,
-      type,
-      note: noteInput.trim(),
-      date: "2026-06-14",
-    };
+    const newRecord = createStudentRecord(type, noteInput);
     setLocalRecords(prev => [newRecord, ...prev]);
+    onApplyRecord(student.id, newRecord, [...syncSelected]);
     setNoteInput("");
+    setProfileStatus(syncSelected.size ? `记录已同步到 ${syncSelected.size + 1} 名学生。` : "记录已保存。");
+  }
+
+  function deleteRecord(recordId: string) {
+    const nextRecords = localRecords.filter(record => record.id !== recordId);
+    setLocalRecords(nextRecords);
+    onUpdateStudent({ ...student, records: nextRecords });
+    setProfileStatus("记录已删除。");
   }
 
   const syncCandidates = students.filter(s => s.id !== student.id && s.name.includes(syncSearch));
@@ -102,7 +180,7 @@ export function StudentModal({ student, students, onClose, onOpenAiComment }: Pr
               <>
                 <span className="text-xs text-red-500 mr-1">确认删除？</span>
                 <button onClick={() => setShowDeleteConfirm(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">取消</button>
-                <button className="px-3 py-1.5 text-sm bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors" style={{ fontWeight: 600 }}>确认</button>
+                <button onClick={() => onDeleteStudent(student.id)} className="px-3 py-1.5 text-sm bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors" style={{ fontWeight: 600 }}>确认</button>
               </>
             ) : (
               <>
@@ -123,6 +201,111 @@ export function StudentModal({ student, students, onClose, onOpenAiComment }: Pr
         </div>
 
         <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-12rem)]">
+          {/* Profile */}
+          <div className="border border-gray-100 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+              <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>学生信息</span>
+              <button
+                onClick={saveProfile}
+                disabled={!profileDirty}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-xl transition-colors ${profileDirty ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-100 text-gray-400 cursor-default"}`}
+                style={{ fontWeight: 600 }}
+              >
+                <Save className="w-3.5 h-3.5" />保存信息
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+                <label className="space-y-1.5">
+                  <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>姓名</span>
+                  <input
+                    value={nameInput}
+                    onChange={e => {
+                      setNameInput(e.target.value);
+                      setProfileStatus("");
+                    }}
+                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                  />
+                </label>
+                <div className="space-y-1.5">
+                  <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>性别</span>
+                  <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 rounded-xl">
+                    {(["男", "女"] as Gender[]).map(gender => (
+                      <button
+                        key={gender}
+                        onClick={() => {
+                          setGenderInput(gender);
+                          setProfileStatus("");
+                        }}
+                        className={`px-4 py-1.5 text-sm rounded-lg transition-colors ${genderInput === gender ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                        style={{ fontWeight: 700 }}
+                      >
+                        {gender}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <label className="space-y-1.5 block">
+                <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>别名</span>
+                <input
+                  value={aliasesInput}
+                  onChange={e => {
+                    setAliasesInput(e.target.value);
+                    setProfileStatus("");
+                  }}
+                  placeholder="多个别名用顿号或逗号分隔"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                />
+              </label>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500" style={{ fontWeight: 700 }}>行为标签</span>
+                  <span className="text-xs text-gray-400">写回旧版手动标签</span>
+                </div>
+                <div className="space-y-3">
+                  {BEHAVIOR_TAG_GROUPS.map(group => (
+                    <div key={group.id} className="grid grid-cols-[5rem_1fr] gap-3 items-start">
+                      <span className="text-xs text-gray-400 pt-1.5">{group.name}</span>
+                      <div className="flex flex-wrap gap-2">
+                        {group.tags.map(tag => {
+                          const active = selectedBehaviorTags.has(tag.id);
+                          return (
+                            <button
+                              key={tag.id}
+                              onClick={() => toggleBehaviorTag(tag.id)}
+                              className={`px-2.5 py-1.5 rounded-full text-sm border transition-colors ${active ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                              style={{ fontWeight: 600 }}
+                            >
+                              {tag.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-xs text-gray-500" style={{ fontWeight: 700 }}>学科标签</span>
+                <div className="flex flex-wrap gap-2">
+                  {student.academicTags.length > 0 ? student.academicTags.map(tag => {
+                    const isStrong = tag.endsWith("强");
+                    return (
+                      <span key={tag} className={`px-2.5 py-1 rounded-full text-sm border ${isStrong ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-500 border-red-100"}`} style={{ fontWeight: 600 }}>
+                        {tag}
+                      </span>
+                    );
+                  }) : <span className="text-sm text-gray-400">暂无自动学科标签</span>}
+                </div>
+              </div>
+
+              {profileStatus && <p className="text-xs text-blue-600">{profileStatus}</p>}
+            </div>
+          </div>
+
           {/* Record Actions */}
           <div className="flex items-center gap-2">
             <input
@@ -196,6 +379,9 @@ export function StudentModal({ student, students, onClose, onOpenAiComment }: Pr
                   </span>
                   <span className={`flex-1 text-sm ${recordTypeStyle[record.type].text}`}>{record.note || "(无备注)"}</span>
                   <span className="text-xs text-gray-400">{record.date}</span>
+                  <button onClick={() => deleteRecord(record.id)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-white/70 rounded-lg transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -264,20 +450,6 @@ export function StudentModal({ student, students, onClose, onOpenAiComment }: Pr
             </div>
           </div>
 
-          {/* Tags */}
-          <div className="border-t border-gray-100 pt-5">
-            <h4 className="text-gray-700 mb-3" style={{ fontSize: "0.9375rem" }}>学生标签</h4>
-            <div className="flex flex-wrap gap-2">
-              {student.academicTags.length > 0 ? student.academicTags.map(tag => {
-                const isStrong = tag.endsWith("强");
-                return (
-                  <span key={tag} className={`px-2.5 py-1 rounded-full text-sm border ${isStrong ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-500 border-red-100"}`} style={{ fontWeight: 600 }}>
-                    {tag}
-                  </span>
-                );
-              }) : <span className="text-sm text-gray-400">暂无标签</span>}
-            </div>
-          </div>
         </div>
       </div>
     </div>

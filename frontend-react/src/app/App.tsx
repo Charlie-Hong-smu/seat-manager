@@ -26,7 +26,7 @@ import { saveGradeExamRecord, saveLegacySnapshot } from "./state/legacyWriteAdap
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
-import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord } from "./state/types";
+import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, StudentId, StudentRecord } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
@@ -133,6 +133,36 @@ export default function App() {
     const student = createStudent({ name, gender, alias });
     setStudents(prev => [...prev, student]);
     commitSeatOrder(placeStudentInFirstEmptySeat(seatOrder, student.id, students.length + 1));
+  }
+
+  function handleUpdateStudent(nextStudent: AppStudent) {
+    setStudents(prev => prev.map(student => (student.id === nextStudent.id ? nextStudent : student)));
+    setSelectedStudent(nextStudent);
+  }
+
+  function handleApplyStudentRecord(studentId: StudentId, record: StudentRecord, syncIds: StudentId[]) {
+    const syncSet = new Set(syncIds.filter(id => id !== studentId));
+    setStudents(prev => prev.map(student => {
+      if (student.id === studentId) {
+        return { ...student, records: [record, ...student.records] };
+      }
+      if (syncSet.has(student.id)) {
+        return {
+          ...student,
+          records: [{ ...record, id: `${record.id}-${student.id}` }, ...student.records],
+        };
+      }
+      return student;
+    }));
+    setSelectedStudent(prev => (
+      prev?.id === studentId ? { ...prev, records: [record, ...prev.records] } : prev
+    ));
+  }
+
+  function handleDeleteStudent(studentId: StudentId) {
+    setStudents(prev => prev.filter(student => student.id !== studentId));
+    commitSeatOrder(seatOrder.map(id => (id === studentId ? null : id)));
+    setSelectedStudent(null);
   }
 
   function saveCurrentLegacySnapshot() {
@@ -273,6 +303,9 @@ export default function App() {
               student={selectedStudent}
               students={students}
               onClose={() => setSelectedStudent(null)}
+              onUpdateStudent={handleUpdateStudent}
+              onApplyRecord={handleApplyStudentRecord}
+              onDeleteStudent={handleDeleteStudent}
             />
           )}
 

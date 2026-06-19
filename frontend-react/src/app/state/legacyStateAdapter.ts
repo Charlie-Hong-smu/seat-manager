@@ -1,4 +1,5 @@
 import { EXAMS, INITIAL_SEATS, SAMPLE_RECORDS, STUDENTS } from "../components/mockData";
+import { getTagLabels, isAcademicTagLabel } from "./tagCatalog";
 import type {
   AppStudent,
   Gender,
@@ -14,42 +15,6 @@ import type {
 
 const COLS = 8;
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
-
-const TAG_LABELS: Record<string, string> = {
-  cn_strong: "语文强",
-  cn_mid: "语文中",
-  cn_weak: "语文弱",
-  math_strong: "数学强",
-  math_mid: "数学中",
-  math_weak: "数学弱",
-  en_strong: "英语强",
-  en_mid: "英语中",
-  en_weak: "英语弱",
-  physics_strong: "物理强",
-  physics_mid: "物理中",
-  physics_weak: "物理弱",
-  chemistry_strong: "化学强",
-  chemistry_mid: "化学中",
-  chemistry_weak: "化学弱",
-  geo_strong: "地理强",
-  geo_mid: "地理中",
-  geo_weak: "地理弱",
-  history_strong: "历史强",
-  history_mid: "历史中",
-  history_weak: "历史弱",
-  politics_strong: "政治强",
-  politics_mid: "政治中",
-  politics_weak: "政治弱",
-  biology_strong: "生物强",
-  biology_mid: "生物中",
-  biology_weak: "生物弱",
-  talkative: "爱讲话",
-  quiet: "沉默",
-  distractible: "容易分心",
-  focused: "专注",
-  leader: "主动",
-  supporter: "配合",
-};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -99,14 +64,6 @@ function normalizeName(name: unknown): string {
     .replace(/[()（）][^()（）]*[()（）]/g, "")
     .replace(/(同学|学生)$/g, "")
     .replace(/\s+/g, "");
-}
-
-function getTagLabels(ids: string[]): string[] {
-  return ids.map(id => TAG_LABELS[id] || id).filter(Boolean);
-}
-
-function isAcademicTag(label: string): boolean {
-  return /^(语文|数学|英语|物理|化学|地理|历史|政治|生物)(强|中|弱)$/.test(label);
 }
 
 function normalizeRecord(value: unknown, index: number): StudentRecord | null {
@@ -267,8 +224,8 @@ function normalizeStudent(value: unknown, index: number): AppStudent | null {
     name,
     gender: normalizeGender(value.gender),
     aliases: toStringArray(value.aliases),
-    tags: allLabels.filter(label => !isAcademicTag(label)),
-    academicTags: allLabels.filter(isAcademicTag),
+    tags: allLabels.filter(label => !isAcademicTagLabel(label)),
+    academicTags: allLabels.filter(isAcademicTagLabel),
     manualTagIds,
     autoTagIds,
     records: toUnknownArray(value.records).map(normalizeRecord).filter((item): item is StudentRecord => Boolean(item)),
