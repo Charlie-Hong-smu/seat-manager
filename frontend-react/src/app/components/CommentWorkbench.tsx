@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Play, Pause, RotateCcw, Copy, Download, Search, ChevronRight, Sparkles, TrendingUp, TrendingDown, Save, Plus } from "lucide-react";
+import { X, Play, Pause, RotateCcw, Copy, Download, Search, Sparkles, TrendingUp, TrendingDown, Save, Plus, ChevronUp, Clock3, AlertCircle, CheckCircle2 } from "lucide-react";
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
@@ -684,6 +684,22 @@ export function CommentWorkbench({ students, onClose }: Props) {
     ? `生成选中 ${selectedBatchCount}`
     : "批量生成";
   const batchButtonAction = batchRunning ? pauseBatch : resumableCount ? resumeBatch : startBatch;
+  const selectedCount = selectedSummary.criteriaSummary.reduce((total, item) => total + item.values.length, 0) + selectedSummary.customOptions.length;
+  const selectedTags = selectedStudent ? [...selectedStudent.academicTags, ...selectedStudent.tags] : [];
+  const selectedInitial = selectedStudent?.name.slice(0, 1) || "";
+
+  function getCommentStatus(state: CommentState) {
+    if (state.failed) {
+      return { label: "失败待重试", badge: "bg-red-50 text-red-500 border-red-100", icon: AlertCircle };
+    }
+    if (state.generated) {
+      return { label: "已生成", badge: "bg-emerald-50 text-emerald-600 border-emerald-100", icon: CheckCircle2 };
+    }
+    if (state.needsInfo) {
+      return { label: "需补充", badge: "bg-amber-50 text-amber-600 border-amber-100", icon: AlertCircle };
+    }
+    return { label: "待生成", badge: "bg-blue-50 text-blue-600 border-blue-100", icon: Clock3 };
+  }
 
   if (!selectedStudent || !selectedComment) {
     return (
@@ -700,169 +716,136 @@ export function CommentWorkbench({ students, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between gap-4">
-        <div>
-          <div className="text-xs text-gray-400 mb-0.5" style={{ fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>全班评语管理</div>
-          <h2 className="text-gray-900">评语工作台</h2>
-        </div>
-
-        {/* Progress metrics */}
-        <div className="flex items-center gap-5">
-          {[
-            { label: "学生", value: students.length, color: "text-gray-700" },
-            { label: "已生成", value: generatedCount, color: "text-emerald-600" },
-            { label: "待生成", value: pendingCount, color: "text-blue-600" },
-            { label: "需补充", value: needsInfoCount, color: "text-amber-600" },
-          ].map(m => (
-            <div key={m.label} className="text-center">
-              <div className={`text-lg ${m.color}`} style={{ fontWeight: 800, lineHeight: 1 }}>{m.value}</div>
-              <div className="text-xs text-gray-400 mt-0.5">{m.label}</div>
-            </div>
-          ))}
-        </div>
-
-        <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors ml-auto">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Toolbar */}
-      <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3 flex-wrap">
-        <button
-          onClick={batchButtonAction}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm transition-colors ${batchRunning ? "bg-gray-200 text-gray-700 hover:bg-gray-300" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-          style={{ fontWeight: 600 }}
-        >
-          {batchRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-          {batchButtonLabel}
-        </button>
-        <button
-          onClick={() => {
-            setComments(buildInitialComments(students));
-            clearBatchState();
-            setAiStatus("已重置工作台状态。");
-          }}
-          className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
-          style={{ fontWeight: 600 }}
-        >
-          <RotateCcw className="w-3.5 h-3.5" />重置
-        </button>
-
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            value={filterSearch}
-            onChange={e => setFilterSearch(e.target.value)}
-            placeholder="搜索学生"
-            className="pl-8 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 w-36"
-          />
-        </div>
-
-        <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
-          <input type="checkbox" checked={filterUngenerated} onChange={e => setFilterUngenerated(e.target.checked)} className="accent-blue-600" />
-          只看未生成
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
-          <input type="checkbox" checked={filterNeedsInfo} onChange={e => setFilterNeedsInfo(e.target.checked)} className="accent-blue-600" />
-          只看需补充
-        </label>
-
-        {!hasAuth && (
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#f8fafc] text-gray-900">
+      <div className="shrink-0 border-b border-gray-100 bg-white/95 px-5 py-3">
+        <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <input
-              type="password"
-              value={accessCode}
-              onChange={event => setAccessCode(event.target.value)}
-              placeholder="AI 授权码"
-              className="px-3 py-2 text-sm bg-violet-50 border border-violet-100 rounded-xl outline-none focus:border-violet-300 w-32"
-            />
-            <label className="flex items-center gap-1 text-xs text-violet-700 cursor-pointer">
-              <input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-violet-600" />
-              记住
-            </label>
-          </div>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={copyAll} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors" style={{ fontWeight: 600 }}>
-            <Copy className="w-3.5 h-3.5" />复制全部
-          </button>
-          <button onClick={exportCommentsCsv} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors" style={{ fontWeight: 600 }}>
-            <Download className="w-3.5 h-3.5" />导出评语
-          </button>
-        </div>
-
-        <p className="w-full text-xs text-blue-600">{aiStatus}</p>
-
-        {selectedBatchCount > 0 && (
-          <div className="w-full flex items-center gap-2 text-xs text-blue-700">
-            <span className="px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100" style={{ fontWeight: 700 }}>
-              已选择 {selectedBatchCount} 人
+            <h2 className="text-base text-gray-900" style={{ fontWeight: 800 }}>评语工作台</h2>
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-400" style={{ fontWeight: 700 }}>
+              全班评语管理
             </span>
-            <button onClick={() => setSelectedBatchIds(new Set())} className="text-gray-400 hover:text-gray-600">
-              清空选择
+          </div>
+
+          <div className="flex items-center gap-2 rounded-2xl bg-gray-50 px-3 py-1.5">
+            {[
+              { label: "共", value: students.length, color: "text-gray-700" },
+              { label: "已生成", value: generatedCount, color: "text-emerald-600" },
+              { label: "待生成", value: pendingCount, color: "text-blue-600" },
+              { label: "需补充", value: needsInfoCount, color: "text-amber-600" },
+            ].map(m => (
+              <div key={m.label} className="flex min-w-[62px] items-center justify-center gap-1 text-xs">
+                <span className={`${m.color} text-sm`} style={{ fontWeight: 800 }}>{m.value}</span>
+                <span className="text-gray-400" style={{ fontWeight: 700 }}>{m.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={batchButtonAction}
+              className={`flex h-9 items-center gap-1.5 rounded-xl px-4 text-sm transition-colors ${batchRunning ? "bg-gray-200 text-gray-700 hover:bg-gray-300" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+              style={{ fontWeight: 800 }}
+            >
+              {batchRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              {batchButtonLabel}
+            </button>
+            <button onClick={exportCommentsCsv} className="flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-600 hover:bg-gray-50" style={{ fontWeight: 700 }}>
+              <Download className="h-3.5 w-3.5" />导出评语
+            </button>
+            <button
+              onClick={() => {
+                setComments(buildInitialComments(students));
+                clearBatchState();
+                setAiStatus("已重置工作台状态。");
+              }}
+              className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              title="重置"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+            <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <X className="h-5 w-5" />
             </button>
           </div>
-        )}
+        </div>
 
-        {/* Progress bar */}
-        {(batchRunning || batchProgress > 0 || resumableCount > 0) && (
-          <div className="w-full flex items-center gap-3 pt-1">
-            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${batchProgress}%` }} />
+        {(batchRunning || batchProgress > 0 || resumableCount > 0 || selectedBatchCount > 0) && (
+          <div className="mt-2 flex items-center gap-3">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
+              <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${batchProgress}%` }} />
             </div>
-            <span className="text-xs text-gray-500 shrink-0">
+            <span className="text-xs text-gray-500">
+              {selectedBatchCount > 0 ? `已选择 ${selectedBatchCount} 人 · ` : ""}
               {batchProgress}% · 剩余 {batchState.queue.length} · 失败 {batchState.failed.length}
             </span>
+            {selectedBatchCount > 0 && (
+              <button onClick={() => setSelectedBatchIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600">清空</button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Main Layout */}
-      <div className="flex-1 min-h-0 flex gap-0">
-        {/* Left: Student Table */}
-        <div className="w-[55%] flex flex-col min-h-0 border-r border-gray-100">
-          <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white">
-            <h3 className="text-gray-700" style={{ fontSize: "0.875rem" }}>学生评语表格</h3>
-            <span className="text-xs text-gray-400">{filteredStudents.length} 人</span>
+      <div className="flex min-h-0 flex-1 gap-5 p-4">
+        <aside className="flex w-[256px] shrink-0 flex-col gap-3">
+          <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm shadow-gray-200/40">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+              <input
+                value={filterSearch}
+                onChange={e => setFilterSearch(e.target.value)}
+                placeholder="搜索学生姓名"
+                className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none transition-colors focus:border-blue-300 focus:bg-white"
+              />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setFilterUngenerated(value => !value)}
+                className={`flex h-9 items-center justify-center gap-1 rounded-xl border text-xs ${filterUngenerated ? "border-blue-100 bg-blue-50 text-blue-600" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+                style={{ fontWeight: 700 }}
+              >
+                <Clock3 className="h-3.5 w-3.5" />待生成
+              </button>
+              <button
+                onClick={() => setFilterNeedsInfo(value => !value)}
+                className={`flex h-9 items-center justify-center gap-1 rounded-xl border text-xs ${filterNeedsInfo ? "border-amber-100 bg-amber-50 text-amber-600" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+                style={{ fontWeight: 700 }}
+              >
+                <AlertCircle className="h-3.5 w-3.5" />需补充
+              </button>
+            </div>
           </div>
 
-          {/* Table header */}
-          <div className="shrink-0 grid grid-cols-12 gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-400" style={{ fontWeight: 700 }}>
-            <button
-              type="button"
-              onClick={toggleFilteredBatchSelection}
-              className="col-span-1 flex items-center gap-1 text-left hover:text-blue-600"
-              title={allFilteredSelected ? "取消选择当前筛选学生" : "选择当前筛选学生"}
-            >
-              <input type="checkbox" checked={allFilteredSelected} readOnly className="accent-blue-600 pointer-events-none" />
-              选择
-            </button>
-            <div className="col-span-2">学生</div>
-            <div className="col-span-2">标签</div>
-            <div className="col-span-3">成绩摘要</div>
-            <div className="col-span-1">完整度</div>
-            <div className="col-span-2">状态</div>
-            <div className="col-span-1"></div>
-          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm shadow-gray-200/40">
+            <div className="flex items-center justify-between border-b border-gray-100 px-3 py-3">
+              <button onClick={toggleFilteredBatchSelection} className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600" style={{ fontWeight: 800 }}>
+                <input type="checkbox" checked={allFilteredSelected} readOnly className="pointer-events-none accent-blue-600" />
+                学生列表
+              </button>
+              <span className="text-xs text-gray-400">{filteredStudents.length} 人</span>
+            </div>
 
-          {/* Table rows */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {filteredStudents.map(s => {
-              const state = comments.find(c => c.studentId === s.id)!;
-              const isSelected = s.id === selectedId;
-              const isBatchSelected = selectedBatchIds.has(s.id);
-              const integrity = s.academicTags.length > 0 ? 40 : 20;
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {filteredStudents.map(s => {
+                const state = comments.find(c => c.studentId === s.id)!;
+                const isSelected = s.id === selectedId;
+                const isBatchSelected = selectedBatchIds.has(s.id);
+                const status = getCommentStatus(state);
+                const StatusIcon = status.icon;
+                const tags = tagSummary(s);
 
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedId(s.id)}
-                  className={`w-full grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-gray-50 text-left hover:bg-blue-50/40 transition-colors items-center ${isSelected ? "bg-blue-50 border-b-blue-100" : ""}`}
-                >
-                  <div className="col-span-1">
+                return (
+                  <div
+                    key={s.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedId(s.id)}
+                    onKeyDown={event => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        setSelectedId(s.id);
+                      }
+                    }}
+                    className={`grid cursor-pointer grid-cols-[24px_36px_1fr_auto] items-center gap-2 border-b border-gray-50 px-3 py-2.5 text-left transition-colors hover:bg-blue-50/50 ${isSelected ? "bg-blue-50" : ""}`}
+                  >
                     <input
                       type="checkbox"
                       checked={isBatchSelected}
@@ -871,142 +854,115 @@ export function CommentWorkbench({ students, onClose }: Props) {
                       className="accent-blue-600"
                       aria-label={`选择 ${s.name} 用于批量生成`}
                     />
+                    <div className={`grid h-8 w-8 place-items-center rounded-full text-sm ${isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500"}`} style={{ fontWeight: 800 }}>
+                      {s.name.slice(0, 1)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-gray-800" style={{ fontWeight: 800 }}>{s.name}</div>
+                      <div className="mt-0.5 truncate text-xs text-gray-400">{tags}</div>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${status.badge}`} style={{ fontWeight: 800 }}>
+                      <StatusIcon className="h-3 w-3" />
+                      {status.label}
+                    </span>
                   </div>
-                  <div className="col-span-2 text-sm text-gray-800 truncate" style={{ fontWeight: 600 }}>{s.name}</div>
-                  <div className="col-span-2 text-xs text-gray-500 truncate">{tagSummary(s)}</div>
-                  <div className="col-span-3 text-xs text-gray-400 truncate">{scoreSummary(s)}</div>
-                  <div className="col-span-1">
-                    <div className="flex items-center gap-1">
-                      <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${integrity >= 40 ? "bg-emerald-400" : "bg-amber-400"}`} style={{ width: `${integrity}%` }} />
-                      </div>
-                      <span className="text-xs text-gray-400">{integrity}%</span>
+                );
+              })}
+            </div>
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <div className="space-y-4">
+            <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm shadow-gray-200/40">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white" style={{ fontWeight: 900 }}>
+                    {selectedInitial}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base text-gray-900" style={{ fontWeight: 900 }}>{selectedStudent.name}</h3>
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${getCommentStatus(selectedComment).badge}`} style={{ fontWeight: 800 }}>
+                        {getCommentStatus(selectedComment).label}
+                      </span>
+                      {selectedStudent.gender && <span className="text-xs text-gray-400">{selectedStudent.gender}</span>}
                     </div>
                   </div>
-                  <div className="col-span-2">
-                    {state.failed ? (
-                      <span className="text-xs px-2 py-0.5 bg-red-50 border border-red-100 text-red-500 rounded-full" style={{ fontWeight: 600 }}>失败待重试</span>
-                    ) : state.needsInfo ? (
-                      <span className="text-xs px-2 py-0.5 bg-amber-50 border border-amber-100 text-amber-600 rounded-full" style={{ fontWeight: 600 }}>需补充</span>
-                    ) : state.generated ? (
-                      <span className="text-xs px-2 py-0.5 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-full" style={{ fontWeight: 600 }}>已生成</span>
-                    ) : (
-                      <span className="text-xs px-2 py-0.5 bg-blue-50 border border-blue-100 text-blue-600 rounded-full" style={{ fontWeight: 600 }}>可生成</span>
-                    )}
-                  </div>
-                  <div className="col-span-1 text-xs text-gray-400">{LENGTH_MODES.find(m => m.value === state.lengthMode)?.label?.split("～")[0]}～字</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right: Detail Panel */}
-        <div className="flex-1 flex flex-col min-h-0 bg-white">
-          <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-100">
-            <div>
-              <div className="text-xs text-gray-400" style={{ fontWeight: 600 }}>当前学生</div>
-              <h3 className="text-gray-800" style={{ fontSize: "0.9375rem" }}>
-                {selectedStudent.name}
-                <span className="text-gray-400 ml-2" style={{ fontWeight: 400, fontSize: "0.8125rem" }}>· 评语资料</span>
-              </h3>
-              <div className="text-xs mt-0.5">
-                {selectedComment.generated
-                  ? <span className="text-emerald-600">已生成</span>
-                  : selectedComment.needsInfo
-                  ? <span className="text-amber-600">需要补充信息</span>
-                  : <span className="text-blue-600">可生成 · 尚未生成</span>}
+                </div>
+                {selectedTags[0] && (
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-600" style={{ fontWeight: 800 }}>
+                    {selectedTags[0]}
+                  </span>
+                )}
               </div>
-            </div>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors" style={{ fontWeight: 600 }}>
-              查看详情 <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0 p-5 space-y-4">
-            {/* Score summary */}
-            {latestExam && (
-              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
-                <div className="text-xs text-gray-500 mb-2" style={{ fontWeight: 700 }}>成绩摘要</div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <span className="text-gray-400">最近考试</span>
-                    <span className="text-gray-700" style={{ fontWeight: 600 }}>{latestExam.name} · {latestExam.date || "未填写日期"}</span>
+              {latestExam && (
+                <div className="mt-5 grid grid-cols-4 gap-3">
+                  <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                    <div className="text-xs text-gray-400" style={{ fontWeight: 700 }}>最近考试</div>
+                    <div className="mt-1 text-sm text-gray-800" style={{ fontWeight: 900 }}>{latestExam.name}</div>
+                  </div>
+                  <div className="rounded-2xl bg-blue-50 px-4 py-3">
+                    <div className="text-xs text-blue-400" style={{ fontWeight: 700 }}>总分</div>
+                    <div className="mt-1 text-lg text-blue-700" style={{ fontWeight: 900 }}>{latestExam.total ?? "—"}</div>
+                  </div>
+                  <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                    <div className="text-xs text-gray-400" style={{ fontWeight: 700 }}>班级排名</div>
+                    <div className="mt-1 text-lg text-gray-900" style={{ fontWeight: 900 }}>{latestExam.rank ? `第 ${latestExam.rank}` : "—"}</div>
+                  </div>
+                  <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                    <div className="text-xs text-gray-400" style={{ fontWeight: 700 }}>优势 / 薄弱</div>
+                    <div className="mt-1 flex items-center gap-2 text-xs">
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                      <span className="text-emerald-700" style={{ fontWeight: 800 }}>{getBestSubject(latestExam.scores)}</span>
+                      <TrendingDown className="h-3.5 w-3.5 text-red-400" />
+                      <span className="text-red-500" style={{ fontWeight: 800 }}>{getWeakSubject(latestExam.scores)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {selectedProfile && (
+              <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm shadow-gray-200/40">
+                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>评语标准选择</h3>
+                    <span className="text-xs text-gray-400">已选 {selectedCount} 项</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-400">总分</span>
-                    <span className="text-blue-700" style={{ fontWeight: 800 }}>{latestExam.total ?? "—"}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <span className="text-gray-400">排名</span>
-                    <span style={{ fontWeight: 600 }}>{latestExam.rank ? `第 ${latestExam.rank} 名` : "暂无排名"}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                    <span className="text-emerald-700" style={{ fontWeight: 600 }}>
-                      {getBestSubject(latestExam.scores)}
-                    </span>
-                    <TrendingDown className="w-3.5 h-3.5 text-red-400 ml-1" />
-                    <span className="text-red-500" style={{ fontWeight: 600 }}>
-                      {getWeakSubject(latestExam.scores)}
-                    </span>
+                    <button
+                      onClick={addCriterion}
+                      className="flex h-8 items-center gap-1.5 rounded-xl bg-blue-50 px-3 text-xs text-blue-600 hover:bg-blue-100"
+                      style={{ fontWeight: 800 }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />新增标准
+                    </button>
+                    <ChevronUp className="h-4 w-4 text-gray-300" />
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Tags */}
-            <div>
-              <div className="text-xs text-gray-500 mb-2" style={{ fontWeight: 700 }}>已有学生标签</div>
-              <div className="flex flex-wrap gap-1.5">
-                {[...selectedStudent.academicTags, ...selectedStudent.tags].length > 0 ? [...selectedStudent.academicTags, ...selectedStudent.tags].map(tag => {
-                  const isStrong = tag.endsWith("强");
-                  return (
-                    <span key={tag} className={`text-xs px-2.5 py-1 rounded-full border ${isStrong ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-400 border-red-100"}`} style={{ fontWeight: 600 }}>
-                      {tag}
-                    </span>
-                  );
-                }) : <span className="text-xs text-gray-400">暂无标签</span>}
-              </div>
-            </div>
-
-            {/* Comment rubric */}
-            {selectedProfile && (
-              <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
-                  <div>
-                    <div className="text-xs text-gray-500" style={{ fontWeight: 700 }}>评语标准选择</div>
-                    <div className="text-xs text-gray-400 mt-0.5">
-                      已选 {selectedSummary.criteriaSummary.reduce((total, item) => total + item.values.length, 0) + selectedSummary.customOptions.length} 项
-                    </div>
-                  </div>
-                  <button
-                    onClick={addCriterion}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 border border-blue-100 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors"
-                    style={{ fontWeight: 700 }}
-                  >
-                    <Plus className="w-3.5 h-3.5" />新增标准
-                  </button>
-                </div>
-
-                <div className="p-4 space-y-4">
+                <div className="divide-y divide-gray-50">
                   {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
                     const selected = new Set(selectedProfile.criteriaValues[criterion.id] || []);
                     const customOptions = selectedProfile.customOptions[criterion.id] || [];
                     return (
-                      <div key={criterion.id} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-gray-500" style={{ fontWeight: 700 }}>{criterion.label}</span>
-                          <button onClick={() => clearCriterion(criterion.id)} className="text-xs text-gray-400 hover:text-gray-600">清空</button>
+                      <div key={criterion.id} className="px-4 py-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-sm text-gray-700" style={{ fontWeight: 900 }}>{criterion.label}</span>
+                          {(selected.size > 0 || customOptions.length > 0) && (
+                            <button onClick={() => clearCriterion(criterion.id)} className="text-xs text-gray-300 hover:text-gray-500">清空</button>
+                          )}
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-2">
                           {criterion.options.map(option => {
                             const active = selected.has(option.id);
                             return (
                               <button
                                 key={option.id}
                                 onClick={() => toggleCriterionOption(criterion, option.id)}
-                                className={`px-2.5 py-1.5 rounded-full text-xs border transition-colors ${active ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                                className={`h-9 rounded-full border px-3 text-sm transition-colors ${active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
                                 style={{ fontWeight: 700 }}
                               >
                                 {option.label}
@@ -1017,15 +973,15 @@ export function CommentWorkbench({ students, onClose }: Props) {
                             <button
                               key={option.id}
                               onClick={() => removeStudentCustomOption(criterion.id, option.id)}
-                              className="px-2.5 py-1.5 rounded-full text-xs border bg-emerald-50 border-emerald-100 text-emerald-700"
-                              style={{ fontWeight: 700 }}
+                              className="h-9 rounded-full border border-emerald-100 bg-emerald-50 px-3 text-sm text-emerald-700"
+                              style={{ fontWeight: 800 }}
                             >
                               {option.label}
                             </button>
                           ))}
                           <button
                             onClick={() => addStudentCustomOption(criterion)}
-                            className="px-2.5 py-1.5 rounded-full text-xs border border-gray-200 text-gray-500 bg-white hover:bg-gray-50"
+                            className="h-9 rounded-full border border-dashed border-gray-200 bg-white px-4 text-sm text-gray-400 hover:bg-gray-50"
                             style={{ fontWeight: 700 }}
                           >
                             + 自定义
@@ -1035,93 +991,125 @@ export function CommentWorkbench({ students, onClose }: Props) {
                     );
                   })}
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* Settings */}
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>字数设置</span>
-                <select
-                  value={selectedComment.lengthMode}
-                  onChange={e => updateComment(selectedId, { lengthMode: e.target.value })}
-                  className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none cursor-pointer"
-                >
-                  {LENGTH_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>评语风格</span>
-                <select
-                  value={selectedComment.style}
-                  onChange={e => updateComment(selectedId, { style: e.target.value })}
-                  className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none cursor-pointer"
-                >
-                  {STYLES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </label>
-            </div>
+            <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm shadow-gray-200/40">
+              <h4 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>生成设置</h4>
+              <div className="mt-3 grid grid-cols-2 gap-4">
+                <div>
+                  <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>字数目标</div>
+                  <div className="flex flex-wrap gap-2">
+                    {LENGTH_MODES.map(mode => (
+                      <button
+                        key={mode.value}
+                        onClick={() => updateComment(selectedId, { lengthMode: mode.value })}
+                        className={`h-9 rounded-full border px-3 text-sm ${selectedComment.lengthMode === mode.value ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                        style={{ fontWeight: 800 }}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>评语风格</div>
+                  <div className="flex flex-wrap gap-2">
+                    {STYLES.map(style => (
+                      <button
+                        key={style.value}
+                        onClick={() => updateComment(selectedId, { style: style.value })}
+                        className={`h-9 rounded-full border px-3 text-sm ${selectedComment.style === style.value ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                        style={{ fontWeight: 800 }}
+                      >
+                        {style.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-            {/* Teacher note */}
-            <div>
-              <div className="text-xs text-gray-500 mb-1.5" style={{ fontWeight: 700 }}>老师补充评价</div>
-              <textarea
-                value={teacherNote}
-                onChange={e => setTeacherNote(e.target.value)}
-                rows={3}
-                placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。"
-                className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 resize-none"
-              />
-            </div>
+              {!hasAuth && (
+                <div className="mt-4 flex items-center gap-2 rounded-2xl bg-violet-50 p-3">
+                  <input
+                    type="password"
+                    value={accessCode}
+                    onChange={event => setAccessCode(event.target.value)}
+                    placeholder="AI 授权码"
+                    className="h-9 w-44 rounded-xl border border-violet-100 bg-white px-3 text-sm outline-none focus:border-violet-300"
+                  />
+                  <label className="flex items-center gap-1 text-xs text-violet-700">
+                    <input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-violet-600" />
+                    记住
+                  </label>
+                </div>
+              )}
 
-            {/* Generated result */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="text-xs text-gray-500" style={{ fontWeight: 700 }}>AI 生成结果</div>
+              <div className="mt-4">
+                <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>老师补充说明（可选）</div>
+                <textarea
+                  value={teacherNote}
+                  onChange={e => setTeacherNote(e.target.value)}
+                  rows={3}
+                  placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。"
+                  className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm outline-none focus:border-blue-300 focus:bg-white"
+                />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm shadow-gray-200/40">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>AI 生成评语</h4>
                 <span className="text-xs text-gray-400">{selectedComment.text.length} 字</span>
               </div>
               <textarea
                 value={selectedComment.text}
                 onChange={e => updateComment(selectedId, { text: e.target.value })}
                 rows={7}
-                placeholder="点击「单独生成」后会在这里显示评语，可直接编辑。"
-                className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 resize-none"
+                placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。"
+                className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm outline-none focus:border-blue-300 focus:bg-white"
               />
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 pb-2">
-              <button
-                onClick={generateSingle}
-                disabled={batchRunning}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors disabled:opacity-60"
-                style={{ fontWeight: 600 }}
-              >
-                <Sparkles className="w-4 h-4" />
-                {selectedComment.generated ? "重新生成" : "单独生成"}
-              </button>
-              <button
-                onClick={saveSelectedComment}
-                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
-                style={{ fontWeight: 600 }}
-              >
-                <Save className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => {
-                  if (selectedComment.text) {
-                    navigator.clipboard.writeText(selectedComment.text).catch(() => {});
-                  }
-                }}
-                disabled={!selectedComment.generated}
-                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors disabled:opacity-40"
-                style={{ fontWeight: 600 }}
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-            </div>
+              <p className="mt-2 text-xs text-blue-600">{aiStatus}</p>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={generateSingle}
+                  disabled={batchRunning}
+                  className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                  style={{ fontWeight: 800 }}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {selectedComment.generated ? "重新生成" : "生成评语"}
+                </button>
+                <button onClick={saveSelectedComment} className="grid h-10 w-12 place-items-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200">
+                  <Save className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedComment.text) {
+                      navigator.clipboard.writeText(selectedComment.text).catch(() => {});
+                    }
+                  }}
+                  disabled={!selectedComment.generated}
+                  className="flex h-10 items-center gap-1.5 rounded-xl bg-gray-100 px-4 text-sm text-gray-600 hover:bg-gray-200 disabled:opacity-40"
+                  style={{ fontWeight: 800 }}
+                >
+                  <Copy className="h-4 w-4" />复制
+                </button>
+                <button
+                  onClick={() => {
+                    const currentIndex = filteredStudentIds.indexOf(selectedId);
+                    const nextId = filteredStudentIds[currentIndex + 1] || filteredStudentIds[0];
+                    if (nextId) setSelectedId(nextId);
+                  }}
+                  className="h-10 rounded-xl bg-gray-100 px-4 text-sm text-gray-600 hover:bg-gray-200"
+                  style={{ fontWeight: 800 }}
+                >
+                  下一位 →
+                </button>
+              </div>
+            </section>
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );
