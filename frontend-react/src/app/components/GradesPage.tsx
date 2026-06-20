@@ -19,12 +19,14 @@ import {
 } from "lucide-react";
 
 import { TrendDashboard } from "./TrendDashboard";
-import type { GradeExam, GradeRow } from "../state/types";
+import type { AppStudent, GradeExam, GradeRow } from "../state/types";
 
 const THRESHOLDS = { pass: 60, good: 75, excellent: 90 };
 
 interface GradesPageProps {
   exams: GradeExam[];
+  students: AppStudent[];
+  onSelectStudent: (student: AppStudent) => void;
 }
 
 function getRowTotal(row: GradeRow): number | null {
@@ -81,6 +83,10 @@ function compareValues(a: string | number | null, b: string | number | null, asc
   return asc ? av - bv : bv - av;
 }
 
+function normalizeName(value: string): string {
+  return value.replace(/\s+/g, "").toLocaleLowerCase("zh-Hans-CN");
+}
+
 function StatCard({ icon, label, value, sub, accent }: {
   icon: React.ReactNode;
   label: string;
@@ -118,7 +124,7 @@ function GradeBadge({ label, count, color, total }: { label: string; count: numb
   );
 }
 
-export function GradesPage({ exams }: GradesPageProps) {
+export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps) {
   const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id || "");
   const [selectedSubject, setSelectedSubject] = useState("total");
   const [examOpen, setExamOpen] = useState(false);
@@ -131,6 +137,16 @@ export function GradesPage({ exams }: GradesPageProps) {
   const subjects = selectedExam?.subjects || [];
   const rows = selectedExam?.rows || [];
   const metricKey = selectedSubject === "total" || subjects.includes(selectedSubject) ? selectedSubject : "total";
+  const studentById = new Map(students.map(student => [student.id, student]));
+  const studentByName = new Map<string, AppStudent>();
+  students.forEach(student => {
+    [student.name, ...student.aliases].forEach(name => {
+      const normalized = normalizeName(name);
+      if (normalized && !studentByName.has(normalized)) {
+        studentByName.set(normalized, student);
+      }
+    });
+  });
 
   useEffect(() => {
     if (exams.length && !exams.some(exam => exam.id === selectedExamId)) {
@@ -348,6 +364,7 @@ export function GradesPage({ exams }: GradesPageProps) {
                   </thead>
                   <tbody>
                     {filtered.map((row, index) => {
+                      const matchedStudent = (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null;
                       const rank = [...rowsWithMetrics].sort((a, b) => compareValues(a.totalScore, b.totalScore, false)).findIndex(item => item.id === row.id) + 1;
                       const grade = getGradeLabel(row.averageScore);
                       const gradeColor = {
@@ -358,7 +375,12 @@ export function GradesPage({ exams }: GradesPageProps) {
                         缺考: "text-gray-500 bg-gray-50 border border-gray-100",
                       }[grade];
                       return (
-                        <tr key={row.id} className="border-t border-gray-50 hover:bg-gray-50/60 transition-colors">
+                        <tr
+                          key={row.id}
+                          onClick={() => matchedStudent && onSelectStudent(matchedStudent)}
+                          title={matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
+                          className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${matchedStudent ? "cursor-pointer" : ""}`}
+                        >
                           <td className="px-6 py-3 text-gray-300 tabular-nums">{row.rankClass || rank || index + 1}</td>
                           <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{row.name}</td>
                           {subjects.map(subject => {

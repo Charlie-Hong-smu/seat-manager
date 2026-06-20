@@ -2,10 +2,12 @@ import { EXAMS, INITIAL_SEATS, SAMPLE_RECORDS, STUDENTS } from "../components/mo
 import { getTagLabels, isAcademicTagLabel } from "./tagCatalog";
 import type {
   AppStudent,
+  ComplementRuleId,
   Gender,
   GradeExam,
   GradeRow,
   GradeScoreCell,
+  SeatSettings,
   RecordType,
   SeatManagerState,
   StudentExamSummary,
@@ -15,6 +17,7 @@ import type {
 
 const COLS = 8;
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
+const COMPLEMENT_RULE_IDS: ComplementRuleId[] = ["talk_quiet", "focus_balance", "role_balance", "cn_balance", "math_balance", "en_balance"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -200,6 +203,65 @@ function normalizeLockedSeats(value: unknown, seatCount: number): number[] {
     }
   });
   return [...unique];
+}
+
+function normalizePairRules(value: unknown, studentIds: Set<StudentId>): Array<{ a: StudentId; b: StudentId }> {
+  return toUnknownArray(value).reduce<Array<{ a: StudentId; b: StudentId }>>((pairs, item) => {
+    if (!isRecord(item)) {
+      return pairs;
+    }
+    const a = toStudentId(item.a);
+    const b = toStudentId(item.b);
+    if (!a || !b || a === b || !studentIds.has(a) || !studentIds.has(b)) {
+      return pairs;
+    }
+    const exists = pairs.some(pair => (pair.a === a && pair.b === b) || (pair.a === b && pair.b === a));
+    if (!exists) {
+      pairs.push({ a, b });
+    }
+    return pairs;
+  }, []);
+}
+
+export function createDefaultSeatSettings(): SeatSettings {
+  return {
+    pairByGender: false,
+    keepLockedEmpty: true,
+    complementRuleIds: [],
+    constraints: {
+      lockedDeskmatePairs: [],
+      noDeskmatePairs: [],
+      frontRowStudentIds: [],
+      frontRows: 2,
+      maxRetries: 200,
+    },
+  };
+}
+
+function normalizeSeatSettings(settings: Record<string, unknown>, students: AppStudent[]): SeatSettings {
+  const defaults = createDefaultSeatSettings();
+  const studentIds = new Set(students.map(student => student.id));
+  const rawConstraints = isRecord(settings.constraints) ? settings.constraints : {};
+  const frontRows = Math.max(1, Math.min(5, Math.trunc(toNumber(rawConstraints.frontRows) ?? defaults.constraints.frontRows)));
+  const maxRetries = Math.max(50, Math.min(1000, Math.trunc(toNumber(rawConstraints.maxRetries) ?? defaults.constraints.maxRetries)));
+  const complementIds = toStringArray(settings.complementRuleIds).filter((id): id is ComplementRuleId =>
+    (COMPLEMENT_RULE_IDS as string[]).includes(id)
+  );
+
+  return {
+    pairByGender: Boolean(settings.pairByGender),
+    keepLockedEmpty: settings.keepLockedEmpty === undefined ? true : Boolean(settings.keepLockedEmpty),
+    complementRuleIds: complementIds,
+    constraints: {
+      lockedDeskmatePairs: normalizePairRules(rawConstraints.lockedDeskmatePairs, studentIds),
+      noDeskmatePairs: normalizePairRules(rawConstraints.noDeskmatePairs, studentIds),
+      frontRowStudentIds: toStringArray(rawConstraints.frontRowStudentIds).filter((id, index, list) =>
+        studentIds.has(id) && list.indexOf(id) === index
+      ),
+      frontRows,
+      maxRetries,
+    },
+  };
 }
 
 function getCommentRubricTagLabels(rawRubric: unknown): Record<string, string> {
@@ -409,6 +471,7 @@ export function createMockSeatManagerState(): SeatManagerState {
     students,
     seatOrder,
     lockedSeats: [],
+    seatSettings: createDefaultSeatSettings(),
     savedExams: EXAMS,
     exams: EXAMS,
     manualTags: [],
@@ -442,6 +505,7 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     students,
     seatOrder,
     lockedSeats: normalizeLockedSeats(raw.lockedSeats, seatOrder.length),
+    seatSettings: normalizeSeatSettings(settings, students),
     savedExams: toUnknownArray(raw.savedExams),
     exams: toUnknownArray(raw.exams),
     manualTags: toUnknownArray(raw.manualTags),

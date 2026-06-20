@@ -12,13 +12,14 @@ import { TopHeader } from "./components/TopHeader";
 import { CloudSyncModal } from "./components/CloudSyncModal";
 import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
+import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
-  shuffleUnlockedSeats,
   swapSeatOrder,
   type SeatOrder,
 } from "./state/seatActions";
+import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated } from "./state/authStorage";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { createStudent } from "./state/studentActions";
@@ -26,7 +27,7 @@ import { saveGradeExamRecord, saveLegacySnapshot } from "./state/legacyWriteAdap
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
-import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, StudentId, StudentRecord } from "./state/types";
+import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, SeatSettings, StudentId, StudentRecord } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
@@ -48,6 +49,8 @@ export default function App() {
   const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => initialState.seatOrder);
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
   const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(initialState.lockedSeats));
+  const [seatSettings, setSeatSettings] = useState<SeatSettings>(() => initialState.seatSettings);
+  const [shufflePreview, setShufflePreview] = useState<ShuffleCandidate | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [showCloudSync, setShowCloudSync] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -68,8 +71,9 @@ export default function App() {
       students,
       seatOrder,
       lockedSeats: [...lockedSeats],
+      seatSettings,
     });
-  }, [students, seatOrder, lockedSeats, loggedIn]);
+  }, [students, seatOrder, lockedSeats, seatSettings, loggedIn]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -112,7 +116,33 @@ export default function App() {
   }
 
   function handleRandomizeSeats() {
-    commitSeatOrder(shuffleUnlockedSeats(seatOrder, lockedSeats));
+    const candidate = buildBestShuffleCandidate(students, seatOrder, lockedSeats, seatSettings);
+    if (candidate) {
+      setShufflePreview(candidate);
+    }
+  }
+
+  function handleShufflePreviewOrderChange(order: SeatOrder) {
+    setShufflePreview({
+      order,
+      evaluation: evaluateSeatOrder(students, order, seatSettings),
+    });
+  }
+
+  function handleApplyShufflePreview() {
+    if (!shufflePreview) {
+      return;
+    }
+    commitSeatOrder(shufflePreview.order);
+    setShufflePreview(null);
+  }
+
+  function updateSeatSettings(updater: (current: SeatSettings) => SeatSettings) {
+    setSeatSettings(current => {
+      const next = updater(current);
+      setAppState(prev => ({ ...prev, seatSettings: next }));
+      return next;
+    });
   }
 
   function handleOrderSeatsByList() {
@@ -162,6 +192,15 @@ export default function App() {
   function handleDeleteStudent(studentId: StudentId) {
     setStudents(prev => prev.filter(student => student.id !== studentId));
     commitSeatOrder(seatOrder.map(id => (id === studentId ? null : id)));
+    updateSeatSettings(current => ({
+      ...current,
+      constraints: {
+        ...current.constraints,
+        lockedDeskmatePairs: current.constraints.lockedDeskmatePairs.filter(pair => pair.a !== studentId && pair.b !== studentId),
+        noDeskmatePairs: current.constraints.noDeskmatePairs.filter(pair => pair.a !== studentId && pair.b !== studentId),
+        frontRowStudentIds: current.constraints.frontRowStudentIds.filter(id => id !== studentId),
+      },
+    }));
     setSelectedStudent(null);
   }
 
@@ -170,6 +209,7 @@ export default function App() {
       students,
       seatOrder,
       lockedSeats: [...lockedSeats],
+      seatSettings,
     });
   }
 
@@ -179,6 +219,7 @@ export default function App() {
     setStudents(next.students);
     setSeatOrder(next.seatOrder);
     setLockedSeats(new Set(next.lockedSeats));
+    setSeatSettings(next.seatSettings);
     setSeatHistory([]);
     setSelectedStudent(null);
   }
@@ -189,6 +230,7 @@ export default function App() {
       students,
       seatOrder,
       lockedSeats: [...lockedSeats],
+      seatSettings,
     });
     if (!next) {
       return null;
@@ -197,6 +239,7 @@ export default function App() {
     setStudents(next.students);
     setSeatOrder(next.seatOrder);
     setLockedSeats(new Set(next.lockedSeats));
+    setSeatSettings(next.seatSettings);
     setSeatHistory([]);
     setMainView("grades");
     return next.gradeExams.find(exam => exam.id === record.id) || next.gradeExams[0] || null;
@@ -209,6 +252,7 @@ export default function App() {
     setStudents(result.state.students);
     setSeatOrder(result.state.seatOrder);
     setLockedSeats(new Set(result.state.lockedSeats));
+    setSeatSettings(result.state.seatSettings);
     setSeatHistory([]);
     setSelectedStudent(null);
     return result;
@@ -271,11 +315,13 @@ export default function App() {
           students={students}
           seatOrder={seatOrder}
           gradeExams={appState.gradeExams}
+          seatSettings={seatSettings}
           canUndoSeatOrder={seatHistory.length > 0}
           onRandomizeSeats={handleRandomizeSeats}
           onOrderSeatsByList={handleOrderSeatsByList}
           onUndoSeatOrder={handleUndoSeatOrder}
           onAddStudent={handleAddStudent}
+          onUpdateSeatSettings={updateSeatSettings}
           onSaveScoreImport={handleSaveScoreImport}
           onImportRoster={handleImportRoster}
           onBeforeBackupExport={saveCurrentLegacySnapshot}
@@ -311,6 +357,19 @@ export default function App() {
 
           {showCommentWorkbench && (
             <CommentWorkbench students={students} onClose={() => setShowCommentWorkbench(false)} />
+          )}
+
+          {shufflePreview && (
+            <SeatShufflePreview
+              students={students}
+              currentOrder={seatOrder}
+              candidate={shufflePreview}
+              seatSettings={seatSettings}
+              onOrderChange={handleShufflePreviewOrderChange}
+              onRegenerate={handleRandomizeSeats}
+              onApply={handleApplyShufflePreview}
+              onClose={() => setShufflePreview(null)}
+            />
           )}
 
           {showCloudSync && (
@@ -353,7 +412,11 @@ export default function App() {
 
       {mainView === "grades" && (
         <div className="h-full overflow-auto">
-          <GradesPage exams={appState.gradeExams} />
+          <GradesPage
+            exams={appState.gradeExams}
+            students={students}
+            onSelectStudent={setSelectedStudent}
+          />
         </div>
       )}
     </AppShell>

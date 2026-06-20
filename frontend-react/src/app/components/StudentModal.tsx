@@ -1,7 +1,17 @@
 import { useMemo, useState } from "react";
 import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save } from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { createStudentRecord, updateStudentProfile } from "../state/studentActions";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
+import { generateStudentAiTrend, hasStoredAiTrendAuth, type AiTrendResult } from "../state/aiTrendService";
 import type { AppStudent, Gender, RecordType, StudentExamSummary, StudentId, StudentRecord } from "../state/types";
 
 interface Props {
@@ -45,6 +55,14 @@ function getExamTotal(exam: StudentExamSummary): number {
   return exam.total ?? getScoreEntries(exam.scores).reduce((sum, [, score]) => sum + score, 0);
 }
 
+function getExamSortValue(exam: StudentExamSummary): string {
+  return `${exam.date || "9999-12-31"}-${exam.name}-${exam.id}`;
+}
+
+function formatScore(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value * 10) / 10) : "—";
+}
+
 function parseAliases(value: string): string[] {
   return value
     .split(/[、,，\n]/)
@@ -85,8 +103,33 @@ export function StudentModal({
   const [syncSelected, setSyncSelected] = useState<Set<StudentId>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [profileStatus, setProfileStatus] = useState("");
+  const [trendMetric, setTrendMetric] = useState("total");
+  const [aiTrendResult, setAiTrendResult] = useState<AiTrendResult | null>(null);
+  const [aiTrendStatus, setAiTrendStatus] = useState("");
+  const [aiTrendBusy, setAiTrendBusy] = useState(false);
+  const [aiTrendAccessCode, setAiTrendAccessCode] = useState("");
+  const [rememberAiTrendAuth, setRememberAiTrendAuth] = useState(true);
+  const [hasAiTrendAuth, setHasAiTrendAuth] = useState(() => hasStoredAiTrendAuth());
 
   const examScores = student.exams;
+  const chronologicalExams = useMemo(
+    () => [...examScores].sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b))),
+    [examScores]
+  );
+  const trendSubjects = useMemo(() => {
+    const subjects = new Set<string>();
+    chronologicalExams.forEach(exam => Object.keys(exam.scores).forEach(subject => subjects.add(subject)));
+    return [...subjects];
+  }, [chronologicalExams]);
+  const trendMetricOptions = ["total", ...trendSubjects];
+  const effectiveTrendMetric = trendMetric === "total" || trendSubjects.includes(trendMetric) ? trendMetric : "total";
+  const trendData = chronologicalExams.map(exam => ({
+    label: exam.name.length > 8 ? `${exam.name.slice(0, 8)}...` : exam.name,
+    fullLabel: `${exam.name}${exam.date ? ` · ${exam.date}` : ""}`,
+    total: getExamTotal(exam),
+    ...exam.scores,
+  }));
+  const hasTrendChart = trendData.filter(item => typeof item[effectiveTrendMetric as keyof typeof item] === "number").length >= 2;
   const preservedManualTagIds = useMemo(
     () => student.manualTagIds.filter(id => !BEHAVIOR_TAG_IDS.has(id)),
     [student.manualTagIds]
@@ -162,6 +205,38 @@ export function StudentModal({
     punish: { bg: "bg-red-50 border-red-100", text: "text-red-600", label: "罚" },
     note:   { bg: "bg-gray-50 border-gray-100", text: "text-gray-600", label: "备注" },
   };
+
+  async function handleGenerateAiTrend() {
+    setAiTrendBusy(true);
+    setAiTrendStatus("正在生成趋势分析...");
+    try {
+      const result = await generateStudentAiTrend(student, {
+        accessCode: aiTrendAccessCode,
+        remember: rememberAiTrendAuth,
+        force: true,
+      });
+      setAiTrendResult(result);
+      setAiTrendStatus("AI 趋势分析已生成。");
+      setAiTrendAccessCode("");
+      setHasAiTrendAuth(hasStoredAiTrendAuth());
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      const messages: Record<string, string> = {
+        ai_auth_required: "请输入 AI 授权码后再生成。",
+        ai_unauthorized: "AI 授权码不正确，请重新输入。",
+        ai_auth_failed: "AI 授权暂时不可用，请稍后重试。",
+        ai_file_protocol: "当前是本地文件打开方式，请通过网页地址打开后再使用 AI。",
+        ai_offline: "当前离线，联网后可生成趋势分析。",
+        ai_payload_too_large: "当前成绩数据过多，请减少历史考试后再试。",
+        ai_rate_limited: "今日 AI 调用较多，请稍后再试。",
+        ai_insufficient_trend: "至少需要两次考试才能生成趋势分析。",
+      };
+      setAiTrendStatus(messages[reason] || "AI 趋势分析暂时不可用，本地趋势图不受影响。");
+      setHasAiTrendAuth(hasStoredAiTrendAuth());
+    } finally {
+      setAiTrendBusy(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/40 backdrop-blur-sm overflow-y-auto">
@@ -388,6 +463,111 @@ export function StudentModal({
           ) : (
             <p className="text-sm text-gray-400 text-center py-3">本周暂无记录，可以先来添加奖罚。</p>
           )}
+
+          {/* Grade Trend */}
+          <div className="border border-gray-100 rounded-2xl overflow-hidden">
+            <div className="flex items-start justify-between gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
+              <div>
+                <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>成绩趋势</span>
+                <p className="text-xs text-gray-400 mt-0.5">{chronologicalExams.length} 次考试 · 趋势按时间先后展示</p>
+              </div>
+              <div className="flex flex-wrap justify-end gap-1 max-w-xs">
+                {trendMetricOptions.slice(0, 7).map(metric => (
+                  <button
+                    key={metric}
+                    onClick={() => setTrendMetric(metric)}
+                    className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${effectiveTrendMetric === metric ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:bg-white"}`}
+                    style={{ fontWeight: 700 }}
+                  >
+                    {metric === "total" ? "总分" : metric}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 space-y-4">
+              {hasTrendChart ? (
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} width={36} />
+                      <Tooltip
+                        labelFormatter={label => String(label || "")}
+                        formatter={(value) => [formatScore(typeof value === "number" ? value : null), effectiveTrendMetric === "total" ? "总分" : effectiveTrendMetric]}
+                        contentStyle={{ borderRadius: 12, border: "1px solid #e5e7eb", fontSize: 13 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey={effectiveTrendMetric}
+                        stroke="#2563eb"
+                        strokeWidth={2.5}
+                        dot={{ r: 3.5, fill: "#2563eb", strokeWidth: 0 }}
+                        activeDot={{ r: 5, fill: "#1d4ed8", stroke: "#dbeafe", strokeWidth: 3 }}
+                        connectNulls
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-400">
+                  至少需要两次有效考试，才会显示趋势图。
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-sm text-violet-700" style={{ fontWeight: 700 }}>
+                      <Sparkles className="w-4 h-4" />AI 成绩趋势分析
+                    </div>
+                    <p className="text-xs text-violet-400 mt-0.5">调用现有 Worker，分析只作为教师参考。</p>
+                  </div>
+                  <button
+                    onClick={handleGenerateAiTrend}
+                    disabled={aiTrendBusy || chronologicalExams.length < 2}
+                    className="shrink-0 px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ fontWeight: 700 }}
+                  >
+                    {aiTrendBusy ? "生成中" : "生成分析"}
+                  </button>
+                </div>
+
+                {!hasAiTrendAuth && (
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                    <input
+                      value={aiTrendAccessCode}
+                      onChange={event => setAiTrendAccessCode(event.target.value)}
+                      type="password"
+                      placeholder="输入 AI 授权码"
+                      className="min-w-0 px-3 py-2 text-sm bg-white border border-violet-100 rounded-xl outline-none focus:border-violet-300"
+                    />
+                    <label className="flex items-center gap-2 px-2 text-xs text-violet-500 cursor-pointer">
+                      <input type="checkbox" checked={rememberAiTrendAuth} onChange={event => setRememberAiTrendAuth(event.target.checked)} className="accent-violet-600" />
+                      记住授权
+                    </label>
+                  </div>
+                )}
+
+                {aiTrendStatus && <p className="text-xs text-violet-600">{aiTrendStatus}</p>}
+                {aiTrendResult && (
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      ["总体判断", aiTrendResult.overall],
+                      ["重点变化", aiTrendResult.changes],
+                      ["建议关注", aiTrendResult.suggestions],
+                      ["参考提示", aiTrendResult.disclaimer],
+                    ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
+                      <div key={label} className="rounded-xl border border-violet-100 bg-white px-3 py-2.5">
+                        <div className="text-xs text-violet-500 mb-1" style={{ fontWeight: 700 }}>{label}</div>
+                        <p className="text-sm text-gray-700 leading-relaxed">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Exam Scores */}
           <div className="border-t border-gray-100 pt-5">

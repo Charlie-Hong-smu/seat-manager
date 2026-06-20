@@ -15,3 +15,13 @@ npm run build
 Vite 已配置 `base: "/seat-manager/"`，用于后续 GitHub Pages 部署。
 
 旧版入口仍保留在仓库根目录的 `index.html`、`style.css`、`app.js`。
+
+## Figma Make 协作约定
+
+详细规则见仓库根目录 `DESIGN.md`。
+
+- `frontend-react/` 是真实实现源。
+- Figma Make 文件只作为设计参考，不直接覆盖本目录。
+- 成绩页主要参考 `1QpH5tRbV2oVGkSKN8tDph`。
+- 全局浅色 dashboard 风格参考 `T89q98PawNHmuhwiEPbBHY`。
+- 修改 UI 时要保留现有真实数据、成绩导入保存、AI 评语、评语工作台、备份同步、登录和 PWA 逻辑。

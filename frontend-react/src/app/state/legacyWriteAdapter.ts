@@ -1,11 +1,12 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
-import type { AppStudent, SavedGradeExamEntry, SavedGradeExamRecord, SeatManagerState, StudentId } from "./types";
+import type { AppStudent, SavedGradeExamEntry, SavedGradeExamRecord, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 interface PersistSnapshotInput {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
   lockedSeats: number[];
+  seatSettings?: SeatSettings;
 }
 
 interface SaveGradeExamInput extends PersistSnapshotInput {
@@ -39,6 +40,29 @@ function normalizeNameForMatch(name: unknown): string {
 function getBaseState(): Record<string, unknown> {
   const raw = readLegacyRootState();
   return isRecord(raw) ? raw : {};
+}
+
+function mergeSeatSettings(baseSettings: unknown, seatSettings?: SeatSettings): Record<string, unknown> {
+  const settings = isRecord(baseSettings) ? { ...baseSettings } : {};
+  if (!seatSettings) {
+    return settings;
+  }
+
+  const constraints = isRecord(settings.constraints) ? { ...settings.constraints } : {};
+  return {
+    ...settings,
+    pairByGender: seatSettings.pairByGender,
+    keepLockedEmpty: seatSettings.keepLockedEmpty,
+    complementRuleIds: [...seatSettings.complementRuleIds],
+    constraints: {
+      ...constraints,
+      lockedDeskmatePairs: seatSettings.constraints.lockedDeskmatePairs.map(pair => ({ ...pair })),
+      noDeskmatePairs: seatSettings.constraints.noDeskmatePairs.map(pair => ({ ...pair })),
+      frontRowStudentIds: [...seatSettings.constraints.frontRowStudentIds],
+      frontRows: seatSettings.constraints.frontRows,
+      maxRetries: seatSettings.constraints.maxRetries,
+    },
+  };
 }
 
 function toLegacyStudent(student: AppStudent, previous?: Record<string, unknown>): Record<string, unknown> {
@@ -176,7 +200,7 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
   return syncedStudents;
 }
 
-export function saveLegacySnapshot({ students, seatOrder, lockedSeats }: PersistSnapshotInput): boolean {
+export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings }: PersistSnapshotInput): boolean {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -194,12 +218,12 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats }: Persist
     lockedSeats,
     savedExams: Array.isArray(baseState.savedExams) ? baseState.savedExams : [],
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],
-    settings: isRecord(baseState.settings) ? baseState.settings : {},
+    settings: mergeSeatSettings(baseState.settings, seatSettings),
     commentRubric: baseState.commentRubric || null,
   });
 }
 
-export function saveGradeExamRecord({ students, seatOrder, lockedSeats, record }: SaveGradeExamInput): SeatManagerState | null {
+export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSettings, record }: SaveGradeExamInput): SeatManagerState | null {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -222,7 +246,7 @@ export function saveGradeExamRecord({ students, seatOrder, lockedSeats, record }
     lockedSeats,
     savedExams,
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],
-    settings: isRecord(baseState.settings) ? baseState.settings : {},
+    settings: mergeSeatSettings(baseState.settings, seatSettings),
     commentRubric: baseState.commentRubric || null,
   };
 

@@ -15,8 +15,9 @@ import {
   type BackupImportPreview,
 } from "../state/backupStorage";
 import { createSavedGradeExamRecord, parseScoreFile } from "../state/scoreImport";
+import { COMPLEMENT_RULES } from "../state/seatPlanner";
 import type { RosterImportOptions, RosterImportResult } from "../state/rosterImport";
-import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft, StudentId } from "../state/types";
+import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft, SeatPairRule, SeatSettings, StudentId } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
 
@@ -26,9 +27,11 @@ interface Props {
   seatOrder: Array<StudentId | null>;
   gradeExams: GradeExam[];
   canUndoSeatOrder: boolean;
+  seatSettings: SeatSettings;
   onRandomizeSeats: () => void;
   onOrderSeatsByList: () => void;
   onUndoSeatOrder: () => void;
+  onUpdateSeatSettings: (updater: (current: SeatSettings) => SeatSettings) => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
   onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
@@ -73,21 +76,48 @@ function RuleChip({ label, detail, type }: { label: string; detail: string; type
   );
 }
 
+function normalizeSearchText(value: string): string {
+  return value.trim().toLocaleLowerCase("zh-Hans-CN");
+}
+
+function getStudentLabel(students: AppStudent[], id: StudentId): string {
+  return students.find(student => student.id === id)?.name || "未知学生";
+}
+
+function findStudentByInput(students: AppStudent[], value: string): AppStudent | null {
+  const needle = normalizeSearchText(value);
+  if (!needle) {
+    return null;
+  }
+  return students.find(student => {
+    const names = [student.id, student.name, ...student.aliases];
+    return names.some(name => normalizeSearchText(name) === needle);
+  }) || null;
+}
+
+function samePair(a: SeatPairRule, b: SeatPairRule): boolean {
+  return (a.a === b.a && a.b === b.b) || (a.a === b.b && a.b === b.a);
+}
+
 // ── Tab: 常用 ─────────────────────────────────────────────────────────────────
 function CommonTab({
   students,
   canUndoSeatOrder,
+  seatSettings,
   onRandomizeSeats,
   onOrderSeatsByList,
   onUndoSeatOrder,
   onAddStudent,
+  onUpdateSeatSettings,
 }: {
   students: AppStudent[];
   canUndoSeatOrder: boolean;
+  seatSettings: SeatSettings;
   onRandomizeSeats: () => void;
   onOrderSeatsByList: () => void;
   onUndoSeatOrder: () => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
+  onUpdateSeatSettings: (updater: (current: SeatSettings) => SeatSettings) => void;
 }) {
   const [search, setSearch] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
@@ -97,8 +127,102 @@ function CommonTab({
   const [noRepeat, setNoRepeat] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
   const [showConstraints, setShowConstraints] = useState(false);
+  const [lockedPairA, setLockedPairA] = useState("");
+  const [lockedPairB, setLockedPairB] = useState("");
+  const [noPairA, setNoPairA] = useState("");
+  const [noPairB, setNoPairB] = useState("");
+  const [frontStudentInput, setFrontStudentInput] = useState("");
+  const [constraintStatus, setConstraintStatus] = useState("");
 
   const filtered = students.filter(s => s.name.includes(search));
+  const constraints = seatSettings.constraints;
+  const activeComplementCount = seatSettings.complementRuleIds.length;
+
+  function setConstraints(updater: (settings: SeatSettings) => SeatSettings) {
+    onUpdateSeatSettings(updater);
+    setConstraintStatus("");
+  }
+
+  function addPairRule(kind: "locked" | "no") {
+    const first = findStudentByInput(students, kind === "locked" ? lockedPairA : noPairA);
+    const second = findStudentByInput(students, kind === "locked" ? lockedPairB : noPairB);
+    if (!first || !second || first.id === second.id) {
+      setConstraintStatus("请填写两个不同且已存在的学生姓名。");
+      return;
+    }
+    const pair = { a: first.id, b: second.id };
+    setConstraints(current => {
+      const nextPairs = kind === "locked" ? current.constraints.lockedDeskmatePairs : current.constraints.noDeskmatePairs;
+      if (nextPairs.some(item => samePair(item, pair))) {
+        return current;
+      }
+      return {
+        ...current,
+        constraints: {
+          ...current.constraints,
+          [kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs"]: [...nextPairs, pair],
+        },
+      };
+    });
+    if (kind === "locked") {
+      setLockedPairA("");
+      setLockedPairB("");
+      setConstraintStatus(`已添加：${first.name} 和 ${second.name} 安排同桌。`);
+    } else {
+      setNoPairA("");
+      setNoPairB("");
+      setConstraintStatus(`已添加：${first.name} 避免和 ${second.name} 同桌。`);
+    }
+  }
+
+  function removePairRule(kind: "locked" | "no", pair: SeatPairRule) {
+    setConstraints(current => ({
+      ...current,
+      constraints: {
+        ...current.constraints,
+        [kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs"]:
+          (kind === "locked" ? current.constraints.lockedDeskmatePairs : current.constraints.noDeskmatePairs).filter(item => !samePair(item, pair)),
+      },
+    }));
+  }
+
+  function addFrontStudent() {
+    const student = findStudentByInput(students, frontStudentInput);
+    if (!student) {
+      setConstraintStatus("请填写已存在的学生姓名。");
+      return;
+    }
+    setConstraints(current => current.constraints.frontRowStudentIds.includes(student.id)
+      ? current
+      : {
+          ...current,
+          constraints: {
+            ...current.constraints,
+            frontRowStudentIds: [...current.constraints.frontRowStudentIds, student.id],
+          },
+        });
+    setFrontStudentInput("");
+    setConstraintStatus(`已添加：${student.name} 前排照顾。`);
+  }
+
+  function removeFrontStudent(studentId: StudentId) {
+    setConstraints(current => ({
+      ...current,
+      constraints: {
+        ...current.constraints,
+        frontRowStudentIds: current.constraints.frontRowStudentIds.filter(id => id !== studentId),
+      },
+    }));
+  }
+
+  function toggleComplementRule(ruleId: SeatSettings["complementRuleIds"][number]) {
+    setConstraints(current => ({
+      ...current,
+      complementRuleIds: current.complementRuleIds.includes(ruleId)
+        ? current.complementRuleIds.filter(id => id !== ruleId)
+        : [...current.complementRuleIds, ruleId],
+    }));
+  }
 
   function handleDraw() {
     const pool = students.map(s => s.name);
@@ -146,7 +270,7 @@ function CommonTab({
             </button>
           </div>
           <div className="bg-blue-50/80 border border-blue-100 rounded-xl px-3 py-2 text-xs text-blue-600">
-            暂无明确要求，点击随机排座将按当前名单随机生成。
+            点击随机排座会先生成预览，确认采用后才会更新当前座位。
           </div>
         </div>
 
@@ -157,10 +281,13 @@ function CommonTab({
             <span className="text-xs text-gray-400">随机排座时生效</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <RuleChip label="避免同桌" detail="0 对" type="must" />
-            <RuleChip label="前排照顾" detail="0 人" type="must" />
-            <RuleChip label="座位保护" detail="未启用" type="protect" />
-            <RuleChip label="男女搭配" detail="未启用" type="soft" />
+            <RuleChip label="安排同桌" detail={`${constraints.lockedDeskmatePairs.length} 对`} type="must" />
+            <RuleChip label="避免同桌" detail={`${constraints.noDeskmatePairs.length} 对`} type="must" />
+            <RuleChip label="前排照顾" detail={`${constraints.frontRowStudentIds.length} 人 · 前 ${constraints.frontRows} 排`} type="must" />
+            <RuleChip label="男女/互补" detail={`${seatSettings.pairByGender ? "男女搭配" : "未启用"} · ${activeComplementCount} 项`} type="soft" />
+          </div>
+          <div className="mt-2">
+            <RuleChip label="座位保护" detail={seatSettings.keepLockedEmpty ? "锁座与空座都保护" : "仅保护锁定学生"} type="protect" />
           </div>
         </div>
 
@@ -176,26 +303,100 @@ function CommonTab({
         {showConstraints && (
           <div className="mt-2 p-3 border border-gray-100 rounded-xl bg-gray-50 space-y-3">
             <p className="text-xs text-gray-400">先满足必须要求，再尽量照顾偏好。</p>
-            {[
-              { title: "同桌关系", note: "必须", placeholder1: "学生A", placeholder2: "学生B", btn: "添加同桌要求" },
-              { title: "前排照顾", note: "必须", placeholder1: "需要坐前排的学生", placeholder2: "", btn: "添加前排学生" },
-            ].map(g => (
-              <div key={g.title} className="bg-white rounded-xl border border-gray-100 p-3">
-                <div className="text-xs mb-2" style={{ fontWeight: 700, color: "#374151" }}>{g.title} <span className="text-blue-500 ml-1">{g.note}</span></div>
-                <div className="flex gap-2">
-                  <input className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-blue-300" placeholder={g.placeholder1} />
-                  {g.placeholder2 && <input className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-blue-300" placeholder={g.placeholder2} />}
-                  <button className="shrink-0 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs transition-colors" style={{ fontWeight: 600 }}>{g.btn}</button>
-                </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3 space-y-2">
+              <div className="text-xs" style={{ fontWeight: 700, color: "#374151" }}>安排同桌 <span className="text-blue-500 ml-1">必须</span></div>
+              <div className="flex gap-2">
+                <input value={lockedPairA} onChange={event => setLockedPairA(event.target.value)} className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-blue-300" placeholder="学生A" list="student-name-options" />
+                <input value={lockedPairB} onChange={event => setLockedPairB(event.target.value)} className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-blue-300" placeholder="学生B" list="student-name-options" />
+                <button onClick={() => addPairRule("locked")} className="shrink-0 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-xs transition-colors" style={{ fontWeight: 600 }}>添加</button>
               </div>
-            ))}
-            <div className="bg-white rounded-xl border border-gray-100 p-3">
-              <div className="text-xs mb-2" style={{ fontWeight: 700, color: "#374151" }}>男女搭配 <span className="text-emerald-500 ml-1">尽量</span></div>
+              {constraints.lockedDeskmatePairs.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {constraints.lockedDeskmatePairs.map(pair => (
+                    <button key={`${pair.a}-${pair.b}`} onClick={() => removePairRule("locked", pair)} className="px-2 py-1 text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100">
+                      {getStudentLabel(students, pair.a)} + {getStudentLabel(students, pair.b)} ×
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 p-3 space-y-2">
+              <div className="text-xs" style={{ fontWeight: 700, color: "#374151" }}>避免同桌 <span className="text-blue-500 ml-1">必须</span></div>
+              <div className="flex gap-2">
+                <input value={noPairA} onChange={event => setNoPairA(event.target.value)} className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-blue-300" placeholder="学生A" list="student-name-options" />
+                <input value={noPairB} onChange={event => setNoPairB(event.target.value)} className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-blue-300" placeholder="学生B" list="student-name-options" />
+                <button onClick={() => addPairRule("no")} className="shrink-0 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs transition-colors" style={{ fontWeight: 600 }}>添加</button>
+              </div>
+              {constraints.noDeskmatePairs.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {constraints.noDeskmatePairs.map(pair => (
+                    <button key={`${pair.a}-${pair.b}`} onClick={() => removePairRule("no", pair)} className="px-2 py-1 text-xs rounded-full bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100">
+                      {getStudentLabel(students, pair.a)} / {getStudentLabel(students, pair.b)} ×
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs" style={{ fontWeight: 700, color: "#374151" }}>前排照顾 <span className="text-blue-500 ml-1">必须</span></div>
+                <label className="flex items-center gap-1 text-xs text-gray-500">
+                  前
+                  <input
+                    type="number"
+                    min={1}
+                    max={8}
+                    value={constraints.frontRows}
+                    onChange={event => {
+                      const value = Math.max(1, Math.min(8, Number(event.target.value) || 1));
+                      setConstraints(current => ({ ...current, constraints: { ...current.constraints, frontRows: value } }));
+                    }}
+                    className="w-12 px-1.5 py-1 text-center border border-gray-200 rounded-lg bg-gray-50 outline-none"
+                  />
+                  排
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <input value={frontStudentInput} onChange={event => setFrontStudentInput(event.target.value)} className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-blue-300" placeholder="需要坐前排的学生" list="student-name-options" />
+                <button onClick={addFrontStudent} className="shrink-0 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-xs transition-colors" style={{ fontWeight: 600 }}>添加</button>
+              </div>
+              {constraints.frontRowStudentIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {constraints.frontRowStudentIds.map(studentId => (
+                    <button key={studentId} onClick={() => removeFrontStudent(studentId)} className="px-2 py-1 text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100">
+                      {getStudentLabel(students, studentId)} ×
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 p-3 space-y-2">
+              <div className="text-xs" style={{ fontWeight: 700, color: "#374151" }}>偏好与保护 <span className="text-emerald-500 ml-1">尽量</span></div>
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                <input type="checkbox" className="accent-blue-600" />
+                <input type="checkbox" checked={seatSettings.pairByGender} onChange={event => setConstraints(current => ({ ...current, pairByGender: event.target.checked }))} className="accent-blue-600" />
                 尽量男女同桌
               </label>
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={seatSettings.keepLockedEmpty} onChange={event => setConstraints(current => ({ ...current, keepLockedEmpty: event.target.checked }))} className="accent-blue-600" />
+                锁定座位时保留空座
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
+                {COMPLEMENT_RULES.map(rule => (
+                  <label key={rule.id} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer rounded-lg border border-gray-100 bg-gray-50 px-2 py-1.5">
+                    <input type="checkbox" checked={seatSettings.complementRuleIds.includes(rule.id)} onChange={() => toggleComplementRule(rule.id)} className="accent-blue-600" />
+                    {rule.label}
+                  </label>
+                ))}
+              </div>
             </div>
+
+            {constraintStatus && <p className="text-xs text-blue-600">{constraintStatus}</p>}
+            <datalist id="student-name-options">
+              {students.map(student => <option key={student.id} value={student.name} />)}
+            </datalist>
           </div>
         )}
       </SectionCard>
@@ -763,10 +964,12 @@ export function Sidebar({
   seatOrder,
   gradeExams,
   canUndoSeatOrder,
+  seatSettings,
   onRandomizeSeats,
   onOrderSeatsByList,
   onUndoSeatOrder,
   onAddStudent,
+  onUpdateSeatSettings,
   onSaveScoreImport,
   onImportRoster,
   onBeforeBackupExport,
@@ -808,10 +1011,12 @@ export function Sidebar({
           <CommonTab
             students={students}
             canUndoSeatOrder={canUndoSeatOrder}
+            seatSettings={seatSettings}
             onRandomizeSeats={onRandomizeSeats}
             onOrderSeatsByList={onOrderSeatsByList}
             onUndoSeatOrder={onUndoSeatOrder}
             onAddStudent={onAddStudent}
+            onUpdateSeatSettings={onUpdateSeatSettings}
           />
         )}
         {activeTab === "import"  && (

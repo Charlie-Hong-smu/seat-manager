@@ -27,6 +27,18 @@ npm install
 npm run dev
 ```
 
+## Figma 设计协作
+
+长期设计协作规则写在 `DESIGN.md`。新开对话时，请先让 Codex 读取 `README.md`、`frontend-react/README.md` 和 `DESIGN.md`。
+
+当前约定：
+
+- `frontend-react/` 是新版真实代码源。
+- Figma Make 是设计参考，不直接覆盖项目。
+- 成绩页优先参考 Figma Make 文件 `1QpH5tRbV2oVGkSKN8tDph`。
+- 整体应用风格参考 Figma Make 文件 `T89q98PawNHmuhwiEPbBHY`。
+- 实现时必须保留座位、成绩、AI 评语、评语工作台、备份同步、登录和 PWA 等现有逻辑。
+
 ## React 新版构建
 
 ```bash

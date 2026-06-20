@@ -44,6 +44,34 @@ export interface GradeExam {
   rows: GradeRow[];
 }
 
+export interface SeatPairRule {
+  a: StudentId;
+  b: StudentId;
+}
+
+export interface SeatConstraints {
+  lockedDeskmatePairs: SeatPairRule[];
+  noDeskmatePairs: SeatPairRule[];
+  frontRowStudentIds: StudentId[];
+  frontRows: number;
+  maxRetries: number;
+}
+
+export type ComplementRuleId =
+  | "talk_quiet"
+  | "focus_balance"
+  | "role_balance"
+  | "cn_balance"
+  | "math_balance"
+  | "en_balance";
+
+export interface SeatSettings {
+  pairByGender: boolean;
+  keepLockedEmpty: boolean;
+  complementRuleIds: ComplementRuleId[];
+  constraints: SeatConstraints;
+}
+
 export interface SavedGradeExamEntry {
   name: string;
   scores: Record<string, GradeScoreCell>;
@@ -149,6 +177,7 @@ export interface SeatManagerState {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
   lockedSeats: number[];
+  seatSettings: SeatSettings;
   savedExams: unknown[];
   exams: unknown[];
   manualTags: unknown[];
