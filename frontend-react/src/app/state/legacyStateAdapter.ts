@@ -8,6 +8,7 @@ import type {
   GradeRow,
   GradeScoreCell,
   SeatSettings,
+  SeatHistorySnapshot,
   RecordType,
   SeatManagerState,
   StudentExamSummary,
@@ -264,6 +265,37 @@ function normalizeSeatSettings(settings: Record<string, unknown>, students: AppS
   };
 }
 
+function normalizeSeatHistory(value: unknown): SeatHistorySnapshot[] {
+  return toUnknownArray(value)
+    .map((item, index): SeatHistorySnapshot | null => {
+      if (!isRecord(item)) {
+        return null;
+      }
+      const seats = toStringArray(item.seats);
+      if (!seats.length) {
+        return null;
+      }
+      const rows = Math.max(1, Math.ceil(seats.length / COLS), Math.trunc(toNumber(item.rows) ?? 0));
+      const seatCount = rows * COLS;
+      const normalizedSeats = [...seats];
+      while (normalizedSeats.length < seatCount) {
+        normalizedSeats.push("");
+      }
+      if (normalizedSeats.length > seatCount) {
+        normalizedSeats.length = seatCount;
+      }
+      return {
+        id: toStringValue(item.id, `seat-history-${index}`),
+        time: toStringValue(item.time) || toStringValue(item.savedAt) || new Date().toISOString(),
+        note: toStringValue(item.note),
+        rows,
+        seats: normalizedSeats,
+      };
+    })
+    .filter((item): item is SeatHistorySnapshot => Boolean(item))
+    .slice(0, 20);
+}
+
 function getCommentRubricTagLabels(rawRubric: unknown): Record<string, string> {
   const labels: Record<string, string> = {};
   if (!isRecord(rawRubric) || !Array.isArray(rawRubric.criteria)) {
@@ -472,6 +504,7 @@ export function createMockSeatManagerState(): SeatManagerState {
     seatOrder,
     lockedSeats: [],
     seatSettings: createDefaultSeatSettings(),
+    seatHistory: [],
     savedExams: EXAMS,
     exams: EXAMS,
     manualTags: [],
@@ -506,6 +539,7 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     seatOrder,
     lockedSeats: normalizeLockedSeats(raw.lockedSeats, seatOrder.length),
     seatSettings: normalizeSeatSettings(settings, students),
+    seatHistory: normalizeSeatHistory(raw.seatHistory),
     savedExams: toUnknownArray(raw.savedExams),
     exams: toUnknownArray(raw.exams),
     manualTags: toUnknownArray(raw.manualTags),

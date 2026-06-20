@@ -14,10 +14,11 @@ import {
   restoreBackup,
   type BackupImportPreview,
 } from "../state/backupStorage";
+import { ExamTableModal } from "./ExamTableModal";
 import { createSavedGradeExamRecord, parseScoreFile } from "../state/scoreImport";
 import { COMPLEMENT_RULES } from "../state/seatPlanner";
 import type { RosterImportOptions, RosterImportResult } from "../state/rosterImport";
-import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft, SeatPairRule, SeatSettings, StudentId } from "../state/types";
+import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft, SeatHistorySnapshot, SeatPairRule, SeatSettings, StudentId } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
 
@@ -34,6 +35,14 @@ interface Props {
   onUpdateSeatSettings: (updater: (current: SeatSettings) => SeatSettings) => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
+  onUpdateGradeExam: (examId: string, name: string, date: string) => boolean;
+  onDeleteGradeExam: (examId: string) => boolean;
+  savedSeatHistory: SeatHistorySnapshot[];
+  onSaveSeatHistory: (note: string) => void;
+  onRenameSeatHistory: (id: string, note: string) => void;
+  onViewSeatHistory: (snapshot: SeatHistorySnapshot) => void;
+  onApplySeatHistory: (snapshot: SeatHistorySnapshot) => void;
+  onDeleteSeatHistory: (id: string) => void;
   onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
   onBeforeBackupExport: () => void;
   onBackupImported: () => void;
@@ -706,13 +715,20 @@ function ScoresTab({
   exams,
   onShowGrades,
   onSaveScoreImport,
+  onUpdateGradeExam,
+  onDeleteGradeExam,
 }: {
   exams: GradeExam[];
   onShowGrades: () => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
+  onUpdateGradeExam: (examId: string, name: string, date: string) => boolean;
+  onDeleteGradeExam: (examId: string) => boolean;
 }) {
   const [selectedExam, setSelectedExam] = useState(exams[0]?.id || "");
-  const selectedExamRecord = exams.find(exam => exam.id === selectedExam) || exams[0];
+  const [expandedExamId, setExpandedExamId] = useState(exams[0]?.id || "");
+  const [examEdits, setExamEdits] = useState<Record<string, { name: string; date: string }>>({});
+  const [examTable, setExamTable] = useState<GradeExam | null>(null);
+  const [deleteExamId, setDeleteExamId] = useState<string | null>(null);
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [scoreDraft, setScoreDraft] = useState<ScoreImportDraft | null>(null);
   const [scoreStatus, setScoreStatus] = useState("上传 .xlsx 或 .csv 后会自动解析。");
@@ -724,7 +740,24 @@ function ScoresTab({
     if (exams.length && !exams.some(exam => exam.id === selectedExam)) {
       setSelectedExam(exams[0].id);
     }
+    if (exams.length && !exams.some(exam => exam.id === expandedExamId)) {
+      setExpandedExamId(exams[0].id);
+    }
   }, [exams, selectedExam]);
+
+  function getExamEdit(exam: GradeExam) {
+    return examEdits[exam.id] || { name: exam.name, date: exam.date };
+  }
+
+  function updateExamEdit(exam: GradeExam, patch: Partial<{ name: string; date: string }>) {
+    setExamEdits(current => ({
+      ...current,
+      [exam.id]: {
+        ...getExamEdit(exam),
+        ...patch,
+      },
+    }));
+  }
 
   async function handleScoreFileChange(file?: File) {
     if (!file) {
@@ -776,6 +809,22 @@ function ScoresTab({
     onShowGrades();
   }
 
+  function handleSaveExamMeta(exam: GradeExam) {
+    const edit = getExamEdit(exam);
+    const saved = onUpdateGradeExam(exam.id, edit.name, edit.date);
+    setScoreStatus(saved ? `已保存「${edit.name.trim() || exam.name}」的考试信息。` : "没有找到这次考试，暂未保存。");
+  }
+
+  function handleDeleteExam(exam: GradeExam) {
+    if (deleteExamId !== exam.id) {
+      setDeleteExamId(exam.id);
+      return;
+    }
+    const deleted = onDeleteGradeExam(exam.id);
+    setDeleteExamId(null);
+    setScoreStatus(deleted ? `已删除「${exam.name}」。` : "没有找到这次考试，暂未删除。");
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <SectionCard title="选择考试" subtitle="右侧看板会随选择更新。">
@@ -796,28 +845,6 @@ function ScoresTab({
           >
             <BarChart2 className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />查看成绩看板
           </button>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="查看科目" subtitle="选择总分或单科作为分析口径。">
-        <div className="flex flex-col gap-2">
-          <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 cursor-pointer">
-            <option value="total">总分</option>
-            {(selectedExamRecord?.subjects || []).map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <details className="border border-gray-100 rounded-xl overflow-hidden">
-            <summary className="px-3 py-2 text-xs text-gray-600 cursor-pointer hover:bg-gray-50 flex justify-between items-center" style={{ fontWeight: 600, listStyle: "none" }}>
-              <span>统计阈值</span><ChevronDown className="w-3 h-3" />
-            </summary>
-            <div className="p-3 bg-gray-50 flex gap-2">
-              {[["及格", "60"], ["良好", "75"], ["优秀", "90"]].map(([label, val]) => (
-                <label key={label} className="flex-1 flex flex-col gap-1">
-                  <span className="text-xs text-gray-400">{label}</span>
-                  <input type="number" defaultValue={val} className="px-2 py-1 text-sm text-center border border-gray-200 rounded-lg bg-white outline-none" />
-                </label>
-              ))}
-            </div>
-          </details>
         </div>
       </SectionCard>
 
@@ -891,18 +918,61 @@ function ScoresTab({
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="text-sm text-gray-700 mb-3" style={{ fontWeight: 700 }}>历史考试</div>
-        <div className="divide-y divide-gray-50 border border-gray-100 rounded-xl overflow-hidden">
-          {exams.map(exam => (
-            <button key={exam.id} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 transition-colors text-left">
-              <div>
-                <div className="text-sm text-gray-800" style={{ fontWeight: 600 }}>{exam.name}</div>
-                <div className="text-xs text-gray-400">{exam.date}</div>
+        <div className="space-y-2">
+          {exams.map(exam => {
+            const edit = getExamEdit(exam);
+            const expanded = expandedExamId === exam.id;
+            return (
+              <div key={exam.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setExpandedExamId(expanded ? "" : exam.id)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 transition-colors text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm text-gray-800 truncate" style={{ fontWeight: 700 }}>{exam.name}</div>
+                    <div className="text-xs text-gray-400">{exam.date || "未填写日期"} · {exam.rows.length} 人 · {exam.subjects.length} 科</div>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-300 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                </button>
+                {expanded && (
+                  <div className="px-3 pb-3 pt-1 border-t border-gray-50 bg-gray-50/50 space-y-2">
+                    <input
+                      value={edit.name}
+                      onChange={event => updateExamEdit(exam, { name: event.target.value })}
+                      className="w-full h-9 px-3 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                      placeholder="考试名称"
+                      maxLength={30}
+                    />
+                    <input
+                      value={edit.date}
+                      onChange={event => updateExamEdit(exam, { date: event.target.value })}
+                      className="w-full h-9 px-3 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                      type="date"
+                    />
+                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-400">
+                      <div className="rounded-lg bg-white border border-gray-100 px-2 py-1.5">保存 {exam.savedAt ? formatHistoryTime(exam.savedAt) : "未记录"}</div>
+                      <div className="rounded-lg bg-white border border-gray-100 px-2 py-1.5">{exam.rows.length} 名学生</div>
+                      <div className="rounded-lg bg-white border border-gray-100 px-2 py-1.5">{exam.subjects.length} 个科目</div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={() => handleSaveExamMeta(exam)} className="py-2 rounded-xl bg-gray-900 text-white text-xs hover:bg-gray-800 transition-colors" style={{ fontWeight: 700 }}>保存修改</button>
+                      <button onClick={() => setExamTable(exam)} className="py-2 rounded-xl bg-blue-600 text-white text-xs hover:bg-blue-700 transition-colors" style={{ fontWeight: 700 }}>查看表格</button>
+                      <button onClick={() => handleDeleteExam(exam)} className="py-2 rounded-xl bg-red-50 text-red-500 text-xs hover:bg-red-100 transition-colors" style={{ fontWeight: 700 }}>
+                        {deleteExamId === exam.id ? "确认删除" : "删除考试"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <ChevronRight className="w-4 h-4 text-gray-300" />
-            </button>
-          ))}
+            );
+          })}
+          {exams.length === 0 && (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-6 text-center text-sm text-gray-400">暂无历史考试。</div>
+          )}
         </div>
       </div>
+
+      {examTable && <ExamTableModal exam={examTable} onClose={() => setExamTable(null)} />}
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="text-sm text-gray-700 mb-3" style={{ fontWeight: 700 }}>分析与建议</div>
@@ -918,39 +988,134 @@ function ScoresTab({
 }
 
 // ── Tab: 历史 ─────────────────────────────────────────────────────────────────
-function HistoryTab() {
-  const mockHistory = [
-    { id: 1, label: "2026-06-14 09:30", note: "周五调座后保存", count: 60 },
-    { id: 2, label: "2026-05-20 14:10", note: "期中考试后调整", count: 60 },
-    { id: 3, label: "2026-04-15 11:05", note: "第三次调座", count: 58 },
-    { id: 4, label: "2026-03-10 09:45", note: "", count: 56 },
-  ];
+function formatHistoryTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value || "未记录时间" : date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function HistoryTab({
+  history,
+  onSave,
+  onRename,
+  onView,
+  onApply,
+  onDelete,
+}: {
+  history: SeatHistorySnapshot[];
+  onSave: (note: string) => void;
+  onRename: (id: string, note: string) => void;
+  onView: (snapshot: SeatHistorySnapshot) => void;
+  onApply: (snapshot: SeatHistorySnapshot) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [note, setNote] = useState("");
+  const [search, setSearch] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState("");
+  const filtered = search.trim() ? history.filter(item => item.note.includes(search.trim()) || formatHistoryTime(item.time).includes(search.trim())) : history;
+
+  function startEdit(item: SeatHistorySnapshot) {
+    setEditingId(item.id);
+    setEditingNote(item.note);
+  }
+
+  function finishEdit() {
+    if (editingId) {
+      onRename(editingId, editingNote);
+    }
+    setEditingId(null);
+    setEditingNote("");
+  }
 
   return (
     <div className="flex flex-col gap-3">
       <SectionCard title="保存当前座位" subtitle="保存后可在历史列表中查看和恢复。">
-        <button className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors flex items-center justify-center gap-2" style={{ fontWeight: 600 }}>
-          <Save className="w-3.5 h-3.5" />保存当前座位
-        </button>
+        <div className="flex flex-col gap-2">
+          <input
+            value={note}
+            onChange={event => setNote(event.target.value)}
+            className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+            placeholder="本次座位备注（可选）"
+            maxLength={40}
+          />
+          <button
+            onClick={() => {
+              onSave(note);
+              setNote("");
+            }}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+            style={{ fontWeight: 600 }}
+          >
+            <Save className="w-3.5 h-3.5" />保存当前座位
+          </button>
+        </div>
       </SectionCard>
 
       <SectionCard title="历史记录" subtitle="查看历史版本并按需恢复。">
         <div className="relative mb-3">
           <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300" placeholder="搜索历史备注" />
+          <input
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+            placeholder="搜索历史备注"
+          />
         </div>
         <div className="space-y-2">
-          {mockHistory.map(h => (
-            <div key={h.id} className="border border-gray-100 rounded-xl p-3 hover:border-blue-200 hover:bg-blue-50/30 transition-colors cursor-pointer">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-sm text-gray-800" style={{ fontWeight: 600 }}>{h.label}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">{h.note || "无备注"} · {h.count} 人</div>
+          {filtered.map(item => {
+            const count = item.seats.filter(Boolean).length;
+            const editing = editingId === item.id;
+            return (
+            <div key={item.id} className="border border-gray-100 rounded-xl p-3 hover:border-blue-200 hover:bg-blue-50/30 transition-colors">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <button onClick={() => onView(item)} className="min-w-0 flex-1 text-left">
+                  <div className="text-sm text-gray-800 truncate" style={{ fontWeight: 700 }}>{formatHistoryTime(item.time)}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">{count} 人 · {item.rows} 排 · 查看 →</div>
+                </button>
+                <div className="shrink-0 flex items-center gap-1">
+                  <button onClick={() => onApply(item)} className="px-2 py-1 text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors" style={{ fontWeight: 600 }}>应用</button>
+                  {deleteId === item.id ? (
+                    <button onClick={() => onDelete(item.id)} className="px-2 py-1 text-xs bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors" style={{ fontWeight: 600 }}>确认</button>
+                  ) : (
+                    <button onClick={() => setDeleteId(item.id)} className="px-2 py-1 text-xs bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors" style={{ fontWeight: 600 }}>删除</button>
+                  )}
                 </div>
-                <button className="shrink-0 px-2 py-1 text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors" style={{ fontWeight: 600 }}>恢复</button>
               </div>
+              {editing ? (
+                <input
+                  autoFocus
+                  value={editingNote}
+                  onChange={event => setEditingNote(event.target.value)}
+                  onBlur={finishEdit}
+                  onKeyDown={event => {
+                    if (event.key === "Enter") finishEdit();
+                    if (event.key === "Escape") {
+                      setEditingId(null);
+                      setEditingNote("");
+                    }
+                  }}
+                  className="w-full h-9 px-3 text-sm bg-white border border-blue-200 rounded-xl outline-none focus:border-blue-400"
+                  maxLength={40}
+                  placeholder="点击添加备注..."
+                />
+              ) : (
+                <button onClick={() => startEdit(item)} className="w-full text-left rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm hover:border-blue-200 transition-colors">
+                  {item.note ? (
+                    <span className="text-gray-700" style={{ fontWeight: 600 }}>{item.note}</span>
+                  ) : (
+                    <span className="text-gray-400 italic">点击添加备注...</span>
+                  )}
+                </button>
+              )}
             </div>
-          ))}
+          );
+          })}
+          {filtered.length === 0 && (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-6 text-center text-sm text-gray-400">
+              {history.length ? "没有匹配的历史记录。" : "暂无历史座位记录。"}
+            </div>
+          )}
         </div>
       </SectionCard>
     </div>
@@ -971,6 +1136,14 @@ export function Sidebar({
   onAddStudent,
   onUpdateSeatSettings,
   onSaveScoreImport,
+  onUpdateGradeExam,
+  onDeleteGradeExam,
+  savedSeatHistory,
+  onSaveSeatHistory,
+  onRenameSeatHistory,
+  onViewSeatHistory,
+  onApplySeatHistory,
+  onDeleteSeatHistory,
   onImportRoster,
   onBeforeBackupExport,
   onBackupImported,
@@ -1030,12 +1203,23 @@ export function Sidebar({
         )}
         {activeTab === "scores"  && (
           <ScoresTab
-            exams={gradeExams}
-            onShowGrades={onShowGrades}
-            onSaveScoreImport={onSaveScoreImport}
+          exams={gradeExams}
+          onShowGrades={onShowGrades}
+          onSaveScoreImport={onSaveScoreImport}
+          onUpdateGradeExam={onUpdateGradeExam}
+          onDeleteGradeExam={onDeleteGradeExam}
+        />
+      )}
+        {activeTab === "history" && (
+          <HistoryTab
+            history={savedSeatHistory}
+            onSave={onSaveSeatHistory}
+            onRename={onRenameSeatHistory}
+            onView={onViewSeatHistory}
+            onApply={onApplySeatHistory}
+            onDelete={onDeleteSeatHistory}
           />
         )}
-        {activeTab === "history" && <HistoryTab />}
       </div>
     </div>
   );

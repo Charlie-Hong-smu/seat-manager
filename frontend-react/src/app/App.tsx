@@ -13,6 +13,7 @@ import { CloudSyncModal } from "./components/CloudSyncModal";
 import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { SeatShufflePreview } from "./components/SeatShufflePreview";
+import { HistorySeatModal } from "./components/HistorySeatModal";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
@@ -23,11 +24,11 @@ import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } f
 import { clearAuth, isAuthenticated } from "./state/authStorage";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { createStudent } from "./state/studentActions";
-import { saveGradeExamRecord, saveLegacySnapshot } from "./state/legacyWriteAdapter";
+import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
-import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, SeatSettings, StudentId, StudentRecord } from "./state/types";
+import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
@@ -48,6 +49,8 @@ export default function App() {
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
   const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => initialState.seatOrder);
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
+  const [savedSeatHistory, setSavedSeatHistory] = useState<SeatHistorySnapshot[]>(() => initialState.seatHistory);
+  const [selectedHistorySnapshot, setSelectedHistorySnapshot] = useState<SeatHistorySnapshot | null>(null);
   const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(initialState.lockedSeats));
   const [seatSettings, setSeatSettings] = useState<SeatSettings>(() => initialState.seatSettings);
   const [shufflePreview, setShufflePreview] = useState<ShuffleCandidate | null>(null);
@@ -72,8 +75,9 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      seatHistory: savedSeatHistory,
     });
-  }, [students, seatOrder, lockedSeats, seatSettings, loggedIn]);
+  }, [students, seatOrder, lockedSeats, seatSettings, savedSeatHistory, loggedIn]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -145,6 +149,64 @@ export default function App() {
     });
   }
 
+  function normalizeNameForHistory(name: string): string {
+    return name.trim().replace(/\u3000/g, " ").replace(/[()（）][^()（）]*[()（）]/g, "").replace(/(同学|学生)$/g, "").replace(/\s+/g, "");
+  }
+
+  function createSnapshotId(): string {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `seat-history-${Date.now()}`;
+  }
+
+  function handleSaveSeatHistory(note: string) {
+    if (!students.length) {
+      return;
+    }
+    const studentById = new Map(students.map(student => [student.id, student]));
+    const rows = Math.max(1, Math.ceil(seatOrder.length / 8));
+    const snapshot: SeatHistorySnapshot = {
+      id: createSnapshotId(),
+      time: new Date().toISOString(),
+      note: note.trim(),
+      rows,
+      seats: seatOrder.map(id => (id ? studentById.get(id)?.name || "" : "")),
+    };
+    setSavedSeatHistory(prev => [snapshot, ...prev].slice(0, 20));
+    setSelectedHistorySnapshot(snapshot);
+  }
+
+  function handleUpdateSeatHistoryNote(id: string, note: string) {
+    setSavedSeatHistory(prev => prev.map(item => (item.id === id ? { ...item, note: note.trim() } : item)));
+    setSelectedHistorySnapshot(prev => (prev?.id === id ? { ...prev, note: note.trim() } : prev));
+  }
+
+  function handleDeleteSeatHistory(id: string) {
+    setSavedSeatHistory(prev => prev.filter(item => item.id !== id));
+    setSelectedHistorySnapshot(prev => (prev?.id === id ? null : prev));
+  }
+
+  function handleApplySeatHistory(snapshot: SeatHistorySnapshot) {
+    const queues = new Map<string, StudentId[]>();
+    students.forEach(student => {
+      const key = normalizeNameForHistory(student.name);
+      if (!queues.has(key)) {
+        queues.set(key, []);
+      }
+      queues.get(key)?.push(student.id);
+    });
+    const next = snapshot.seats.map(name => {
+      if (!name) {
+        return null;
+      }
+      const queue = queues.get(normalizeNameForHistory(name));
+      return queue?.shift() || null;
+    });
+    commitSeatOrder(next);
+    setSelectedHistorySnapshot(null);
+  }
+
   function handleOrderSeatsByList() {
     commitSeatOrder(buildSeatOrderByStudentList(students));
   }
@@ -210,6 +272,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      seatHistory: savedSeatHistory,
     });
   }
 
@@ -220,6 +283,7 @@ export default function App() {
     setSeatOrder(next.seatOrder);
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
+    setSavedSeatHistory(next.seatHistory);
     setSeatHistory([]);
     setSelectedStudent(null);
   }
@@ -231,6 +295,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      seatHistory: savedSeatHistory,
     });
     if (!next) {
       return null;
@@ -240,9 +305,54 @@ export default function App() {
     setSeatOrder(next.seatOrder);
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
+    setSavedSeatHistory(next.seatHistory);
     setSeatHistory([]);
     setMainView("grades");
     return next.gradeExams.find(exam => exam.id === record.id) || next.gradeExams[0] || null;
+  }
+
+  function handleUpdateGradeExam(examId: string, name: string, date: string): boolean {
+    const next = updateGradeExamRecordMetadata({
+      examId,
+      name,
+      date,
+      students,
+      seatOrder,
+      lockedSeats: [...lockedSeats],
+      seatSettings,
+      seatHistory: savedSeatHistory,
+    });
+    if (!next) {
+      return false;
+    }
+    setAppState(next);
+    setStudents(next.students);
+    setSeatOrder(next.seatOrder);
+    setLockedSeats(new Set(next.lockedSeats));
+    setSeatSettings(next.seatSettings);
+    setSavedSeatHistory(next.seatHistory);
+    return true;
+  }
+
+  function handleDeleteGradeExam(examId: string): boolean {
+    const next = deleteGradeExamRecord({
+      examId,
+      students,
+      seatOrder,
+      lockedSeats: [...lockedSeats],
+      seatSettings,
+      seatHistory: savedSeatHistory,
+    });
+    if (!next) {
+      return false;
+    }
+    setAppState(next);
+    setStudents(next.students);
+    setSeatOrder(next.seatOrder);
+    setLockedSeats(new Set(next.lockedSeats));
+    setSeatSettings(next.seatSettings);
+    setSavedSeatHistory(next.seatHistory);
+    return true;
   }
 
   async function handleImportRoster(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
@@ -253,6 +363,7 @@ export default function App() {
     setSeatOrder(result.state.seatOrder);
     setLockedSeats(new Set(result.state.lockedSeats));
     setSeatSettings(result.state.seatSettings);
+    setSavedSeatHistory(result.state.seatHistory);
     setSeatHistory([]);
     setSelectedStudent(null);
     return result;
@@ -323,6 +434,14 @@ export default function App() {
           onAddStudent={handleAddStudent}
           onUpdateSeatSettings={updateSeatSettings}
           onSaveScoreImport={handleSaveScoreImport}
+          onUpdateGradeExam={handleUpdateGradeExam}
+          onDeleteGradeExam={handleDeleteGradeExam}
+          savedSeatHistory={savedSeatHistory}
+          onSaveSeatHistory={handleSaveSeatHistory}
+          onRenameSeatHistory={handleUpdateSeatHistoryNote}
+          onViewSeatHistory={setSelectedHistorySnapshot}
+          onApplySeatHistory={handleApplySeatHistory}
+          onDeleteSeatHistory={handleDeleteSeatHistory}
           onImportRoster={handleImportRoster}
           onBeforeBackupExport={saveCurrentLegacySnapshot}
           onBackupImported={reloadFromLegacyState}
@@ -369,6 +488,16 @@ export default function App() {
               onRegenerate={handleRandomizeSeats}
               onApply={handleApplyShufflePreview}
               onClose={() => setShufflePreview(null)}
+            />
+          )}
+
+          {selectedHistorySnapshot && (
+            <HistorySeatModal
+              snapshot={selectedHistorySnapshot}
+              onClose={() => setSelectedHistorySnapshot(null)}
+              onSaveNote={handleUpdateSeatHistoryNote}
+              onApply={handleApplySeatHistory}
+              onDelete={handleDeleteSeatHistory}
             />
           )}
 

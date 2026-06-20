@@ -72,6 +72,14 @@ export interface SeatSettings {
   constraints: SeatConstraints;
 }
 
+export interface SeatHistorySnapshot {
+  id: string;
+  time: string;
+  note: string;
+  rows: number;
+  seats: string[];
+}
+
 export interface SavedGradeExamEntry {
   name: string;
   scores: Record<string, GradeScoreCell>;
@@ -178,6 +186,7 @@ export interface SeatManagerState {
   seatOrder: Array<StudentId | null>;
   lockedSeats: number[];
   seatSettings: SeatSettings;
+  seatHistory: SeatHistorySnapshot[];
   savedExams: unknown[];
   exams: unknown[];
   manualTags: unknown[];

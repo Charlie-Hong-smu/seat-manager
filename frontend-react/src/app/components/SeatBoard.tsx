@@ -176,7 +176,7 @@ export function SeatBoard({ students, seatOrder, onSelectStudent, onMoveSeat, lo
     <div className="flex flex-col h-full">
       {/* Compact toolbar — no title, just the mode toggle + hint */}
       <div className="flex items-center justify-between mb-3 shrink-0">
-        <p className="text-xs text-gray-400">每两列为同桌一组，共 4 组 · 点击卡片查看学生详情</p>
+        <p className="text-xs text-gray-400">每两列为同桌一组，共 4 组 · 最下方为讲台 · 点击卡片查看学生详情</p>
         <div className="flex p-1 bg-gray-100 rounded-xl gap-1">
           <button
             onClick={() => setCardMode("compact")}
@@ -208,7 +208,10 @@ export function SeatBoard({ students, seatOrder, onSelectStudent, onMoveSeat, lo
 
         {/* Rows */}
         <div className="flex flex-col gap-2">
-          {rows.map((row, rowIdx) => (
+          {rows.map((_, displayIdx) => {
+            const rowIdx = rows.length - 1 - displayIdx;
+            const row = rows[rowIdx];
+            return (
             <div key={rowIdx} className="flex items-center gap-3">
               {/* Row label */}
               <div className="w-9 shrink-0 text-center">
@@ -239,7 +242,12 @@ export function SeatBoard({ students, seatOrder, onSelectStudent, onMoveSeat, lo
                 </div>
               ))}
             </div>
-          ))}
+          );
+          })}
+        </div>
+
+        <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/70 py-2 text-center text-xs text-blue-600" style={{ fontWeight: 700 }}>
+          讲台
         </div>
 
         {/* Legend */}
