@@ -225,10 +225,10 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
     return { subject, avg, fill: SUBJECT_COLORS[index % SUBJECT_COLORS.length] };
   });
   const bandLabels = [
-    { key: "excellent" as const, label: metricKey === "total" ? `优秀 (≥${formatThresholdValue(totalThresholds.excellent)})` : `优秀 (≥${thresholds.excellent})`, fill: GRADE_COLORS.excellent },
-    { key: "good" as const, label: metricKey === "total" ? `良好 (≥${formatThresholdValue(totalThresholds.good)})` : `良好 (≥${thresholds.good})`, fill: GRADE_COLORS.good },
-    { key: "pass" as const, label: metricKey === "total" ? `及格 (≥${formatThresholdValue(totalThresholds.pass)})` : `及格 (≥${thresholds.pass})`, fill: GRADE_COLORS.pass },
-    { key: "fail" as const, label: metricKey === "total" ? `不及格 (<${formatThresholdValue(totalThresholds.pass)})` : `不及格 (<${thresholds.pass})`, fill: GRADE_COLORS.fail },
+    { key: "fail" as const, label: metricKey === "total" ? `不及格 (<${formatThresholdValue(totalThresholds.pass)})` : `0-${Math.max(0, thresholds.pass - 1)}`, fill: GRADE_COLORS.fail },
+    { key: "pass" as const, label: metricKey === "total" ? `及格 (≥${formatThresholdValue(totalThresholds.pass)})` : `${thresholds.pass}-${Math.max(thresholds.pass, thresholds.good - 1)}`, fill: GRADE_COLORS.pass },
+    { key: "good" as const, label: metricKey === "total" ? `良好 (≥${formatThresholdValue(totalThresholds.good)})` : `${thresholds.good}-${Math.max(thresholds.good, thresholds.excellent - 1)}`, fill: GRADE_COLORS.good },
+    { key: "excellent" as const, label: metricKey === "total" ? `优秀 (≥${formatThresholdValue(totalThresholds.excellent)})` : `${thresholds.excellent}+`, fill: GRADE_COLORS.excellent },
   ];
   const distributionData = [
     ...bandLabels.map(band => ({
@@ -245,6 +245,15 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
     .sort((a, b) => b.value - a.value)
     .slice(0, 12)
     .map((item, index) => ({ ...item, rank: index + 1, fill: metricKey === "total" ? "#2563eb" : SUBJECT_COLORS[Math.max(0, subjects.indexOf(metricKey)) % SUBJECT_COLORS.length] }));
+  const subjectRankingRows = [...rowsWithMetrics]
+    .filter(row => row.name.includes(searchQuery))
+    .map(row => ({
+      row,
+      value: getMetricValue(row, metricKey),
+      matchedStudent: (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null,
+    }))
+    .filter(item => typeof item.value === "number" && Number.isFinite(item.value))
+    .sort((a, b) => compareValues(a.value, b.value, false));
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortAsc(v => !v);
@@ -408,13 +417,13 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
               />
             </div>
 
-            <div className="grid grid-cols-5 gap-4">
-              <div className="col-span-3 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+            <div className={metricKey === "total" ? "grid grid-cols-5 gap-4" : "grid grid-cols-1 gap-4"}>
+              <div className={`${metricKey === "total" ? "col-span-3" : ""} bg-white rounded-2xl p-5 border border-gray-100 shadow-sm`}>
                 <h3 className="text-gray-700 mb-1">{metricKey === "total" ? "各科平均分对比" : `${metricLabel}分数分布`}</h3>
                 <p className="text-xs text-gray-400 mb-4">
-                  {metricKey === "total" ? "不同科目的班级平均表现" : "按当前统计阈值划分该科成绩段"}
+                  {metricKey === "total" ? "不同科目的班级平均表现" : `共 ${rows.length} 名学生的成绩区间分布`}
                 </p>
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={metricKey === "total" ? 200 : 260}>
                   <BarChart data={metricKey === "total" ? subjectAvgData : distributionData} barSize={32}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                     <XAxis dataKey={metricKey === "total" ? "subject" : "label"} tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} interval={0} />
@@ -429,13 +438,11 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                 </ResponsiveContainer>
               </div>
 
-              <div className="col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-                <h3 className="text-gray-700 mb-1">{metricKey === "total" ? "总分分布" : `${metricLabel}学生排名`}</h3>
-                <p className="text-xs text-gray-400 mb-4">
-                  {metricKey === "total" ? totalThresholdHint : `按${metricLabel}分数从高到低展示前 12 名`}
-                </p>
-                <ResponsiveContainer width="100%" height={200}>
-                  {metricKey === "total" ? (
+              {metricKey === "total" && (
+                <div className="col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                  <h3 className="text-gray-700 mb-1">总分分布</h3>
+                  <p className="text-xs text-gray-400 mb-4">{totalThresholdHint}</p>
+                  <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={distributionData} barSize={26}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                       <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} interval={0} />
@@ -445,24 +452,17 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                         {distributionData.map((item, index) => <Cell key={`dist-cell-${index}`} fill={item.fill} />)}
                       </Bar>
                     </BarChart>
-                  ) : (
-                    <BarChart data={rankingData} layout="vertical" barSize={10} margin={{ left: 12, right: 16, top: 4, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                      <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                      <YAxis type="category" dataKey="name" width={52} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 13 }} cursor={{ fill: "#f9fafb" }} />
-                      <Bar dataKey="value" name={metricLabel} radius={[0, 5, 5, 0]}>
-                        {rankingData.map((item, index) => <Cell key={`rank-cell-${index}`} fill={item.fill} />)}
-                      </Bar>
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
-              </div>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
-                <h3 className="text-gray-700">学生成绩</h3>
+                <div>
+                  <h3 className="text-gray-700">{metricKey === "total" ? "学生成绩" : `${metricLabel} · 成绩排名`}</h3>
+                  {metricKey !== "total" && <p className="text-xs text-gray-400 mt-0.5">按 {metricLabel} 成绩从高到低排列</p>}
+                </div>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
@@ -475,61 +475,101 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
-                      <th className="text-left px-6 py-3 w-10">#</th>
-                      <th className="text-left px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("name")}>
-                        <span className="flex items-center gap-1">姓名 <ArrowUpDown className="w-3 h-3" /></span>
-                      </th>
-                      {subjects.map(subject => (
-                        <th key={subject} className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort(subject)}>
-                          <span className="flex items-center justify-center gap-1">{subject} <ArrowUpDown className="w-3 h-3" /></span>
+                {metricKey === "total" ? (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
+                        <th className="text-left px-6 py-3 w-10">#</th>
+                        <th className="text-left px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("name")}>
+                          <span className="flex items-center gap-1">姓名 <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
-                      ))}
-                      <th className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("total")}>
-                        <span className="flex items-center justify-center gap-1">总分 <ArrowUpDown className="w-3 h-3" /></span>
-                      </th>
-                      <th className="text-center px-4 py-3">等级</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((row, index) => {
-                      const matchedStudent = (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null;
-                      const rank = [...rowsWithMetrics].sort((a, b) => compareValues(a.totalScore, b.totalScore, false)).findIndex(item => item.id === row.id) + 1;
-                      const grade = getGradeLabel(getMetricBandValue(row, metricKey, subjects, thresholds), thresholds);
-                      const gradeColor = {
-                        优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
-                        良好: "text-blue-600 bg-blue-50 border border-blue-100",
-                        及格: "text-amber-600 bg-amber-50 border border-amber-100",
-                        不及格: "text-red-500 bg-red-50 border border-red-100",
-                        缺考: "text-gray-500 bg-gray-50 border border-gray-100",
-                      }[grade];
-                      return (
-                        <tr
-                          key={row.id}
-                          onClick={() => matchedStudent && onSelectStudent(matchedStudent)}
-                          title={matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
-                          className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${matchedStudent ? "cursor-pointer" : ""}`}
-                        >
-                          <td className="px-6 py-3 text-gray-300 tabular-nums">{row.rankClass || rank || index + 1}</td>
-                          <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{row.name}</td>
-                          {subjects.map(subject => {
-                            const score = row.scores[subject]?.score ?? null;
-                            const color = score === null ? "text-gray-300" : score >= 90 ? "text-emerald-600" : score >= 75 ? "text-blue-600" : score >= 60 ? "text-gray-700" : "text-red-500";
-                            return (
-                              <td key={subject} className={`text-center px-4 py-3 tabular-nums ${color} ${metricKey === subject ? "bg-blue-50/50" : ""}`}>{formatScore(score)}</td>
-                            );
-                          })}
-                          <td className={`text-center px-4 py-3 tabular-nums text-gray-800 ${metricKey === "total" ? "bg-blue-50/50" : ""}`} style={{ fontWeight: 700 }}>{formatScore(row.totalScore)}</td>
-                          <td className="text-center px-4 py-3">
-                            <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        {subjects.map(subject => (
+                          <th key={subject} className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort(subject)}>
+                            <span className="flex items-center justify-center gap-1">{subject} <ArrowUpDown className="w-3 h-3" /></span>
+                          </th>
+                        ))}
+                        <th className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("total")}>
+                          <span className="flex items-center justify-center gap-1">总分 <ArrowUpDown className="w-3 h-3" /></span>
+                        </th>
+                        <th className="text-center px-4 py-3">等级</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((row, index) => {
+                        const matchedStudent = (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null;
+                        const rank = [...rowsWithMetrics].sort((a, b) => compareValues(a.totalScore, b.totalScore, false)).findIndex(item => item.id === row.id) + 1;
+                        const grade = getGradeLabel(getMetricBandValue(row, metricKey, subjects, thresholds), thresholds);
+                        const gradeColor = {
+                          优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
+                          良好: "text-blue-600 bg-blue-50 border border-blue-100",
+                          及格: "text-amber-600 bg-amber-50 border border-amber-100",
+                          不及格: "text-red-500 bg-red-50 border border-red-100",
+                          缺考: "text-gray-500 bg-gray-50 border border-gray-100",
+                        }[grade];
+                        return (
+                          <tr
+                            key={row.id}
+                            onClick={() => matchedStudent && onSelectStudent(matchedStudent)}
+                            title={matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
+                            className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${matchedStudent ? "cursor-pointer" : ""}`}
+                          >
+                            <td className="px-6 py-3 text-gray-300 tabular-nums">{row.rankClass || rank || index + 1}</td>
+                            <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{row.name}</td>
+                            {subjects.map(subject => {
+                              const score = row.scores[subject]?.score ?? null;
+                              const color = score === null ? "text-gray-300" : score >= 90 ? "text-emerald-600" : score >= 75 ? "text-blue-600" : score >= 60 ? "text-gray-700" : "text-red-500";
+                              return (
+                                <td key={subject} className={`text-center px-4 py-3 tabular-nums ${color}`}>{formatScore(score)}</td>
+                              );
+                            })}
+                            <td className="text-center px-4 py-3 tabular-nums text-gray-800 bg-blue-50/50" style={{ fontWeight: 700 }}>{formatScore(row.totalScore)}</td>
+                            <td className="text-center px-4 py-3">
+                              <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
+                        <th className="text-left px-6 py-3 w-16">排名</th>
+                        <th className="text-left px-4 py-3">姓名</th>
+                        <th className="text-center px-4 py-3">{metricLabel} 成绩</th>
+                        <th className="text-center px-4 py-3">等级</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subjectRankingRows.map((item, index) => {
+                        const grade = getGradeLabel(item.value, thresholds);
+                        const gradeColor = {
+                          优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
+                          良好: "text-blue-600 bg-blue-50 border border-blue-100",
+                          及格: "text-amber-600 bg-amber-50 border border-amber-100",
+                          不及格: "text-red-500 bg-red-50 border border-red-100",
+                          缺考: "text-gray-500 bg-gray-50 border border-gray-100",
+                        }[grade];
+                        return (
+                          <tr
+                            key={item.row.id}
+                            onClick={() => item.matchedStudent && onSelectStudent(item.matchedStudent)}
+                            title={item.matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
+                            className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${item.matchedStudent ? "cursor-pointer" : ""}`}
+                          >
+                            <td className="px-6 py-3 text-gray-400 tabular-nums">{index + 1}</td>
+                            <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{item.row.name}</td>
+                            <td className="text-center px-4 py-3 tabular-nums text-blue-700" style={{ fontWeight: 700 }}>{formatScore(item.value)}</td>
+                            <td className="text-center px-4 py-3">
+                              <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Play, Pause, RotateCcw, Copy, Download, Search, CheckSquare, Square, ChevronRight, Sparkles, TrendingUp, TrendingDown, Save, Settings2, Plus, Trash2 } from "lucide-react";
+import { X, Play, Pause, RotateCcw, Copy, Download, Search, ChevronRight, Sparkles, TrendingUp, TrendingDown, Save, Plus } from "lucide-react";
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
@@ -160,6 +160,7 @@ export function CommentWorkbench({ students, onClose }: Props) {
   const [filterSearch, setFilterSearch] = useState("");
   const [filterUngenerated, setFilterUngenerated] = useState(false);
   const [filterNeedsInfo, setFilterNeedsInfo] = useState(false);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<StudentId>>(() => new Set());
   const [teacherNote, setTeacherNote] = useState("");
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchState, setBatchState] = useState<CommentBatchState>(() => initialBatchState);
@@ -184,6 +185,9 @@ export function CommentWorkbench({ students, onClose }: Props) {
       return true;
     });
   }, [comments, filterSearch, filterUngenerated, filterNeedsInfo, students]);
+  const filteredStudentIds = useMemo(() => filteredStudents.map(student => student.id), [filteredStudents]);
+  const selectedBatchCount = selectedBatchIds.size;
+  const allFilteredSelected = filteredStudentIds.length > 0 && filteredStudentIds.every(id => selectedBatchIds.has(id));
 
   const selectedStudent = students.find(s => s.id === selectedId) || students[0];
   const selectedComment = comments.find(c => c.studentId === selectedStudent?.id) || comments[0];
@@ -220,6 +224,30 @@ export function CommentWorkbench({ students, onClose }: Props) {
     const saved = saveStudentCommentProfile(selectedStudent.id, rubric, nextProfile);
     setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: saved }));
     setTeacherNote(saved.teacherNote);
+  }
+
+  function toggleBatchSelection(studentId: StudentId) {
+    setSelectedBatchIds(prev => {
+      const next = new Set(prev);
+      if (next.has(studentId)) {
+        next.delete(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
+  }
+
+  function toggleFilteredBatchSelection() {
+    setSelectedBatchIds(prev => {
+      const next = new Set(prev);
+      if (filteredStudentIds.length && filteredStudentIds.every(id => next.has(id))) {
+        filteredStudentIds.forEach(id => next.delete(id));
+      } else {
+        filteredStudentIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
   }
 
   function commitBatchState(next: CommentBatchState) {
@@ -546,6 +574,7 @@ export function CommentWorkbench({ students, onClose }: Props) {
       }
       setAccessCode("");
       setHasAuth(true);
+      setSelectedBatchIds(new Set());
       const finalState = { queue: [], failed, done: total, total, status: failed.length ? "failed" as const : "complete" as const, updatedAt: "" };
       commitBatchState(finalState);
       if (failed.length) {
@@ -563,9 +592,12 @@ export function CommentWorkbench({ students, onClose }: Props) {
 
   function startBatch() {
     const failedIds = new Set(batchState.failed);
-    const pending = comments.filter(c => !c.generated || failedIds.has(c.studentId));
+    const selectedIds = Array.from(selectedBatchIds);
+    const pending = selectedIds.length
+      ? comments.filter(c => selectedIds.includes(c.studentId))
+      : comments.filter(c => !c.generated || failedIds.has(c.studentId));
     if (!pending.length) {
-      setAiStatus("没有待生成的学生。");
+      setAiStatus(selectedIds.length ? "请选择要批量生成的学生。" : "没有待生成的学生。");
       clearBatchState();
       return;
     }
@@ -577,6 +609,9 @@ export function CommentWorkbench({ students, onClose }: Props) {
       status: "running" as const,
       updatedAt: "",
     };
+    if (selectedIds.length) {
+      setAiStatus(`准备为已选 ${pending.length} 名学生批量生成评语。`);
+    }
     void runBatchQueue(next);
   }
 
@@ -645,6 +680,8 @@ export function CommentWorkbench({ students, onClose }: Props) {
     ? "继续生成"
     : batchState.failed.length
     ? "重试失败"
+    : selectedBatchCount
+    ? `生成选中 ${selectedBatchCount}`
     : "批量生成";
   const batchButtonAction = batchRunning ? pauseBatch : resumableCount ? resumeBatch : startBatch;
 
@@ -759,6 +796,17 @@ export function CommentWorkbench({ students, onClose }: Props) {
 
         <p className="w-full text-xs text-blue-600">{aiStatus}</p>
 
+        {selectedBatchCount > 0 && (
+          <div className="w-full flex items-center gap-2 text-xs text-blue-700">
+            <span className="px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100" style={{ fontWeight: 700 }}>
+              已选择 {selectedBatchCount} 人
+            </span>
+            <button onClick={() => setSelectedBatchIds(new Set())} className="text-gray-400 hover:text-gray-600">
+              清空选择
+            </button>
+          </div>
+        )}
+
         {/* Progress bar */}
         {(batchRunning || batchProgress > 0 || resumableCount > 0) && (
           <div className="w-full flex items-center gap-3 pt-1">
@@ -783,7 +831,15 @@ export function CommentWorkbench({ students, onClose }: Props) {
 
           {/* Table header */}
           <div className="shrink-0 grid grid-cols-12 gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-400" style={{ fontWeight: 700 }}>
-            <div className="col-span-1">选择</div>
+            <button
+              type="button"
+              onClick={toggleFilteredBatchSelection}
+              className="col-span-1 flex items-center gap-1 text-left hover:text-blue-600"
+              title={allFilteredSelected ? "取消选择当前筛选学生" : "选择当前筛选学生"}
+            >
+              <input type="checkbox" checked={allFilteredSelected} readOnly className="accent-blue-600 pointer-events-none" />
+              选择
+            </button>
             <div className="col-span-2">学生</div>
             <div className="col-span-2">标签</div>
             <div className="col-span-3">成绩摘要</div>
@@ -797,6 +853,7 @@ export function CommentWorkbench({ students, onClose }: Props) {
             {filteredStudents.map(s => {
               const state = comments.find(c => c.studentId === s.id)!;
               const isSelected = s.id === selectedId;
+              const isBatchSelected = selectedBatchIds.has(s.id);
               const integrity = s.academicTags.length > 0 ? 40 : 20;
 
               return (
@@ -806,7 +863,14 @@ export function CommentWorkbench({ students, onClose }: Props) {
                   className={`w-full grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-gray-50 text-left hover:bg-blue-50/40 transition-colors items-center ${isSelected ? "bg-blue-50 border-b-blue-100" : ""}`}
                 >
                   <div className="col-span-1">
-                    {isSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4 text-gray-300" />}
+                    <input
+                      type="checkbox"
+                      checked={isBatchSelected}
+                      onClick={event => event.stopPropagation()}
+                      onChange={() => toggleBatchSelection(s.id)}
+                      className="accent-blue-600"
+                      aria-label={`选择 ${s.name} 用于批量生成`}
+                    />
                   </div>
                   <div className="col-span-2 text-sm text-gray-800 truncate" style={{ fontWeight: 600 }}>{s.name}</div>
                   <div className="col-span-2 text-xs text-gray-500 truncate">{tagSummary(s)}</div>
@@ -924,60 +988,6 @@ export function CommentWorkbench({ students, onClose }: Props) {
                     <Plus className="w-3.5 h-3.5" />新增标准
                   </button>
                 </div>
-
-                <details className="border-b border-gray-100">
-                  <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-xs text-gray-500 hover:bg-gray-50" style={{ fontWeight: 700 }}>
-                    <Settings2 className="w-3.5 h-3.5" />标准库管理
-                  </summary>
-                  <div className="px-4 pb-4 space-y-3">
-                    {rubric.criteria.map(criterion => (
-                      <div key={criterion.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <input
-                            value={criterion.label}
-                            disabled={criterion.builtIn}
-                            onChange={event => updateCriterion(criterion.id, { label: event.target.value || criterion.label })}
-                            className="flex-1 min-w-0 px-3 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none disabled:text-gray-400"
-                          />
-                          <label className="flex items-center gap-1.5 text-xs text-gray-500 whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              checked={criterion.syncToTags}
-                              onChange={event => updateCriterion(criterion.id, { syncToTags: event.target.checked })}
-                              className="accent-blue-600"
-                            />
-                            同步标签
-                          </label>
-                          <button
-                            onClick={() => deleteOrHideCriterion(criterion)}
-                            className="px-2.5 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg bg-white hover:bg-gray-100"
-                            style={{ fontWeight: 700 }}
-                          >
-                            {criterion.builtIn ? (criterion.hidden ? "显示" : "隐藏") : "删除"}
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {criterion.options.filter(option => !option.builtIn).map(option => (
-                            <button
-                              key={option.id}
-                              onClick={() => removeCriterionOption(criterion, option.id)}
-                              className="flex items-center gap-1 px-2 py-1 text-xs text-red-500 border border-red-100 bg-white rounded-full hover:bg-red-50"
-                            >
-                              <Trash2 className="w-3 h-3" />{option.label}
-                            </button>
-                          ))}
-                          <button
-                            onClick={() => addCriterionOption(criterion)}
-                            className="px-2 py-1 text-xs text-blue-600 border border-blue-100 bg-white rounded-full hover:bg-blue-50"
-                            style={{ fontWeight: 700 }}
-                          >
-                            + 选项
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
 
                 <div className="p-4 space-y-4">
                   {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
