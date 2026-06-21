@@ -247,7 +247,7 @@ export function StudentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-12 bg-black/40 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-12 bg-black/40 backdrop-blur-sm overflow-y-auto">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mb-8 overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4 border-b border-gray-100">
@@ -479,12 +479,12 @@ export function StudentModal({
                 <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>成绩趋势</span>
                 <p className="text-xs text-gray-400 mt-0.5">{chronologicalExams.length} 次考试 · 趋势按时间先后展示</p>
               </div>
-              <div className="flex flex-wrap justify-end gap-1 max-w-xs">
+              <div className="flex flex-nowrap justify-end gap-1 overflow-x-auto">
                 {trendMetricOptions.slice(0, 7).map(metric => (
                   <button
                     key={metric}
                     onClick={() => setTrendMetric(metric)}
-                    className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${effectiveTrendMetric === metric ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:bg-white"}`}
+                    className={`shrink-0 px-2.5 py-1 rounded-lg text-xs transition-colors ${effectiveTrendMetric === metric ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:bg-white"}`}
                     style={{ fontWeight: 700 }}
                   >
                     {metric === "total" ? "总分" : metric}

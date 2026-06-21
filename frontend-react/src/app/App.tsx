@@ -28,11 +28,19 @@ import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateG
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
-import { generateStudentAiTrend, readCachedStudentAiTrend } from "./state/aiTrendService";
+import { generateClassAiTrend, generateStudentAiTrend, readCachedStudentAiTrend, type AiClassTrendResult } from "./state/aiTrendService";
 import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
 type MainView = "seat" | "grades";
+type StudentAdviceProgress = {
+  busy: boolean;
+  status: string;
+  generated: number;
+  failed: number;
+  skipped: number;
+  total: number;
+};
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
@@ -61,7 +69,16 @@ export default function App() {
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [installMessage, setInstallMessage] = useState("当前浏览器没有直接提供安装确认，请按下面方式手动添加。");
+  const [studentAdviceProgress, setStudentAdviceProgress] = useState<StudentAdviceProgress>({
+    busy: false,
+    status: "",
+    generated: 0,
+    failed: 0,
+    skipped: 0,
+    total: 0,
+  });
   const hasMounted = useRef(false);
+  const studentAdviceRunning = useRef(false);
 
   useEffect(() => {
     if (!hasMounted.current) {
@@ -378,7 +395,11 @@ export default function App() {
     return scores.length ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10 : null;
   }
 
-  function handleGenerateClassAnalysis(): string {
+  async function handleGenerateClassAnalysis(): Promise<AiClassTrendResult> {
+    return generateClassAiTrend(students, appState.gradeExams, { force: false });
+  }
+
+  function handleGenerateLocalClassAnalysis(): string {
     const exams = [...appState.gradeExams].sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`));
     if (exams.length < 2) {
       return "至少需要两次考试，才能分析班级整体分数变化。";
@@ -417,9 +438,26 @@ export default function App() {
   }
 
   async function handleGenerateStudentTrendAdvice(): Promise<{ generated: number; failed: number; skipped: number }> {
+    if (studentAdviceRunning.current) {
+      return {
+        generated: studentAdviceProgress.generated,
+        failed: studentAdviceProgress.failed,
+        skipped: studentAdviceProgress.skipped,
+      };
+    }
+    studentAdviceRunning.current = true;
     let generated = 0;
     let failed = 0;
     let skipped = 0;
+    const eligible = students.filter(student => student.exams.length >= 2);
+    setStudentAdviceProgress({
+      busy: true,
+      status: `正在生成学生趋势分析：0 / ${eligible.length}`,
+      generated,
+      failed,
+      skipped,
+      total: eligible.length,
+    });
 
     for (const student of students) {
       if (student.exams.length < 2) {
@@ -429,6 +467,14 @@ export default function App() {
       const cached = readCachedStudentAiTrend(student);
       if (cached?.overall || cached?.changes || cached?.suggestions) {
         generated += 1;
+        setStudentAdviceProgress({
+          busy: true,
+          status: `正在生成学生趋势分析：${generated + failed} / ${eligible.length}`,
+          generated,
+          failed,
+          skipped,
+          total: eligible.length,
+        });
         continue;
       }
       try {
@@ -437,8 +483,25 @@ export default function App() {
       } catch {
         failed += 1;
       }
+      setStudentAdviceProgress({
+        busy: true,
+        status: `正在生成学生趋势分析：${generated + failed} / ${eligible.length}`,
+        generated,
+        failed,
+        skipped,
+        total: eligible.length,
+      });
     }
 
+    setStudentAdviceProgress({
+      busy: false,
+      status: `已生成 ${generated} 人，跳过 ${skipped} 人，失败 ${failed} 人。`,
+      generated,
+      failed,
+      skipped,
+      total: eligible.length,
+    });
+    studentAdviceRunning.current = false;
     return { generated, failed, skipped };
   }
 
@@ -524,7 +587,9 @@ export default function App() {
           onUpdateGradeExam={handleUpdateGradeExam}
           onDeleteGradeExam={handleDeleteGradeExam}
           onGenerateClassAnalysis={handleGenerateClassAnalysis}
+          onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
           onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
+          studentAdviceProgress={studentAdviceProgress}
           savedSeatHistory={savedSeatHistory}
           onSaveSeatHistory={handleSaveSeatHistory}
           onRenameSeatHistory={handleUpdateSeatHistoryNote}
@@ -534,6 +599,7 @@ export default function App() {
           onImportRoster={handleImportRoster}
           onBeforeBackupExport={saveCurrentLegacySnapshot}
           onBackupImported={reloadFromLegacyState}
+          onSelectStudent={setSelectedStudent}
           onTabChange={tab => {
             setSidebarTab(tab);
             if (tab === "scores") setMainView("grades");
@@ -552,6 +618,10 @@ export default function App() {
       }
       overlays={
         <>
+          {showCommentWorkbench && (
+            <CommentWorkbench students={students} onClose={() => setShowCommentWorkbench(false)} onSelectStudent={setSelectedStudent} />
+          )}
+
           {selectedStudent && (
             <StudentDetail
               student={selectedStudent}
@@ -561,10 +631,6 @@ export default function App() {
               onApplyRecord={handleApplyStudentRecord}
               onDeleteStudent={handleDeleteStudent}
             />
-          )}
-
-          {showCommentWorkbench && (
-            <CommentWorkbench students={students} onClose={() => setShowCommentWorkbench(false)} />
           )}
 
           {shufflePreview && (

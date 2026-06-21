@@ -18,6 +18,7 @@ import { ExamTableModal } from "./ExamTableModal";
 import { createSavedGradeExamRecord, parseScoreFile } from "../state/scoreImport";
 import { COMPLEMENT_RULES } from "../state/seatPlanner";
 import type { RosterImportOptions, RosterImportResult } from "../state/rosterImport";
+import type { AiClassTrendResult } from "../state/aiTrendService";
 import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, ScoreImportDraft, SeatHistorySnapshot, SeatPairRule, SeatSettings, StudentId } from "../state/types";
 
 type Tab = "common" | "import" | "scores" | "history";
@@ -37,8 +38,17 @@ interface Props {
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
   onUpdateGradeExam: (examId: string, name: string, date: string) => boolean;
   onDeleteGradeExam: (examId: string) => boolean;
-  onGenerateClassAnalysis: () => string;
+  onGenerateClassAnalysis: () => Promise<AiClassTrendResult>;
+  onGenerateLocalClassAnalysis: () => string;
   onGenerateStudentTrendAdvice: () => Promise<{ generated: number; failed: number; skipped: number }>;
+  studentAdviceProgress: {
+    busy: boolean;
+    status: string;
+    generated: number;
+    failed: number;
+    skipped: number;
+    total: number;
+  };
   savedSeatHistory: SeatHistorySnapshot[];
   onSaveSeatHistory: (note: string) => void;
   onRenameSeatHistory: (id: string, note: string) => void;
@@ -48,6 +58,7 @@ interface Props {
   onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
   onBeforeBackupExport: () => void;
   onBackupImported: () => void;
+  onSelectStudent: (student: AppStudent) => void;
   onTabChange: (tab: Tab) => void;
   onShowGrades: () => void;
   onHideGrades: () => void;
@@ -120,6 +131,7 @@ function CommonTab({
   onUndoSeatOrder,
   onAddStudent,
   onUpdateSeatSettings,
+  onSelectStudent,
 }: {
   students: AppStudent[];
   canUndoSeatOrder: boolean;
@@ -129,6 +141,7 @@ function CommonTab({
   onUndoSeatOrder: () => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
   onUpdateSeatSettings: (updater: (current: SeatSettings) => SeatSettings) => void;
+  onSelectStudent: (student: AppStudent) => void;
 }) {
   const [search, setSearch] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
@@ -137,6 +150,8 @@ function CommonTab({
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
+  const [drawHistory, setDrawHistory] = useState<Array<{ id: string; time: string; names: string[] }>>([]);
+  const [showDrawHistory, setShowDrawHistory] = useState(false);
   const [showConstraints, setShowConstraints] = useState(false);
   const [lockedPairA, setLockedPairA] = useState("");
   const [lockedPairB, setLockedPairB] = useState("");
@@ -246,6 +261,10 @@ function CommonTab({
       picked.push(pool[idx]);
     }
     setDrawResult(picked);
+    setDrawHistory(current => [
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, time: new Date().toLocaleTimeString("zh-CN", { hour12: false }), names: picked },
+      ...current,
+    ].slice(0, 10));
   }
 
   function handleAddStudent() {
@@ -413,7 +432,7 @@ function CommonTab({
       </SectionCard>
 
       {/* 学生 */}
-      <SectionCard title="学生管理" subtitle="添加、搜索都在这里处理。">
+      <SectionCard title="学生管理">
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <input
@@ -459,10 +478,14 @@ function CommonTab({
           {search && (
             <div className="border border-gray-100 rounded-xl overflow-hidden">
               {filtered.slice(0, 6).map(s => (
-                <div key={s.id} className="px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center justify-between border-b border-gray-50 last:border-0 cursor-pointer">
+                <button
+                  key={s.id}
+                  onClick={() => onSelectStudent(s)}
+                  className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center justify-between border-b border-gray-50 last:border-0 cursor-pointer text-left"
+                >
                   <span>{s.name}</span>
                   <span className="text-xs text-gray-400">{s.gender}</span>
-                </div>
+                </button>
               ))}
               {filtered.length === 0 && <div className="px-3 py-2 text-sm text-gray-400">无匹配结果</div>}
             </div>
@@ -471,7 +494,7 @@ function CommonTab({
       </SectionCard>
 
       {/* 抽签 */}
-      <SectionCard title="抽签" subtitle="课堂抽问用，支持去重。">
+      <SectionCard title="抽签">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-gray-600">
@@ -505,6 +528,34 @@ function CommonTab({
               ))}
             </div>
           )}
+          {drawHistory.length > 0 && (
+            <div className="border border-gray-100 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setShowDrawHistory(value => !value)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-600 hover:bg-gray-50"
+                style={{ fontWeight: 700 }}
+              >
+                <span>最近抽签 {drawHistory.length} 次</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-300 transition-transform ${showDrawHistory ? "rotate-180" : ""}`} />
+              </button>
+              {showDrawHistory && (
+                <div className="border-t border-gray-50 divide-y divide-gray-50">
+                  {drawHistory.map(item => (
+                    <div key={item.id} className="px-3 py-2">
+                      <div className="text-xs text-gray-400">{item.time}</div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {item.names.map((name, index) => (
+                          <span key={`${item.id}-${index}`} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700" style={{ fontWeight: 700 }}>
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </SectionCard>
     </div>
@@ -528,10 +579,10 @@ function ImportTab({
   const [rosterFile, setRosterFile] = useState<File | null>(null);
   const [replaceExisting, setReplaceExisting] = useState(true);
   const [keepHistory, setKeepHistory] = useState(true);
-  const [rosterStatus, setRosterStatus] = useState("支持姓名、性别、行、列字段。");
+  const [rosterStatus, setRosterStatus] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
   const [backupPreview, setBackupPreview] = useState<BackupImportPreview | null>(null);
-  const [backupStatus, setBackupStatus] = useState("选择 JSON 备份文件后可恢复整份本地数据。");
+  const [backupStatus, setBackupStatus] = useState("");
   const [lastBackupAt, setLastBackupAt] = useState(() => getLastBackupAt());
 
   async function handleRosterImport() {
@@ -601,7 +652,7 @@ function ImportTab({
           title: "导入名单",
           badge: "导入",
           badgeColor: "bg-blue-50 text-blue-600",
-          desc: "支持 Excel/CSV；可选择是否覆盖现有名单",
+          desc: "",
           body: (
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
@@ -638,7 +689,7 @@ function ImportTab({
               >
                 {rosterBusy ? "导入中" : "导入名单"}
               </button>
-              <p className="text-xs text-blue-600">{rosterStatus}</p>
+              {rosterStatus && <p className="text-xs text-blue-600">{rosterStatus}</p>}
             </div>
           ),
         },
@@ -663,7 +714,7 @@ function ImportTab({
               >
                 <FileDown className="w-3.5 h-3.5" />导出备份 JSON
               </button>
-              <p className="text-xs text-gray-400">上次备份：{formatBackupTime(lastBackupAt)}</p>
+              {lastBackupAt && <p className="text-xs text-gray-500">上次备份：{formatBackupTime(lastBackupAt)}</p>}
             </div>
           ),
         },
@@ -671,7 +722,7 @@ function ImportTab({
           title: "恢复备份（JSON）",
           badge: "恢复",
           badgeColor: "bg-amber-50 text-amber-600",
-          desc: "用于换电脑或恢复数据",
+          desc: "",
           body: (
             <div className="flex flex-col gap-2">
               <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-3 cursor-pointer hover:border-amber-300 hover:bg-amber-50/30 transition-colors">
@@ -694,7 +745,7 @@ function ImportTab({
                 </div>
               )}
               <button onClick={handleRestoreBackup} className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>导入备份 JSON</button>
-              <p className="text-xs text-amber-600">{backupStatus}</p>
+              {backupStatus && <p className="text-xs text-amber-600">{backupStatus}</p>}
             </div>
           ),
         },
@@ -720,18 +771,21 @@ function ScoresTab({
   onUpdateGradeExam,
   onDeleteGradeExam,
   onGenerateClassAnalysis,
+  onGenerateLocalClassAnalysis,
   onGenerateStudentTrendAdvice,
+  studentAdviceProgress,
 }: {
   exams: GradeExam[];
   onShowGrades: () => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
   onUpdateGradeExam: (examId: string, name: string, date: string) => boolean;
   onDeleteGradeExam: (examId: string) => boolean;
-  onGenerateClassAnalysis: () => string;
+  onGenerateClassAnalysis: () => Promise<AiClassTrendResult>;
+  onGenerateLocalClassAnalysis: () => string;
   onGenerateStudentTrendAdvice: () => Promise<{ generated: number; failed: number; skipped: number }>;
+  studentAdviceProgress: Props["studentAdviceProgress"];
 }) {
-  const [selectedExam, setSelectedExam] = useState(exams[0]?.id || "");
-  const [expandedExamId, setExpandedExamId] = useState(exams[0]?.id || "");
+  const [expandedExamIds, setExpandedExamIds] = useState<Set<string>>(() => new Set(exams[0]?.id ? [exams[0].id] : []));
   const [examEdits, setExamEdits] = useState<Record<string, { name: string; date: string }>>({});
   const [examTable, setExamTable] = useState<GradeExam | null>(null);
   const [deleteExamId, setDeleteExamId] = useState<string | null>(null);
@@ -741,18 +795,13 @@ function ScoresTab({
   const [scoreBusy, setScoreBusy] = useState(false);
   const [examName, setExamName] = useState("");
   const [examDate, setExamDate] = useState(new Date().toISOString().slice(0, 10));
-  const [classAnalysis, setClassAnalysis] = useState("");
-  const [studentAdviceStatus, setStudentAdviceStatus] = useState("");
-  const [studentAdviceBusy, setStudentAdviceBusy] = useState(false);
+  const [classAnalysis, setClassAnalysis] = useState<AiClassTrendResult | null>(null);
+  const [classAnalysisStatus, setClassAnalysisStatus] = useState("");
+  const [classAnalysisBusy, setClassAnalysisBusy] = useState(false);
 
   useEffect(() => {
-    if (exams.length && !exams.some(exam => exam.id === selectedExam)) {
-      setSelectedExam(exams[0].id);
-    }
-    if (exams.length && !exams.some(exam => exam.id === expandedExamId)) {
-      setExpandedExamId(exams[0].id);
-    }
-  }, [exams, selectedExam]);
+    setExpandedExamIds(current => new Set([...current].filter(id => exams.some(exam => exam.id === id))));
+  }, [exams]);
 
   function getExamEdit(exam: GradeExam) {
     return examEdits[exam.id] || { name: exam.name, date: exam.date };
@@ -835,42 +884,48 @@ function ScoresTab({
   }
 
   async function handleGenerateStudentAdvice() {
-    setStudentAdviceBusy(true);
-    setStudentAdviceStatus("正在批量生成学生趋势分析...");
     try {
-      const result = await onGenerateStudentTrendAdvice();
-      setStudentAdviceStatus(`已生成 ${result.generated} 人，跳过 ${result.skipped} 人，失败 ${result.failed} 人。`);
+      await onGenerateStudentTrendAdvice();
     } catch {
-      setStudentAdviceStatus("批量生成暂时不可用，请确认 AI 授权或稍后重试。");
+      // The parent keeps the visible progress state so generation can continue across tabs.
+    }
+  }
+
+  async function handleGenerateClassAnalysis() {
+    setClassAnalysisBusy(true);
+    setClassAnalysisStatus("正在生成班级 AI 分析...");
+    try {
+      const result = await onGenerateClassAnalysis();
+      setClassAnalysis(result);
+      setClassAnalysisStatus("");
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      setClassAnalysis(null);
+      setClassAnalysisStatus({
+        ai_auth_required: "请先完成一次 AI 授权后再生成班级分析。",
+        ai_file_protocol: "请通过正式网页打开后再使用 AI 分析。",
+        ai_offline: "当前离线，联网后可生成班级分析。",
+        ai_payload_too_large: "当前成绩数据过多，请减少历史考试后再试。",
+        ai_insufficient_trend: "至少需要两次考试、且有多名学生可比较。",
+        ai_rate_limited: "今日 AI 使用较多，请稍后再试。",
+        ai_unauthorized: "AI 功能未授权。",
+      }[reason] || "班级 AI 分析暂时不可用，已显示本地分析。");
+      const local = onGenerateLocalClassAnalysis();
+      setClassAnalysis({
+        overall: local,
+        classChanges: "",
+        focusStudents: "",
+        suggestions: "",
+        disclaimer: "本地分析基于已保存成绩计算，未调用 AI。",
+      });
     } finally {
-      setStudentAdviceBusy(false);
+      setClassAnalysisBusy(false);
     }
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <SectionCard title="选择考试" subtitle="右侧看板会随选择更新。">
-        <div className="flex flex-col gap-2">
-          <select
-            className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 cursor-pointer"
-            value={selectedExam}
-            onChange={e => setSelectedExam(e.target.value)}
-          >
-            {exams.map(e => (
-              <option key={e.id} value={e.id}>{e.name} · {e.date || "未填写日期"}</option>
-            ))}
-          </select>
-          <button
-            onClick={onShowGrades}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors"
-            style={{ fontWeight: 600 }}
-          >
-            <BarChart2 className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />查看成绩看板
-          </button>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="成绩导入" subtitle="解析成绩表后保存为一次考试。">
+      <SectionCard title="成绩导入">
         <div className="flex flex-col gap-2">
           <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-3 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors">
             <FileUp className="w-4 h-4 text-gray-300" />
@@ -940,11 +995,19 @@ function ScoresTab({
         <div className="space-y-2">
           {exams.map(exam => {
             const edit = getExamEdit(exam);
-            const expanded = expandedExamId === exam.id;
+            const expanded = expandedExamIds.has(exam.id);
             return (
               <div key={exam.id} className="border border-gray-100 rounded-xl overflow-hidden">
                 <button
-                  onClick={() => setExpandedExamId(expanded ? "" : exam.id)}
+                  onClick={() => setExpandedExamIds(current => {
+                    const next = new Set(current);
+                    if (next.has(exam.id)) {
+                      next.delete(exam.id);
+                    } else {
+                      next.add(exam.id);
+                    }
+                    return next;
+                  })}
                   className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-blue-50 transition-colors text-left"
                 >
                   <div className="min-w-0">
@@ -995,31 +1058,43 @@ function ScoresTab({
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="text-sm text-gray-700 mb-3" style={{ fontWeight: 700 }}>分析与建议</div>
-        <p className="text-xs text-gray-400 mb-3">班级分析显示在右侧；学生建议可在学生详情中查看。</p>
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => setClassAnalysis(onGenerateClassAnalysis())}
+            disabled={classAnalysisBusy}
+            onClick={handleGenerateClassAnalysis}
             className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
             style={{ fontWeight: 600 }}
           >
-            生成班级分析
+            {classAnalysisBusy ? "生成中" : "生成班级分析"}
           </button>
           <button
-            disabled={studentAdviceBusy}
+            disabled={studentAdviceProgress.busy}
             onClick={handleGenerateStudentAdvice}
             className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors disabled:opacity-60"
             style={{ fontWeight: 600 }}
           >
             <Sparkles className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
-            {studentAdviceBusy ? "生成中" : "生成学生建议"}
+            {studentAdviceProgress.busy ? "生成中" : "生成学生建议"}
           </button>
         </div>
         {classAnalysis && (
-          <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-700">
-            {classAnalysis}
+          <div className="mt-3 space-y-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-700">
+            {[
+              ["总体判断", classAnalysis.overall],
+              ["班级变化", classAnalysis.classChanges],
+              ["重点关注", classAnalysis.focusStudents],
+              ["建议", classAnalysis.suggestions],
+            ].filter(([, value]) => value).map(([label, value]) => (
+              <div key={label}>
+                <span style={{ fontWeight: 800 }}>{label}：</span>
+                <span className="whitespace-pre-line">{value}</span>
+              </div>
+            ))}
+            {classAnalysis.disclaimer && <div className="text-blue-500">{classAnalysis.disclaimer}</div>}
           </div>
         )}
-        {studentAdviceStatus && <p className="mt-2 text-xs text-violet-600">{studentAdviceStatus}</p>}
+        {classAnalysisStatus && <p className="mt-2 text-xs text-blue-600">{classAnalysisStatus}</p>}
+        {studentAdviceProgress.status && <p className="mt-2 text-xs text-violet-600">{studentAdviceProgress.status}</p>}
       </div>
     </div>
   );
@@ -1177,7 +1252,9 @@ export function Sidebar({
   onUpdateGradeExam,
   onDeleteGradeExam,
   onGenerateClassAnalysis,
+  onGenerateLocalClassAnalysis,
   onGenerateStudentTrendAdvice,
+  studentAdviceProgress,
   savedSeatHistory,
   onSaveSeatHistory,
   onRenameSeatHistory,
@@ -1187,6 +1264,7 @@ export function Sidebar({
   onImportRoster,
   onBeforeBackupExport,
   onBackupImported,
+  onSelectStudent,
   onTabChange,
   onShowGrades,
   onHideGrades,
@@ -1230,6 +1308,7 @@ export function Sidebar({
             onUndoSeatOrder={onUndoSeatOrder}
             onAddStudent={onAddStudent}
             onUpdateSeatSettings={onUpdateSeatSettings}
+            onSelectStudent={onSelectStudent}
           />
         )}
         {activeTab === "import"  && (
@@ -1249,7 +1328,9 @@ export function Sidebar({
           onUpdateGradeExam={onUpdateGradeExam}
           onDeleteGradeExam={onDeleteGradeExam}
           onGenerateClassAnalysis={onGenerateClassAnalysis}
+          onGenerateLocalClassAnalysis={onGenerateLocalClassAnalysis}
           onGenerateStudentTrendAdvice={onGenerateStudentTrendAdvice}
+          studentAdviceProgress={studentAdviceProgress}
         />
       )}
         {activeTab === "history" && (

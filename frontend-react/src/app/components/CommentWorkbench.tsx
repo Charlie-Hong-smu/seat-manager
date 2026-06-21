@@ -100,6 +100,7 @@ function buildInitialComments(students: AppStudent[], failedIds: StudentId[] = [
 interface Props {
   students: AppStudent[];
   onClose: () => void;
+  onSelectStudent: (student: AppStudent) => void;
 }
 
 const LENGTH_MODES = [
@@ -148,7 +149,7 @@ function makeSafeId(value: string, fallback = "item"): string {
   return safe || `${fallback}_${Date.now().toString(36)}`;
 }
 
-export function CommentWorkbench({ students, onClose }: Props) {
+export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) {
   const initialBatchState = useMemo(() => loadCommentBatchState(students), [students]);
   const initialRubric = useMemo(() => readCommentRubric(), []);
   const [comments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
@@ -890,6 +891,13 @@ export function CommentWorkbench({ students, onClose }: Props) {
                     </div>
                   </div>
                 </div>
+                <button
+                  onClick={() => onSelectStudent(selectedStudent)}
+                  className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-600 hover:bg-gray-50"
+                  style={{ fontWeight: 800 }}
+                >
+                  查看详情
+                </button>
                 {selectedTags[0] && (
                   <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-600" style={{ fontWeight: 800 }}>
                     {selectedTags[0]}

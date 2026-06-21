@@ -175,8 +175,7 @@ export function SeatBoard({ students, seatOrder, onSelectStudent, onMoveSeat, lo
   return (
     <div className="flex flex-col h-full">
       {/* Compact toolbar — no title, just the mode toggle + hint */}
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <p className="text-xs text-gray-400">每两列为同桌一组，共 4 组 · 最下方为讲台 · 点击卡片查看学生详情</p>
+      <div className="flex items-center justify-end mb-3 shrink-0">
         <div className="flex p-1 bg-gray-100 rounded-xl gap-1">
           <button
             onClick={() => setCardMode("compact")}
