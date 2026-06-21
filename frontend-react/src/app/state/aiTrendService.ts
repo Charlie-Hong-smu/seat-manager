@@ -148,6 +148,15 @@ function storeCachedTrend(signature: string, result: AiTrendResult): void {
   }
 }
 
+export function readCachedStudentAiTrend(student: AppStudent): AiTrendResult | null {
+  if (student.exams.length < 2) {
+    return null;
+  }
+  const payload = buildPayload(student);
+  const signature = getCacheSignature({ studentId: student.id, payload });
+  return getCachedTrend(signature);
+}
+
 function getExamSortValue(exam: StudentExamSummary): string {
   return `${exam.date || "9999-12-31"}-${exam.name}-${exam.id}`;
 }

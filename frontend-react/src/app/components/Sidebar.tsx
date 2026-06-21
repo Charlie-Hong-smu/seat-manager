@@ -3,7 +3,7 @@ import {
   LayoutGrid, Upload, BarChart2, History,
   Shuffle, RotateCcw, Undo2, Plus, Search,
   Dices, FileUp, FileDown, Save, Trash2,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Sparkles,
 } from "lucide-react";
 import {
   exportBackupJson,
@@ -37,6 +37,8 @@ interface Props {
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
   onUpdateGradeExam: (examId: string, name: string, date: string) => boolean;
   onDeleteGradeExam: (examId: string) => boolean;
+  onGenerateClassAnalysis: () => string;
+  onGenerateStudentTrendAdvice: () => Promise<{ generated: number; failed: number; skipped: number }>;
   savedSeatHistory: SeatHistorySnapshot[];
   onSaveSeatHistory: (note: string) => void;
   onRenameSeatHistory: (id: string, note: string) => void;
@@ -717,12 +719,16 @@ function ScoresTab({
   onSaveScoreImport,
   onUpdateGradeExam,
   onDeleteGradeExam,
+  onGenerateClassAnalysis,
+  onGenerateStudentTrendAdvice,
 }: {
   exams: GradeExam[];
   onShowGrades: () => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
   onUpdateGradeExam: (examId: string, name: string, date: string) => boolean;
   onDeleteGradeExam: (examId: string) => boolean;
+  onGenerateClassAnalysis: () => string;
+  onGenerateStudentTrendAdvice: () => Promise<{ generated: number; failed: number; skipped: number }>;
 }) {
   const [selectedExam, setSelectedExam] = useState(exams[0]?.id || "");
   const [expandedExamId, setExpandedExamId] = useState(exams[0]?.id || "");
@@ -735,6 +741,9 @@ function ScoresTab({
   const [scoreBusy, setScoreBusy] = useState(false);
   const [examName, setExamName] = useState("");
   const [examDate, setExamDate] = useState(new Date().toISOString().slice(0, 10));
+  const [classAnalysis, setClassAnalysis] = useState("");
+  const [studentAdviceStatus, setStudentAdviceStatus] = useState("");
+  const [studentAdviceBusy, setStudentAdviceBusy] = useState(false);
 
   useEffect(() => {
     if (exams.length && !exams.some(exam => exam.id === selectedExam)) {
@@ -825,6 +834,19 @@ function ScoresTab({
     setScoreStatus(deleted ? `已删除「${exam.name}」。` : "没有找到这次考试，暂未删除。");
   }
 
+  async function handleGenerateStudentAdvice() {
+    setStudentAdviceBusy(true);
+    setStudentAdviceStatus("正在批量生成学生趋势分析...");
+    try {
+      const result = await onGenerateStudentTrendAdvice();
+      setStudentAdviceStatus(`已生成 ${result.generated} 人，跳过 ${result.skipped} 人，失败 ${result.failed} 人。`);
+    } catch {
+      setStudentAdviceStatus("批量生成暂时不可用，请确认 AI 授权或稍后重试。");
+    } finally {
+      setStudentAdviceBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <SectionCard title="选择考试" subtitle="右侧看板会随选择更新。">
@@ -873,48 +895,45 @@ function ScoresTab({
             </div>
           )}
           <p className={`text-xs ${scoreDraft ? "text-blue-500" : "text-gray-400"}`}>{scoreStatus}</p>
+          <button
+            onClick={() => setShowSaveForm(v => !v)}
+            className="mt-1 w-full flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            style={{ fontWeight: 700 }}
+          >
+            <span>保存设置</span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${showSaveForm ? "rotate-180" : ""}`} />
+          </button>
+          {showSaveForm && (
+            <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-gray-50/60 p-3">
+              <input
+                className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none"
+                placeholder="考试名称"
+                maxLength={30}
+                value={examName}
+                onChange={event => setExamName(event.target.value)}
+              />
+              <input
+                className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none"
+                type="date"
+                value={examDate}
+                onChange={event => setExamDate(event.target.value)}
+              />
+              <button
+                disabled={!scoreDraft || scoreBusy}
+                onClick={handleSaveScoreDraft}
+                className={`w-full py-2.5 rounded-xl text-sm transition-colors ${
+                  scoreDraft && !scoreBusy
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                }`}
+                style={{ fontWeight: 600 }}
+              >
+                <Save className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />保存考试
+              </button>
+            </div>
+          )}
         </div>
       </SectionCard>
-
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-        <button
-          onClick={() => setShowSaveForm(v => !v)}
-          className="w-full flex items-center justify-between text-sm text-gray-700"
-          style={{ fontWeight: 700 }}
-        >
-          <span>考试保存与管理</span>
-          <ChevronDown className={`w-4 h-4 transition-transform ${showSaveForm ? "rotate-180" : ""}`} />
-        </button>
-        {showSaveForm && (
-          <div className="mt-3 flex flex-col gap-2">
-            <input
-              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none"
-              placeholder="考试名称"
-              maxLength={30}
-              value={examName}
-              onChange={event => setExamName(event.target.value)}
-            />
-            <input
-              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none"
-              type="date"
-              value={examDate}
-              onChange={event => setExamDate(event.target.value)}
-            />
-            <button
-              disabled={!scoreDraft || scoreBusy}
-              onClick={handleSaveScoreDraft}
-              className={`w-full py-2.5 rounded-xl text-sm transition-colors ${
-                scoreDraft && !scoreBusy
-                  ? "bg-blue-600 hover:bg-blue-700 text-white"
-                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
-              }`}
-              style={{ fontWeight: 600 }}
-            >
-              <Save className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />保存考试
-            </button>
-          </div>
-        )}
-      </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="text-sm text-gray-700 mb-3" style={{ fontWeight: 700 }}>历史考试</div>
@@ -978,10 +997,29 @@ function ScoresTab({
         <div className="text-sm text-gray-700 mb-3" style={{ fontWeight: 700 }}>分析与建议</div>
         <p className="text-xs text-gray-400 mb-3">班级分析显示在右侧；学生建议可在学生详情中查看。</p>
         <div className="flex flex-col gap-2">
-          <button className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>生成班级分析</button>
-          <button className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>生成学生建议</button>
-          <button className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>评语工作台</button>
+          <button
+            onClick={() => setClassAnalysis(onGenerateClassAnalysis())}
+            className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
+            style={{ fontWeight: 600 }}
+          >
+            生成班级分析
+          </button>
+          <button
+            disabled={studentAdviceBusy}
+            onClick={handleGenerateStudentAdvice}
+            className="w-full py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm transition-colors disabled:opacity-60"
+            style={{ fontWeight: 600 }}
+          >
+            <Sparkles className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+            {studentAdviceBusy ? "生成中" : "生成学生建议"}
+          </button>
         </div>
+        {classAnalysis && (
+          <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-700">
+            {classAnalysis}
+          </div>
+        )}
+        {studentAdviceStatus && <p className="mt-2 text-xs text-violet-600">{studentAdviceStatus}</p>}
       </div>
     </div>
   );
@@ -1138,6 +1176,8 @@ export function Sidebar({
   onSaveScoreImport,
   onUpdateGradeExam,
   onDeleteGradeExam,
+  onGenerateClassAnalysis,
+  onGenerateStudentTrendAdvice,
   savedSeatHistory,
   onSaveSeatHistory,
   onRenameSeatHistory,
@@ -1208,6 +1248,8 @@ export function Sidebar({
           onSaveScoreImport={onSaveScoreImport}
           onUpdateGradeExam={onUpdateGradeExam}
           onDeleteGradeExam={onDeleteGradeExam}
+          onGenerateClassAnalysis={onGenerateClassAnalysis}
+          onGenerateStudentTrendAdvice={onGenerateStudentTrendAdvice}
         />
       )}
         {activeTab === "history" && (

@@ -3,7 +3,13 @@ import { Copy, Save, Sparkles, X } from "lucide-react";
 
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
-import type { AppStudent } from "../state/types";
+import {
+  readCommentRubric,
+  readStudentCommentProfile,
+  saveStudentCommentProfile,
+  summarizeCommentProfile,
+} from "../state/commentRubricStorage";
+import type { AppStudent, CommentCriterion, StudentCommentProfile } from "../state/types";
 
 interface AiCommentDrawerProps {
   open: boolean;
@@ -13,6 +19,8 @@ interface AiCommentDrawerProps {
 
 export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps) {
   const [draftState, setDraftState] = useState(() => readStudentCommentDraft(student));
+  const [rubric] = useState(() => readCommentRubric());
+  const [commentProfile, setCommentProfile] = useState<StudentCommentProfile>(() => readStudentCommentProfile(student));
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiAuth());
@@ -21,6 +29,7 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
 
   useEffect(() => {
     setDraftState(readStudentCommentDraft(student));
+    setCommentProfile(readStudentCommentProfile(student));
     setHasAuth(hasStoredAiAuth());
     setStatus("请核对素材，可补充课堂表现后生成。");
   }, [student]);
@@ -33,7 +42,16 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
     setBusy(true);
     setStatus("正在生成评语...");
     try {
-      const result = await generateStudentAiComment(student, draftState, {
+      const summary = summarizeCommentProfile(rubric, commentProfile);
+      const result = await generateStudentAiComment(student, {
+        ...draftState,
+        teacherNote: commentProfile.teacherNote || draftState.teacherNote,
+        style: commentProfile.style,
+        lengthMode: commentProfile.lengthMode,
+        targetWordCount: commentProfile.targetWordCount,
+        criteriaSummary: summary.criteriaSummary,
+        customOptions: summary.customOptions,
+      }, {
         accessCode,
         remember: rememberAuth,
         force: true,
@@ -65,6 +83,55 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
     }
   }
 
+  function updateProfile(patch: Partial<StudentCommentProfile>) {
+    setCommentProfile(current => {
+      const next = saveStudentCommentProfile(student.id, rubric, {
+        ...current,
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      });
+      setDraftState(prev => ({
+        ...prev,
+        teacherNote: next.teacherNote,
+        style: next.style,
+        lengthMode: next.lengthMode,
+        targetWordCount: next.targetWordCount,
+      }));
+      return next;
+    });
+    setStatus("评语素材已更新。");
+  }
+
+  function toggleCriterionOption(criterion: CommentCriterion, optionId: string) {
+    const current = new Set(commentProfile.criteriaValues[criterion.id] || []);
+    if (current.has(optionId)) {
+      current.delete(optionId);
+    } else if (criterion.type === "single") {
+      current.clear();
+      current.add(optionId);
+    } else {
+      current.add(optionId);
+    }
+    updateProfile({
+      criteriaValues: {
+        ...commentProfile.criteriaValues,
+        [criterion.id]: [...current],
+      },
+    });
+  }
+
+  const selectedCount = summarizeCommentProfile(rubric, commentProfile).criteriaSummary.reduce((total, item) => total + item.values.length, 0);
+  const lengthModes = [
+    { value: "short", label: "80～100 字" },
+    { value: "standard", label: "100～150 字" },
+    { value: "long", label: "150～200 字" },
+  ] as const;
+  const styles = [
+    { value: "warm", label: "温和鼓励" },
+    { value: "formal", label: "客观正式" },
+    { value: "brief", label: "简洁家长会" },
+  ] as const;
+
   return (
     <div className="fixed inset-y-0 right-0 z-[60] w-full max-w-md bg-white border-l border-gray-100 shadow-2xl flex flex-col">
       <div className="shrink-0 px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
@@ -92,41 +159,83 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
           </div>
         </div>
 
+        <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+            <div>
+              <div className="text-sm text-gray-800" style={{ fontWeight: 800 }}>评语标准选择</div>
+              <div className="text-xs text-gray-400 mt-0.5">已选 {selectedCount} 项</div>
+            </div>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
+              const selected = new Set(commentProfile.criteriaValues[criterion.id] || []);
+              return (
+                <div key={criterion.id} className="px-4 py-3">
+                  <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>{criterion.label}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {criterion.options.map(option => (
+                      <button
+                        key={option.id}
+                        onClick={() => toggleCriterionOption(criterion, option.id)}
+                        className={`h-8 rounded-full border px-3 text-xs transition-colors ${
+                          selected.has(option.id)
+                            ? "border-violet-200 bg-violet-50 text-violet-700"
+                            : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                        style={{ fontWeight: 700 }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <label className="block">
           <span className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 700 }}>教师补充</span>
           <textarea
-            value={draftState.teacherNote}
-            onChange={event => setDraftState(prev => ({ ...prev, teacherNote: event.target.value }))}
+            value={commentProfile.teacherNote}
+            onChange={event => updateProfile({ teacherNote: event.target.value })}
             rows={4}
             className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-violet-300 resize-none"
             placeholder="补充学生近期表现、性格特点或需要强调的进步点。"
           />
         </label>
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 700 }}>评语风格</span>
-            <select
-              value={draftState.style}
-              onChange={event => setDraftState(prev => ({ ...prev, style: event.target.value as typeof prev.style }))}
-              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-violet-300"
-            >
-              <option value="warm">温和鼓励</option>
-              <option value="formal">客观正式</option>
-              <option value="brief">简洁家长会</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 700 }}>目标字数</span>
-            <input
-              type="number"
-              min={50}
-              max={300}
-              value={draftState.targetWordCount}
-              onChange={event => setDraftState(prev => ({ ...prev, lengthMode: "custom", targetWordCount: Number(event.target.value) || 120 }))}
-              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-violet-300"
-            />
-          </label>
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 space-y-3">
+          <div>
+            <span className="block text-xs text-gray-500 mb-2" style={{ fontWeight: 700 }}>字数目标</span>
+            <div className="flex flex-wrap gap-2">
+              {lengthModes.map(mode => (
+                <button
+                  key={mode.value}
+                  onClick={() => updateProfile({ lengthMode: mode.value, targetWordCount: mode.value === "short" ? 90 : mode.value === "long" ? 180 : 120 })}
+                  className={`h-8 rounded-full border px-3 text-xs ${commentProfile.lengthMode === mode.value ? "border-violet-200 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                  style={{ fontWeight: 700 }}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <span className="block text-xs text-gray-500 mb-2" style={{ fontWeight: 700 }}>评语风格</span>
+            <div className="flex flex-wrap gap-2">
+              {styles.map(style => (
+                <button
+                  key={style.value}
+                  onClick={() => updateProfile({ style: style.value })}
+                  className={`h-8 rounded-full border px-3 text-xs ${commentProfile.style === style.value ? "border-violet-200 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                  style={{ fontWeight: 700 }}
+                >
+                  {style.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {!hasAuth && (

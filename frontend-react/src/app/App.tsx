@@ -28,6 +28,7 @@ import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateG
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
+import { generateStudentAiTrend, readCachedStudentAiTrend } from "./state/aiTrendService";
 import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
 
 type AppTab = "common" | "import" | "scores" | "history";
@@ -355,6 +356,92 @@ export default function App() {
     return true;
   }
 
+  function getExamTotalAverage(exam: GradeExam): number | null {
+    const totals = exam.rows
+      .map(row => {
+        if (typeof row.total === "number" && Number.isFinite(row.total)) {
+          return row.total;
+        }
+        const scores = Object.values(row.scores)
+          .map(cell => cell.score)
+          .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
+        return scores.length ? scores.reduce((sum, score) => sum + score, 0) : null;
+      })
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    return totals.length ? Math.round((totals.reduce((sum, value) => sum + value, 0) / totals.length) * 10) / 10 : null;
+  }
+
+  function getSubjectAverage(exam: GradeExam, subject: string): number | null {
+    const scores = exam.rows
+      .map(row => row.scores[subject]?.score)
+      .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
+    return scores.length ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10 : null;
+  }
+
+  function handleGenerateClassAnalysis(): string {
+    const exams = [...appState.gradeExams].sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`));
+    if (exams.length < 2) {
+      return "至少需要两次考试，才能分析班级整体分数变化。";
+    }
+
+    const first = exams[0];
+    const latest = exams[exams.length - 1];
+    const firstAvg = getExamTotalAverage(first);
+    const latestAvg = getExamTotalAverage(latest);
+    const parts: string[] = [`已对比「${first.name}」到「${latest.name}」共 ${exams.length} 次考试。`];
+    if (firstAvg !== null && latestAvg !== null) {
+      const diff = Math.round((latestAvg - firstAvg) * 10) / 10;
+      parts.push(`班级总分均分${diff >= 0 ? "上升" : "下降"} ${Math.abs(diff)} 分，最新均分 ${latestAvg}。`);
+    }
+
+    const subjectDiffs = latest.subjects
+      .map(subject => {
+        const start = getSubjectAverage(first, subject);
+        const end = getSubjectAverage(latest, subject);
+        return start === null || end === null ? null : { subject, diff: Math.round((end - start) * 10) / 10, end };
+      })
+      .filter((item): item is { subject: string; diff: number; end: number } => Boolean(item))
+      .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+    const improved = subjectDiffs.filter(item => item.diff > 0).slice(0, 2).map(item => `${item.subject}+${item.diff}`);
+    const declined = subjectDiffs.filter(item => item.diff < 0).slice(0, 2).map(item => `${item.subject}${item.diff}`);
+    if (improved.length) {
+      parts.push(`提升较明显：${improved.join("、")}。`);
+    }
+    if (declined.length) {
+      parts.push(`需要关注：${declined.join("、")}。`);
+    }
+    if (!improved.length && !declined.length) {
+      parts.push("各科均分变化较平稳，可继续结合学生个体趋势做分层跟进。");
+    }
+    return parts.join("");
+  }
+
+  async function handleGenerateStudentTrendAdvice(): Promise<{ generated: number; failed: number; skipped: number }> {
+    let generated = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    for (const student of students) {
+      if (student.exams.length < 2) {
+        skipped += 1;
+        continue;
+      }
+      const cached = readCachedStudentAiTrend(student);
+      if (cached?.overall || cached?.changes || cached?.suggestions) {
+        generated += 1;
+        continue;
+      }
+      try {
+        await generateStudentAiTrend(student, { force: false });
+        generated += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+
+    return { generated, failed, skipped };
+  }
+
   async function handleImportRoster(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
     saveCurrentLegacySnapshot();
     const result = await importRosterFile(file, options);
@@ -436,6 +523,8 @@ export default function App() {
           onSaveScoreImport={handleSaveScoreImport}
           onUpdateGradeExam={handleUpdateGradeExam}
           onDeleteGradeExam={handleDeleteGradeExam}
+          onGenerateClassAnalysis={handleGenerateClassAnalysis}
+          onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
           savedSeatHistory={savedSeatHistory}
           onSaveSeatHistory={handleSaveSeatHistory}
           onRenameSeatHistory={handleUpdateSeatHistoryNote}

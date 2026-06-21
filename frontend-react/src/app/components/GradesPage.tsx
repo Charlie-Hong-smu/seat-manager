@@ -352,7 +352,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                 className={`px-4 py-1.5 rounded-lg text-sm transition-all ${activeTab === tab ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 style={{ fontWeight: activeTab === tab ? 700 : 500 }}
               >
-                {tab === "single" ? "单次分析" : "各科趋势"}
+                {tab === "single" ? "单次分析" : "多次趋势"}
               </button>
             ))}
           </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save } from "lucide-react";
 import {
   CartesianGrid,
@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { createStudentRecord, updateStudentProfile } from "../state/studentActions";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
-import { generateStudentAiTrend, hasStoredAiTrendAuth, type AiTrendResult } from "../state/aiTrendService";
+import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
 import type { AppStudent, Gender, RecordType, StudentExamSummary, StudentId, StudentRecord } from "../state/types";
 
 interface Props {
@@ -104,12 +104,20 @@ export function StudentModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [profileStatus, setProfileStatus] = useState("");
   const [trendMetric, setTrendMetric] = useState("total");
-  const [aiTrendResult, setAiTrendResult] = useState<AiTrendResult | null>(null);
+  const [aiTrendResult, setAiTrendResult] = useState<AiTrendResult | null>(() => readCachedStudentAiTrend(student));
   const [aiTrendStatus, setAiTrendStatus] = useState("");
   const [aiTrendBusy, setAiTrendBusy] = useState(false);
   const [aiTrendAccessCode, setAiTrendAccessCode] = useState("");
   const [rememberAiTrendAuth, setRememberAiTrendAuth] = useState(true);
   const [hasAiTrendAuth, setHasAiTrendAuth] = useState(() => hasStoredAiTrendAuth());
+
+  useEffect(() => {
+    const cached = readCachedStudentAiTrend(student);
+    setAiTrendResult(cached);
+    setAiTrendStatus(cached ? "已载入上次生成的趋势分析。" : "");
+    setAiTrendAccessCode("");
+    setHasAiTrendAuth(hasStoredAiTrendAuth());
+  }, [student]);
 
   const examScores = student.exams;
   const chronologicalExams = useMemo(
@@ -521,7 +529,6 @@ export function StudentModal({
                     <div className="flex items-center gap-1.5 text-sm text-violet-700" style={{ fontWeight: 700 }}>
                       <Sparkles className="w-4 h-4" />AI 成绩趋势分析
                     </div>
-                    <p className="text-xs text-violet-400 mt-0.5">调用现有 Worker，分析只作为教师参考。</p>
                   </div>
                   <button
                     onClick={handleGenerateAiTrend}
@@ -529,7 +536,7 @@ export function StudentModal({
                     className="shrink-0 px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ fontWeight: 700 }}
                   >
-                    {aiTrendBusy ? "生成中" : "生成分析"}
+                    {aiTrendBusy ? "生成中" : aiTrendResult ? "重新生成" : "生成分析"}
                   </button>
                 </div>
 
