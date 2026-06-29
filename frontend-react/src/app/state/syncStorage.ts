@@ -1,4 +1,5 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
+import { getProductAuthToken } from "./authStorage";
 
 const AI_WORKER_URL_KEY = "seat-manager-ai-worker-url";
 const AI_DEFAULT_WORKER_URL = "https://seat-manager-ai.hongchenglin03.workers.dev";
@@ -92,6 +93,10 @@ export function clearSyncAuth(): void {
   window.sessionStorage.removeItem(SYNC_AUTH_SESSION_EXPIRES_KEY);
 }
 
+export function usesProductAuthForSync(): boolean {
+  return Boolean(getProductAuthToken());
+}
+
 export async function requestSyncAuth(syncCode: string, remember: boolean): Promise<void> {
   const response = await fetch(`${getWorkerBaseUrl()}/sync/auth`, {
     method: "POST",
@@ -112,19 +117,23 @@ export async function requestSyncAuth(syncCode: string, remember: boolean): Prom
 }
 
 async function fetchSyncEndpoint<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const productToken = getProductAuthToken();
   const auth = getStoredSyncAuth();
-  if (!auth) {
+  const token = productToken || auth?.token || "";
+  if (!token) {
     throw new Error("sync_auth_required");
   }
   const response = await fetch(`${getWorkerBaseUrl()}${path}`, {
     ...options,
     headers: {
       ...(options.headers || {}),
-      Authorization: `Bearer ${auth.token}`,
+      Authorization: `Bearer ${token}`,
     },
   });
   if (response.status === 401) {
-    clearSyncAuth();
+    if (!productToken) {
+      clearSyncAuth();
+    }
     throw new Error("sync_auth_required");
   }
   if (!response.ok) {

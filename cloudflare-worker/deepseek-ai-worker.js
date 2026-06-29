@@ -5,6 +5,9 @@ const SYNC_MAX_BODY_BYTES = 5 * 1024 * 1024;
 const DAILY_LIMIT = 100;
 const MODEL = "deepseek-v4-flash";
 const SYNC_STATE_KEY = "seat-manager:single-teacher:state";
+const LICENSE_KEY_PREFIX = "seat-manager:license:";
+const LICENSE_SYNC_STATE_SUFFIX = ":state";
+const DEFAULT_MAX_DEVICES = 3;
 
 const dailyUsage = new Map();
 
@@ -26,6 +29,9 @@ export default {
       return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
     }
 
+    if (url.pathname === "/license/auth") {
+      return handleLicenseAuth(request, env, corsHeaders);
+    }
     if (url.pathname === "/auth") {
       return handleAuth(request, env, corsHeaders);
     }
@@ -45,6 +51,49 @@ export default {
   }
 };
 
+async function handleLicenseAuth(request, env, corsHeaders) {
+  const tokenSecret = env.PRODUCT_TOKEN_SECRET || env.TOKEN_SECRET;
+  if (!tokenSecret) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+
+  const productCode = String(body.value.productCode || "");
+  const codeHash = await sha256Hex(productCode);
+  const license = await loadLicenseRecord(codeHash, env);
+  if (!license) {
+    return jsonResponse({ error: "forbidden" }, 403, corsHeaders);
+  }
+  if (!env.SEAT_MANAGER_KV && !license.legacyEnv) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+  if (license.status !== "active") {
+    return jsonResponse({ error: "license_inactive" }, 403, corsHeaders);
+  }
+  if (license.expiresAt && Date.parse(license.expiresAt) <= Date.now()) {
+    return jsonResponse({ error: "license_expired" }, 403, corsHeaders);
+  }
+
+  const deviceId = toText(body.value.deviceId || "").slice(0, 120);
+  if (!deviceId) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const deviceName = toText(body.value.deviceName || "").slice(0, 80) || "未知设备";
+  const bound = await bindLicenseDevice(license, deviceId, deviceName, env);
+  if (!bound.ok) {
+    return jsonResponse({ error: "device_limit", maxDevices: bound.maxDevices }, 409, corsHeaders);
+  }
+
+  const rememberDays = Number(body.value.rememberDays);
+  const ttl = rememberDays > 0 ? Math.min(rememberDays, 30) * 24 * 60 * 60 * 1000 : SESSION_TOKEN_TTL_MS;
+  const expiresAt = Date.now() + ttl;
+  const token = await signToken({ exp: expiresAt, scope: "product-access", licenseId: license.licenseId, deviceId }, tokenSecret);
+  return jsonResponse({ token, expiresAt, licenseId: license.licenseId, maxDevices: bound.maxDevices }, 200, corsHeaders);
+}
+
 async function handleSyncRoute(request, env, corsHeaders, pathname) {
   if (pathname === "/sync/auth") {
     if (request.method !== "POST") {
@@ -56,8 +105,8 @@ async function handleSyncRoute(request, env, corsHeaders, pathname) {
   if (!["GET", "POST"].includes(request.method)) {
     return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
   }
-  const verified = await verifySyncRequest(request, env);
-  if (!verified) {
+  const syncContext = await verifySyncRequest(request, env);
+  if (!syncContext.ok) {
     return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
   }
   if (!env.SEAT_MANAGER_KV) {
@@ -68,19 +117,19 @@ async function handleSyncRoute(request, env, corsHeaders, pathname) {
     if (request.method !== "GET") {
       return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
     }
-    return handleSyncStatus(env, corsHeaders);
+    return handleSyncStatus(env, corsHeaders, syncContext);
   }
   if (pathname === "/sync/save") {
     if (request.method !== "POST") {
       return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
     }
-    return handleSyncSave(request, env, corsHeaders);
+    return handleSyncSave(request, env, corsHeaders, syncContext);
   }
   if (pathname === "/sync/load") {
     if (request.method !== "GET") {
       return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
     }
-    return handleSyncLoad(env, corsHeaders);
+    return handleSyncLoad(env, corsHeaders, syncContext);
   }
   return jsonResponse({ error: "not_found" }, 404, corsHeaders);
 }
@@ -111,21 +160,43 @@ async function handleSyncAuth(request, env, corsHeaders) {
 }
 
 async function verifySyncRequest(request, env) {
-  if (!env.SYNC_TOKEN_SECRET) {
-    return false;
-  }
   const token = getBearerToken(request);
-  const verified = token ? await verifyToken(token, env.SYNC_TOKEN_SECRET) : null;
-  return Boolean(verified && verified.exp > Date.now() && verified.scope === "seat-sync");
+  const productSecret = env.PRODUCT_TOKEN_SECRET || env.TOKEN_SECRET;
+  if (productSecret) {
+    const productToken = token ? await verifyToken(token, productSecret) : null;
+    if (
+      productToken &&
+      productToken.exp > Date.now() &&
+      productToken.scope === "product-access" &&
+      productToken.licenseId
+    ) {
+      const licenseId = sanitizeLicenseId(productToken.licenseId);
+      if (licenseId) {
+        return {
+          ok: true,
+          key: getLicensedSyncStateKey(licenseId),
+          licenseId,
+        };
+      }
+    }
+  }
+  if (env.SYNC_TOKEN_SECRET) {
+    const verified = token ? await verifyToken(token, env.SYNC_TOKEN_SECRET) : null;
+    if (verified && verified.exp > Date.now() && verified.scope === "seat-sync") {
+      return { ok: true, key: SYNC_STATE_KEY, licenseId: "" };
+    }
+  }
+  return { ok: false, key: "", licenseId: "" };
 }
 
-async function handleSyncStatus(env, corsHeaders) {
-  const saved = await env.SEAT_MANAGER_KV.get(SYNC_STATE_KEY, { type: "json" });
+async function handleSyncStatus(env, corsHeaders, syncContext) {
+  const saved = await env.SEAT_MANAGER_KV.get(syncContext.key, { type: "json" });
   if (!saved) {
-    return jsonResponse({ exists: false }, 200, corsHeaders);
+    return jsonResponse({ exists: false, licenseId: syncContext.licenseId || undefined }, 200, corsHeaders);
   }
   return jsonResponse({
     exists: true,
+    licenseId: syncContext.licenseId || undefined,
     updatedAt: saved.updatedAt || "",
     deviceName: toText(saved.deviceName || "").slice(0, 60),
     version: Number(saved.version) || 1,
@@ -133,7 +204,7 @@ async function handleSyncStatus(env, corsHeaders) {
   }, 200, corsHeaders);
 }
 
-async function handleSyncSave(request, env, corsHeaders) {
+async function handleSyncSave(request, env, corsHeaders, syncContext) {
   const body = await readJsonBody(request, SYNC_MAX_BODY_BYTES);
   if (!body.ok || !isValidSyncSavePayload(body.value)) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
@@ -149,9 +220,10 @@ async function handleSyncSave(request, env, corsHeaders) {
   if (payload.sizeBytes > SYNC_MAX_BODY_BYTES) {
     return jsonResponse({ error: "payload_too_large" }, 413, corsHeaders);
   }
-  await env.SEAT_MANAGER_KV.put(SYNC_STATE_KEY, JSON.stringify(payload));
+  await env.SEAT_MANAGER_KV.put(syncContext.key, JSON.stringify(payload));
   return jsonResponse({
     ok: true,
+    licenseId: syncContext.licenseId || undefined,
     updatedAt,
     deviceName: payload.deviceName,
     version: payload.version,
@@ -159,12 +231,13 @@ async function handleSyncSave(request, env, corsHeaders) {
   }, 200, corsHeaders);
 }
 
-async function handleSyncLoad(env, corsHeaders) {
-  const saved = await env.SEAT_MANAGER_KV.get(SYNC_STATE_KEY, { type: "json" });
+async function handleSyncLoad(env, corsHeaders, syncContext) {
+  const saved = await env.SEAT_MANAGER_KV.get(syncContext.key, { type: "json" });
   if (!saved) {
     return jsonResponse({ error: "not_found" }, 404, corsHeaders);
   }
   return jsonResponse({
+    licenseId: syncContext.licenseId || undefined,
     version: Number(saved.version) || 1,
     updatedAt: saved.updatedAt || "",
     deviceName: toText(saved.deviceName || "").slice(0, 60),
@@ -443,6 +516,122 @@ async function readJsonBody(request, maxBytes = MAX_BODY_BYTES) {
   } catch (error) {
     return { ok: false };
   }
+}
+
+async function loadLicenseRecord(codeHash, env) {
+  if (env.SEAT_MANAGER_KV) {
+    const key = getLicenseKey(codeHash);
+    const record = await env.SEAT_MANAGER_KV.get(key, { type: "json" });
+    if (record) {
+      const licenseId = sanitizeLicenseId(record.licenseId || record.id);
+      if (!licenseId) {
+        return null;
+      }
+      return {
+        storageKey: key,
+        legacyEnv: false,
+        licenseId,
+        status: toText(record.status || "active") || "active",
+        expiresAt: toText(record.expiresAt || ""),
+        maxDevices: normalizeMaxDevices(record.maxDevices),
+        devices: normalizeLicenseDevices(record.devices),
+      };
+    }
+  }
+
+  let allowed = false;
+  if (env.PRODUCT_ACCESS_CODE_HASH) {
+    allowed = timingSafeEqual(codeHash, env.PRODUCT_ACCESS_CODE_HASH);
+  } else if (env.PRODUCT_ACCESS_CODE) {
+    allowed = timingSafeEqual(codeHash, await sha256Hex(env.PRODUCT_ACCESS_CODE));
+  }
+  if (!allowed) {
+    return null;
+  }
+
+  return {
+    storageKey: getLicenseKey(codeHash),
+    legacyEnv: true,
+    licenseId: sanitizeLicenseId(env.PRODUCT_LICENSE_ID || "single"),
+    status: "active",
+    expiresAt: "",
+    maxDevices: normalizeMaxDevices(env.PRODUCT_MAX_DEVICES),
+    devices: [],
+  };
+}
+
+async function bindLicenseDevice(license, deviceId, deviceName, env) {
+  const maxDevices = license.maxDevices || DEFAULT_MAX_DEVICES;
+  const now = new Date().toISOString();
+  const devices = [...license.devices];
+  const existingIndex = devices.findIndex((device) => device.id === deviceId);
+  if (existingIndex >= 0) {
+    devices[existingIndex] = {
+      ...devices[existingIndex],
+      name: deviceName,
+      lastSeenAt: now,
+    };
+  } else {
+    if (devices.length >= maxDevices) {
+      return { ok: false, maxDevices };
+    }
+    devices.push({ id: deviceId, name: deviceName, firstSeenAt: now, lastSeenAt: now });
+  }
+
+  if (env.SEAT_MANAGER_KV && license.storageKey) {
+    await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
+      licenseId: license.licenseId,
+      status: license.status,
+      expiresAt: license.expiresAt || "",
+      maxDevices,
+      devices,
+      updatedAt: now,
+    }));
+  }
+  return { ok: true, maxDevices };
+}
+
+function getLicenseKey(codeHash) {
+  return `${LICENSE_KEY_PREFIX}${codeHash}`;
+}
+
+function getLicensedSyncStateKey(licenseId) {
+  return `${LICENSE_KEY_PREFIX}${licenseId}${LICENSE_SYNC_STATE_SUFFIX}`;
+}
+
+function sanitizeLicenseId(value) {
+  return toText(value).trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+}
+
+function normalizeMaxDevices(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return DEFAULT_MAX_DEVICES;
+  }
+  return Math.max(1, Math.min(10, Math.trunc(number)));
+}
+
+function normalizeLicenseDevices(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((device) => {
+      if (!device || typeof device !== "object") {
+        return null;
+      }
+      const id = toText(device.id).slice(0, 120);
+      if (!id) {
+        return null;
+      }
+      return {
+        id,
+        name: toText(device.name || "").slice(0, 80) || "未知设备",
+        firstSeenAt: toText(device.firstSeenAt || ""),
+        lastSeenAt: toText(device.lastSeenAt || ""),
+      };
+    })
+    .filter(Boolean);
 }
 
 function isValidSyncSavePayload(payload) {

@@ -1,5 +1,7 @@
 import { BookOpen, ChevronRight, Cloud, Grid3x3, KeyRound, LogOut, Monitor, Users } from "lucide-react";
 
+import { APP_NAME } from "../config";
+
 interface TopHeaderProps {
   studentCount: number;
   seatCount: number;
@@ -9,7 +11,8 @@ interface TopHeaderProps {
   onToggleAccount: () => void;
   onCloseAccount: () => void;
   onInstallApp: () => void;
-  onChangePassword: () => void;
+  /** 仅小张版提供;商用版授权码登录无此项。 */
+  onChangePassword?: () => void;
   onOpenCloudSync: () => void;
   onLogout: () => void;
 }
@@ -27,6 +30,12 @@ export function TopHeader({
   onOpenCloudSync,
   onLogout,
 }: TopHeaderProps) {
+  const accountItems = [
+    { key: "install", icon: <Monitor className="w-3.5 h-3.5" />, label: "安装到桌面" },
+    ...(onChangePassword ? [{ key: "password", icon: <KeyRound className="w-3.5 h-3.5" />, label: "修改密码" }] : []),
+    { key: "sync", icon: <Cloud className="w-3.5 h-3.5" />, label: "云同步" },
+    { key: "logout", icon: <LogOut className="w-3.5 h-3.5 text-red-400" />, label: "退出登录", danger: true },
+  ];
   return (
     <>
       <header className="shrink-0 bg-white border-b border-gray-100 px-6 py-0 h-14 flex items-center justify-between gap-4 z-20">
@@ -34,7 +43,7 @@ export function TopHeader({
           <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center">
             <BookOpen className="w-4 h-4 text-white" />
           </div>
-          <span className="text-gray-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>小张专用座位管理器</span>
+          <span className="text-gray-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>{APP_NAME}</span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -69,20 +78,15 @@ export function TopHeader({
             </button>
             {accountOpen && (
               <div className="absolute right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-2xl shadow-lg overflow-hidden z-30 w-44">
-                {[
-                  { icon: <Monitor className="w-3.5 h-3.5" />, label: "安装到桌面" },
-                  { icon: <KeyRound className="w-3.5 h-3.5" />, label: "修改密码" },
-                  { icon: <Cloud className="w-3.5 h-3.5" />, label: "云同步" },
-                  { icon: <LogOut className="w-3.5 h-3.5 text-red-400" />, label: "退出登录", danger: true },
-                ].map(item => (
+                {accountItems.map(item => (
                   <button
-                    key={item.label}
+                    key={item.key}
                     onClick={() => {
                       onCloseAccount();
-                      if (item.label === "安装到桌面") onInstallApp();
-                      if (item.label === "修改密码") onChangePassword();
-                      if (item.label === "云同步") onOpenCloudSync();
-                      if (item.label === "退出登录") onLogout();
+                      if (item.key === "install") onInstallApp();
+                      if (item.key === "password") onChangePassword?.();
+                      if (item.key === "sync") onOpenCloudSync();
+                      if (item.key === "logout") onLogout();
                     }}
                     className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${item.danger ? "text-red-500" : "text-gray-600"}`}
                   >

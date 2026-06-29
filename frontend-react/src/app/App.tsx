@@ -20,6 +20,7 @@ import {
 } from "./state/seatActions";
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated } from "./state/authStorage";
+import { IS_COMMERCIAL } from "./config";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { closeDormitoryPeriod, createDormEvent, createDormitory, createDormStudentRecord, normalizeDormitoryScore, type NewDormEventInput } from "./state/dormitoryActions";
 import { createStudent } from "./state/studentActions";
@@ -711,7 +712,7 @@ export default function App() {
           onToggleAccount={() => setAccountOpen(v => !v)}
           onCloseAccount={() => setAccountOpen(false)}
           onInstallApp={handleInstallApp}
-          onChangePassword={() => setShowChangePassword(true)}
+          onChangePassword={IS_COMMERCIAL ? undefined : () => setShowChangePassword(true)}
           onOpenCloudSync={() => setShowCloudSync(true)}
           onLogout={() => {
             clearAuth();
@@ -791,7 +792,7 @@ export default function App() {
             <InstallHelpModal message={installMessage} onClose={() => setShowInstallHelp(false)} />
           )}
 
-          {showChangePassword && (
+          {!IS_COMMERCIAL && showChangePassword && (
             <ChangePasswordModal
               onClose={() => setShowChangePassword(false)}
               onPasswordChanged={() => {

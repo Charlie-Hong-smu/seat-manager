@@ -7,6 +7,11 @@
 在 Cloudflare Workers 中配置这些变量：
 
 - `DEEPSEEK_API_KEY`: DeepSeek 平台创建的 API Key。
+- `PRODUCT_ACCESS_CODE_HASH`: 单码 fallback，产品授权码的 SHA-256 hex，用于进入应用前验证。
+- `PRODUCT_ACCESS_CODE`: 产品授权码明文。更推荐使用 `PRODUCT_ACCESS_CODE_HASH`。
+- `PRODUCT_TOKEN_SECRET`: 用于签发产品授权 token 的随机长字符串。未配置时会回退使用 `TOKEN_SECRET`。
+- `PRODUCT_LICENSE_ID`: 单码 fallback 对应的空间 ID，默认 `single`。
+- `PRODUCT_MAX_DEVICES`: 单码 fallback 最多绑定设备数，默认 `3`。
 - `AI_ACCESS_CODE_HASH`: AI 使用码的 SHA-256 hex。
 - `TOKEN_SECRET`: 用于签发临时 token 的随机长字符串。
 - `SYNC_ACCESS_CODE`: 云同步码，给老师手动输入。也可以改用 `SYNC_ACCESS_CODE_HASH`。
@@ -14,10 +19,10 @@
 - `SYNC_TOKEN_SECRET`: 用于签发同步 token 的随机长字符串，建议和 `TOKEN_SECRET` 不同。
 - `ALLOWED_ORIGIN`: 可选，前端网页来源，默认 `https://charlie-hong-smu.github.io`。多个来源可用英文逗号分隔。
 
-生成 `AI_ACCESS_CODE_HASH` 的一种方式：
+生成 `PRODUCT_ACCESS_CODE_HASH` 或 `AI_ACCESS_CODE_HASH` 的一种方式：
 
 ```bash
-printf '你的AI使用码' | shasum -a 256
+printf '你的授权码' | shasum -a 256
 ```
 
 `TOKEN_SECRET` 可以使用一段 32 位以上的随机字符串。
@@ -34,13 +39,52 @@ printf '你的云同步码' | shasum -a 256
 
 - `SEAT_MANAGER_KV`
 
-同步数据保存到固定 key：
+小范围试用时，每个授权码对应一条 KV 授权记录。先计算授权码 hash：
+
+```bash
+printf '给某位老师的授权码' | shasum -a 256
+```
+
+然后在 `SEAT_MANAGER_KV` 里新增 key：
+
+```text
+seat-manager:license:<上一步得到的hash>
+```
+
+value 示例：
+
+```json
+{
+  "licenseId": "teacher-a",
+  "status": "active",
+  "expiresAt": "",
+  "maxDevices": 3,
+  "devices": []
+}
+```
+
+- `licenseId` 只能使用英文字母、数字、`_`、`-`，它决定这位老师的云端空间。
+- `status` 设为 `disabled` 可停用这个授权码。
+- `expiresAt` 可留空；如果要限时，填 ISO 时间，例如 `2026-08-01T00:00:00.000Z`。
+- `maxDevices` 默认 `3`。
+- `devices` 会在老师登录时自动写入，超过上限会拒绝新设备。
+
+产品授权登录成功后，云同步数据会按授权空间保存：
+
+- `seat-manager:license:<licenseId>:state`
+
+旧版单人同步 fallback 仍保存到固定 key：
 
 - `seat-manager:single-teacher:state`
 
-第一版只保存单老师的一份完整业务状态，不做多账号、不做自动合并。
+它只用于旧同步码路径。给外部试用者使用时，应使用产品授权码路径。
 
 ## Endpoints
+
+- `POST /license/auth`
+  - body: `{ "productCode": "...", "rememberDays": 30 }`
+  - response: `{ "token": "...", "expiresAt": 1780000000000 }`
+  - 用途：进入应用前校验产品授权码。AI 功能仍使用单独的 `/auth`。
 
 - `POST /auth`
   - body: `{ "accessCode": "...", "rememberDays": 30 }`
@@ -80,7 +124,7 @@ printf '你的云同步码' | shasum -a 256
 
 ## Frontend Setup
 
-首次点击 AI 分析时，页面只要求老师输入 AI 使用码。Worker 地址已经内置在前端，DeepSeek API Key 只保存在 Cloudflare Worker Secret 中。
+进入页面时，前端会要求老师输入产品授权码；首次点击 AI 分析时，页面会再要求老师输入 AI 使用码。Worker 地址已经内置在前端，DeepSeek API Key 只保存在 Cloudflare Worker Secret 中。
 
 账户菜单中的“云同步”用于手动上传和从云端恢复。首次同步操作会要求输入云同步码，前端只保存临时同步 token，不保存 Worker Secret、KV token 或 Cloudflare 管理 token。
 
