@@ -43,7 +43,8 @@ npm run dev
 
 ```bash
 cd frontend-react
-npm run build
+npm run build                      # 小张版（默认 edition）
+VITE_EDITION=commercial npm run build   # 商用版
 ```
 
 Vite 已设置：
@@ -51,6 +52,23 @@ Vite 已设置：
 ```ts
 base: "/seat-manager/"
 ```
+
+## 版本（Editions）与商用化
+
+新版是「一套代码、两种构建」，由打包时的环境变量 `VITE_EDITION` 决定（见 `frontend-react/src/app/config.ts`）：
+
+- **小张版（默认，`VITE_EDITION` 不设或非 `commercial`）**：本地密码登录、首次设密码、「修改密码」、纯离线可用。行为与历史版本完全一致，**不要改动其默认行为**。
+- **商用版（`VITE_EDITION=commercial`）**：改为「产品授权码」登录（服务端校验），用于对外售卖。`VITE_APP_NAME` 可覆盖显示名（默认「班级座位管理器」）。
+
+发布方式：两种构建产物放在**两个网址**。小张版继续用现有 GitHub Pages；商用版另起一个部署（计划用 Cloudflare Pages，构建时设 `VITE_EDITION=commercial`）。两站数据各自隔离在各自浏览器/网址下。
+
+授权/计费（后端在 `cloudflare-worker/`，详见其 README）：
+
+- **买断**：在 KV 建一条 license 记录，`expiresAt` 留空 = 永久；`status` 改 `disabled` 可停用。
+- **AI 订阅（计划中，尚未实现）**：拟在 license 记录加 `aiExpiresAt`，到期后停 AI、应用照用；首次激活自动给试用期。
+- 早期收款走人工：收到款后在 Cloudflare KV 手动建/改记录，不接支付系统。
+
+`authStorage.ts` 同时保留本地密码与产品授权两套逻辑，`isAuthenticated()/clearAuth()` 按 edition 自动选择，互不干扰。
 
 ## GitHub Pages 部署
 
@@ -84,6 +102,19 @@ base: "/seat-manager/"
 - 名单批量导入，支持覆盖/追加和覆盖时保留历史数据。
 - PWA 安装到桌面的入口和浏览器安装提示 fallback。
 
-尚未完整迁移：
+## 最近进展（2026-06，Claude 这边）
 
-- 暂无已知核心模块缺口；后续主要是细节打磨和更完整的端到端回归。
+- **宿舍模块重构**：周期制计分（结算/一键周清/可选结转 + 周期历史归档）；事件可增/改/删；处罚措施字段 + 「已执行」勾选；抽出共享 `DormEventForm`（宿舍页与学生详情共用）；「同时记入责任人个人档案」显式开关。
+- **座位限制条件**：恢复旧版排座约束的编辑界面（男女同桌、互补规则、必须前排、固定/不能同桌），放在可搜索学生的 `SeatSettingsModal`；顶部 4 个按钮合并为单一「排座」入口；修复座位卡锁图标点击错位、详细模式姓名截断。
+- **成绩页**：历史考试支持行内改名称/日期。
+- **评语工作台**：勾选学生时进度条不再突兀弹出（平滑提示），批量按钮文案稳定，背景统一。
+- **学生详情**：拆成「奖罚记录 / 档案 / 成绩」标签页，降低信息密度。
+- **应用外壳**：移除与侧栏重复的 `MainTabs` 顶栏。
+- **商用化地基**：edition 双版本 + 产品授权码登录（详见上方「版本与商用化」）。
+
+待办 / 已知问题（给 Codex 和后续）：
+
+- AI 订阅计费（`aiExpiresAt` + 自动试用）尚未实现。
+- 商用版安全注意：核心离线应用是纯前端，授权码只能真正约束云同步与 AI；考虑给商用版加可选本地 PIN（隐私锁）。
+- `/license/auth` 尚无限流（防授权码暴力猜测）。
+- 旧版（根目录原生前端）仍保留；若决定「只保留新版」，需删旧版文件并改 `pages.yml`（尚未做）。
