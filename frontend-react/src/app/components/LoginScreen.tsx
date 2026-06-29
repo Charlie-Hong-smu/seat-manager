@@ -169,7 +169,7 @@ export function LoginScreen({ onLogin }: Props) {
           </button>
 
           <p className="text-center text-xs text-gray-300 mt-5">
-            {IS_COMMERCIAL ? "AI 功能会在使用时单独验证授权" : "密码只保存在当前浏览器本地"}
+            {IS_COMMERCIAL ? "授权码会绑定本机设备名额" : "密码只保存在当前浏览器本地"}
           </p>
         </div>
       </form>

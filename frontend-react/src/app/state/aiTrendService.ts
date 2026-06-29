@@ -1,3 +1,5 @@
+import { IS_COMMERCIAL } from "../config";
+import { getProductAuthToken } from "./authStorage";
 import type { AppStudent, GradeExam, StudentExamSummary } from "./types";
 
 const AI_WORKER_URL_KEY = "seat-manager-ai-worker-url";
@@ -83,7 +85,7 @@ function storeAiAuth(auth: AiAuth, remember: boolean): void {
 }
 
 export function hasStoredAiTrendAuth(): boolean {
-  return Boolean(getStoredAiAuth());
+  return Boolean(IS_COMMERCIAL && getProductAuthToken()) || Boolean(getStoredAiAuth());
 }
 
 async function requestAiAuth(accessCode: string, remember: boolean): Promise<AiAuth> {
@@ -107,6 +109,10 @@ async function requestAiAuth(accessCode: string, remember: boolean): Promise<AiA
 }
 
 async function getAuth(input?: { accessCode?: string; remember?: boolean }): Promise<AiAuth> {
+  const productToken = IS_COMMERCIAL ? getProductAuthToken() : "";
+  if (productToken) {
+    return { token: productToken, expiresAt: Date.now() + AI_REMEMBER_DAYS * 24 * 60 * 60 * 1000 };
+  }
   const stored = getStoredAiAuth();
   if (stored) {
     return stored;
@@ -417,6 +423,9 @@ export async function generateClassAiTrend(
   let auth = await getAuth(input);
   let response = await send(auth.token);
   if (response.status === 401) {
+    if (IS_COMMERCIAL && getProductAuthToken()) {
+      throw new Error("ai_unauthorized");
+    }
     clearAiAuth();
     auth = await getAuth(input);
     response = await send(auth.token);
@@ -490,6 +499,9 @@ export async function generateStudentAiTrend(
   let auth = await getAuth(input);
   let response = await send(auth.token);
   if (response.status === 401) {
+    if (IS_COMMERCIAL && getProductAuthToken()) {
+      throw new Error("ai_unauthorized");
+    }
     clearAiAuth();
     auth = await getAuth(input);
     response = await send(auth.token);

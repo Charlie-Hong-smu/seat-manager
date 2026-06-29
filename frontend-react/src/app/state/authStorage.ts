@@ -45,6 +45,13 @@ export function clearAuth(): void {
   window.sessionStorage.removeItem(PRODUCT_AUTH_SESSION_EXPIRES_KEY);
 }
 
+function clearProductDeviceId(): void {
+  if (!hasBrowserStorage()) {
+    return;
+  }
+  window.localStorage.removeItem(PRODUCT_DEVICE_ID_KEY);
+}
+
 // ── 本地密码(小张版) ────────────────────────────────────────────────────
 
 async function hashPassword(password: string): Promise<string> {
@@ -174,6 +181,28 @@ function storeProductAuth(auth: ProductAuth, remember: boolean): void {
 
 export function getProductAuthToken(): string {
   return getStoredProductAuth()?.token || "";
+}
+
+export async function unbindCurrentDevice(): Promise<void> {
+  if (!IS_COMMERCIAL) {
+    return;
+  }
+  const token = getProductAuthToken();
+  if (!token) {
+    clearProductDeviceId();
+    clearAuth();
+    return;
+  }
+
+  const response = await fetch(`${getWorkerBaseUrl()}/license/unbind-device`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok && response.status !== 401) {
+    throw new Error("license_unbind_failed");
+  }
+  clearProductDeviceId();
+  clearAuth();
 }
 
 export async function authorizeProduct(productCode: string, remember: boolean): Promise<void> {

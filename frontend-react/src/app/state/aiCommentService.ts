@@ -1,4 +1,6 @@
 import { saveStudentCommentDraft } from "./commentStorage";
+import { IS_COMMERCIAL } from "../config";
+import { getProductAuthToken } from "./authStorage";
 import type { AppStudent, StudentCommentDraft } from "./types";
 
 const AI_WORKER_URL_KEY = "seat-manager-ai-worker-url";
@@ -64,7 +66,7 @@ function storeAiAuth(auth: AiAuth, remember: boolean): void {
 }
 
 export function hasStoredAiAuth(): boolean {
-  return Boolean(getStoredAiAuth());
+  return Boolean(IS_COMMERCIAL && getProductAuthToken()) || Boolean(getStoredAiAuth());
 }
 
 export function clearAiAuth(): void {
@@ -230,6 +232,10 @@ function validatePayloadSize(payload: unknown): boolean {
 }
 
 async function getAuth(input?: { accessCode?: string; remember?: boolean }): Promise<AiAuth> {
+  const productToken = IS_COMMERCIAL ? getProductAuthToken() : "";
+  if (productToken) {
+    return { token: productToken, expiresAt: Date.now() + AI_REMEMBER_DAYS * 24 * 60 * 60 * 1000 };
+  }
   const stored = getStoredAiAuth();
   if (stored) {
     return stored;
@@ -278,6 +284,9 @@ export async function generateStudentAiComment(
   let auth = await getAuth(input);
   let response = await send(auth.token);
   if (response.status === 401) {
+    if (IS_COMMERCIAL && getProductAuthToken()) {
+      throw new Error("ai_unauthorized");
+    }
     clearAiAuth();
     auth = await getAuth(input);
     response = await send(auth.token);

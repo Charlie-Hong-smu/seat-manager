@@ -19,7 +19,7 @@ import {
   type SeatOrder,
 } from "./state/seatActions";
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
-import { clearAuth, isAuthenticated } from "./state/authStorage";
+import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
 import { IS_COMMERCIAL } from "./config";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { closeDormitoryPeriod, createDormEvent, createDormitory, createDormStudentRecord, normalizeDormitoryScore, type NewDormEventInput } from "./state/dormitoryActions";
@@ -695,6 +695,19 @@ export default function App() {
   const studentCount = students.length;
   const seatCount = seatOrder.length;
 
+  async function handleUnbindDevice() {
+    if (!window.confirm("解绑后，本机将退出登录并释放一个设备名额。下次使用需要重新输入授权码，确定继续吗？")) {
+      return;
+    }
+    try {
+      await unbindCurrentDevice();
+      setLoggedIn(false);
+      window.alert("本机设备已解绑。");
+    } catch (error) {
+      window.alert("解绑失败，请稍后再试。");
+    }
+  }
+
   if (!loggedIn) {
     return <LoginScreen onLogin={() => setLoggedIn(true)} />;
   }
@@ -714,6 +727,7 @@ export default function App() {
           onInstallApp={handleInstallApp}
           onChangePassword={IS_COMMERCIAL ? undefined : () => setShowChangePassword(true)}
           onOpenCloudSync={() => setShowCloudSync(true)}
+          onUnbindDevice={IS_COMMERCIAL ? handleUnbindDevice : undefined}
           onLogout={() => {
             clearAuth();
             setLoggedIn(false);

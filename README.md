@@ -72,7 +72,8 @@ base: "/seat-manager/"
 授权/计费（后端在 `cloudflare-worker/`，详见其 README）：
 
 - **买断**：在 KV 建一条 license 记录，`expiresAt` 留空 = 永久；`status` 改 `disabled` 可停用。
-- **AI 订阅（计划中，尚未实现）**：拟在 license 记录加 `aiExpiresAt`，到期后停 AI、应用照用；首次激活自动给试用期。
+- **AI 权益**：商用版可复用同一个产品授权码开通 AI；在 license 记录中用 `aiEnabled`、`aiExpiresAt`、`aiDailyLimit` 单独控制，后续可单独续费或停用 AI。
+- **设备名额**：每个授权码默认最多 3 台设备；商用版账号菜单提供“解绑本机”，可释放当前浏览器占用的设备名额。
 - 早期收款走人工：收到款后在 Cloudflare KV 手动建/改记录，不接支付系统。
 
 `authStorage.ts` 同时保留本地密码与产品授权两套逻辑，`isAuthenticated()/clearAuth()` 按 edition 自动选择，互不干扰。
@@ -121,7 +122,7 @@ base: "/seat-manager/"
 
 待办 / 已知问题（给 Codex 和后续）：
 
-- AI 订阅计费（`aiExpiresAt` + 自动试用）尚未实现。
+- AI 已可并入产品授权码；正式订阅计费和自动续费流程尚未实现。
 - 商用版安全注意：核心离线应用是纯前端，授权码只能真正约束云同步与 AI；考虑给商用版加可选本地 PIN（隐私锁）。
 - `/license/auth` 尚无限流（防授权码暴力猜测）。
 - 旧版（根目录原生前端）仍保留；若决定「只保留新版」，需删旧版文件并改 `pages.yml`（尚未做）。

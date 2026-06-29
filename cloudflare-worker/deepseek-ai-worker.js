@@ -8,6 +8,7 @@ const SYNC_STATE_KEY = "seat-manager:single-teacher:state";
 const LICENSE_KEY_PREFIX = "seat-manager:license:";
 const LICENSE_SYNC_STATE_SUFFIX = ":state";
 const DEFAULT_MAX_DEVICES = 3;
+const DEFAULT_AI_DAILY_LIMIT = 30;
 
 const dailyUsage = new Map();
 
@@ -31,6 +32,9 @@ export default {
 
     if (url.pathname === "/license/auth") {
       return handleLicenseAuth(request, env, corsHeaders);
+    }
+    if (url.pathname === "/license/unbind-device") {
+      return handleLicenseUnbindDevice(request, env, corsHeaders);
     }
     if (url.pathname === "/auth") {
       return handleAuth(request, env, corsHeaders);
@@ -90,8 +94,54 @@ async function handleLicenseAuth(request, env, corsHeaders) {
   const rememberDays = Number(body.value.rememberDays);
   const ttl = rememberDays > 0 ? Math.min(rememberDays, 30) * 24 * 60 * 60 * 1000 : SESSION_TOKEN_TTL_MS;
   const expiresAt = Date.now() + ttl;
-  const token = await signToken({ exp: expiresAt, scope: "product-access", licenseId: license.licenseId, deviceId }, tokenSecret);
-  return jsonResponse({ token, expiresAt, licenseId: license.licenseId, maxDevices: bound.maxDevices }, 200, corsHeaders);
+  const token = await signToken({
+    exp: expiresAt,
+    scope: "product-access",
+    licenseId: license.licenseId,
+    licenseKey: license.storageKey,
+    deviceId,
+  }, tokenSecret);
+  return jsonResponse({
+    token,
+    expiresAt,
+    licenseId: license.licenseId,
+    maxDevices: bound.maxDevices,
+    aiEnabled: Boolean(license.aiEnabled),
+    aiExpiresAt: license.aiExpiresAt || "",
+    aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+  }, 200, corsHeaders);
+}
+
+async function handleLicenseUnbindDevice(request, env, corsHeaders) {
+  const tokenSecret = env.PRODUCT_TOKEN_SECRET || env.TOKEN_SECRET;
+  if (!tokenSecret || !env.SEAT_MANAGER_KV) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  const token = getBearerToken(request);
+  const verified = token ? await verifyToken(token, tokenSecret) : null;
+  if (
+    !verified ||
+    verified.exp <= Date.now() ||
+    verified.scope !== "product-access" ||
+    !verified.licenseKey ||
+    !verified.deviceId
+  ) {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+
+  const license = await loadLicenseRecordByKey(verified.licenseKey, env);
+  if (!license || license.status !== "active") {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+
+  const removed = await unbindLicenseDevice(license, verified.deviceId, env);
+  return jsonResponse({
+    ok: true,
+    removed,
+    licenseId: license.licenseId,
+    maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
+  }, 200, corsHeaders);
 }
 
 async function handleSyncRoute(request, env, corsHeaders, pathname) {
@@ -189,6 +239,48 @@ async function verifySyncRequest(request, env) {
   return { ok: false, key: "", licenseId: "" };
 }
 
+async function verifyAiRequest(token, env) {
+  if (!token) {
+    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT };
+  }
+
+  if (env.TOKEN_SECRET) {
+    const aiToken = await verifyToken(token, env.TOKEN_SECRET);
+    if (aiToken && aiToken.exp > Date.now() && aiToken.scope === "ai-trend") {
+      return { ok: true, dailyLimit: DEFAULT_AI_DAILY_LIMIT };
+    }
+  }
+
+  const productSecret = env.PRODUCT_TOKEN_SECRET || env.TOKEN_SECRET;
+  if (!productSecret || !env.SEAT_MANAGER_KV) {
+    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT };
+  }
+  const productToken = await verifyToken(token, productSecret);
+  if (
+    !productToken ||
+    productToken.exp <= Date.now() ||
+    productToken.scope !== "product-access" ||
+    !productToken.licenseKey
+  ) {
+    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT };
+  }
+
+  const license = await loadLicenseRecordByKey(productToken.licenseKey, env);
+  if (!license || license.status !== "active") {
+    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT };
+  }
+  if (license.expiresAt && Date.parse(license.expiresAt) <= Date.now()) {
+    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT };
+  }
+  if (!license.aiEnabled) {
+    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT };
+  }
+  if (license.aiExpiresAt && Date.parse(license.aiExpiresAt) <= Date.now()) {
+    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT };
+  }
+  return { ok: true, dailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT };
+}
+
 async function handleSyncStatus(env, corsHeaders, syncContext) {
   const saved = await env.SEAT_MANAGER_KV.get(syncContext.key, { type: "json" });
   if (!saved) {
@@ -268,17 +360,17 @@ async function handleAuth(request, env, corsHeaders) {
 }
 
 async function handleAnalyzeTrend(request, env, corsHeaders) {
-  if (!env.DEEPSEEK_API_KEY || !env.TOKEN_SECRET) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
     return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
   }
 
   const token = getBearerToken(request);
-  const verified = token ? await verifyToken(token, env.TOKEN_SECRET) : null;
-  if (!verified || verified.exp <= Date.now() || verified.scope !== "ai-trend") {
+  const verified = await verifyAiRequest(token, env);
+  if (!verified.ok) {
     return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
   }
 
-  if (isOverDailyLimit(token)) {
+  if (isOverDailyLimit(token, verified.dailyLimit)) {
     return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
   }
 
@@ -328,17 +420,17 @@ async function handleAnalyzeTrend(request, env, corsHeaders) {
 }
 
 async function handleAnalyzeClass(request, env, corsHeaders) {
-  if (!env.DEEPSEEK_API_KEY || !env.TOKEN_SECRET) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
     return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
   }
 
   const token = getBearerToken(request);
-  const verified = token ? await verifyToken(token, env.TOKEN_SECRET) : null;
-  if (!verified || verified.exp <= Date.now() || verified.scope !== "ai-trend") {
+  const verified = await verifyAiRequest(token, env);
+  if (!verified.ok) {
     return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
   }
 
-  if (isOverDailyLimit(token)) {
+  if (isOverDailyLimit(token, verified.dailyLimit)) {
     return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
   }
 
@@ -388,16 +480,16 @@ async function handleAnalyzeClass(request, env, corsHeaders) {
 }
 
 async function handleSuggestScoreMapping(request, env, corsHeaders) {
-  if (!env.DEEPSEEK_API_KEY || !env.TOKEN_SECRET) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
     return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
   }
 
   const token = getBearerToken(request);
-  const verified = token ? await verifyToken(token, env.TOKEN_SECRET) : null;
-  if (!verified || verified.exp <= Date.now() || verified.scope !== "ai-trend") {
+  const verified = await verifyAiRequest(token, env);
+  if (!verified.ok) {
     return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
   }
-  if (isOverDailyLimit(token)) {
+  if (isOverDailyLimit(token, verified.dailyLimit)) {
     return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
   }
 
@@ -442,16 +534,16 @@ async function handleSuggestScoreMapping(request, env, corsHeaders) {
 }
 
 async function handleGenerateStudentComment(request, env, corsHeaders) {
-  if (!env.DEEPSEEK_API_KEY || !env.TOKEN_SECRET) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
     return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
   }
 
   const token = getBearerToken(request);
-  const verified = token ? await verifyToken(token, env.TOKEN_SECRET) : null;
-  if (!verified || verified.exp <= Date.now() || verified.scope !== "ai-trend") {
+  const verified = await verifyAiRequest(token, env);
+  if (!verified.ok) {
     return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
   }
-  if (isOverDailyLimit(token)) {
+  if (isOverDailyLimit(token, verified.dailyLimit)) {
     return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
   }
 
@@ -521,21 +613,9 @@ async function readJsonBody(request, maxBytes = MAX_BODY_BYTES) {
 async function loadLicenseRecord(codeHash, env) {
   if (env.SEAT_MANAGER_KV) {
     const key = getLicenseKey(codeHash);
-    const record = await env.SEAT_MANAGER_KV.get(key, { type: "json" });
-    if (record) {
-      const licenseId = sanitizeLicenseId(record.licenseId || record.id);
-      if (!licenseId) {
-        return null;
-      }
-      return {
-        storageKey: key,
-        legacyEnv: false,
-        licenseId,
-        status: toText(record.status || "active") || "active",
-        expiresAt: toText(record.expiresAt || ""),
-        maxDevices: normalizeMaxDevices(record.maxDevices),
-        devices: normalizeLicenseDevices(record.devices),
-      };
+    const license = await loadLicenseRecordByKey(key, env);
+    if (license) {
+      return license;
     }
   }
 
@@ -556,7 +636,36 @@ async function loadLicenseRecord(codeHash, env) {
     status: "active",
     expiresAt: "",
     maxDevices: normalizeMaxDevices(env.PRODUCT_MAX_DEVICES),
+    aiEnabled: parseBoolean(env.PRODUCT_AI_ENABLED, false),
+    aiExpiresAt: toText(env.PRODUCT_AI_EXPIRES_AT || ""),
+    aiDailyLimit: normalizeAiDailyLimit(env.PRODUCT_AI_DAILY_LIMIT),
     devices: [],
+  };
+}
+
+async function loadLicenseRecordByKey(key, env) {
+  if (!env.SEAT_MANAGER_KV || !toText(key).startsWith(LICENSE_KEY_PREFIX)) {
+    return null;
+  }
+  const record = await env.SEAT_MANAGER_KV.get(key, { type: "json" });
+  if (!record) {
+    return null;
+  }
+  const licenseId = sanitizeLicenseId(record.licenseId || record.id);
+  if (!licenseId) {
+    return null;
+  }
+  return {
+    storageKey: key,
+    legacyEnv: false,
+    licenseId,
+    status: toText(record.status || "active") || "active",
+    expiresAt: toText(record.expiresAt || ""),
+    maxDevices: normalizeMaxDevices(record.maxDevices),
+    aiEnabled: parseBoolean(record.aiEnabled, false),
+    aiExpiresAt: toText(record.aiExpiresAt || ""),
+    aiDailyLimit: normalizeAiDailyLimit(record.aiDailyLimit),
+    devices: normalizeLicenseDevices(record.devices),
   };
 }
 
@@ -584,11 +693,34 @@ async function bindLicenseDevice(license, deviceId, deviceName, env) {
       status: license.status,
       expiresAt: license.expiresAt || "",
       maxDevices,
+      aiEnabled: Boolean(license.aiEnabled),
+      aiExpiresAt: license.aiExpiresAt || "",
+      aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
       devices,
       updatedAt: now,
     }));
   }
   return { ok: true, maxDevices };
+}
+
+async function unbindLicenseDevice(license, deviceId, env) {
+  const now = new Date().toISOString();
+  const devices = license.devices.filter((device) => device.id !== deviceId);
+  const removed = devices.length !== license.devices.length;
+  if (env.SEAT_MANAGER_KV && license.storageKey) {
+    await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
+      licenseId: license.licenseId,
+      status: license.status,
+      expiresAt: license.expiresAt || "",
+      maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
+      aiEnabled: Boolean(license.aiEnabled),
+      aiExpiresAt: license.aiExpiresAt || "",
+      aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+      devices,
+      updatedAt: now,
+    }));
+  }
+  return removed;
 }
 
 function getLicenseKey(codeHash) {
@@ -609,6 +741,31 @@ function normalizeMaxDevices(value) {
     return DEFAULT_MAX_DEVICES;
   }
   return Math.max(1, Math.min(10, Math.trunc(number)));
+}
+
+function normalizeAiDailyLimit(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return DEFAULT_AI_DAILY_LIMIT;
+  }
+  return Math.max(1, Math.min(500, Math.trunc(number)));
+}
+
+function parseBoolean(value, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  const text = toText(value).trim().toLowerCase();
+  if (["true", "1", "yes", "on"].includes(text)) {
+    return true;
+  }
+  if (["false", "0", "no", "off"].includes(text)) {
+    return false;
+  }
+  return fallback;
 }
 
 function normalizeLicenseDevices(value) {
@@ -834,12 +991,12 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
-function isOverDailyLimit(token) {
+function isOverDailyLimit(token, limit = DAILY_LIMIT) {
   const day = new Date().toISOString().slice(0, 10);
   const key = `${day}:${token.slice(-18)}`;
   const used = dailyUsage.get(key) || 0;
   dailyUsage.set(key, used + 1);
-  return used >= DAILY_LIMIT;
+  return used >= limit;
 }
 
 function parseModelJson(content) {

@@ -1,4 +1,4 @@
-import { BookOpen, ChevronRight, Cloud, Grid3x3, KeyRound, LogOut, Monitor, Users } from "lucide-react";
+import { BookOpen, ChevronRight, Cloud, Grid3x3, KeyRound, Link2Off, LogOut, Monitor, Users } from "lucide-react";
 
 import { APP_NAME } from "../config";
 
@@ -14,6 +14,7 @@ interface TopHeaderProps {
   /** 仅小张版提供;商用版授权码登录无此项。 */
   onChangePassword?: () => void;
   onOpenCloudSync: () => void;
+  onUnbindDevice?: () => void;
   onLogout: () => void;
 }
 
@@ -28,12 +29,14 @@ export function TopHeader({
   onInstallApp,
   onChangePassword,
   onOpenCloudSync,
+  onUnbindDevice,
   onLogout,
 }: TopHeaderProps) {
   const accountItems = [
     { key: "install", icon: <Monitor className="w-3.5 h-3.5" />, label: "安装到桌面" },
     ...(onChangePassword ? [{ key: "password", icon: <KeyRound className="w-3.5 h-3.5" />, label: "修改密码" }] : []),
     { key: "sync", icon: <Cloud className="w-3.5 h-3.5" />, label: "云同步" },
+    ...(onUnbindDevice ? [{ key: "unbind", icon: <Link2Off className="w-3.5 h-3.5" />, label: "解绑本机" }] : []),
     { key: "logout", icon: <LogOut className="w-3.5 h-3.5 text-red-400" />, label: "退出登录", danger: true },
   ];
   return (
@@ -86,6 +89,7 @@ export function TopHeader({
                       if (item.key === "install") onInstallApp();
                       if (item.key === "password") onChangePassword?.();
                       if (item.key === "sync") onOpenCloudSync();
+                      if (item.key === "unbind") onUnbindDevice?.();
                       if (item.key === "logout") onLogout();
                     }}
                     className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${item.danger ? "text-red-500" : "text-gray-600"}`}

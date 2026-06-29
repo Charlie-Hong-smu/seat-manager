@@ -284,7 +284,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   function getAiErrorMessage(reason: string): string {
     return {
       ai_auth_required: "请输入 AI 授权码后再生成。",
-      ai_unauthorized: "AI 授权码不正确，请重新输入。",
+      ai_unauthorized: "当前授权未开通 AI 或 AI 已到期。",
       ai_auth_failed: "AI 授权暂时不可用，请稍后重试。",
       ai_file_protocol: "当前是本地文件打开方式，请通过网页地址打开后再使用 AI。",
       ai_offline: "当前离线，联网后可生成评语。",

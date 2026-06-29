@@ -106,6 +106,9 @@ value 示例：
   "status": "active",
   "expiresAt": "",
   "maxDevices": 3,
+  "aiEnabled": true,
+  "aiExpiresAt": "",
+  "aiDailyLimit": 30,
   "devices": []
 }
 ```
@@ -114,7 +117,10 @@ value 示例：
 - `status` 设为 `disabled` 可停用这个授权码。
 - `expiresAt` 可留空；如果要限时，填 ISO 时间，例如 `2026-08-01T00:00:00.000Z`。
 - `maxDevices` 默认 `3`。
-- `devices` 会在老师登录时自动写入，超过上限会拒绝新设备。
+- `aiEnabled` 控制这个授权码是否包含 AI 权益。
+- `aiExpiresAt` 控制 AI 到期时间，可和 `expiresAt` 不同；留空表示 AI 不单独到期。
+- `aiDailyLimit` 控制该授权码每天最多 AI 请求次数，默认 `30`。
+- `devices` 会在老师登录时自动写入，超过上限会拒绝新设备；商用版账号菜单里的“解绑本机”会释放当前设备名额。
 
 产品授权登录成功后，云同步数据会按授权空间保存：
 
@@ -129,9 +135,14 @@ value 示例：
 ## Endpoints
 
 - `POST /license/auth`
-  - body: `{ "productCode": "...", "rememberDays": 30 }`
-  - response: `{ "token": "...", "expiresAt": 1780000000000 }`
-  - 用途：进入应用前校验产品授权码。AI 功能仍使用单独的 `/auth`。
+  - body: `{ "productCode": "...", "rememberDays": 30, "deviceId": "...", "deviceName": "..." }`
+  - response: `{ "token": "...", "expiresAt": 1780000000000, "licenseId": "...", "maxDevices": 3, "aiEnabled": true }`
+  - 用途：进入应用前校验产品授权码、绑定当前设备；商用版 AI 可复用同一个产品授权 token。
+
+- `POST /license/unbind-device`
+  - header: `Authorization: Bearer <product_token>`
+  - response: `{ "ok": true, "removed": true, "licenseId": "...", "maxDevices": 3 }`
+  - 用途：商用版账号菜单“解绑本机”，从当前授权码的 `devices` 中移除本机并释放设备名额。
 
 - `POST /auth`
   - body: `{ "accessCode": "...", "rememberDays": 30 }`
@@ -171,7 +182,7 @@ value 示例：
 
 ## Frontend Setup
 
-进入页面时，前端会要求老师输入产品授权码；首次点击 AI 分析时，页面会再要求老师输入 AI 使用码。Worker 地址已经内置在前端，DeepSeek API Key 只保存在 Cloudflare Worker Secret 中。
+进入页面时，前端会要求老师输入产品授权码。商用版如果 license 记录包含 `aiEnabled: true` 且 AI 未到期，AI 分析和 AI 评语会直接复用产品授权码；小张版和旧路径仍可使用独立 AI 使用码。Worker 地址已经内置在前端，DeepSeek API Key 只保存在 Cloudflare Worker Secret 中。
 
 账户菜单中的“云同步”用于手动上传和从云端恢复。首次同步操作会要求输入云同步码，前端只保存临时同步 token，不保存 Worker Secret、KV token 或 Cloudflare 管理 token。
 
