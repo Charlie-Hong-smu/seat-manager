@@ -62,6 +62,13 @@ base: "/seat-manager/"
 
 发布方式：两种构建产物放在**两个网址**。小张版继续用现有 GitHub Pages；商用版另起一个部署（计划用 Cloudflare Pages，构建时设 `VITE_EDITION=commercial`）。两站数据各自隔离在各自浏览器/网址下。
 
+当前商用试用站已建在 Cloudflare Pages：
+
+- 稳定地址：`https://seat-manager-commercial.pages.dev/`
+- 项目名：`seat-manager-commercial`
+- 构建方式：`VITE_EDITION=commercial VITE_BASE=/ npm run build`
+- 部署方式：从 `frontend-react/dist` 用 Wrangler Pages 部署。
+
 授权/计费（后端在 `cloudflare-worker/`，详见其 README）：
 
 - **买断**：在 KV 建一条 license 记录，`expiresAt` 留空 = 永久；`status` 改 `disabled` 可停用。

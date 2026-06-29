@@ -33,6 +33,53 @@ printf '你的授权码' | shasum -a 256
 printf '你的云同步码' | shasum -a 256
 ```
 
+## Wrangler 本地部署
+
+本目录已配置 Wrangler，用于以后从本地部署 Worker，避免每次到 Cloudflare 网页后台手动粘贴代码。
+
+首次使用：
+
+```bash
+cd cloudflare-worker
+npm install
+npm exec wrangler -- login
+```
+
+常用命令：
+
+```bash
+npm run deploy      # 部署 deepseek-ai-worker.js 到 seat-manager-ai
+npm run dev         # 本地开发预览
+npm run tail        # 查看线上实时日志
+```
+
+`wrangler.toml` 只记录 Worker 名称、入口文件和 KV 绑定，不保存任何密钥。`DEEPSEEK_API_KEY`、`TOKEN_SECRET`、`AI_ACCESS_CODE_HASH`、`PRODUCT_TOKEN_SECRET` 等仍应保存在 Cloudflare Worker 的 Secrets / Variables 中。
+
+如果要通过命令设置 secret，可用：
+
+```bash
+npm exec wrangler -- secret put SECRET_NAME
+```
+
+不要把 `.dev.vars`、API Key、授权码明文或同步码提交进 Git。
+
+## Cloudflare Pages 商用试用站
+
+商用试用站项目：
+
+- Project name: `seat-manager-commercial`
+- Stable URL: `https://seat-manager-commercial.pages.dev/`
+
+重新部署商用前端：
+
+```bash
+cd ../frontend-react
+VITE_EDITION=commercial VITE_BASE=/ npm run build
+../cloudflare-worker/node_modules/.bin/wrangler pages deploy dist --project-name seat-manager-commercial --branch main --commit-dirty true
+```
+
+Worker 的 `ALLOWED_ORIGIN` 已在 `wrangler.toml` 中保留小张 GitHub Pages，并追加商用 Pages 域名。后续如果换商用域名，需要把新域名追加到 `ALLOWED_ORIGIN` 后重新 `npm run deploy`。
+
 ## Cloudflare KV
 
 需要创建一个 KV namespace，并在 Worker 中绑定为：

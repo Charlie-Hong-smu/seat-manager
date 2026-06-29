@@ -1,0 +1,11 @@
+name = "seat-manager-ai"
+main = "deepseek-ai-worker.js"
+compatibility_date = "2026-06-29"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGIN = "https://charlie-hong-smu.github.io,https://seat-manager-commercial.pages.dev,https://6c245938.seat-manager-commercial.pages.dev"
+
+[[kv_namespaces]]
+binding = "SEAT_MANAGER_KV"
+id = "c825c37e3d1a43e5928251dab78731c4"
