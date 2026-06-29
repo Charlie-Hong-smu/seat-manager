@@ -9,18 +9,24 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { type NewDormEventInput } from "../state/dormitoryActions";
+import { DormEventForm } from "./DormEventForm";
 import { createStudentRecord, updateStudentProfile } from "../state/studentActions";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
-import type { AppStudent, Gender, RecordType, StudentExamSummary, StudentId, StudentRecord } from "../state/types";
+import type { AppStudent, Dormitory, Gender, RecordType, StudentExamSummary, StudentId, StudentRecord } from "../state/types";
 
 interface Props {
   student: AppStudent;
   students: AppStudent[];
+  dormitories: Dormitory[];
   onClose: () => void;
   onUpdateStudent: (student: AppStudent) => void;
   onApplyRecord: (studentId: StudentId, record: StudentRecord, syncIds: StudentId[]) => void;
   onDeleteStudent: (studentId: StudentId) => void;
+  onAssignDormitory: (studentId: StudentId, dormitoryId?: string) => void;
+  onAddDormitoryEvent: (input: NewDormEventInput) => void;
+  onOpenDormitories: () => void;
   onOpenAiComment?: () => void;
 }
 
@@ -77,10 +83,14 @@ function sortTagIds(ids: Iterable<string>): string {
 export function StudentModal({
   student,
   students,
+  dormitories,
   onClose,
   onUpdateStudent,
   onApplyRecord,
   onDeleteStudent,
+  onAssignDormitory,
+  onAddDormitoryEvent,
+  onOpenDormitories,
   onOpenAiComment,
 }: Props) {
   const [nameInput, setNameInput] = useState(student.name);
@@ -103,6 +113,11 @@ export function StudentModal({
   const [syncSelected, setSyncSelected] = useState<Set<StudentId>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [profileStatus, setProfileStatus] = useState("");
+  const [dormStatus, setDormStatus] = useState("");
+  const [activeTab, setActiveTab] = useState<"records" | "profile" | "trend">("records");
+  const [dormAssignmentOpen, setDormAssignmentOpen] = useState(false);
+  const [dormEventOpen, setDormEventOpen] = useState(false);
+  const [pendingDormitoryId, setPendingDormitoryId] = useState(student.dormitoryId || "");
   const [trendMetric, setTrendMetric] = useState("total");
   const [aiTrendResult, setAiTrendResult] = useState<AiTrendResult | null>(() => readCachedStudentAiTrend(student));
   const [aiTrendStatus, setAiTrendStatus] = useState("");
@@ -118,6 +133,19 @@ export function StudentModal({
     setAiTrendAccessCode("");
     setHasAiTrendAuth(hasStoredAiTrendAuth());
   }, [student]);
+
+  useEffect(() => {
+    setLocalRecords(student.records.map(r => ({
+      id: r.id,
+      type: r.type,
+      note: r.note,
+      date: r.date,
+    })));
+  }, [student.records]);
+
+  useEffect(() => {
+    setPendingDormitoryId(student.dormitoryId || "");
+  }, [student.dormitoryId]);
 
   const examScores = student.exams;
   const chronologicalExams = useMemo(
@@ -138,6 +166,7 @@ export function StudentModal({
     ...exam.scores,
   }));
   const hasTrendChart = trendData.filter(item => typeof item[effectiveTrendMetric as keyof typeof item] === "number").length >= 2;
+  const currentDormitory = dormitories.find(dormitory => dormitory.id === student.dormitoryId) || null;
   const preservedManualTagIds = useMemo(
     () => student.manualTagIds.filter(id => !BEHAVIOR_TAG_IDS.has(id)),
     [student.manualTagIds]
@@ -189,6 +218,27 @@ export function StudentModal({
     onApplyRecord(student.id, newRecord, [...syncSelected]);
     setNoteInput("");
     setProfileStatus(syncSelected.size ? `记录已同步到 ${syncSelected.size + 1} 名学生。` : "记录已保存。");
+  }
+
+  function handleDormitoryChange(dormitoryId: string) {
+    onAssignDormitory(student.id, dormitoryId || undefined);
+    setPendingDormitoryId(dormitoryId);
+    setDormAssignmentOpen(false);
+    setDormStatus(dormitoryId ? "所属宿舍已更新。" : "已从宿舍移除。");
+  }
+
+  function handleAddDormEvent(input: Omit<NewDormEventInput, "dormId">) {
+    if (!currentDormitory) {
+      setDormStatus("请先选择所属宿舍。");
+      return;
+    }
+    onAddDormitoryEvent({ ...input, dormId: currentDormitory.id });
+    setDormEventOpen(false);
+    setDormStatus(
+      input.recordToStudent === false
+        ? `已同步到 ${currentDormitory.name}（未写入个人档案）。`
+        : `已同步到 ${currentDormitory.name}，并写入该学生个人记录。`,
+    );
   }
 
   function deleteRecord(recordId: string) {
@@ -252,7 +302,7 @@ export function StudentModal({
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4 border-b border-gray-100">
           <div>
-            <div className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>奖罚记录</div>
+            <div className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生</div>
             <h3 className="text-gray-900" style={{ fontSize: "1.25rem" }}>
               {student.name}
               <span className="text-gray-400 ml-2" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 周起始 2026-06-14</span>
@@ -283,8 +333,21 @@ export function StudentModal({
           </div>
         </div>
 
-        <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-12rem)]">
-          {/* Profile */}
+        <div className="flex items-center gap-1 border-b border-gray-100 px-6 pt-3">
+          {([["records", "奖罚记录"], ["profile", "档案"], ["trend", "成绩"]] as Array<["records" | "profile" | "trend", string]>).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`relative px-4 py-2.5 text-sm font-semibold transition-colors ${activeTab === key ? "text-blue-700" : "text-gray-400 hover:text-gray-600"}`}
+            >
+              {label}
+              {activeTab === key && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-blue-600" />}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-14rem)]">
+          {activeTab === "profile" && (
           <div className="border border-gray-100 rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
               <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>学生信息</span>
@@ -342,6 +405,28 @@ export function StudentModal({
                 />
               </label>
 
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs text-gray-400" style={{ fontWeight: 800 }}>宿舍</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                      <span className="text-gray-900" style={{ fontWeight: 900 }}>{currentDormitory?.name || "未分配"}</span>
+                      <span className="text-gray-400">当前分 <span className={currentDormitory && currentDormitory.currentScore < 0 ? "text-red-500" : "text-emerald-600"} style={{ fontWeight: 900 }}>{currentDormitory ? `${currentDormitory.currentScore > 0 ? "+" : ""}${currentDormitory.currentScore}` : "—"}</span></span>
+                      <span className="text-gray-400">成员 {currentDormitory?.memberIds.length ?? "—"}</span>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-gray-400">
+                      最近事件：{currentDormitory?.events[0] ? `${currentDormitory.events[0].reason} · ${currentDormitory.events[0].date}` : "暂无"}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button onClick={() => setDormAssignmentOpen(true)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50" style={{ fontWeight: 800 }}>更换宿舍</button>
+                    <button onClick={() => setDormEventOpen(true)} disabled={!currentDormitory} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400" style={{ fontWeight: 800 }}>记宿舍事件</button>
+                    <button onClick={onOpenDormitories} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50" style={{ fontWeight: 800 }}>管理</button>
+                  </div>
+                </div>
+                {dormStatus && <p className="mt-2 text-xs text-blue-600">{dormStatus}</p>}
+              </div>
+
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-500" style={{ fontWeight: 700 }}>行为标签</span>
@@ -388,7 +473,10 @@ export function StudentModal({
               {profileStatus && <p className="text-xs text-blue-600">{profileStatus}</p>}
             </div>
           </div>
+          )}
 
+          {activeTab === "records" && (
+          <div className="space-y-5">
           {/* Record Actions */}
           <div className="flex items-center gap-2">
             <input
@@ -471,7 +559,11 @@ export function StudentModal({
           ) : (
             <p className="text-sm text-gray-400 text-center py-3">本周暂无记录，可以先来添加奖罚。</p>
           )}
+          </div>
+          )}
 
+          {activeTab === "trend" && (
+          <div className="space-y-5">
           {/* Grade Trend */}
           <div className="border border-gray-100 rounded-2xl overflow-hidden">
             <div className="flex items-start justify-between gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
@@ -636,9 +728,54 @@ export function StudentModal({
               })}
             </div>
           </div>
+          </div>
+          )}
 
         </div>
       </div>
+
+      {dormAssignmentOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-5 shadow-2xl">
+            <div className="text-base text-gray-900" style={{ fontWeight: 900 }}>更换宿舍</div>
+            <select
+              value={pendingDormitoryId}
+              onChange={event => setPendingDormitoryId(event.target.value)}
+              className="mt-4 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300"
+            >
+              <option value="">未分配</option>
+              {dormitories.map(dormitory => <option key={dormitory.id} value={dormitory.id}>{dormitory.name}</option>)}
+            </select>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button onClick={() => setDormAssignmentOpen(false)} className="rounded-xl border border-gray-200 bg-white py-2 text-sm text-gray-600 hover:bg-gray-50" style={{ fontWeight: 800 }}>取消</button>
+              <button onClick={() => handleDormitoryChange(pendingDormitoryId)} className="rounded-xl bg-blue-600 py-2 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dormEventOpen && currentDormitory && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-100 bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-base text-gray-900" style={{ fontWeight: 900 }}>记宿舍事件</div>
+                <div className="mt-1 text-xs text-gray-400">{student.name} · {currentDormitory.name}</div>
+              </div>
+              <button onClick={() => setDormEventOpen(false)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-4">
+              <DormEventForm
+                members={[]}
+                lockedResponsible={{ id: student.id, name: student.name }}
+                onSubmit={handleAddDormEvent}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

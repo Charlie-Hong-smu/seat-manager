@@ -40,6 +40,7 @@ export function createStudent(input: NewStudentInput): AppStudent {
     autoTagIds: [],
     records: [],
     exams: [],
+    dormitoryId: undefined,
   };
 }
 

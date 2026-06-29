@@ -682,7 +682,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     : batchState.failed.length
     ? "重试失败"
     : selectedBatchCount
-    ? `生成选中 ${selectedBatchCount}`
+    ? `批量生成 ${selectedBatchCount}`
     : "批量生成";
   const batchButtonAction = batchRunning ? pauseBatch : resumableCount ? resumeBatch : startBatch;
   const selectedCount = selectedSummary.criteriaSummary.reduce((total, item) => total + item.values.length, 0) + selectedSummary.customOptions.length;
@@ -717,7 +717,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#f8fafc] text-gray-900">
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-50 text-gray-900">
       <div className="shrink-0 border-b border-gray-100 bg-white/95 px-5 py-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -770,20 +770,29 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           </div>
         </div>
 
-        {(batchRunning || batchProgress > 0 || resumableCount > 0 || selectedBatchCount > 0) && (
-          <div className="mt-2 flex items-center gap-3">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
-              <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${batchProgress}%` }} />
+        {(() => {
+          const batchActive = batchRunning || resumableCount > 0 || batchProgress > 0;
+          const show = batchActive || selectedBatchCount > 0;
+          return (
+            <div className={`overflow-hidden transition-all duration-300 ${show ? "mt-2 max-h-12 opacity-100" : "max-h-0 opacity-0"}`}>
+              <div className="flex items-center gap-3">
+                {batchActive ? (
+                  <>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
+                      <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${batchProgress}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-500">{batchProgress}% · 剩余 {batchState.queue.length} · 失败 {batchState.failed.length}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-xs text-gray-500">已选择 {selectedBatchCount} 人，点上方「批量生成 {selectedBatchCount}」仅为选中学生生成</span>
+                    <button onClick={() => setSelectedBatchIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600">清空</button>
+                  </>
+                )}
+              </div>
             </div>
-            <span className="text-xs text-gray-500">
-              {selectedBatchCount > 0 ? `已选择 ${selectedBatchCount} 人 · ` : ""}
-              {batchProgress}% · 剩余 {batchState.queue.length} · 失败 {batchState.failed.length}
-            </span>
-            {selectedBatchCount > 0 && (
-              <button onClick={() => setSelectedBatchIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600">清空</button>
-            )}
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       <div className="flex min-h-0 flex-1 gap-5 p-4">

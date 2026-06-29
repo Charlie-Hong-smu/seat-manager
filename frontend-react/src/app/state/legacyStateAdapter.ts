@@ -1,8 +1,12 @@
 import { EXAMS, INITIAL_SEATS, SAMPLE_RECORDS, STUDENTS } from "../components/mockData";
+import { calculateDormScore } from "./dormitoryActions";
 import { getTagLabels, isAcademicTagLabel } from "./tagCatalog";
 import type {
   AppStudent,
   ComplementRuleId,
+  DormEvent,
+  DormPeriodArchive,
+  Dormitory,
   Gender,
   GradeExam,
   GradeRow,
@@ -86,6 +90,92 @@ function normalizeRecord(value: unknown, index: number): StudentRecord | null {
     note,
     date,
   };
+}
+
+function normalizeDormEvent(value: unknown, index: number, dormId: string): DormEvent | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const score = Number(value.score);
+  const reason = toStringValue(value.reason);
+  return {
+    id: toStringValue(value.id, `dorm-event-${index}`),
+    dormId: toStringValue(value.dormId, dormId),
+    type: value.type === "reward" || value.type === "punish" || value.type === "note"
+      ? value.type
+      : Number.isFinite(score) && score > 0
+        ? "reward"
+        : Number.isFinite(score) && score < 0
+          ? "punish"
+          : "note",
+    score: Number.isFinite(score) ? score : 0,
+    reason: reason || "宿舍记录",
+    responsibleStudentId: toStudentId(value.responsibleStudentId) || undefined,
+    responsibleStudentName: toStringValue(value.responsibleStudentName) || undefined,
+    note: toStringValue(value.note),
+    punishment: toStringValue(value.punishment) || undefined,
+    punishmentDone: value.punishmentDone === true,
+    date: toStringValue(value.date) || new Date().toISOString().slice(0, 10),
+    createdAt: toStringValue(value.createdAt) || new Date().toISOString(),
+  };
+}
+
+function normalizeDormPeriodArchive(value: unknown, index: number, dormId: string): DormPeriodArchive | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const startDate = toStringValue(value.startDate);
+  const endDate = toStringValue(value.endDate);
+  const baseScore = Number(value.baseScore);
+  const finalScore = Number(value.finalScore);
+  const events = toUnknownArray(value.events)
+    .map((event, eventIndex) => normalizeDormEvent(event, eventIndex, dormId))
+    .filter((event): event is DormEvent => Boolean(event));
+  return {
+    id: toStringValue(value.id, `dorm-period-${index}`),
+    label: toStringValue(value.label) || endDate || startDate || `周期 ${index + 1}`,
+    startDate,
+    endDate,
+    baseScore: Number.isFinite(baseScore) ? baseScore : 0,
+    finalScore: Number.isFinite(finalScore) ? finalScore : 0,
+    events,
+  };
+}
+
+function normalizeDormitories(value: unknown, validStudentIds: Set<StudentId>): Dormitory[] {
+  return toUnknownArray(value)
+    .map((item, index) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+      const id = toStringValue(item.id, `dorm-${index}`);
+      const name = toStringValue(item.name);
+      if (!name) {
+        return null;
+      }
+      const baseScore = Number(item.baseScore);
+      const events = toUnknownArray(item.events)
+        .map((event, eventIndex) => normalizeDormEvent(event, eventIndex, id))
+        .filter((event): event is DormEvent => Boolean(event));
+      const history = toUnknownArray(item.history)
+        .map((period, periodIndex) => normalizeDormPeriodArchive(period, periodIndex, id))
+        .filter((period): period is DormPeriodArchive => Boolean(period));
+      const earliestEventDate = events.reduce<string>((earliest, event) => (
+        event.date && (!earliest || event.date < earliest) ? event.date : earliest
+      ), "");
+      const dormitory: Dormitory = {
+        id,
+        name,
+        memberIds: toStringArray(item.memberIds).filter(studentId => validStudentIds.has(studentId)),
+        baseScore: Number.isFinite(baseScore) ? baseScore : 0,
+        currentScore: 0,
+        events,
+        periodStart: toStringValue(item.periodStart) || earliestEventDate || new Date().toISOString().slice(0, 10),
+        history,
+      };
+      return { ...dormitory, currentScore: calculateDormScore(dormitory) };
+    })
+    .filter((item): item is Dormitory => Boolean(item));
 }
 
 function pickScores(value: Record<string, unknown>): Record<string, number> {
@@ -347,6 +437,7 @@ function normalizeStudent(value: unknown, index: number, extraTagLabels: Record<
     autoTagIds,
     records: toUnknownArray(value.records).map(normalizeRecord).filter((item): item is StudentRecord => Boolean(item)),
     exams: toUnknownArray(value.exams).map(normalizeExam).filter((item): item is StudentExamSummary => Boolean(item)),
+    dormitoryId: toStringValue(value.dormitoryId) || undefined,
     aiComments: value.aiComments,
   };
 }
@@ -384,6 +475,7 @@ function createMockStudents(): AppStudent[] {
         date: record.date,
       })),
       exams,
+      dormitoryId: undefined,
     };
   });
 }
@@ -504,6 +596,7 @@ export function createMockSeatManagerState(): SeatManagerState {
     seatOrder,
     lockedSeats: [],
     seatSettings: createDefaultSeatSettings(),
+    dormitories: [],
     seatHistory: [],
     savedExams: EXAMS,
     exams: EXAMS,
@@ -529,16 +622,37 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     return createMockSeatManagerState();
   }
 
-  const seatOrder = normalizeSeatOrder(students, raw.seatOrder);
+  const studentIds = new Set(students.map(student => student.id));
+  const dormitories = normalizeDormitories(raw.dormitories, studentIds);
+  const validDormIds = new Set(dormitories.map(dormitory => dormitory.id));
+  const dormitoryIdByStudent = new Map<StudentId, string>();
+  dormitories.forEach(dormitory => {
+    dormitory.memberIds.forEach(studentId => dormitoryIdByStudent.set(studentId, dormitory.id));
+  });
+  const normalizedStudents = students.map(student => {
+    const dormitoryId = student.dormitoryId && validDormIds.has(student.dormitoryId)
+      ? student.dormitoryId
+      : dormitoryIdByStudent.get(student.id);
+    return dormitoryId ? { ...student, dormitoryId } : { ...student, dormitoryId: undefined };
+  });
+  const normalizedDormitories = dormitories.map(dormitory => ({
+    ...dormitory,
+    memberIds: Array.from(new Set([
+      ...dormitory.memberIds,
+      ...normalizedStudents.filter(student => student.dormitoryId === dormitory.id).map(student => student.id),
+    ])),
+  }));
+  const seatOrder = normalizeSeatOrder(normalizedStudents, raw.seatOrder);
   const settings = isRecord(raw.settings) ? raw.settings : {};
 
   return {
     source: "legacy",
     hasLegacyData: true,
-    students,
+    students: normalizedStudents,
     seatOrder,
     lockedSeats: normalizeLockedSeats(raw.lockedSeats, seatOrder.length),
-    seatSettings: normalizeSeatSettings(settings, students),
+    seatSettings: normalizeSeatSettings(settings, normalizedStudents),
+    dormitories: normalizedDormitories,
     seatHistory: normalizeSeatHistory(raw.seatHistory),
     savedExams: toUnknownArray(raw.savedExams),
     exams: toUnknownArray(raw.exams),

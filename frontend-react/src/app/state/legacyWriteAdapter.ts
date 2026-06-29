@@ -1,6 +1,6 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
-import type { AppStudent, SavedGradeExamEntry, SavedGradeExamRecord, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
+import type { AppStudent, Dormitory, SavedGradeExamEntry, SavedGradeExamRecord, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 interface PersistSnapshotInput {
   students: AppStudent[];
@@ -8,6 +8,7 @@ interface PersistSnapshotInput {
   lockedSeats: number[];
   seatSettings?: SeatSettings;
   seatHistory?: SeatHistorySnapshot[];
+  dormitories?: Dormitory[];
 }
 
 interface SaveGradeExamInput extends PersistSnapshotInput {
@@ -87,6 +88,7 @@ function toLegacyStudent(student: AppStudent, previous?: Record<string, unknown>
     manualTags: student.manualTagIds,
     autoTags: student.autoTagIds,
     exams: student.exams,
+    dormitoryId: student.dormitoryId,
     aiComments: student.aiComments || previous?.aiComments || {},
   };
 }
@@ -211,7 +213,7 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
   return syncedStudents;
 }
 
-export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory }: PersistSnapshotInput): boolean {
+export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories }: PersistSnapshotInput): boolean {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -227,6 +229,7 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSetti
     students: students.map(student => toLegacyStudent(student, previousById.get(student.id))),
     seatOrder,
     lockedSeats,
+    dormitories: dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams: Array.isArray(baseState.savedExams) ? baseState.savedExams : [],
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],
@@ -235,7 +238,7 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSetti
   });
 }
 
-export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSettings, seatHistory, record }: SaveGradeExamInput): SeatManagerState | null {
+export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, record }: SaveGradeExamInput): SeatManagerState | null {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -256,6 +259,7 @@ export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSett
     students: syncSavedExamsToStudents(legacyStudents, savedExams),
     seatOrder,
     lockedSeats,
+    dormitories: dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams,
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],
@@ -267,7 +271,7 @@ export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSett
 }
 
 function persistSavedExamRecords(
-  { students, seatOrder, lockedSeats, seatSettings, seatHistory }: PersistSnapshotInput,
+  { students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories }: PersistSnapshotInput,
   savedExams: SavedGradeExamRecord[],
 ): SeatManagerState | null {
   const baseState = getBaseState();
@@ -286,6 +290,7 @@ function persistSavedExamRecords(
     students: syncSavedExamsToStudents(legacyStudents, savedExams),
     seatOrder,
     lockedSeats,
+    dormitories: dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams,
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],

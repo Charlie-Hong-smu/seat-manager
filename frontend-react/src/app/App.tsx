@@ -2,18 +2,16 @@ import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/LoginScreen";
-import { MainTabs } from "./components/MainTabs";
-import { Sidebar } from "./components/Sidebar";
-import { SeatBoard } from "./components/SeatBoard";
+import { Sidebar, type SidebarTab } from "./components/Sidebar";
 import { StudentDetail } from "./components/StudentDetail";
 import { CommentWorkbench } from "./components/CommentWorkbench";
-import { GradesPage } from "./components/GradesPage";
 import { TopHeader } from "./components/TopHeader";
 import { CloudSyncModal } from "./components/CloudSyncModal";
 import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import { HistorySeatModal } from "./components/HistorySeatModal";
+import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ScoresWorkspace } from "./components/WorkspacePages";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
@@ -23,16 +21,16 @@ import {
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated } from "./state/authStorage";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
+import { closeDormitoryPeriod, createDormEvent, createDormitory, createDormStudentRecord, normalizeDormitoryScore, type NewDormEventInput } from "./state/dormitoryActions";
 import { createStudent } from "./state/studentActions";
 import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
 import { generateClassAiTrend, generateStudentAiTrend, readCachedStudentAiTrend, type AiClassTrendResult } from "./state/aiTrendService";
-import type { AppStudent, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
+import type { AppStudent, Dormitory, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
 
-type AppTab = "common" | "import" | "scores" | "history";
-type MainView = "seat" | "grades";
+type AppTab = SidebarTab;
 type StudentAdviceProgress = {
   busy: boolean;
   status: string;
@@ -50,10 +48,10 @@ export default function App() {
   const initialState = useSeatManagerState();
   const [appState, setAppState] = useState(() => initialState);
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
-  const [sidebarTab, setSidebarTab] = useState<AppTab>("common");
-  const [mainView, setMainView] = useState<MainView>("seat");
+  const [sidebarTab, setSidebarTab] = useState<AppTab>("daily");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [students, setStudents] = useState<AppStudent[]>(() => initialState.students);
+  const [dormitories, setDormitories] = useState<Dormitory[]>(() => initialState.dormitories);
   const [selectedStudent, setSelectedStudent] = useState<AppStudent | null>(null);
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
   const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => initialState.seatOrder);
@@ -93,9 +91,10 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      dormitories,
       seatHistory: savedSeatHistory,
     });
-  }, [students, seatOrder, lockedSeats, seatSettings, savedSeatHistory, loggedIn]);
+  }, [students, seatOrder, lockedSeats, seatSettings, dormitories, savedSeatHistory, loggedIn]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -250,6 +249,143 @@ export default function App() {
     setSelectedStudent(nextStudent);
   }
 
+  function handleCreateDormitory(name: string, baseScore: number) {
+    const dormitory = createDormitory(name, baseScore);
+    setDormitories(prev => [dormitory, ...prev]);
+    return dormitory;
+  }
+
+  function handleUpdateDormitory(dormitoryId: string, patch: Partial<Pick<Dormitory, "name" | "baseScore">>) {
+    setDormitories(prev => prev.map(dormitory => {
+      if (dormitory.id !== dormitoryId) {
+        return dormitory;
+      }
+      return normalizeDormitoryScore({
+        ...dormitory,
+        name: patch.name !== undefined ? patch.name.trim() || dormitory.name : dormitory.name,
+        baseScore: patch.baseScore !== undefined && Number.isFinite(patch.baseScore) ? patch.baseScore : dormitory.baseScore,
+      });
+    }));
+  }
+
+  function handleDeleteDormitory(dormitoryId: string) {
+    setDormitories(prev => prev.filter(dormitory => dormitory.id !== dormitoryId));
+    setStudents(prev => prev.map(student => (
+      student.dormitoryId === dormitoryId ? { ...student, dormitoryId: undefined } : student
+    )));
+    setSelectedStudent(prev => (
+      prev?.dormitoryId === dormitoryId ? { ...prev, dormitoryId: undefined } : prev
+    ));
+  }
+
+  function handleAssignStudentDormitory(studentId: StudentId, dormitoryId?: string) {
+    const targetDormitory = dormitoryId ? dormitories.find(dormitory => dormitory.id === dormitoryId) : undefined;
+    const nextDormitoryId = targetDormitory?.id;
+    setStudents(prev => prev.map(student => (
+      student.id === studentId ? { ...student, dormitoryId: nextDormitoryId } : student
+    )));
+    setDormitories(prev => prev.map(dormitory => {
+      const withoutStudent = dormitory.memberIds.filter(id => id !== studentId);
+      const memberIds = dormitory.id === nextDormitoryId ? [...withoutStudent, studentId] : withoutStudent;
+      return { ...dormitory, memberIds: Array.from(new Set(memberIds)) };
+    }));
+    setSelectedStudent(prev => (
+      prev?.id === studentId ? { ...prev, dormitoryId: nextDormitoryId } : prev
+    ));
+  }
+
+  function handleAddDormitoryEvent(input: NewDormEventInput) {
+    const dormitory = dormitories.find(item => item.id === input.dormId);
+    if (!dormitory) {
+      return null;
+    }
+    const event = createDormEvent(input, students);
+    const nextDormitory = normalizeDormitoryScore({
+      ...dormitory,
+      events: [event, ...dormitory.events].slice(0, 200),
+    });
+    setDormitories(prev => prev.map(item => (item.id === dormitory.id ? nextDormitory : item)));
+    const record = input.recordToStudent === false ? null : createDormStudentRecord(event, nextDormitory);
+    if (record && event.responsibleStudentId) {
+      setStudents(prev => prev.map(student => (
+        student.id === event.responsibleStudentId
+          ? { ...student, records: [record, ...student.records] }
+          : student
+      )));
+      setSelectedStudent(prev => (
+        prev?.id === event.responsibleStudentId
+          ? { ...prev, records: [record, ...prev.records] }
+          : prev
+      ));
+    }
+    return event;
+  }
+
+  function handleUpdateDormEvent(dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean }) {
+    setDormitories(prev => prev.map(dormitory => {
+      if (dormitory.id !== dormId) {
+        return dormitory;
+      }
+      const events = dormitory.events.map(event => {
+        if (event.id !== eventId) {
+          return event;
+        }
+        const nextScore = patch.score !== undefined && Number.isFinite(patch.score) ? Math.round(patch.score * 10) / 10 : event.score;
+        return {
+          ...event,
+          reason: patch.reason !== undefined ? patch.reason.trim() || event.reason : event.reason,
+          score: nextScore,
+          type: nextScore > 0 ? "reward" : nextScore < 0 ? "punish" : "note",
+          note: patch.note !== undefined ? patch.note.trim() : event.note,
+          punishment: patch.punishment !== undefined ? patch.punishment.trim() : event.punishment,
+          punishmentDone: patch.punishmentDone !== undefined ? patch.punishmentDone : event.punishmentDone,
+        };
+      });
+      return normalizeDormitoryScore({ ...dormitory, events });
+    }));
+  }
+
+  function handleDeleteDormEvent(dormId: string, eventId: string) {
+    let responsibleStudentId: StudentId | undefined;
+    setDormitories(prev => prev.map(dormitory => {
+      if (dormitory.id !== dormId) {
+        return dormitory;
+      }
+      const target = dormitory.events.find(event => event.id === eventId);
+      responsibleStudentId = target?.responsibleStudentId;
+      return normalizeDormitoryScore({
+        ...dormitory,
+        events: dormitory.events.filter(event => event.id !== eventId),
+      });
+    }));
+    // 删除事件时，一并清掉当初联动写入责任人个人档案的那条记录（id 为 record-<eventId>），保持一致。
+    if (responsibleStudentId) {
+      const linkedRecordId = `record-${eventId}`;
+      setStudents(prev => prev.map(student => (
+        student.id === responsibleStudentId
+          ? { ...student, records: student.records.filter(record => record.id !== linkedRecordId) }
+          : student
+      )));
+      setSelectedStudent(prev => (
+        prev?.id === responsibleStudentId
+          ? { ...prev, records: prev.records.filter(record => record.id !== linkedRecordId) }
+          : prev
+      ));
+    }
+  }
+
+  function handleCloseDormitoryPeriod(dormId: string, options: { carryOver?: boolean } = {}) {
+    setDormitories(prev => prev.map(dormitory => (
+      dormitory.id === dormId ? closeDormitoryPeriod(dormitory, options) : dormitory
+    )));
+  }
+
+  function handleCloseAllDormitoryPeriods(options: { carryOver?: boolean } = {}) {
+    setDormitories(prev => prev.map(dormitory => (
+      dormitory.events.length ? closeDormitoryPeriod(dormitory, options) : dormitory
+    )));
+  }
+
   function handleApplyStudentRecord(studentId: StudentId, record: StudentRecord, syncIds: StudentId[]) {
     const syncSet = new Set(syncIds.filter(id => id !== studentId));
     setStudents(prev => prev.map(student => {
@@ -271,6 +407,10 @@ export default function App() {
 
   function handleDeleteStudent(studentId: StudentId) {
     setStudents(prev => prev.filter(student => student.id !== studentId));
+    setDormitories(prev => prev.map(dormitory => ({
+      ...dormitory,
+      memberIds: dormitory.memberIds.filter(id => id !== studentId),
+    })));
     commitSeatOrder(seatOrder.map(id => (id === studentId ? null : id)));
     updateSeatSettings(current => ({
       ...current,
@@ -290,6 +430,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      dormitories,
       seatHistory: savedSeatHistory,
     });
   }
@@ -301,6 +442,7 @@ export default function App() {
     setSeatOrder(next.seatOrder);
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
+    setDormitories(next.dormitories);
     setSavedSeatHistory(next.seatHistory);
     setSeatHistory([]);
     setSelectedStudent(null);
@@ -313,6 +455,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      dormitories,
       seatHistory: savedSeatHistory,
     });
     if (!next) {
@@ -323,9 +466,10 @@ export default function App() {
     setSeatOrder(next.seatOrder);
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
+    setDormitories(next.dormitories);
     setSavedSeatHistory(next.seatHistory);
     setSeatHistory([]);
-    setMainView("grades");
+    setSidebarTab("scores");
     return next.gradeExams.find(exam => exam.id === record.id) || next.gradeExams[0] || null;
   }
 
@@ -338,6 +482,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      dormitories,
       seatHistory: savedSeatHistory,
     });
     if (!next) {
@@ -348,6 +493,7 @@ export default function App() {
     setSeatOrder(next.seatOrder);
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
+    setDormitories(next.dormitories);
     setSavedSeatHistory(next.seatHistory);
     return true;
   }
@@ -359,6 +505,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      dormitories,
       seatHistory: savedSeatHistory,
     });
     if (!next) {
@@ -369,6 +516,7 @@ export default function App() {
     setSeatOrder(next.seatOrder);
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
+    setDormitories(next.dormitories);
     setSavedSeatHistory(next.seatHistory);
     return true;
   }
@@ -513,6 +661,7 @@ export default function App() {
     setSeatOrder(result.state.seatOrder);
     setLockedSeats(new Set(result.state.lockedSeats));
     setSeatSettings(result.state.seatSettings);
+    setDormitories(result.state.dormitories);
     setSavedSeatHistory(result.state.seatHistory);
     setSeatHistory([]);
     setSelectedStudent(null);
@@ -574,45 +723,11 @@ export default function App() {
         <Sidebar
           activeTab={sidebarTab}
           students={students}
+          dormitories={dormitories}
           seatOrder={seatOrder}
           gradeExams={appState.gradeExams}
-          seatSettings={seatSettings}
-          canUndoSeatOrder={seatHistory.length > 0}
-          onRandomizeSeats={handleRandomizeSeats}
-          onOrderSeatsByList={handleOrderSeatsByList}
-          onUndoSeatOrder={handleUndoSeatOrder}
-          onAddStudent={handleAddStudent}
-          onUpdateSeatSettings={updateSeatSettings}
-          onSaveScoreImport={handleSaveScoreImport}
-          onUpdateGradeExam={handleUpdateGradeExam}
-          onDeleteGradeExam={handleDeleteGradeExam}
-          onGenerateClassAnalysis={handleGenerateClassAnalysis}
-          onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
-          onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
-          studentAdviceProgress={studentAdviceProgress}
-          savedSeatHistory={savedSeatHistory}
-          onSaveSeatHistory={handleSaveSeatHistory}
-          onRenameSeatHistory={handleUpdateSeatHistoryNote}
-          onViewSeatHistory={setSelectedHistorySnapshot}
-          onApplySeatHistory={handleApplySeatHistory}
-          onDeleteSeatHistory={handleDeleteSeatHistory}
-          onImportRoster={handleImportRoster}
-          onBeforeBackupExport={saveCurrentLegacySnapshot}
-          onBackupImported={reloadFromLegacyState}
-          onSelectStudent={setSelectedStudent}
-          onTabChange={tab => {
-            setSidebarTab(tab);
-            if (tab === "scores") setMainView("grades");
-          }}
-          onShowGrades={() => setMainView("grades")}
-          onHideGrades={() => setMainView("seat")}
-          mainView={mainView}
-        />
-      }
-      mainTabs={
-        <MainTabs
-          activeView={mainView}
-          onChangeView={setMainView}
+          savedSeatHistoryCount={savedSeatHistory.length}
+          onTabChange={setSidebarTab}
           onOpenCommentWorkbench={() => setShowCommentWorkbench(true)}
         />
       }
@@ -626,10 +741,17 @@ export default function App() {
             <StudentDetail
               student={selectedStudent}
               students={students}
+              dormitories={dormitories}
               onClose={() => setSelectedStudent(null)}
               onUpdateStudent={handleUpdateStudent}
               onApplyRecord={handleApplyStudentRecord}
               onDeleteStudent={handleDeleteStudent}
+              onAssignDormitory={handleAssignStudentDormitory}
+              onAddDormitoryEvent={handleAddDormitoryEvent}
+              onOpenDormitories={() => {
+                setSidebarTab("dormitories");
+                setSidebarCollapsed(false);
+              }}
             />
           )}
 
@@ -681,27 +803,75 @@ export default function App() {
         </>
       }
     >
-      {mainView === "seat" && (
-        <div className="h-full bg-white overflow-hidden flex flex-col px-6 py-4">
-          <SeatBoard
-            students={students}
-            seatOrder={seatOrder}
-            onSelectStudent={setSelectedStudent}
-            onMoveSeat={handleMoveSeat}
-            lockedSeats={lockedSeats}
-            onToggleLock={toggleLock}
-          />
-        </div>
+      {sidebarTab === "daily" && (
+        <DailyWorkspace
+          students={students}
+          seatOrder={seatOrder}
+          lockedSeats={lockedSeats}
+          seatSettings={seatSettings}
+          canUndoSeatOrder={seatHistory.length > 0}
+          onRandomizeSeats={handleRandomizeSeats}
+          onOrderSeatsByList={handleOrderSeatsByList}
+          onUndoSeatOrder={handleUndoSeatOrder}
+          onUpdateSeatSettings={updateSeatSettings}
+          onAddStudent={handleAddStudent}
+          onSelectStudent={setSelectedStudent}
+          onMoveSeat={handleMoveSeat}
+          onToggleLock={toggleLock}
+        />
       )}
 
-      {mainView === "grades" && (
-        <div className="h-full overflow-auto">
-          <GradesPage
-            exams={appState.gradeExams}
-            students={students}
-            onSelectStudent={setSelectedStudent}
-          />
-        </div>
+      {sidebarTab === "dormitories" && (
+        <DormitoryWorkspace
+          students={students}
+          dormitories={dormitories}
+          onCreateDormitory={handleCreateDormitory}
+          onUpdateDormitory={handleUpdateDormitory}
+          onDeleteDormitory={handleDeleteDormitory}
+          onAssignStudentDormitory={handleAssignStudentDormitory}
+          onAddDormitoryEvent={handleAddDormitoryEvent}
+          onUpdateDormitoryEvent={handleUpdateDormEvent}
+          onDeleteDormitoryEvent={handleDeleteDormEvent}
+          onCloseDormitoryPeriod={handleCloseDormitoryPeriod}
+          onCloseAllDormitoryPeriods={handleCloseAllDormitoryPeriods}
+          onSelectStudent={setSelectedStudent}
+        />
+      )}
+
+      {sidebarTab === "scores" && (
+        <ScoresWorkspace
+          exams={appState.gradeExams}
+          students={students}
+          onSelectStudent={setSelectedStudent}
+          onSaveScoreImport={handleSaveScoreImport}
+          onUpdateGradeExam={handleUpdateGradeExam}
+          onDeleteGradeExam={handleDeleteGradeExam}
+          onGenerateClassAnalysis={handleGenerateClassAnalysis}
+          onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
+          onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
+          studentAdviceProgress={studentAdviceProgress}
+        />
+      )}
+
+      {sidebarTab === "data" && (
+        <DataWorkspace
+          students={students}
+          seatOrder={seatOrder}
+          onImportRoster={handleImportRoster}
+          onBeforeBackupExport={saveCurrentLegacySnapshot}
+          onBackupImported={reloadFromLegacyState}
+        />
+      )}
+
+      {sidebarTab === "history" && (
+        <HistoryWorkspace
+          history={savedSeatHistory}
+          onSave={handleSaveSeatHistory}
+          onRename={handleUpdateSeatHistoryNote}
+          onView={setSelectedHistorySnapshot}
+          onApply={handleApplySeatHistory}
+          onDelete={handleDeleteSeatHistory}
+        />
       )}
     </AppShell>
   );

@@ -85,7 +85,6 @@ function SeatCard({
     );
   }
 
-  const genderColor = student.gender === "男" ? "text-blue-400" : student.gender === "女" ? "text-pink-400" : "text-gray-300";
   const genderDot = student.gender === "男" ? "bg-blue-400" : student.gender === "女" ? "bg-pink-400" : "bg-gray-300";
 
   return (
@@ -101,36 +100,31 @@ function SeatCard({
       onDrop={handleDrop}
       className={`relative w-full rounded-xl border border-gray-200 bg-white hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30 transition-all text-left group ${isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"} ${
         isLocked ? "border-amber-300 bg-amber-50/30" : ""
-      } ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""} ${cardMode === "compact" ? "h-12 px-3" : "h-20 px-3 pt-2.5 pb-2"}`}
+      } ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""} ${cardMode === "compact" ? "h-12 px-3" : "h-20 px-2.5 pt-2.5 pb-2"}`}
     >
-      {/* Lock indicator */}
-      {isLocked && (
-        <div className="absolute top-1 right-1">
-          <Lock className="w-2.5 h-2.5 text-amber-400" />
-        </div>
-      )}
-
-      {/* Lock toggle (hover) */}
+      {/* Lock toggle: 锁定时常显(琥珀)，未锁定时悬停显示(灰)。单一元素、固定位置，避免点击后位移。 */}
       <button
         onClick={e => { e.stopPropagation(); onToggleLock(seatIndex); }}
-        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100"
+        onMouseDown={e => e.stopPropagation()}
+        title={isLocked ? "解锁座位" : "锁定座位"}
+        className={`absolute top-0.5 right-0.5 z-10 grid h-5 w-5 place-items-center rounded-md transition-opacity hover:bg-gray-100 ${isLocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
       >
-        <Lock className={`w-3 h-3 ${isLocked ? "text-amber-400" : "text-gray-300"}`} />
+        <Lock className={`h-3 w-3 ${isLocked ? "text-amber-400" : "text-gray-300"}`} />
       </button>
 
       {cardMode === "compact" ? (
         <div className="flex items-center gap-2 h-full">
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderDot}`} />
-          <span className="text-sm text-gray-800 truncate" style={{ fontWeight: 600 }}>{student.name}</span>
+          <span className="min-w-0 flex-1 truncate text-sm text-gray-800" style={{ fontWeight: 600 }}>{student.name}</span>
           {student.academicTags.length > 0 && (
-            <span className="ml-auto text-xs text-gray-400 truncate hidden group-hover:block">{student.academicTags[0]}</span>
+            <span className="shrink-0 text-xs text-gray-400 truncate hidden group-hover:block">{student.academicTags[0]}</span>
           )}
         </div>
       ) : (
         <div className="flex flex-col gap-1 h-full">
-          <div className="flex items-center gap-1.5">
-            <span className={`text-xs ${genderColor}`} style={{ fontWeight: 700 }}>{student.gender || "—"}</span>
-            <span className="text-sm text-gray-800 truncate" style={{ fontWeight: 700 }}>{student.name}</span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderDot}`} title={student.gender || "未知"} />
+            <span className="min-w-0 flex-1 truncate text-sm text-gray-800" style={{ fontWeight: 700 }}>{student.name}</span>
           </div>
           {student.academicTags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-auto">

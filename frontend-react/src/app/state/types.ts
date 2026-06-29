@@ -10,6 +10,46 @@ export interface StudentRecord {
   date: string;
 }
 
+export type DormEventType = "reward" | "punish" | "note";
+
+export interface DormEvent {
+  id: string;
+  dormId: string;
+  type: DormEventType;
+  score: number;
+  reason: string;
+  responsibleStudentId?: StudentId;
+  responsibleStudentName?: string;
+  note: string;
+  /** 老师拟定的处罚措施（可选）。 */
+  punishment?: string;
+  /** 处罚是否已执行。 */
+  punishmentDone?: boolean;
+  date: string;
+  createdAt: string;
+}
+
+export interface DormPeriodArchive {
+  id: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  baseScore: number;
+  finalScore: number;
+  events: DormEvent[];
+}
+
+export interface Dormitory {
+  id: string;
+  name: string;
+  memberIds: StudentId[];
+  baseScore: number;
+  currentScore: number;
+  events: DormEvent[];
+  periodStart: string;
+  history: DormPeriodArchive[];
+}
+
 export interface StudentExamSummary {
   id: string;
   name: string;
@@ -176,6 +216,7 @@ export interface AppStudent {
   autoTagIds: string[];
   records: StudentRecord[];
   exams: StudentExamSummary[];
+  dormitoryId?: string;
   aiComments?: unknown;
 }
 
@@ -186,6 +227,7 @@ export interface SeatManagerState {
   seatOrder: Array<StudentId | null>;
   lockedSeats: number[];
   seatSettings: SeatSettings;
+  dormitories: Dormitory[];
   seatHistory: SeatHistorySnapshot[];
   savedExams: unknown[];
   exams: unknown[];

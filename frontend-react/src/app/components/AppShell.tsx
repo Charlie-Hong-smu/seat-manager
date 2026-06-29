@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 interface AppShellProps {
   header: ReactNode;
   sidebar: ReactNode;
-  mainTabs: ReactNode;
+  mainTabs?: ReactNode;
   children: ReactNode;
   overlays?: ReactNode;
   sidebarCollapsed: boolean;
