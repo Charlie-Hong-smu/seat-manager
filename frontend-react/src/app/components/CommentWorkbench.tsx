@@ -266,12 +266,13 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     commitBatchState(emptyBatchState());
   }
 
-  function buildDraft(comment: CommentState, note = teacherNote): StudentCommentDraft {
+  function buildDraft(comment: CommentState, note?: string): StudentCommentDraft {
     const profile = commentProfiles[comment.studentId];
     const summary = profile ? summarizeCommentProfile(rubric, profile) : { criteriaSummary: [], customOptions: [] };
+    const draftTeacherNote = note ?? (comment.studentId === selectedId ? teacherNote : profile?.teacherNote || "");
     return {
       generatedComment: comment.text,
-      teacherNote: note,
+      teacherNote: draftTeacherNote,
       style: comment.style as "warm" | "formal" | "brief",
       lengthMode: comment.lengthMode as "short" | "standard" | "long" | "custom",
       targetWordCount: 120,
@@ -354,6 +355,23 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       updatedAt: new Date().toISOString(),
     });
     updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
+  }
+
+  function saveSelectedTeacherNote() {
+    if (!selectedStudent || !selectedComment || !selectedProfile) return;
+    const savedProfile = saveStudentCommentProfile(selectedStudent.id, rubric, {
+      ...selectedProfile,
+      teacherNote,
+      style: selectedComment.style as "warm" | "formal" | "brief",
+      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
+      status: selectedProfile.generatedComment ? "edited" : "draft",
+      updatedAt: new Date().toISOString(),
+    });
+    setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
+    updateComment(selectedStudent.id, {
+      needsInfo: savedProfile.teacherNote.trim() ? false : selectedStudent.academicTags.length === 0,
+    });
+    setAiStatus(`已暂存 ${selectedStudent.name} 的补充说明。`);
   }
 
   function toggleCriterionOption(criterion: CommentCriterion, optionId: string) {
@@ -530,7 +548,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         }
         setAiStatus(`正在生成 ${done + 1}/${total}：${student.name}`);
         try {
-          const result = await generateStudentAiComment(student, buildDraft(comment, ""), {
+          const result = await generateStudentAiComment(student, buildDraft(comment), {
             accessCode,
             remember: rememberAuth,
             force: true,
@@ -686,8 +704,9 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     : "批量生成";
   const batchButtonAction = batchRunning ? pauseBatch : resumableCount ? resumeBatch : startBatch;
   const selectedCount = selectedSummary.criteriaSummary.reduce((total, item) => total + item.values.length, 0) + selectedSummary.customOptions.length;
-  const selectedTags = selectedStudent ? [...selectedStudent.academicTags, ...selectedStudent.tags] : [];
+  const selectedTags = selectedStudent ? [...selectedStudent.academicTags, ...selectedStudent.tags].filter(tag => !tag.startsWith("comment_")) : [];
   const selectedInitial = selectedStudent?.name.slice(0, 1) || "";
+  const hasUnsavedTeacherNote = selectedProfile ? teacherNote !== selectedProfile.teacherNote : false;
 
   function getCommentStatus(state: CommentState) {
     if (state.failed) {
@@ -1063,7 +1082,18 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
               )}
 
               <div className="mt-4">
-                <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>老师补充说明（可选）</div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="text-xs text-gray-500" style={{ fontWeight: 800 }}>老师补充说明（可选）</div>
+                  <button
+                    onClick={saveSelectedTeacherNote}
+                    disabled={!hasUnsavedTeacherNote}
+                    className={`flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs transition-colors ${hasUnsavedTeacherNote ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "bg-gray-50 text-gray-300"}`}
+                    style={{ fontWeight: 800 }}
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    暂存
+                  </button>
+                </div>
                 <textarea
                   value={teacherNote}
                   onChange={e => setTeacherNote(e.target.value)}
