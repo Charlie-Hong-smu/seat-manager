@@ -57,7 +57,7 @@ base: "/seat-manager/"
 
 新版是「一套代码、两种构建」，由打包时的环境变量 `VITE_EDITION` 决定（见 `frontend-react/src/app/config.ts`）：
 
-- **小张版（默认，`VITE_EDITION` 不设或非 `commercial`）**：本地密码登录、首次设密码、「修改密码」、纯离线可用。行为与历史版本完全一致，**不要改动其默认行为**。
+- **小张版（`VITE_EDITION=zhang`，默认不设也等同于 `zhang`）**：本地密码登录、首次设密码、「修改密码」、纯离线可用。行为与历史版本完全一致，**不要改动其默认行为**。
 - **商用版（`VITE_EDITION=commercial`）**：改为「产品授权码」登录（服务端校验），用于对外售卖。`VITE_APP_NAME` 可覆盖显示名（默认「班级座位管理器」）。
 
 发布方式：两种构建产物放在**两个网址**。小张版继续用现有 GitHub Pages；商用版另起一个部署（计划用 Cloudflare Pages，构建时设 `VITE_EDITION=commercial`）。两站数据各自隔离在各自浏览器/网址下。
@@ -75,6 +75,8 @@ base: "/seat-manager/"
 - **AI 权益**：商用版可复用同一个产品授权码开通 AI；在 license 记录中用 `aiEnabled`、`aiExpiresAt`、`aiDailyLimit` 单独控制，后续可单独续费或停用 AI。
 - **设备名额**：每个授权码默认最多 3 台设备；商用版账号菜单提供“解绑本机”，可释放当前浏览器占用的设备名额。
 - 早期收款走人工：收到款后在 Cloudflare KV 手动建/改记录，不接支付系统。
+
+轻量授权管理页在 `license-admin/index.html`。它用于你自己管理老师授权码、软件到期日、AI 到期日、设备数和清空设备绑定；管理员密钥需要单独设置到 Worker Secret，不写入仓库。
 
 `authStorage.ts` 同时保留本地密码与产品授权两套逻辑，`isAuthenticated()/clearAuth()` 按 edition 自动选择，互不干扰。
 

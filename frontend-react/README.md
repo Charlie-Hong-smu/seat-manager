@@ -9,11 +9,11 @@
 ```bash
 npm install
 npm run dev
-npm run build                          # 小张版（默认 edition）
+npm run build                          # 小张版（默认 edition，等同 VITE_EDITION=zhang）
 VITE_EDITION=commercial npm run build  # 商用版（授权码登录）
 ```
 
-版本由 `src/app/config.ts` 的 `VITE_EDITION` 决定：默认 = 小张版（本地密码、离线，行为不可改动）；`commercial` = 商用授权码版。详见根 `README.md`。
+版本由 `src/app/config.ts` 的 `VITE_EDITION` 决定：`zhang` = 小张版（默认不设也等同于 `zhang`，本地密码、离线，行为不可改动）；`commercial` = 商用授权码版。详见根 `README.md`。
 
 Vite 已配置 `base: "/seat-manager/"`，用于后续 GitHub Pages 部署。
 

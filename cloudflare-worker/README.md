@@ -132,6 +132,28 @@ value 示例：
 
 它只用于旧同步码路径。给外部试用者使用时，应使用产品授权码路径。
 
+## License Admin
+
+仓库里的 `license-admin/index.html` 是轻量授权管理页，用于你自己管理人员和授权记录。它不会打包进老师使用的前端。
+
+首次使用前，先给 Worker 设置管理员密钥：
+
+```bash
+cd cloudflare-worker
+openssl rand -base64 24
+npm exec wrangler -- secret put LICENSE_ADMIN_TOKEN
+npm run deploy
+```
+
+把 `openssl rand` 生成的密钥保存到自己的密码管理器；`wrangler secret put` 提示输入时粘贴这串密钥。管理页打开后填写 Worker 地址和管理员密钥即可操作。
+
+管理页支持：
+
+- 新增授权码：生成随机授权码，自动写入对应 KV 记录。
+- 修改授权：调整 `status`、软件到期日、AI 是否开通、AI 到期日、AI 每日次数、设备上限。
+- 清空设备：释放某个授权码当前绑定的所有设备。
+- 删除授权：删除授权记录；默认不删除该老师的云端业务数据。
+
 ## Endpoints
 
 - `POST /license/auth`
@@ -143,6 +165,13 @@ value 示例：
   - header: `Authorization: Bearer <product_token>`
   - response: `{ "ok": true, "removed": true, "licenseId": "...", "maxDevices": 3 }`
   - 用途：商用版账号菜单“解绑本机”，从当前授权码的 `devices` 中移除本机并释放设备名额。
+
+- `POST /admin/licenses/list`
+- `POST /admin/licenses/upsert`
+- `POST /admin/licenses/clear-devices`
+- `POST /admin/licenses/delete`
+  - header: `Authorization: Bearer <LICENSE_ADMIN_TOKEN>`
+  - 用途：仅供 `license-admin/index.html` 管理页使用。
 
 - `POST /auth`
   - body: `{ "accessCode": "...", "rememberDays": 30 }`

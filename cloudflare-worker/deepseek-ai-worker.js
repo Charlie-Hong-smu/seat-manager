@@ -22,6 +22,10 @@ export default {
     }
 
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/admin/licenses/")) {
+      return handleLicenseAdminRoute(request, env, corsHeaders, url.pathname);
+    }
+
     if (url.pathname.startsWith("/sync/")) {
       return handleSyncRoute(request, env, corsHeaders, url.pathname);
     }
@@ -110,6 +114,122 @@ async function handleLicenseAuth(request, env, corsHeaders) {
     aiExpiresAt: license.aiExpiresAt || "",
     aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
   }, 200, corsHeaders);
+}
+
+async function handleLicenseAdminRoute(request, env, corsHeaders, pathname) {
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
+  }
+  if (!env.SEAT_MANAGER_KV) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+  if (!await verifyLicenseAdminRequest(request, env)) {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+
+  if (pathname === "/admin/licenses/list") {
+    return handleLicenseAdminList(env, corsHeaders);
+  }
+  if (pathname === "/admin/licenses/upsert") {
+    return handleLicenseAdminUpsert(request, env, corsHeaders);
+  }
+  if (pathname === "/admin/licenses/clear-devices") {
+    return handleLicenseAdminClearDevices(request, env, corsHeaders);
+  }
+  if (pathname === "/admin/licenses/delete") {
+    return handleLicenseAdminDelete(request, env, corsHeaders);
+  }
+  return jsonResponse({ error: "not_found" }, 404, corsHeaders);
+}
+
+async function verifyLicenseAdminRequest(request, env) {
+  const token = getBearerToken(request);
+  if (!token) {
+    return false;
+  }
+  if (env.LICENSE_ADMIN_TOKEN_HASH) {
+    return timingSafeEqual(await sha256Hex(token), env.LICENSE_ADMIN_TOKEN_HASH);
+  }
+  if (env.LICENSE_ADMIN_TOKEN) {
+    return timingSafeEqual(token, env.LICENSE_ADMIN_TOKEN);
+  }
+  return false;
+}
+
+async function handleLicenseAdminList(env, corsHeaders) {
+  const list = await env.SEAT_MANAGER_KV.list({ prefix: LICENSE_KEY_PREFIX });
+  const licenseKeys = list.keys
+    .map((item) => item.name)
+    .filter((key) => key.startsWith(LICENSE_KEY_PREFIX) && !key.endsWith(LICENSE_SYNC_STATE_SUFFIX));
+  const licenses = await Promise.all(licenseKeys.map(async (key) => {
+    const license = await loadLicenseRecordByKey(key, env);
+    if (!license) {
+      return null;
+    }
+    return serializeLicenseForAdmin(license);
+  }));
+  return jsonResponse({
+    licenses: licenses.filter(Boolean).sort((a, b) => a.licenseId.localeCompare(b.licenseId)),
+    partial: Boolean(list.list_complete === false),
+  }, 200, corsHeaders);
+}
+
+async function handleLicenseAdminUpsert(request, env, corsHeaders) {
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const input = body.value || {};
+  const licenseKey = await getAdminLicenseKey(input);
+  const licenseId = sanitizeLicenseId(input.licenseId);
+  if (!licenseKey || !licenseId) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const existing = await loadLicenseRecordByKey(licenseKey, env);
+  const clearDevices = Boolean(input.clearDevices);
+  const now = new Date().toISOString();
+  const record = normalizeAdminLicenseInput(input, existing, {
+    licenseId,
+    devices: clearDevices ? [] : existing?.devices || [],
+    updatedAt: now,
+  });
+  await env.SEAT_MANAGER_KV.put(licenseKey, JSON.stringify(record));
+  const saved = await loadLicenseRecordByKey(licenseKey, env);
+  return jsonResponse({ license: serializeLicenseForAdmin(saved) }, 200, corsHeaders);
+}
+
+async function handleLicenseAdminClearDevices(request, env, corsHeaders) {
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const licenseKey = getAdminLicenseKeyFromExisting(body.value);
+  const license = await loadLicenseRecordByKey(licenseKey, env);
+  if (!license) {
+    return jsonResponse({ error: "not_found" }, 404, corsHeaders);
+  }
+  await unbindAllLicenseDevices(license, env);
+  const saved = await loadLicenseRecordByKey(licenseKey, env);
+  return jsonResponse({ license: serializeLicenseForAdmin(saved) }, 200, corsHeaders);
+}
+
+async function handleLicenseAdminDelete(request, env, corsHeaders) {
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const licenseKey = getAdminLicenseKeyFromExisting(body.value);
+  if (!licenseKey) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  await env.SEAT_MANAGER_KV.delete(licenseKey);
+  if (body.value?.deleteState) {
+    const licenseId = sanitizeLicenseId(body.value.licenseId);
+    if (licenseId) {
+      await env.SEAT_MANAGER_KV.delete(getLicensedSyncStateKey(licenseId));
+    }
+  }
+  return jsonResponse({ ok: true }, 200, corsHeaders);
 }
 
 async function handleLicenseUnbindDevice(request, env, corsHeaders) {
@@ -721,6 +841,85 @@ async function unbindLicenseDevice(license, deviceId, env) {
     }));
   }
   return removed;
+}
+
+async function unbindAllLicenseDevices(license, env) {
+  const now = new Date().toISOString();
+  if (env.SEAT_MANAGER_KV && license.storageKey) {
+    await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
+      licenseId: license.licenseId,
+      status: license.status,
+      expiresAt: license.expiresAt || "",
+      maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
+      aiEnabled: Boolean(license.aiEnabled),
+      aiExpiresAt: license.aiExpiresAt || "",
+      aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+      devices: [],
+      updatedAt: now,
+    }));
+  }
+}
+
+async function getAdminLicenseKey(input) {
+  const existingKey = getAdminLicenseKeyFromExisting(input);
+  if (existingKey) {
+    return existingKey;
+  }
+  const productCode = toText(input?.productCode).trim();
+  if (!productCode) {
+    return "";
+  }
+  return getLicenseKey(await sha256Hex(productCode));
+}
+
+function getAdminLicenseKeyFromExisting(input) {
+  const key = toText(input?.licenseKey).trim();
+  return key.startsWith(LICENSE_KEY_PREFIX) && !key.endsWith(LICENSE_SYNC_STATE_SUFFIX) ? key : "";
+}
+
+function normalizeAdminLicenseInput(input, existing, fallback) {
+  return {
+    licenseId: fallback.licenseId,
+    status: ["active", "disabled"].includes(input.status) ? input.status : existing?.status || "active",
+    expiresAt: normalizeIsoDateInput(input.expiresAt),
+    maxDevices: normalizeMaxDevices(input.maxDevices ?? existing?.maxDevices),
+    aiEnabled: parseBoolean(input.aiEnabled, Boolean(existing?.aiEnabled)),
+    aiExpiresAt: normalizeIsoDateInput(input.aiExpiresAt),
+    aiDailyLimit: normalizeAiDailyLimit(input.aiDailyLimit ?? existing?.aiDailyLimit),
+    devices: fallback.devices,
+    updatedAt: fallback.updatedAt,
+  };
+}
+
+function serializeLicenseForAdmin(license) {
+  if (!license) {
+    return null;
+  }
+  return {
+    licenseKey: license.storageKey,
+    codeHash: license.storageKey.replace(LICENSE_KEY_PREFIX, ""),
+    licenseId: license.licenseId,
+    status: license.status,
+    expiresAt: license.expiresAt || "",
+    maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
+    aiEnabled: Boolean(license.aiEnabled),
+    aiExpiresAt: license.aiExpiresAt || "",
+    aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+    deviceCount: license.devices.length,
+    devices: license.devices,
+  };
+}
+
+function normalizeIsoDateInput(value) {
+  const text = toText(value).trim();
+  if (!text) {
+    return "";
+  }
+  const timestamp = Date.parse(text);
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+  return new Date(timestamp).toISOString();
 }
 
 function getLicenseKey(codeHash) {

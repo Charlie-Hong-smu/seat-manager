@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>授权码管理</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --line: #e6e9f0;
+      --text: #1f2937;
+      --muted: #667085;
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --red: #dc2626;
+      --green: #16a34a;
+      --shadow: 0 18px 45px rgba(31, 41, 55, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      height: 64px;
+      padding: 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      backdrop-filter: blur(12px);
+    }
+    h1 { margin: 0; font-size: 18px; }
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 380px minmax(0, 1fr);
+      gap: 20px;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .panel { padding: 18px; }
+    .stack { display: grid; gap: 14px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 700; }
+    input, select {
+      width: 100%;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 10px;
+      color: var(--text);
+      background: #fff;
+      font: inherit;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+    .checkline { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
+    .checkline input { width: 16px; height: 16px; }
+    button {
+      height: 38px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 13px;
+      background: var(--blue);
+      color: white;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button:hover { background: var(--blue-dark); }
+    button.secondary { background: #eef2ff; color: #3730a3; }
+    button.secondary:hover { background: #e0e7ff; }
+    button.ghost { background: #f3f4f6; color: #374151; }
+    button.ghost:hover { background: #e5e7eb; }
+    button.danger { background: #fee2e2; color: var(--red); }
+    button.danger:hover { background: #fecaca; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .toolbar-actions { display: flex; gap: 8px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .status { min-height: 18px; color: var(--muted); font-size: 12px; }
+    .status.ok { color: var(--green); }
+    .status.error { color: var(--red); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 12px; background: #fafbff; }
+    tr:hover td { background: #fbfcff; }
+    .pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+    .pill.active { background: #dcfce7; color: #166534; }
+    .pill.disabled { background: #fee2e2; color: #991b1b; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .code-box {
+      display: none;
+      padding: 12px;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #1e3a8a;
+      font-size: 13px;
+    }
+    .code-box.show { display: block; }
+    @media (max-width: 920px) {
+      main { grid-template-columns: 1fr; padding: 14px; }
+      header { padding: 0 16px; }
+      .row { grid-template-columns: 1fr; }
+      .table-wrap { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>授权码管理</h1>
+    <div class="muted">用于管理商用试用、软件到期、AI 权益和设备名额</div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <form id="licenseForm" class="stack">
+        <div class="stack">
+          <label>
+            Worker 地址
+            <input id="workerUrl" autocomplete="off" value="https://seat-manager-ai.hongchenglin03.workers.dev">
+          </label>
+          <label>
+            管理员密钥
+            <input id="adminToken" type="password" autocomplete="current-password" placeholder="只保存在当前浏览器">
+          </label>
+          <div class="toolbar-actions">
+            <button type="button" class="secondary" id="saveTokenBtn">记住密钥</button>
+            <button type="button" class="ghost" id="forgetTokenBtn">清除</button>
+          </div>
+        </div>
+
+        <hr style="width:100%; border:0; border-top:1px solid var(--line);">
+
+        <input id="licenseKey" type="hidden">
+        <label>
+          老师/客户代号 licenseId
+          <input id="licenseId" autocomplete="off" placeholder="例如 teacher-li">
+        </label>
+        <label>
+          授权码
+          <input id="productCode" autocomplete="off" placeholder="新建时填写；编辑旧记录可留空">
+        </label>
+        <div class="toolbar-actions">
+          <button type="button" class="secondary" id="generateCodeBtn">生成新授权码</button>
+          <button type="button" class="ghost" id="copyCodeBtn">复制授权码</button>
+        </div>
+        <div id="newCodeBox" class="code-box"></div>
+
+        <div class="row">
+          <label>
+            软件状态
+            <select id="status">
+              <option value="active">active 可用</option>
+              <option value="disabled">disabled 停用</option>
+            </select>
+          </label>
+          <label>
+            最多设备数
+            <input id="maxDevices" type="number" min="1" max="10" value="3">
+          </label>
+        </div>
+
+        <div class="row">
+          <label>
+            软件到期日
+            <input id="expiresAt" type="date">
+          </label>
+          <label>
+            AI 到期日
+            <input id="aiExpiresAt" type="date">
+          </label>
+        </div>
+
+        <div class="row">
+          <label class="checkline">
+            <input id="aiEnabled" type="checkbox" checked>
+            开通 AI
+          </label>
+          <label>
+            AI 每日次数
+            <input id="aiDailyLimit" type="number" min="1" max="500" value="30">
+          </label>
+        </div>
+
+        <label class="checkline">
+          <input id="clearDevices" type="checkbox">
+          保存时清空已绑定设备
+        </label>
+
+        <div class="toolbar-actions">
+          <button type="submit">保存授权</button>
+          <button type="button" class="ghost" id="resetFormBtn">新建空白</button>
+        </div>
+        <div id="formStatus" class="status"></div>
+      </form>
+    </section>
+
+    <section>
+      <div class="toolbar">
+        <div>
+          <strong>授权记录</strong>
+          <div class="muted" id="summaryText">尚未加载</div>
+        </div>
+        <div class="toolbar-actions">
+          <button type="button" class="secondary" id="refreshBtn">刷新</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>代号</th>
+              <th>状态</th>
+              <th>软件到期</th>
+              <th>AI</th>
+              <th>设备</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="licenseRows">
+            <tr><td colspan="6" class="muted">点击“刷新”加载授权记录。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = { licenses: [] };
+    const $ = (id) => document.getElementById(id);
+    const fields = {
+      workerUrl: $("workerUrl"),
+      adminToken: $("adminToken"),
+      licenseKey: $("licenseKey"),
+      licenseId: $("licenseId"),
+      productCode: $("productCode"),
+      status: $("status"),
+      maxDevices: $("maxDevices"),
+      expiresAt: $("expiresAt"),
+      aiEnabled: $("aiEnabled"),
+      aiExpiresAt: $("aiExpiresAt"),
+      aiDailyLimit: $("aiDailyLimit"),
+      clearDevices: $("clearDevices"),
+    };
+
+    fields.workerUrl.value = localStorage.getItem("seat-manager-license-admin-worker") || fields.workerUrl.value;
+    fields.adminToken.value = localStorage.getItem("seat-manager-license-admin-token") || "";
+
+    function setStatus(message, type = "") {
+      $("formStatus").textContent = message;
+      $("formStatus").className = `status ${type}`;
+    }
+
+    function baseUrl() {
+      return fields.workerUrl.value.trim().replace(/\/+$/, "");
+    }
+
+    async function api(path, body = {}) {
+      const token = fields.adminToken.value.trim();
+      if (!token) throw new Error("请先输入管理员密钥");
+      const response = await fetch(`${baseUrl()}${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `请求失败 ${response.status}`);
+      }
+      return data;
+    }
+
+    function dateToIsoEnd(dateText) {
+      if (!dateText) return "";
+      const date = new Date(`${dateText}T23:59:59.999+08:00`);
+      return Number.isFinite(date.getTime()) ? date.toISOString() : "";
+    }
+
+    function isoToDate(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return "";
+      const local = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+      return local.toISOString().slice(0, 10);
+    }
+
+    function formatDate(value) {
+      return value ? isoToDate(value) : "永久";
+    }
+
+    function randomCode() {
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      const bytes = new Uint8Array(10);
+      crypto.getRandomValues(bytes);
+      return `SM-${Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("")}`;
+    }
+
+    function resetForm() {
+      fields.licenseKey.value = "";
+      fields.licenseId.value = "";
+      fields.productCode.value = "";
+      fields.status.value = "active";
+      fields.maxDevices.value = "3";
+      fields.expiresAt.value = "";
+      fields.aiEnabled.checked = true;
+      fields.aiExpiresAt.value = "";
+      fields.aiDailyLimit.value = "30";
+      fields.clearDevices.checked = false;
+      $("newCodeBox").className = "code-box";
+      $("newCodeBox").textContent = "";
+      setStatus("");
+    }
+
+    function editLicense(license) {
+      fields.licenseKey.value = license.licenseKey;
+      fields.licenseId.value = license.licenseId;
+      fields.productCode.value = "";
+      fields.status.value = license.status;
+      fields.maxDevices.value = license.maxDevices;
+      fields.expiresAt.value = isoToDate(license.expiresAt);
+      fields.aiEnabled.checked = Boolean(license.aiEnabled);
+      fields.aiExpiresAt.value = isoToDate(license.aiExpiresAt);
+      fields.aiDailyLimit.value = license.aiDailyLimit;
+      fields.clearDevices.checked = false;
+      $("newCodeBox").className = "code-box";
+      $("newCodeBox").textContent = "";
+      setStatus(`正在编辑 ${license.licenseId}`, "ok");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function renderRows() {
+      const tbody = $("licenseRows");
+      if (!state.licenses.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">暂无授权记录。</td></tr>';
+        $("summaryText").textContent = "0 条记录";
+        return;
+      }
+      $("summaryText").textContent = `${state.licenses.length} 条记录`;
+      tbody.innerHTML = state.licenses.map((license, index) => `
+        <tr>
+          <td>
+            <strong>${escapeHtml(license.licenseId)}</strong>
+            <div class="muted mono">${escapeHtml(license.codeHash.slice(0, 12))}...</div>
+          </td>
+          <td><span class="pill ${license.status === "active" ? "active" : "disabled"}">${license.status}</span></td>
+          <td>${formatDate(license.expiresAt)}</td>
+          <td>
+            ${license.aiEnabled ? "已开通" : "未开通"}
+            <div class="muted">到期：${formatDate(license.aiExpiresAt)} / 日限 ${license.aiDailyLimit}</div>
+          </td>
+          <td>
+            ${license.deviceCount}/${license.maxDevices}
+            <div class="muted">${license.devices.map((item) => escapeHtml(item.name)).join("、") || "无设备"}</div>
+          </td>
+          <td>
+            <div class="actions">
+              <button class="ghost" data-action="edit" data-index="${index}">编辑</button>
+              <button class="secondary" data-action="clear" data-index="${index}">清设备</button>
+              <button class="danger" data-action="delete" data-index="${index}">删除</button>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      })[char]);
+    }
+
+    async function refreshLicenses() {
+      setStatus("正在加载授权记录...");
+      const data = await api("/admin/licenses/list");
+      state.licenses = data.licenses || [];
+      renderRows();
+      setStatus(data.partial ? "已加载前 1000 条记录。" : "授权记录已刷新。", "ok");
+    }
+
+    $("saveTokenBtn").addEventListener("click", () => {
+      localStorage.setItem("seat-manager-license-admin-worker", fields.workerUrl.value.trim());
+      localStorage.setItem("seat-manager-license-admin-token", fields.adminToken.value.trim());
+      setStatus("管理员密钥已保存在当前浏览器。", "ok");
+    });
+
+    $("forgetTokenBtn").addEventListener("click", () => {
+      localStorage.removeItem("seat-manager-license-admin-token");
+      fields.adminToken.value = "";
+      setStatus("已清除本机保存的管理员密钥。", "ok");
+    });
+
+    $("generateCodeBtn").addEventListener("click", () => {
+      const code = randomCode();
+      fields.productCode.value = code;
+      $("newCodeBox").textContent = `新授权码：${code}。请现在记录并发给老师，系统不会保存明文授权码。`;
+      $("newCodeBox").className = "code-box show";
+    });
+
+    $("copyCodeBtn").addEventListener("click", async () => {
+      if (!fields.productCode.value.trim()) return;
+      await navigator.clipboard.writeText(fields.productCode.value.trim());
+      setStatus("授权码已复制。", "ok");
+    });
+
+    $("resetFormBtn").addEventListener("click", resetForm);
+    $("refreshBtn").addEventListener("click", () => refreshLicenses().catch((error) => setStatus(error.message, "error")));
+
+    $("licenseForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const payload = {
+          licenseKey: fields.licenseKey.value,
+          licenseId: fields.licenseId.value.trim(),
+          productCode: fields.productCode.value.trim(),
+          status: fields.status.value,
+          expiresAt: dateToIsoEnd(fields.expiresAt.value),
+          maxDevices: Number(fields.maxDevices.value),
+          aiEnabled: fields.aiEnabled.checked,
+          aiExpiresAt: dateToIsoEnd(fields.aiExpiresAt.value),
+          aiDailyLimit: Number(fields.aiDailyLimit.value),
+          clearDevices: fields.clearDevices.checked,
+        };
+        if (!payload.licenseKey && !payload.productCode) {
+          throw new Error("新建授权时必须填写或生成授权码");
+        }
+        setStatus("正在保存...");
+        await api("/admin/licenses/upsert", payload);
+        await refreshLicenses();
+        setStatus("授权已保存。", "ok");
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
+
+    $("licenseRows").addEventListener("click", async (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const license = state.licenses[Number(button.dataset.index)];
+      if (!license) return;
+      const action = button.dataset.action;
+      if (action === "edit") {
+        editLicense(license);
+        return;
+      }
+      try {
+        if (action === "clear") {
+          if (!confirm(`确定清空 ${license.licenseId} 的所有设备绑定吗？`)) return;
+          await api("/admin/licenses/clear-devices", { licenseKey: license.licenseKey });
+          await refreshLicenses();
+          setStatus("设备绑定已清空。", "ok");
+        }
+        if (action === "delete") {
+          if (!confirm(`确定删除 ${license.licenseId} 的授权记录吗？云端数据不会一并删除。`)) return;
+          await api("/admin/licenses/delete", { licenseKey: license.licenseKey, licenseId: license.licenseId });
+          await refreshLicenses();
+          setStatus("授权记录已删除。", "ok");
+        }
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
+  </script>
+</body>
+</html>
