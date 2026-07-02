@@ -156,7 +156,7 @@
         </label>
         <label>
           授权码
-          <input id="productCode" autocomplete="off" placeholder="新建时填写；编辑旧记录可留空">
+          <input id="productCode" autocomplete="off" placeholder="新建时填写；旧记录补录后可再次查看">
         </label>
         <div class="toolbar-actions">
           <button type="button" class="secondary" id="generateCodeBtn">生成新授权码</button>
@@ -309,6 +309,48 @@
       return value ? isoToDate(value) : "永久";
     }
 
+    function bytesToBase64(bytes) {
+      let binary = "";
+      bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+      return btoa(binary);
+    }
+
+    function base64ToBytes(value) {
+      return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+    }
+
+    async function getProductCodeCryptoKey() {
+      const token = fields.adminToken.value.trim();
+      if (!token) throw new Error("请先输入管理员密钥");
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`seat-manager-license-admin:${token}`));
+      return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+    }
+
+    async function encryptProductCode(productCode) {
+      const text = productCode.trim();
+      if (!text) return "";
+      const key = await getProductCodeCryptoKey();
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(text));
+      return JSON.stringify({ v: 1, iv: bytesToBase64(iv), data: bytesToBase64(new Uint8Array(encrypted)) });
+    }
+
+    async function decryptProductCode(secret) {
+      if (!secret) return "";
+      try {
+        const payload = JSON.parse(secret);
+        const key = await getProductCodeCryptoKey();
+        const decrypted = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: base64ToBytes(payload.iv) },
+          key,
+          base64ToBytes(payload.data)
+        );
+        return new TextDecoder().decode(decrypted);
+      } catch (error) {
+        return "";
+      }
+    }
+
     function randomCode() {
       const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
       const bytes = new Uint8Array(10);
@@ -335,7 +377,7 @@
     function editLicense(license) {
       fields.licenseKey.value = license.licenseKey;
       fields.licenseId.value = license.licenseId;
-      fields.productCode.value = "";
+      fields.productCode.value = license.productCode || "";
       fields.status.value = license.status;
       fields.maxDevices.value = license.maxDevices;
       fields.expiresAt.value = isoToDate(license.expiresAt);
@@ -397,7 +439,11 @@
     async function refreshLicenses() {
       setStatus("正在加载授权记录...");
       const data = await api("/admin/licenses/list");
-      state.licenses = data.licenses || [];
+      const licenses = data.licenses || [];
+      state.licenses = await Promise.all(licenses.map(async (license) => ({
+        ...license,
+        productCode: await decryptProductCode(license.productCodeSecret),
+      })));
       renderRows();
       setStatus(data.partial ? "已加载前 1000 条记录。" : "授权记录已刷新。", "ok");
     }
@@ -417,7 +463,7 @@
     $("generateCodeBtn").addEventListener("click", () => {
       const code = randomCode();
       fields.productCode.value = code;
-      $("newCodeBox").textContent = `新授权码：${code}。请现在记录并发给老师，系统不会保存明文授权码。`;
+      $("newCodeBox").textContent = `新授权码：${code}。保存后会加密记录这串授权码，之后输入同一个管理员密钥即可再次查看。`;
       $("newCodeBox").className = "code-box show";
     });
 
@@ -437,6 +483,7 @@
           licenseKey: fields.licenseKey.value,
           licenseId: fields.licenseId.value.trim(),
           productCode: fields.productCode.value.trim(),
+          productCodeSecret: await encryptProductCode(fields.productCode.value),
           status: fields.status.value,
           expiresAt: dateToIsoEnd(fields.expiresAt.value),
           maxDevices: Number(fields.maxDevices.value),

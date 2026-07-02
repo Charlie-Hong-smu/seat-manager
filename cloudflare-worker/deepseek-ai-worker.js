@@ -759,6 +759,7 @@ async function loadLicenseRecord(codeHash, env) {
     aiEnabled: parseBoolean(env.PRODUCT_AI_ENABLED, false),
     aiExpiresAt: toText(env.PRODUCT_AI_EXPIRES_AT || ""),
     aiDailyLimit: normalizeAiDailyLimit(env.PRODUCT_AI_DAILY_LIMIT),
+    productCodeSecret: "",
     devices: [],
   };
 }
@@ -785,6 +786,7 @@ async function loadLicenseRecordByKey(key, env) {
     aiEnabled: parseBoolean(record.aiEnabled, false),
     aiExpiresAt: toText(record.aiExpiresAt || ""),
     aiDailyLimit: normalizeAiDailyLimit(record.aiDailyLimit),
+    productCodeSecret: normalizeProductCodeSecret(record.productCodeSecret),
     devices: normalizeLicenseDevices(record.devices),
   };
 }
@@ -816,6 +818,7 @@ async function bindLicenseDevice(license, deviceId, deviceName, env) {
       aiEnabled: Boolean(license.aiEnabled),
       aiExpiresAt: license.aiExpiresAt || "",
       aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+      productCodeSecret: license.productCodeSecret || "",
       devices,
       updatedAt: now,
     }));
@@ -836,6 +839,7 @@ async function unbindLicenseDevice(license, deviceId, env) {
       aiEnabled: Boolean(license.aiEnabled),
       aiExpiresAt: license.aiExpiresAt || "",
       aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+      productCodeSecret: license.productCodeSecret || "",
       devices,
       updatedAt: now,
     }));
@@ -854,6 +858,7 @@ async function unbindAllLicenseDevices(license, env) {
       aiEnabled: Boolean(license.aiEnabled),
       aiExpiresAt: license.aiExpiresAt || "",
       aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+      productCodeSecret: license.productCodeSecret || "",
       devices: [],
       updatedAt: now,
     }));
@@ -886,6 +891,7 @@ function normalizeAdminLicenseInput(input, existing, fallback) {
     aiEnabled: parseBoolean(input.aiEnabled, Boolean(existing?.aiEnabled)),
     aiExpiresAt: normalizeIsoDateInput(input.aiExpiresAt),
     aiDailyLimit: normalizeAiDailyLimit(input.aiDailyLimit ?? existing?.aiDailyLimit),
+    productCodeSecret: normalizeProductCodeSecret(input.productCodeSecret) || existing?.productCodeSecret || "",
     devices: fallback.devices,
     updatedAt: fallback.updatedAt,
   };
@@ -905,9 +911,18 @@ function serializeLicenseForAdmin(license) {
     aiEnabled: Boolean(license.aiEnabled),
     aiExpiresAt: license.aiExpiresAt || "",
     aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+    productCodeSecret: license.productCodeSecret || "",
     deviceCount: license.devices.length,
     devices: license.devices,
   };
+}
+
+function normalizeProductCodeSecret(value) {
+  const secret = toText(value).trim();
+  if (!secret || secret.length > 1000) {
+    return "";
+  }
+  return secret;
 }
 
 function normalizeIsoDateInput(value) {
