@@ -76,7 +76,7 @@ base: "/seat-manager/"
 - **设备名额**：每个授权码默认最多 3 台设备；商用版账号菜单提供“解绑本机”，可释放当前浏览器占用的设备名额。
 - 早期收款走人工：收到款后在 Cloudflare KV 手动建/改记录，不接支付系统。
 
-轻量授权管理页在 `license-admin/index.html`。它用于你自己管理老师授权码、软件到期日、AI 到期日、设备数和清空设备绑定；管理员密钥需要单独设置到 Worker Secret，不写入仓库。
+轻量授权管理页在 `license-admin/index.html`，线上地址为 `https://seat-manager-license-admin.pages.dev/`。它用于你自己管理老师授权码、软件到期日、AI 到期日、设备数和清空设备绑定；管理员密钥需要单独设置到 Worker Secret，不写入仓库。
 
 `authStorage.ts` 同时保留本地密码与产品授权两套逻辑，`isAuthenticated()/clearAuth()` 按 edition 自动选择，互不干扰。
 

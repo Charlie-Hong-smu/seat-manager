@@ -4,7 +4,7 @@ compatibility_date = "2026-06-29"
 workers_dev = true
 
 [vars]
-ALLOWED_ORIGIN = "https://charlie-hong-smu.github.io,https://seat-manager-commercial.pages.dev,https://6c245938.seat-manager-commercial.pages.dev"
+ALLOWED_ORIGIN = "https://charlie-hong-smu.github.io,https://seat-manager-commercial.pages.dev,https://6c245938.seat-manager-commercial.pages.dev,https://seat-manager-license-admin.pages.dev,https://bdd1a8db.seat-manager-license-admin.pages.dev"
 
 [[kv_namespaces]]
 binding = "SEAT_MANAGER_KV"

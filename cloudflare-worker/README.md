@@ -134,7 +134,7 @@ value 示例：
 
 ## License Admin
 
-仓库里的 `license-admin/index.html` 是轻量授权管理页，用于你自己管理人员和授权记录。它不会打包进老师使用的前端。
+仓库里的 `license-admin/index.html` 是轻量授权管理页，用于你自己管理人员和授权记录。它不会打包进老师使用的前端；已部署的固定地址是 `https://seat-manager-license-admin.pages.dev/`。
 
 首次使用前，先给 Worker 设置管理员密钥：
 
