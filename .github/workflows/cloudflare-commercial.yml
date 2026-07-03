@@ -88,14 +88,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend-react/pnpm-lock.yaml
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - name: Install frontend dependencies
         working-directory: frontend-react
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build commercial frontend
         working-directory: frontend-react
-        run: VITE_EDITION=commercial VITE_BASE=/ npm run build
+        run: VITE_EDITION=commercial VITE_BASE=/ pnpm run build
 
       - name: Deploy commercial Cloudflare Pages
         working-directory: frontend-react
