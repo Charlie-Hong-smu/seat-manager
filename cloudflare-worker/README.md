@@ -78,6 +78,19 @@ VITE_EDITION=commercial VITE_BASE=/ npm run build
 ../cloudflare-worker/node_modules/.bin/wrangler pages deploy dist --project-name seat-manager-commercial --branch main --commit-dirty true
 ```
 
+仓库已新增 `.github/workflows/cloudflare-commercial.yml` 自动部署：
+
+- `frontend-react/**` 变化时自动部署商用前端。
+- `cloudflare-worker/**` 变化时自动部署 Worker。
+- `license-admin/**` 变化时自动部署授权管理页。
+
+GitHub Actions 需要仓库 Secrets：
+
+```text
+CLOUDFLARE_ACCOUNT_ID=432f0f0483c3f9cc87179a96ecd00102
+CLOUDFLARE_API_TOKEN=<Cloudflare API Token>
+```
+
 Worker 的 `ALLOWED_ORIGIN` 已在 `wrangler.toml` 中保留小张 GitHub Pages，并追加商用 Pages 域名。后续如果换商用域名，需要把新域名追加到 `ALLOWED_ORIGIN` 后重新 `npm run deploy`。
 
 ## Cloudflare KV

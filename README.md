@@ -89,6 +89,24 @@ base: "/seat-manager/"
 3. 将 React 构建结果作为新版站点根目录。
 4. 将旧版 `index.html`、`style.css`、`app.js`、`manifest.webmanifest`、`sw.js`、`avatar.jpg` 复制到部署产物的 `legacy/`。
 
+## Cloudflare 商用版自动部署
+
+`.github/workflows/cloudflare-commercial.yml` 用于在 `main` 推送后自动同步商用相关部署：
+
+- `frontend-react/**` 变化：构建 `VITE_EDITION=commercial VITE_BASE=/`，部署到 Cloudflare Pages 项目 `seat-manager-commercial`。
+- `cloudflare-worker/**` 变化：部署 Worker `seat-manager-ai`。
+- `license-admin/**` 变化：部署授权管理页到 Cloudflare Pages 项目 `seat-manager-license-admin`。
+- 手动运行该 workflow 时，三者都会部署。
+
+启用前需要在 GitHub 仓库 `Settings -> Secrets and variables -> Actions` 中添加：
+
+```text
+CLOUDFLARE_ACCOUNT_ID=432f0f0483c3f9cc87179a96ecd00102
+CLOUDFLARE_API_TOKEN=<Cloudflare API Token>
+```
+
+`CLOUDFLARE_API_TOKEN` 需要能编辑 Workers、Workers KV 和 Pages。不要把 token 写入仓库文件。
+
 ## Cloudflare Worker
 
 `cloudflare-worker/` 保持独立，不会被 React 构建或 GitHub Pages workflow 修改。AI 调用密钥仍应只放在 Worker 或 Cloudflare 环境变量中，不要写入前端代码。

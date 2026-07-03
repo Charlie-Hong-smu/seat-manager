@@ -1,0 +1,152 @@
+name: Deploy commercial Cloudflare targets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend-react/**"
+      - "cloudflare-worker/**"
+      - "license-admin/**"
+      - ".github/workflows/cloudflare-commercial.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-commercial
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has_cloudflare_secrets: ${{ steps.secrets.outputs.has_cloudflare_secrets }}
+      commercial_frontend: ${{ steps.filter.outputs.commercial_frontend }}
+      worker: ${{ steps.filter.outputs.worker }}
+      license_admin: ${{ steps.filter.outputs.license_admin }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check Cloudflare secrets
+        id: secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "has_cloudflare_secrets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_cloudflare_secrets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect changed targets
+        id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "commercial_frontend=true" >> "$GITHUB_OUTPUT"
+            echo "worker=true" >> "$GITHUB_OUTPUT"
+            echo "license_admin=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" > /tmp/changed-files.txt
+
+          if grep -Eq '^(frontend-react/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/changed-files.txt; then
+            echo "commercial_frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "commercial_frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^(cloudflare-worker/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/changed-files.txt; then
+            echo "worker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "worker=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^(license-admin/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/changed-files.txt; then
+            echo "license_admin=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "license_admin=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy-commercial-frontend:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_cloudflare_secrets == 'true' && needs.changes.outputs.commercial_frontend == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend dependencies
+        working-directory: frontend-react
+        run: npm ci
+
+      - name: Build commercial frontend
+        working-directory: frontend-react
+        run: VITE_EDITION=commercial VITE_BASE=/ npm run build
+
+      - name: Deploy commercial Cloudflare Pages
+        working-directory: frontend-react
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deploy dist --project-name seat-manager-commercial --branch main --commit-dirty=true
+
+  deploy-worker:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_cloudflare_secrets == 'true' && needs.changes.outputs.worker == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Worker dependencies
+        working-directory: cloudflare-worker
+        run: npm ci
+
+      - name: Deploy Worker
+        working-directory: cloudflare-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy
+
+  deploy-license-admin:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_cloudflare_secrets == 'true' && needs.changes.outputs.license_admin == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        working-directory: cloudflare-worker
+        run: npm ci
+
+      - name: Deploy license admin Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: cloudflare-worker/node_modules/.bin/wrangler pages deploy license-admin --project-name seat-manager-license-admin --branch main --commit-dirty=true
