@@ -18,9 +18,11 @@ import {
   ArrowUpDown,
   ChevronDown,
   SlidersHorizontal,
+  Download,
 } from "lucide-react";
 
 import { TrendDashboard } from "./TrendDashboard";
+import { GradeExportModal } from "./GradeExportModal";
 import type { AppStudent, GradeExam, GradeRow } from "../state/types";
 
 const DEFAULT_THRESHOLDS = { pass: 60, good: 75, excellent: 90 };
@@ -149,6 +151,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
   const [sortKey, setSortKey] = useState("total");
   const [sortAsc, setSortAsc] = useState(false);
   const [thresholdOpen, setThresholdOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
 
   const selectedExam = exams.find(exam => exam.id === selectedExamId) || exams[0];
@@ -342,6 +345,15 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
             style={{ fontWeight: 700 }}
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />统计阈值
+          </button>
+
+          <button
+            onClick={() => setExportOpen(true)}
+            disabled={!exams.length}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors disabled:opacity-50"
+            style={{ fontWeight: 700 }}
+          >
+            <Download className="w-3.5 h-3.5" />导出成绩
           </button>
 
           <div className="ml-auto flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
@@ -577,6 +589,13 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
           <TrendDashboard exams={exams} subjects={subjects} />
         )}
       </div>
+      {exportOpen && (
+        <GradeExportModal
+          exams={exams}
+          students={students}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
     </div>
   );
 }

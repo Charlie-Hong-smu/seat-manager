@@ -1,13 +1,18 @@
 import type { GradeScoreCell, SavedGradeExamRecord, ScoreImportDraft } from "./types";
 
-const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
+export const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
 
 type XlsxCell = string | number | boolean | null | undefined;
 type XlsxRows = XlsxCell[][];
 type XlsxWorkbook = { SheetNames: string[]; Sheets: Record<string, unknown> };
-type XlsxApi = {
+export type XlsxWorksheet = unknown;
+export type XlsxApi = {
   read: (buffer: ArrayBuffer, options: { type: "array" }) => XlsxWorkbook;
+  writeFile: (workbook: XlsxWorkbook, filename: string) => void;
   utils: {
+    aoa_to_sheet: (rows: XlsxRows) => XlsxWorksheet;
+    book_new: () => XlsxWorkbook;
+    book_append_sheet: (workbook: XlsxWorkbook, sheet: XlsxWorksheet, name: string) => void;
     sheet_to_json: (sheet: unknown, options: { header: 1; defval: string }) => XlsxRows;
   };
 };
@@ -160,7 +165,7 @@ function getXlsxScriptUrl(): string {
   return new URL("vendor/xlsx.full.min.js", baseUrl).toString();
 }
 
-async function loadXlsx(): Promise<XlsxApi> {
+export async function loadXlsx(): Promise<XlsxApi> {
   if (window.XLSX) {
     return window.XLSX;
   }
