@@ -582,9 +582,49 @@ function normalizeGradeExams(rawSavedExams: unknown, students: AppStudent[]): Gr
     .map((record, index) => normalizeSavedExamRecord(record, index, students))
     .filter((item): item is GradeExam => Boolean(item));
 
-  // 注意:不再"没有考试就回退到演示考试"。真实班级可能只是还没导入成绩,
-  // 应显示空,而不是塞演示数据(否则新学期会看到上学期/演示的考试)。
-  return exams;
+  if (exams.length) {
+    return exams;
+  }
+
+  // savedExams 为空时,尝试从学生各自的 exams 数据重建成绩看板。
+  // 这样:演示数据/老数据(学生自带成绩)能正常显示;
+  // 而真实新学期(升学期时已清空学生 exams)或空班仍显示空,符合预期。
+  return rebuildGradeExamsFromStudents(students);
+}
+
+function rebuildGradeExamsFromStudents(students: AppStudent[]): GradeExam[] {
+  // 收集所有学生里出现过的考试(按考试 id 归组)。
+  const examMap = new Map<string, { id: string; name: string; date: string; subjects: Set<string>; rows: GradeRow[] }>();
+  students.forEach(student => {
+    student.exams.forEach(exam => {
+      let group = examMap.get(exam.id);
+      if (!group) {
+        group = { id: exam.id, name: exam.name, date: exam.date, subjects: new Set(), rows: [] };
+        examMap.set(exam.id, group);
+      }
+      const scores: Record<string, GradeScoreCell> = {};
+      Object.entries(exam.scores).forEach(([subject, score]) => {
+        group!.subjects.add(subject);
+        scores[subject] = { score: typeof score === "number" ? score : null };
+      });
+      group.rows.push({
+        id: `${exam.id}-${student.id}`,
+        name: student.name,
+        studentId: student.id,
+        scores,
+        total: typeof exam.total === "number" ? exam.total : sumScoreCells(scores),
+        rankClass: exam.rank ? Number.parseInt(exam.rank, 10) || null : null,
+      });
+    });
+  });
+
+  return [...examMap.values()].map(group => ({
+    id: group.id,
+    name: group.name,
+    date: group.date,
+    subjects: [...group.subjects],
+    rows: group.rows,
+  }));
 }
 
 export function createMockSeatManagerState(): SeatManagerState {

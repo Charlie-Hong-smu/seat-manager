@@ -29,6 +29,7 @@ import {
 import { type NewDormEventInput } from "../state/dormitoryActions";
 import { DormEventForm } from "./DormEventForm";
 import { SeatSettingsModal } from "./SeatSettingsModal";
+import { Button, FileDropZone } from "./ui";
 import { createSavedGradeExamRecord, parseScoreFile } from "../state/scoreImport";
 import type { RosterImportOptions, RosterImportResult } from "../state/rosterImport";
 import type { AiClassTrendResult } from "../state/aiTrendService";
@@ -659,37 +660,35 @@ export function DataWorkspace({
           <div className="space-y-3">
             <label className="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" checked={replaceExisting} onChange={event => setReplaceExisting(event.target.checked)} className="accent-blue-600" />覆盖现有名单</label>
             <label className="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" checked={keepHistory} disabled={!replaceExisting} onChange={event => setKeepHistory(event.target.checked)} className="accent-blue-600 disabled:opacity-40" />覆盖时保留历史数据</label>
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 p-4 hover:border-blue-300 hover:bg-blue-50/30">
-              <FileUp className="h-4 w-4 text-gray-300" />
-              <span className="text-sm text-gray-400">{rosterFile ? rosterFile.name : "选择 .xlsx / .csv 文件"}</span>
-              <input type="file" className="hidden" accept=".xlsx,.xls,.csv,.tsv" onChange={event => { setRosterFile(event.target.files?.[0] || null); event.target.value = ""; }} />
-            </label>
-            <button onClick={importRoster} className="w-full rounded-xl bg-blue-600 py-2.5 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>导入名单</button>
+            <FileDropZone accept=".xlsx,.xls,.csv,.tsv" onChange={file => setRosterFile(file)}>
+              <FileUp className="h-4 w-4 text-gray-400" />
+              <span className="text-sm text-gray-500">{rosterFile ? rosterFile.name : "拖拽文件或点击选择 .xlsx / .csv"}</span>
+            </FileDropZone>
+            <Button onClick={importRoster} className="w-full">导入名单</Button>
             {rosterStatus && <p className="text-sm text-blue-600">{rosterStatus}</p>}
           </div>
         </Panel>
 
         <Panel title="导出">
           <div className="space-y-3">
-            <button onClick={() => exportSeatsCsv(students, seatOrder)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-sm text-gray-700 hover:bg-gray-100" style={{ fontWeight: 800 }}>
+            <Button variant="secondary" onClick={() => exportSeatsCsv(students, seatOrder)} className="w-full flex items-center justify-center gap-2">
               <FileDown className="h-4 w-4" />导出座位表 CSV
-            </button>
-            <button onClick={exportBackup} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-sm text-gray-700 hover:bg-gray-100" style={{ fontWeight: 800 }}>
+            </Button>
+            <Button variant="secondary" onClick={exportBackup} className="w-full flex items-center justify-center gap-2">
               <FileDown className="h-4 w-4" />导出备份 JSON
-            </button>
+            </Button>
             {lastBackupAt && <p className="text-sm text-gray-500">上次备份：{formatBackupTime(lastBackupAt)}</p>}
           </div>
         </Panel>
 
         <Panel title="恢复备份">
           <div className="space-y-3">
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 p-4 hover:border-amber-300 hover:bg-amber-50/30">
-              <FileUp className="h-4 w-4 text-gray-300" />
-              <span className="text-sm text-gray-400">{backupPreview ? "已选择备份文件" : "选择 JSON 备份文件"}</span>
-              <input type="file" className="hidden" accept=".json" onChange={event => { void readBackup(event.target.files?.[0]); event.target.value = ""; }} />
-            </label>
+            <FileDropZone accept=".json" onChange={file => { if (file) void readBackup(file); }}>
+              <FileUp className="h-4 w-4 text-gray-400" />
+              <span className="text-sm text-gray-500">{backupPreview ? "已选择备份文件" : "拖拽或选择 JSON 备份文件"}</span>
+            </FileDropZone>
             {backupPreview && <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">{backupPreview.studentCount} 名学生 · {backupPreview.seatCount} 个座位</div>}
-            <button onClick={restore} className="w-full rounded-xl bg-amber-500 py-2.5 text-sm text-white hover:bg-amber-600" style={{ fontWeight: 800 }}>恢复备份</button>
+            <Button variant="danger" onClick={restore} className="w-full">恢复备份</Button>
             {backupStatus && <p className="text-sm text-amber-600">{backupStatus}</p>}
           </div>
         </Panel>
@@ -862,16 +861,15 @@ export function ScoresWorkspace({
         <aside className="min-h-0 space-y-4 overflow-y-auto">
           <Panel title="成绩导入">
             <div className="space-y-3">
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 p-4 hover:border-blue-300 hover:bg-blue-50/30">
-                <FileUp className="h-4 w-4 text-gray-300" />
-                <span className="text-sm text-gray-400">{draft ? draft.filename : "上传成绩文件"}</span>
-                <input type="file" className="hidden" accept=".xlsx,.xls,.csv,.tsv" onChange={event => { void readScoreFile(event.target.files?.[0]); event.target.value = ""; }} />
-              </label>
+              <FileDropZone accept=".xlsx,.xls,.csv,.tsv" onChange={file => { if (file) void readScoreFile(file); }}>
+                <FileUp className="h-4 w-4 text-gray-400" />
+                <span className="text-sm text-gray-500">{draft ? draft.filename : "拖拽或选择成绩文件"}</span>
+              </FileDropZone>
               {draft && (
                 <div className="space-y-2">
                   <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
                   <input type="date" value={examDate} onChange={event => setExamDate(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" />
-                  <button onClick={saveDraft} className="w-full rounded-xl bg-blue-600 py-2.5 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>保存考试</button>
+                  <Button onClick={saveDraft} className="w-full">保存考试</Button>
                 </div>
               )}
               {scoreStatus && <p className="text-sm text-blue-600">{scoreStatus}</p>}
@@ -887,16 +885,16 @@ export function ScoresWorkspace({
                       <input value={editExamName} onChange={e => setEditExamName(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
                       <input type="date" value={editExamDate} onChange={e => setEditExamDate(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300" />
                       <div className="grid grid-cols-2 gap-2">
-                        <button
+                        <Button
+                          size="sm"
                           onClick={() => {
                             if (!editExamName.trim()) return;
                             if (onUpdateGradeExam(exam.id, editExamName, editExamDate)) setEditingExamId("");
                           }}
-                          className="rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                         >
                           保存
-                        </button>
-                        <button onClick={() => setEditingExamId("")} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-100">取消</button>
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setEditingExamId("")}>取消</Button>
                       </div>
                     </div>
                   ) : (
@@ -904,9 +902,9 @@ export function ScoresWorkspace({
                       <div className="truncate text-sm font-bold text-gray-800">{exam.name}</div>
                       <div className="mt-1 text-xs text-gray-400">{exam.date || "未填写日期"} · {exam.rows.length} 人 · {exam.subjects.length} 科</div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
-                        <button onClick={() => setExamTable(exam)} className="rounded-lg bg-white px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100">表格</button>
-                        <button onClick={() => { setEditingExamId(exam.id); setEditExamName(exam.name); setEditExamDate(exam.date || new Date().toISOString().slice(0, 10)); }} className="rounded-lg bg-white px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100">编辑</button>
-                        <button onClick={() => { if (window.confirm(`确认删除「${exam.name}」？该操作不可撤销。`)) onDeleteGradeExam(exam.id); }} className="rounded-lg bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-100">删除</button>
+                        <Button size="sm" variant="secondary" onClick={() => setExamTable(exam)}>表格</Button>
+                        <Button size="sm" variant="secondary" onClick={() => { setEditingExamId(exam.id); setEditExamName(exam.name); setEditExamDate(exam.date || new Date().toISOString().slice(0, 10)); }}>编辑</Button>
+                        <Button size="sm" variant="danger" onClick={() => { if (window.confirm(`确认删除「${exam.name}」？该操作不可撤销。`)) onDeleteGradeExam(exam.id); }}>删除</Button>
                       </div>
                     </>
                   )}
