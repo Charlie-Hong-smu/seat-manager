@@ -107,6 +107,30 @@ CLOUDFLARE_API_TOKEN=<Cloudflare API Token>
 
 `CLOUDFLARE_API_TOKEN` 需要能编辑 Workers、Workers KV 和 Pages。不要把 token 写入仓库文件。
 
+如果启用了 Netlify API 中转，可在 GitHub 仓库 `Settings -> Secrets and variables -> Actions -> Variables` 添加：
+
+```text
+COMMERCIAL_WORKER_URL=https://你的-netlify-站点.netlify.app/api
+```
+
+该变量只影响商用版 Cloudflare Pages 构建；未设置时仍默认直连 `https://seat-manager-ai.hongchenglin03.workers.dev`。
+
+## Netlify API 中转试验
+
+`netlify/functions/worker-proxy.mjs` 是一个轻量代理，用于在用户无法直连 `workers.dev` 时，把浏览器请求改为：
+
+```text
+商用前端 -> Netlify /api/* -> Cloudflare Worker -> KV / DeepSeek
+```
+
+代理默认转发到 `https://seat-manager-ai.hongchenglin03.workers.dev`，也可在 Netlify 环境变量中设置：
+
+```text
+WORKER_ORIGIN=https://seat-manager-ai.hongchenglin03.workers.dev
+```
+
+Netlify 站点建议使用仓库根目录部署，配置已写入 `netlify.toml`。它只发布一个占位静态页和 `/api/:path*` 函数，不替代主应用。代理只放行应用需要的 `/license/*`、`/sync/*`、`/auth`、`/generate-comment`、`/analyze-class`、`/analyze-trend`、`/suggest-score-mapping` 路径，暂不代理 `/admin/*` 管理接口。
+
 ## Cloudflare Worker
 
 `cloudflare-worker/` 保持独立，不会被 React 构建或 GitHub Pages workflow 修改。AI 调用密钥仍应只放在 Worker 或 Cloudflare 环境变量中，不要写入前端代码。

@@ -1,4 +1,5 @@
 import { IS_COMMERCIAL } from "../config";
+import { getWorkerBaseUrl } from "./workerEndpoint";
 
 // ── 小张版:本地密码登录(离线、密码只存在本机) ─────────────────────────
 const AUTH_PERSIST_KEY = "seat-manager-authenticated";
@@ -6,8 +7,6 @@ const AUTH_SESSION_KEY = "seat-manager-session-authenticated";
 const CUSTOM_PASSWORD_HASH_KEY = "seat-manager-password-hash";
 
 // ── 商用版:产品授权码登录(服务端校验、按授权码绑定设备/空间) ──────────
-const WORKER_URL_KEY = "seat-manager-ai-worker-url";
-const DEFAULT_WORKER_URL = "https://seat-manager-ai.hongchenglin03.workers.dev";
 const PRODUCT_AUTH_TOKEN_KEY = "seat-manager-product-auth-token";
 const PRODUCT_AUTH_EXPIRES_KEY = "seat-manager-product-auth-expires";
 const PRODUCT_AUTH_SESSION_TOKEN_KEY = "seat-manager-product-session-token";
@@ -114,14 +113,6 @@ export function setAuthenticated(remember: boolean): void {
 }
 
 // ── 产品授权码(商用版) ──────────────────────────────────────────────────
-
-function getWorkerBaseUrl(): string {
-  if (!hasBrowserStorage()) {
-    return DEFAULT_WORKER_URL;
-  }
-  const configuredUrl = window.localStorage.getItem(WORKER_URL_KEY)?.trim() || DEFAULT_WORKER_URL;
-  return configuredUrl.replace(/\/+$/, "");
-}
 
 function getStoredProductAuth(): ProductAuth | null {
   if (!hasBrowserStorage()) {

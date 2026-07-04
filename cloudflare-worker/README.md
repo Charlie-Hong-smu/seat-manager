@@ -78,6 +78,21 @@ VITE_EDITION=commercial VITE_BASE=/ npm run build
 ../cloudflare-worker/node_modules/.bin/wrangler pages deploy dist --project-name seat-manager-commercial --branch main --commit-dirty true
 ```
 
+如果用户网络无法直连 `workers.dev`，仓库根目录提供了一个 Netlify 中转函数：
+
+- 函数文件：`netlify/functions/worker-proxy.mjs`
+- 入口路径：`https://你的-netlify-站点.netlify.app/api/*`
+- 目标 Worker：默认 `https://seat-manager-ai.hongchenglin03.workers.dev`，可用 Netlify 环境变量 `WORKER_ORIGIN` 覆盖。
+
+商用前端可通过构建变量改用该中转：
+
+```bash
+cd ../frontend-react
+VITE_EDITION=commercial VITE_BASE=/ VITE_WORKER_URL=https://你的-netlify-站点.netlify.app/api npm run build
+```
+
+GitHub Actions 商用部署也支持仓库变量 `COMMERCIAL_WORKER_URL`。未设置时仍直连 Worker。
+
 仓库已新增 `.github/workflows/cloudflare-commercial.yml` 自动部署：
 
 - `frontend-react/**` 变化时自动部署商用前端。

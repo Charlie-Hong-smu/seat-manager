@@ -1,9 +1,8 @@
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
+import { getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, GradeExam, StudentExamSummary } from "./types";
 
-const AI_WORKER_URL_KEY = "seat-manager-ai-worker-url";
-const AI_DEFAULT_WORKER_URL = "https://seat-manager-ai.hongchenglin03.workers.dev";
 const AI_AUTH_TOKEN_KEY = "seat-manager-ai-auth-token";
 const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
 const AI_AUTH_SESSION_TOKEN_KEY = "seat-manager-ai-session-token";
@@ -36,14 +35,6 @@ export interface AiClassTrendResult {
 
 function hasBrowserStorage(): boolean {
   return typeof window !== "undefined" && Boolean(window.localStorage) && Boolean(window.sessionStorage);
-}
-
-function getWorkerBaseUrl(): string {
-  if (!hasBrowserStorage()) {
-    return AI_DEFAULT_WORKER_URL;
-  }
-  const configuredUrl = window.localStorage.getItem(AI_WORKER_URL_KEY)?.trim() || AI_DEFAULT_WORKER_URL;
-  return configuredUrl.replace(/\/+$/, "");
 }
 
 function getStoredAiAuth(): AiAuth | null {
