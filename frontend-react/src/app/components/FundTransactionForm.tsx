@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Search, TrendingDown, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, Search } from "lucide-react";
 
 import { FUND_EXPENSE_PRESETS, FUND_INCOME_PRESETS, type NewFundTxInput } from "../state/classFundActions";
 import type { AppStudent, FundTxType } from "../state/types";
@@ -18,11 +18,8 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
   const [showRelated, setShowRelated] = useState(false);
   const [relatedId, setRelatedId] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
-  const [searchFocused, setSearchFocused] = useState(false);
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const presets = type === "income" ? FUND_INCOME_PRESETS : FUND_EXPENSE_PRESETS;
-  const activeColor = type === "income" ? "emerald" : "red";
   const activeClass = type === "income"
     ? "bg-emerald-500 text-white"
     : "bg-red-500 text-white";
@@ -63,12 +60,6 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
     : students;
 
   const relatedStudent = students.find(s => s.id === relatedId);
-
-  useEffect(() => {
-    if (showRelated && searchRef.current) {
-      searchRef.current.focus();
-    }
-  }, [showRelated]);
 
   return (
     <div className="space-y-4">
@@ -162,36 +153,34 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
-              ref={searchRef}
               value={studentSearch}
               onChange={e => setStudentSearch(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
               className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-blue-300"
               placeholder="搜索学生姓名"
             />
-            {searchFocused && filteredStudents.length > 0 && (
-              <div className="absolute z-20 mt-1 max-h-40 w-full overflow-y-auto rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
-                {filteredStudents.map(student => (
-                  <button
-                    key={student.id}
-                    type="button"
-                    onClick={() => {
-                      setRelatedId(student.id);
-                      setStudentSearch(student.name);
-                      setSearchFocused(false);
-                    }}
-                    className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
-                      relatedId === student.id ? "bg-blue-50 text-blue-600" : "text-gray-700"
-                    }`}
-                  >
-                    {student.name}
-                  </button>
-                ))}
-              </div>
+          </div>
+          <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-white py-1">
+            {filteredStudents.length === 0 ? (
+              <div className="py-3 text-center text-xs text-gray-400">无匹配学生</div>
+            ) : (
+              filteredStudents.map(student => (
+                <button
+                  key={student.id}
+                  type="button"
+                  onClick={() => {
+                    setRelatedId(student.id);
+                    setStudentSearch(student.name);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
+                    relatedId === student.id ? "bg-blue-50 text-blue-600" : "text-gray-700"
+                  }`}
+                >
+                  {student.name}
+                </button>
+              ))
             )}
           </div>
-          {relatedId && !searchFocused && (
+          {relatedId && (
             <div className="mt-2 flex items-center gap-2">
               <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
                 {relatedStudent?.name}
