@@ -182,14 +182,14 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
     totalScore: getRowTotal(row),
     averageScore: getRowAverage(row, subjects),
   }));
-  const metricLabel = metricKey === "total" ? "总分" : metricKey;
+  const metricLabel = metricKey === "total" ? "全部" : metricKey;
   const fullScore = Math.max(1, subjects.length * 100);
   const totalThresholds = {
     pass: (thresholds.pass / 100) * fullScore,
     good: (thresholds.good / 100) * fullScore,
     excellent: (thresholds.excellent / 100) * fullScore,
   };
-  const totalThresholdHint = `总分阈值：及格≥${formatThresholdValue(totalThresholds.pass)} / 良好≥${formatThresholdValue(totalThresholds.good)} / 优秀≥${formatThresholdValue(totalThresholds.excellent)}`;
+  const totalThresholdHint = `全部阈值：及格≥${formatThresholdValue(totalThresholds.pass)} / 良好≥${formatThresholdValue(totalThresholds.good)} / 优秀≥${formatThresholdValue(totalThresholds.excellent)}`;
   const subjectThresholdHint = `单科阈值：及格≥${thresholds.pass} / 良好≥${thresholds.good} / 优秀≥${thresholds.excellent}`;
 
   const filtered = [...rowsWithMetrics]
@@ -291,7 +291,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
 
   return (
     <div className="flex flex-col bg-gray-50 min-h-full">
-      <div className="bg-white border-b border-gray-100 px-6 py-3">
+      <div className="bg-white border-b border-gray-100 px-6 py-3 space-y-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative min-w-0 shrink basis-[280px]">
             <button
@@ -334,11 +334,13 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                 className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${metricKey === subject ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 style={{ fontWeight: metricKey === subject ? 700 : 500 }}
               >
-                {subject === "total" ? "总分" : subject}
+                {subject === "total" ? "全部" : subject}
               </button>
             ))}
           </div>
+        </div>
 
+        <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0">
             <button
               onClick={() => setThresholdOpen(v => !v)}
@@ -349,13 +351,13 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
             </button>
 
             {thresholdOpen && (
-              <div className="surface-enter absolute right-0 top-full z-30 mt-2 w-64 rounded-2xl border border-gray-100 bg-white p-4 shadow-xl shadow-gray-200/70">
+              <div className="surface-enter absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border border-gray-100 bg-white p-4 shadow-xl shadow-gray-200/70">
                 <div className="grid grid-cols-3 gap-3">
-                  {([
+                  {(([
                     ["pass", "及格"],
                     ["good", "良好"],
                     ["excellent", "优秀"],
-                  ] as Array<[keyof Thresholds, string]>).map(([key, label]) => (
+                  ]) as Array<[keyof Thresholds, string]>).map(([key, label]) => (
                     <label key={key} className="space-y-1.5 text-xs text-gray-500" style={{ fontWeight: 700 }}>
                       <span>{label}</span>
                       <input
@@ -456,7 +458,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
 
               {metricKey === "total" && (
                 <div className="col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-                  <h3 className="text-gray-700 mb-1">总分分布</h3>
+                  <h3 className="text-gray-700 mb-1">全部分布</h3>
                   <p className="text-xs text-gray-400 mb-4">{totalThresholdHint}</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={distributionData} barSize={26}>
@@ -505,7 +507,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                           </th>
                         ))}
                         <th className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("total")}>
-                          <span className="flex items-center justify-center gap-1">总分 <ArrowUpDown className="w-3 h-3" /></span>
+                          <span className="flex items-center justify-center gap-1">全部 <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
                         <th className="text-center px-4 py-3">等级</th>
                       </tr>

@@ -157,29 +157,42 @@ export function DailyWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <PageHeader
-        title="日常管理"
-        subtitle="座位、抽签和学生快捷操作集中在这里。"
-        right={
-          <div className="flex items-center gap-2">
-            {(() => {
-              const c = seatSettings.constraints;
-              const activeCount = c.lockedDeskmatePairs.length + c.noDeskmatePairs.length + c.frontRowStudentIds.length + seatSettings.complementRuleIds.length + (seatSettings.pairByGender ? 1 : 0);
-              return (
-                <button onClick={() => setShowSeatSettings(true)} className="rounded-xl bg-blue-600 px-3.5 py-2 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>
-                  <Shuffle className="mr-1.5 inline h-4 w-4 -mt-0.5" />排座
-                  {activeCount > 0 && <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-xs">{activeCount}</span>}
-                </button>
-              );
-            })()}
-          </div>
-        }
-      />
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_320px] gap-4 overflow-hidden p-4">
         <div className="min-h-0 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
           <SeatBoard students={students} seatOrder={seatOrder} onSelectStudent={onSelectStudent} onMoveSeat={onMoveSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
         </div>
         <aside className="min-h-0 space-y-4 overflow-y-auto">
+          <Panel title="排座">
+            <div className="space-y-3">
+              {(() => {
+                const c = seatSettings.constraints;
+                const activeCount = c.lockedDeskmatePairs.length + c.noDeskmatePairs.length + c.frontRowStudentIds.length + seatSettings.complementRuleIds.length + (seatSettings.pairByGender ? 1 : 0);
+                return (
+                  <button onClick={() => setShowSeatSettings(true)} className="w-full rounded-xl bg-blue-600 py-2.5 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>
+                    <Shuffle className="mr-1.5 inline h-4 w-4 -mt-0.5" />排座
+                    {activeCount > 0 && <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-xs">{activeCount}</span>}
+                  </button>
+                );
+              })()}
+              <div className="flex gap-2">
+                <button
+                  onClick={onRandomizeSeats}
+                  disabled={!canUndoSeatOrder}
+                  className="flex-1 rounded-xl border border-blue-200 bg-blue-50 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-100 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+                >
+                  随机
+                </button>
+                <button
+                  onClick={onUndoSeatOrder}
+                  disabled={!canUndoSeatOrder}
+                  className="flex-1 rounded-xl border border-gray-200 bg-white py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+                >
+                  撤销
+                </button>
+              </div>
+            </div>
+          </Panel>
+
           <Panel title="学生">
             <div className="space-y-3">
               <div className="grid grid-cols-[1fr_5rem_auto] gap-2">
@@ -363,24 +376,6 @@ export function DormitoryWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <div className="flex shrink-0 items-center justify-end gap-3 border-b border-gray-100 bg-white px-4 py-2.5">
-        <label className="flex items-center gap-1.5 text-sm text-gray-500">
-          <input type="checkbox" checked={carryOver} onChange={event => setCarryOver(event.target.checked)} className="accent-blue-600" />
-          结转上期分数
-        </label>
-        <button
-          onClick={() => {
-            if (!hasPendingEvents) return;
-            if (window.confirm(`将结算所有宿舍的当前周期${carryOver ? "（结转分数到下一周期）" : "（分数归零）"}，已记录事件会归档到周期历史。是否继续？`)) {
-              onCloseAllDormitoryPeriods({ carryOver });
-            }
-          }}
-          disabled={!hasPendingEvents}
-          className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"
-        >
-          <CalendarClock className="h-4 w-4" />一键周清
-        </button>
-      </div>
       <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)] gap-4 overflow-hidden p-4">
         <aside className="min-h-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 p-4">
@@ -418,6 +413,24 @@ export function DormitoryWorkspace({
         </aside>
 
         <main className="min-h-0 overflow-y-auto">
+          <div className="mb-4 flex items-center justify-end gap-3">
+            <label className="flex items-center gap-1.5 text-sm text-gray-500">
+              <input type="checkbox" checked={carryOver} onChange={event => setCarryOver(event.target.checked)} className="accent-blue-600" />
+              结转上期分数
+            </label>
+            <button
+              onClick={() => {
+                if (!hasPendingEvents) return;
+                if (window.confirm(`将结算所有宿舍的当前周期${carryOver ? "（结转分数到下一周期）" : "（分数归零）"}，已记录事件会归档到周期历史。是否继续？`)) {
+                  onCloseAllDormitoryPeriods({ carryOver });
+                }
+              }}
+              disabled={!hasPendingEvents}
+              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"
+            >
+              <CalendarClock className="h-4 w-4" />一键周清
+            </button>
+          </div>
           {selectedDormitory ? (
             <div className="space-y-4">
               <Panel
@@ -660,7 +673,6 @@ export function DataWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <PageHeader title="名单与备份" />
       <div className="grid gap-4 overflow-y-auto p-4 lg:grid-cols-3">
         <div className="surface-enter">
         <Panel title="导入名单" action={<span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600" style={{ fontWeight: 800 }}>导入</span>}>
@@ -736,7 +748,6 @@ export function HistoryWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <PageHeader title="历史记录" subtitle="保存、查看和恢复座位历史。" />
       <div className="grid min-h-0 flex-1 grid-cols-[360px_minmax(0,1fr)] gap-4 overflow-hidden p-4">
         <Panel title="保存当前座位">
           <div className="space-y-3">
@@ -868,7 +879,6 @@ export function ScoresWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <PageHeader title="成绩" subtitle="成绩导入、历史考试和看板集中在这里。" />
       <div className="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)] gap-4 overflow-hidden p-4">
         <aside className="min-h-0 space-y-4 overflow-y-auto">
           <Panel title="成绩导入">
@@ -1023,7 +1033,6 @@ export function ClassFundWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <PageHeader title="班费管理" subtitle="记录班费收支流水" />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-5xl space-y-5">
