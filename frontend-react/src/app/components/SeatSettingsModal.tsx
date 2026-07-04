@@ -80,10 +80,10 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds }: {
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-      <div className="mb-3">
+    <section className="surface-enter rounded-xl border border-gray-100 bg-gray-50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-sm font-bold text-gray-800">{title}</h3>
-        {hint && <p className="mt-0.5 text-xs text-gray-400">{hint}</p>}
+        {hint && <span className="rounded-full bg-white px-2.5 py-1 text-xs text-gray-400">{hint}</span>}
       </div>
       {children}
     </section>
@@ -153,11 +153,10 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
-      <div className="flex max-h-[88vh] w-full max-w-lg flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl">
+      <div className="modal-panel-enter flex max-h-[88vh] w-full max-w-lg flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div>
             <h2 className="text-base font-bold text-gray-900">排座</h2>
-            <p className="mt-0.5 text-xs text-gray-400">先设置限制条件，再在下方排座。</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
         </div>
@@ -180,12 +179,12 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
             </div>
           </Section>
 
-          <Section title="互补搭配" hint="按标签让强弱/性格互补的同学尽量同桌。">
+          <Section title="互补搭配">
             <div className="grid grid-cols-2 gap-2">
               {COMPLEMENT_RULES.map(rule => {
                 const active = settings.complementRuleIds.includes(rule.id);
                 return (
-                  <button key={rule.id} onClick={() => toggleComplement(rule.id)} className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-colors ${active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
+                  <button key={rule.id} onClick={() => toggleComplement(rule.id)} className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-[background,border-color,color,transform] active:scale-95 ${active ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50/40"}`}>
                     {rule.label}
                   </button>
                 );
@@ -193,7 +192,7 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
             </div>
           </Section>
 
-          <Section title="必须坐前排" hint={`安排在前 ${constraints.frontRows} 排。`}>
+          <Section title="必须坐前排" hint={`前 ${constraints.frontRows} 排`}>
             <div className="flex gap-2">
               <StudentPicker students={students} value={frontStudentId} onChange={setFrontStudentId} placeholder="搜索并选择学生" excludeIds={constraints.frontRowStudentIds} />
               <button onClick={addFrontStudent} disabled={!frontStudentId} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" /></button>
@@ -210,7 +209,7 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
             )}
           </Section>
 
-          <Section title="固定同桌" hint="这两位尽量安排在一起。">
+          <Section title="固定同桌">
             <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
               <StudentPicker students={students} value={pairA} onChange={setPairA} placeholder="学生 A" excludeIds={pairB ? [pairB] : []} />
               <StudentPicker students={students} value={pairB} onChange={setPairB} placeholder="学生 B" excludeIds={pairA ? [pairA] : []} />
@@ -226,7 +225,7 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
             </div>
           </Section>
 
-          <Section title="不能同桌" hint="这两位尽量分开。">
+          <Section title="不能同桌">
             <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
               <StudentPicker students={students} value={noPairA} onChange={setNoPairA} placeholder="学生 A" excludeIds={noPairB ? [noPairB] : []} />
               <StudentPicker students={students} value={noPairB} onChange={setNoPairB} placeholder="学生 B" excludeIds={noPairA ? [noPairA] : []} />

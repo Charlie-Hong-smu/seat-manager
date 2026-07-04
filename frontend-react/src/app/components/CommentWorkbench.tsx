@@ -739,25 +739,16 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-50 text-gray-900">
       <div className="shrink-0 border-b border-gray-100 bg-white/95 px-5 py-3">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <h2 className="text-base text-gray-900" style={{ fontWeight: 800 }}>评语工作台</h2>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-400" style={{ fontWeight: 700 }}>
-              全班评语管理
+            <span className="text-sm text-gray-400" style={{ fontWeight: 700 }}>
+              <span className="text-emerald-600">{generatedCount}</span> / {students.length} 已生成
             </span>
-          </div>
-
-          <div className="flex items-center gap-2 rounded-2xl bg-gray-50 px-3 py-1.5">
-            {[
-              { label: "共", value: students.length, color: "text-gray-700" },
-              { label: "已生成", value: generatedCount, color: "text-emerald-600" },
-              { label: "待生成", value: pendingCount, color: "text-blue-600" },
-              { label: "需补充", value: needsInfoCount, color: "text-amber-600" },
-            ].map(m => (
-              <div key={m.label} className="flex min-w-[62px] items-center justify-center gap-1 text-xs">
-                <span className={`${m.color} text-sm`} style={{ fontWeight: 800 }}>{m.value}</span>
-                <span className="text-gray-400" style={{ fontWeight: 700 }}>{m.label}</span>
-              </div>
-            ))}
+            {selectedBatchCount > 0 && (
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600" style={{ fontWeight: 800 }}>
+                已选 {selectedBatchCount} 人
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -768,9 +759,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
             >
               {batchRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
               {batchButtonLabel}
-            </button>
-            <button onClick={exportCommentsCsv} className="flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-600 hover:bg-gray-50" style={{ fontWeight: 700 }}>
-              <Download className="h-3.5 w-3.5" />导出评语
             </button>
             <button
               onClick={() => {
@@ -814,43 +802,50 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         })()}
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-5 p-4">
-        <aside className="flex w-[256px] shrink-0 flex-col gap-3">
-          <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm shadow-gray-200/40">
+      <div className="grid min-h-0 flex-1 grid-cols-[176px_minmax(360px,1fr)_360px] overflow-hidden">
+        <aside className="flex min-h-0 flex-col border-r border-gray-100 bg-white">
+          <div className="space-y-2 border-b border-gray-100 p-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
               <input
                 value={filterSearch}
                 onChange={e => setFilterSearch(e.target.value)}
-                placeholder="搜索学生姓名"
-                className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none transition-colors focus:border-blue-300 focus:bg-white"
+                placeholder="搜索姓名"
+                className="h-9 w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none transition-colors focus:border-blue-300 focus:bg-white"
               />
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 rounded-xl bg-gray-100 p-1">
+              <button
+                onClick={() => { setFilterUngenerated(false); setFilterNeedsInfo(false); }}
+                className={`h-7 rounded-lg text-xs transition-colors ${!filterUngenerated && !filterNeedsInfo ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}
+                style={{ fontWeight: 800 }}
+              >
+                全部
+              </button>
               <button
                 onClick={() => setFilterUngenerated(value => !value)}
-                className={`flex h-9 items-center justify-center gap-1 rounded-xl border text-xs ${filterUngenerated ? "border-blue-100 bg-blue-50 text-blue-600" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+                className={`h-7 rounded-lg text-xs transition-colors ${filterUngenerated ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}
                 style={{ fontWeight: 700 }}
               >
-                <Clock3 className="h-3.5 w-3.5" />待生成
+                待生成
               </button>
               <button
                 onClick={() => setFilterNeedsInfo(value => !value)}
-                className={`flex h-9 items-center justify-center gap-1 rounded-xl border text-xs ${filterNeedsInfo ? "border-amber-100 bg-amber-50 text-amber-600" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+                className={`h-7 rounded-lg text-xs transition-colors ${filterNeedsInfo ? "bg-white text-amber-600 shadow-sm" : "text-gray-500"}`}
                 style={{ fontWeight: 700 }}
               >
-                <AlertCircle className="h-3.5 w-3.5" />需补充
+                需补充
               </button>
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm shadow-gray-200/40">
-            <div className="flex items-center justify-between border-b border-gray-100 px-3 py-3">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
               <button onClick={toggleFilteredBatchSelection} className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600" style={{ fontWeight: 800 }}>
                 <input type="checkbox" checked={allFilteredSelected} readOnly className="pointer-events-none accent-blue-600" />
-                学生列表
+                {filteredStudents.length} 人
               </button>
-              <span className="text-xs text-gray-400">{filteredStudents.length} 人</span>
+              <button onClick={copyAll} className="text-xs text-gray-400 hover:text-gray-600" title="复制已生成评语">复制</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -873,7 +868,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                         setSelectedId(s.id);
                       }
                     }}
-                    className={`grid cursor-pointer grid-cols-[24px_36px_1fr_auto] items-center gap-2 border-b border-gray-50 px-3 py-2.5 text-left transition-colors hover:bg-blue-50/50 ${isSelected ? "bg-blue-50" : ""}`}
+                    className={`grid cursor-pointer grid-cols-[18px_28px_1fr] items-center gap-2 border-b border-gray-50 px-2.5 py-2 text-left transition-[background,transform] duration-200 hover:translate-x-px hover:bg-blue-50/50 ${isSelected ? "bg-blue-50" : ""}`}
                   >
                     <input
                       type="checkbox"
@@ -883,17 +878,15 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                       className="accent-blue-600"
                       aria-label={`选择 ${s.name} 用于批量生成`}
                     />
-                    <div className={`grid h-8 w-8 place-items-center rounded-full text-sm ${isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500"}`} style={{ fontWeight: 800 }}>
+                    <div className={`grid h-7 w-7 place-items-center rounded-full text-sm ${isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500"}`} style={{ fontWeight: 800 }}>
                       {s.name.slice(0, 1)}
                     </div>
                     <div className="min-w-0">
                       <div className="truncate text-sm text-gray-800" style={{ fontWeight: 800 }}>{s.name}</div>
-                      <div className="mt-0.5 truncate text-xs text-gray-400">{tags}</div>
+                      <div className={`mt-0.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] ${status.badge}`} style={{ fontWeight: 800 }}>
+                        {status.label}
+                      </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${status.badge}`} style={{ fontWeight: 800 }}>
-                      <StatusIcon className="h-3 w-3" />
-                      {status.label}
-                    </span>
                   </div>
                 );
               })}
@@ -901,12 +894,12 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="space-y-4">
-            <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm shadow-gray-200/40">
-              <div className="flex items-start justify-between gap-4">
+        <main className="col-span-2 grid min-w-0 grid-cols-[minmax(360px,1fr)_360px] overflow-hidden">
+          <div key={selectedId} className="min-h-0 space-y-4 overflow-y-auto px-6 py-4 workspace-tab-enter">
+            <section className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm shadow-gray-200/40">
+              <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-600 text-white" style={{ fontWeight: 900 }}>
+                  <div className="grid h-9 w-9 place-items-center rounded-full bg-blue-600 text-white" style={{ fontWeight: 900 }}>
                     {selectedInitial}
                   </div>
                   <div>
@@ -916,6 +909,9 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                         {getCommentStatus(selectedComment).label}
                       </span>
                       {selectedStudent.gender && <span className="text-xs text-gray-400">{selectedStudent.gender}</span>}
+                    </div>
+                    <div className="mt-0.5 text-xs text-gray-400">
+                      {latestExam ? `${latestExam.name} · 总分 ${latestExam.total ?? "—"} · ${latestExam.rank ? `第 ${latestExam.rank} 名` : "暂无排名"} · ${getBestSubject(latestExam.scores)} ↑ ${getWeakSubject(latestExam.scores)} ↓` : scoreSummary(selectedStudent)}
                     </div>
                   </div>
                 </div>
@@ -932,40 +928,14 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                   </span>
                 )}
               </div>
-
-              {latestExam && (
-                <div className="mt-5 grid grid-cols-4 gap-3">
-                  <div className="rounded-2xl bg-gray-50 px-4 py-3">
-                    <div className="text-xs text-gray-400" style={{ fontWeight: 700 }}>最近考试</div>
-                    <div className="mt-1 text-sm text-gray-800" style={{ fontWeight: 900 }}>{latestExam.name}</div>
-                  </div>
-                  <div className="rounded-2xl bg-blue-50 px-4 py-3">
-                    <div className="text-xs text-blue-400" style={{ fontWeight: 700 }}>总分</div>
-                    <div className="mt-1 text-lg text-blue-700" style={{ fontWeight: 900 }}>{latestExam.total ?? "—"}</div>
-                  </div>
-                  <div className="rounded-2xl bg-gray-50 px-4 py-3">
-                    <div className="text-xs text-gray-400" style={{ fontWeight: 700 }}>班级排名</div>
-                    <div className="mt-1 text-lg text-gray-900" style={{ fontWeight: 900 }}>{latestExam.rank ? `第 ${latestExam.rank}` : "—"}</div>
-                  </div>
-                  <div className="rounded-2xl bg-gray-50 px-4 py-3">
-                    <div className="text-xs text-gray-400" style={{ fontWeight: 700 }}>优势 / 薄弱</div>
-                    <div className="mt-1 flex items-center gap-2 text-xs">
-                      <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                      <span className="text-emerald-700" style={{ fontWeight: 800 }}>{getBestSubject(latestExam.scores)}</span>
-                      <TrendingDown className="h-3.5 w-3.5 text-red-400" />
-                      <span className="text-red-500" style={{ fontWeight: 800 }}>{getWeakSubject(latestExam.scores)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </section>
 
             {selectedProfile && (
               <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm shadow-gray-200/40">
                 <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>评语标准选择</h3>
-                    <span className="text-xs text-gray-400">已选 {selectedCount} 项</span>
+                    <h3 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>评语素材</h3>
+                    <span className="text-xs text-gray-400">{selectedCount} 项</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -973,7 +943,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                       className="flex h-8 items-center gap-1.5 rounded-xl bg-blue-50 px-3 text-xs text-blue-600 hover:bg-blue-100"
                       style={{ fontWeight: 800 }}
                     >
-                      <Plus className="h-3.5 w-3.5" />新增标准
+                      <Plus className="h-3.5 w-3.5" />新增
                     </button>
                     <ChevronUp className="h-4 w-4 text-gray-300" />
                   </div>
@@ -998,7 +968,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                               <button
                                 key={option.id}
                                 onClick={() => toggleCriterionOption(criterion, option.id)}
-                                className={`h-9 rounded-full border px-3 text-sm transition-colors ${active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                                className={`h-9 rounded-full border px-3.5 text-sm transition-[background,border-color,color,transform] active:scale-95 ${active ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50/40"}`}
                                 style={{ fontWeight: 700 }}
                               >
                                 {option.label}
@@ -1009,7 +979,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                             <button
                               key={option.id}
                               onClick={() => removeStudentCustomOption(criterion.id, option.id)}
-                              className="h-9 rounded-full border border-emerald-100 bg-emerald-50 px-3 text-sm text-emerald-700"
+                              className="h-9 rounded-full border border-emerald-100 bg-emerald-50 px-3.5 text-sm text-emerald-700"
                               style={{ fontWeight: 800 }}
                             >
                               {option.label}
@@ -1020,7 +990,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                             className="h-9 rounded-full border border-dashed border-gray-200 bg-white px-4 text-sm text-gray-400 hover:bg-gray-50"
                             style={{ fontWeight: 700 }}
                           >
-                            + 自定义
+                            自定义...
                           </button>
                         </div>
                       </div>
@@ -1029,8 +999,11 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                 </div>
               </section>
             )}
+          </div>
 
-            <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm shadow-gray-200/40">
+          <aside className="flex min-h-0 flex-col border-l border-gray-100 bg-white">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+            <section className="rounded-2xl border border-gray-100 bg-white p-4">
               <h4 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>生成设置</h4>
               <div className="mt-3 grid grid-cols-2 gap-4">
                 <div>
@@ -1112,9 +1085,9 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
               <textarea
                 value={selectedComment.text}
                 onChange={e => updateComment(selectedId, { text: e.target.value })}
-                rows={7}
+                rows={12}
                 placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。"
-                className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm outline-none focus:border-blue-300 focus:bg-white"
+                className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none focus:border-blue-300 focus:bg-white"
               />
               <p className="mt-2 text-xs text-blue-600">{aiStatus}</p>
               <div className="mt-3 flex items-center gap-2">
@@ -1155,7 +1128,8 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                 </button>
               </div>
             </section>
-          </div>
+            </div>
+          </aside>
         </main>
       </div>
     </div>

@@ -819,76 +819,78 @@ export default function App() {
         </>
       }
     >
-      {sidebarTab === "daily" && (
-        <DailyWorkspace
-          students={students}
-          seatOrder={seatOrder}
-          lockedSeats={lockedSeats}
-          seatSettings={seatSettings}
-          canUndoSeatOrder={seatHistory.length > 0}
-          onRandomizeSeats={handleRandomizeSeats}
-          onOrderSeatsByList={handleOrderSeatsByList}
-          onUndoSeatOrder={handleUndoSeatOrder}
-          onUpdateSeatSettings={updateSeatSettings}
-          onAddStudent={handleAddStudent}
-          onSelectStudent={setSelectedStudent}
-          onMoveSeat={handleMoveSeat}
-          onToggleLock={toggleLock}
-        />
-      )}
+      <div key={sidebarTab} className="h-full workspace-tab-enter">
+        {sidebarTab === "daily" && (
+          <DailyWorkspace
+            students={students}
+            seatOrder={seatOrder}
+            lockedSeats={lockedSeats}
+            seatSettings={seatSettings}
+            canUndoSeatOrder={seatHistory.length > 0}
+            onRandomizeSeats={handleRandomizeSeats}
+            onOrderSeatsByList={handleOrderSeatsByList}
+            onUndoSeatOrder={handleUndoSeatOrder}
+            onUpdateSeatSettings={updateSeatSettings}
+            onAddStudent={handleAddStudent}
+            onSelectStudent={setSelectedStudent}
+            onMoveSeat={handleMoveSeat}
+            onToggleLock={toggleLock}
+          />
+        )}
 
-      {sidebarTab === "dormitories" && (
-        <DormitoryWorkspace
-          students={students}
-          dormitories={dormitories}
-          onCreateDormitory={handleCreateDormitory}
-          onUpdateDormitory={handleUpdateDormitory}
-          onDeleteDormitory={handleDeleteDormitory}
-          onAssignStudentDormitory={handleAssignStudentDormitory}
-          onAddDormitoryEvent={handleAddDormitoryEvent}
-          onUpdateDormitoryEvent={handleUpdateDormEvent}
-          onDeleteDormitoryEvent={handleDeleteDormEvent}
-          onCloseDormitoryPeriod={handleCloseDormitoryPeriod}
-          onCloseAllDormitoryPeriods={handleCloseAllDormitoryPeriods}
-          onSelectStudent={setSelectedStudent}
-        />
-      )}
+        {sidebarTab === "dormitories" && (
+          <DormitoryWorkspace
+            students={students}
+            dormitories={dormitories}
+            onCreateDormitory={handleCreateDormitory}
+            onUpdateDormitory={handleUpdateDormitory}
+            onDeleteDormitory={handleDeleteDormitory}
+            onAssignStudentDormitory={handleAssignStudentDormitory}
+            onAddDormitoryEvent={handleAddDormitoryEvent}
+            onUpdateDormitoryEvent={handleUpdateDormEvent}
+            onDeleteDormitoryEvent={handleDeleteDormEvent}
+            onCloseDormitoryPeriod={handleCloseDormitoryPeriod}
+            onCloseAllDormitoryPeriods={handleCloseAllDormitoryPeriods}
+            onSelectStudent={setSelectedStudent}
+          />
+        )}
 
-      {sidebarTab === "scores" && (
-        <ScoresWorkspace
-          exams={appState.gradeExams}
-          students={students}
-          onSelectStudent={setSelectedStudent}
-          onSaveScoreImport={handleSaveScoreImport}
-          onUpdateGradeExam={handleUpdateGradeExam}
-          onDeleteGradeExam={handleDeleteGradeExam}
-          onGenerateClassAnalysis={handleGenerateClassAnalysis}
-          onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
-          onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
-          studentAdviceProgress={studentAdviceProgress}
-        />
-      )}
+        {sidebarTab === "scores" && (
+          <ScoresWorkspace
+            exams={appState.gradeExams}
+            students={students}
+            onSelectStudent={setSelectedStudent}
+            onSaveScoreImport={handleSaveScoreImport}
+            onUpdateGradeExam={handleUpdateGradeExam}
+            onDeleteGradeExam={handleDeleteGradeExam}
+            onGenerateClassAnalysis={handleGenerateClassAnalysis}
+            onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
+            onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
+            studentAdviceProgress={studentAdviceProgress}
+          />
+        )}
 
-      {sidebarTab === "data" && (
-        <DataWorkspace
-          students={students}
-          seatOrder={seatOrder}
-          onImportRoster={handleImportRoster}
-          onBeforeBackupExport={saveCurrentLegacySnapshot}
-          onBackupImported={reloadFromLegacyState}
-        />
-      )}
+        {sidebarTab === "data" && (
+          <DataWorkspace
+            students={students}
+            seatOrder={seatOrder}
+            onImportRoster={handleImportRoster}
+            onBeforeBackupExport={saveCurrentLegacySnapshot}
+            onBackupImported={reloadFromLegacyState}
+          />
+        )}
 
-      {sidebarTab === "history" && (
-        <HistoryWorkspace
-          history={savedSeatHistory}
-          onSave={handleSaveSeatHistory}
-          onRename={handleUpdateSeatHistoryNote}
-          onView={setSelectedHistorySnapshot}
-          onApply={handleApplySeatHistory}
-          onDelete={handleDeleteSeatHistory}
-        />
-      )}
+        {sidebarTab === "history" && (
+          <HistoryWorkspace
+            history={savedSeatHistory}
+            onSave={handleSaveSeatHistory}
+            onRename={handleUpdateSeatHistoryNote}
+            onView={setSelectedHistorySnapshot}
+            onApply={handleApplySeatHistory}
+            onDelete={handleDeleteSeatHistory}
+          />
+        )}
+      </div>
     </AppShell>
   );
 }

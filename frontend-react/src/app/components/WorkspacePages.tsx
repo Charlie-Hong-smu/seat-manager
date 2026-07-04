@@ -654,36 +654,41 @@ export function DataWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <PageHeader title="名单与备份" subtitle="导入名单、导出座位表、备份和恢复都集中在这里。" />
+      <PageHeader title="名单与备份" />
       <div className="grid gap-4 overflow-y-auto p-4 lg:grid-cols-3">
-        <Panel title="导入名单">
+        <div className="surface-enter">
+        <Panel title="导入名单" action={<span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600" style={{ fontWeight: 800 }}>导入</span>}>
           <div className="space-y-3">
             <label className="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" checked={replaceExisting} onChange={event => setReplaceExisting(event.target.checked)} className="accent-blue-600" />覆盖现有名单</label>
             <label className="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" checked={keepHistory} disabled={!replaceExisting} onChange={event => setKeepHistory(event.target.checked)} className="accent-blue-600 disabled:opacity-40" />覆盖时保留历史数据</label>
-            <FileDropZone accept=".xlsx,.xls,.csv,.tsv" onChange={file => setRosterFile(file)}>
+            <FileDropZone accept=".xlsx,.xls,.csv,.tsv" onChange={file => setRosterFile(file)} className="min-h-32 justify-center">
               <FileUp className="h-4 w-4 text-gray-400" />
               <span className="text-sm text-gray-500">{rosterFile ? rosterFile.name : "拖拽文件或点击选择 .xlsx / .csv"}</span>
             </FileDropZone>
             <Button onClick={importRoster} className="w-full">导入名单</Button>
-            {rosterStatus && <p className="text-sm text-blue-600">{rosterStatus}</p>}
+            {rosterStatus && <div className="rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-600">{rosterStatus}</div>}
           </div>
         </Panel>
+        </div>
 
-        <Panel title="导出">
+        <div className="surface-enter [animation-delay:60ms]">
+        <Panel title="导出" action={<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-600" style={{ fontWeight: 800 }}>导出</span>}>
           <div className="space-y-3">
-            <Button variant="secondary" onClick={() => exportSeatsCsv(students, seatOrder)} className="w-full flex items-center justify-center gap-2">
+            <Button variant="secondary" onClick={() => exportSeatsCsv(students, seatOrder)} className="w-full flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3">
               <FileDown className="h-4 w-4" />导出座位表 CSV
             </Button>
-            <Button variant="secondary" onClick={exportBackup} className="w-full flex items-center justify-center gap-2">
+            <Button variant="secondary" onClick={exportBackup} className="w-full flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3">
               <FileDown className="h-4 w-4" />导出备份 JSON
             </Button>
-            {lastBackupAt && <p className="text-sm text-gray-500">上次备份：{formatBackupTime(lastBackupAt)}</p>}
+            {lastBackupAt && <p className="text-sm text-gray-400">上次备份：{formatBackupTime(lastBackupAt)}</p>}
           </div>
         </Panel>
+        </div>
 
-        <Panel title="恢复备份">
+        <div className="surface-enter [animation-delay:120ms]">
+        <Panel title="恢复备份" action={<span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-600" style={{ fontWeight: 800 }}>恢复</span>}>
           <div className="space-y-3">
-            <FileDropZone accept=".json" onChange={file => { if (file) void readBackup(file); }}>
+            <FileDropZone accept=".json" onChange={file => { if (file) void readBackup(file); }} className="min-h-32 justify-center">
               <FileUp className="h-4 w-4 text-gray-400" />
               <span className="text-sm text-gray-500">{backupPreview ? "已选择备份文件" : "拖拽或选择 JSON 备份文件"}</span>
             </FileDropZone>
@@ -692,6 +697,7 @@ export function DataWorkspace({
             {backupStatus && <p className="text-sm text-amber-600">{backupStatus}</p>}
           </div>
         </Panel>
+        </div>
       </div>
     </div>
   );
