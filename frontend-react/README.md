@@ -17,7 +17,7 @@ VITE_EDITION=commercial npm run build  # 商用版（授权码登录）
 
 Vite 已配置 `base: "/seat-manager/"`，用于 GitHub Pages 部署。
 
-GitHub Pages 现在只发布本目录的 React 构建产物。仓库根目录的旧版 `index.html`、`style.css`、`app.js` 等文件仅作为暂时归档保留。
+GitHub Pages 现在只发布本目录的 React 构建产物。仓库根目录的旧版 `index.html`、`style.css`、`app.js` 等文件已从工作区移除；如需回退，可从垃圾箱或 Git 历史恢复。
 
 ## Figma Make 协作约定
 
