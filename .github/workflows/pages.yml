@@ -39,9 +39,6 @@ jobs:
         run: |
           mkdir -p pages
           cp -R frontend-react/dist/. pages/
-          mkdir -p pages/legacy
-          cp index.html style.css app.js manifest.webmanifest sw.js avatar.jpg pages/legacy/
-          cp -R vendor pages/legacy/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -7,7 +7,7 @@ Do not directly overwrite the React app with Figma Make exports. Treat Figma Mak
 ## Current Source Roles
 
 - Real app source: `frontend-react/`
-- Legacy app source: root `index.html`, `style.css`, `app.js`
+- Legacy app archive: root `index.html`, `style.css`, `app.js`
 - AI and cloud logic: `cloudflare-worker/`
 - Design workflow note: this file
 
@@ -47,7 +47,7 @@ These files are enough to reproduce the layout and visual style, but they should
 ## Implementation Rules
 
 1. Keep `frontend-react/` as the single source of truth for the new app.
-2. Keep the legacy root app available; do not delete `index.html`, `style.css`, or `app.js`.
+2. Treat the legacy root app as a temporary archive only. Do not route new product work through `index.html`, `style.css`, or `app.js`.
 3. Keep `cloudflare-worker/` independent; do not move API keys or Worker-only secrets into frontend code.
 4. Preserve existing business logic when applying Figma designs:
    - seat data and seat operations

@@ -1,23 +1,25 @@
 # 小张专用座位管理器
 
-这是座位管理、成绩分析和 AI 期末评语辅助工具。仓库目前同时保留旧版原生前端和新版 React 前端，迁移会按模块逐步完成。
+这是座位管理、成绩分析和 AI 期末评语辅助工具。新版 React 前端已经成为主应用，旧版原生前端只作为暂时归档保留，不再随 GitHub Pages 发布。
 
 ## 入口
 
-- 旧版本地入口：根目录 `index.html`
-- 新版 React 入口：`frontend-react/`
-- GitHub Pages 部署后：新版在站点根路径，旧版保留在 `/legacy/`
+- 主应用源码：`frontend-react/`
+- GitHub Pages 部署后：React 新版在站点根路径。
+- 旧版归档：根目录 `index.html`、`style.css`、`app.js` 等旧版文件暂时保留，后续确认无回退需求后再删除。
 
-## 旧版运行
+## 旧版归档
 
-旧版不需要构建，直接打开根目录 `index.html` 即可。旧版仍使用：
+旧版原生前端已停止作为发布入口。当前仍暂时保留这些文件，方便对照和必要时回退：
 
 - `index.html`
 - `style.css`
 - `app.js`
 - `manifest.webmanifest`
 - `sw.js`
-- `cloudflare-worker/`
+- `vendor/`
+
+`cloudflare-worker/` 是独立后端，不属于旧版前端归档。
 
 ## React 新版开发
 
@@ -86,8 +88,9 @@ base: "/seat-manager/"
 
 1. 安装 React 前端依赖。
 2. 构建 `frontend-react/dist`。
-3. 将 React 构建结果作为新版站点根目录。
-4. 将旧版 `index.html`、`style.css`、`app.js`、`manifest.webmanifest`、`sw.js`、`avatar.jpg` 复制到部署产物的 `legacy/`。
+3. 将 React 构建结果作为站点根目录。
+
+旧版原生前端不再复制到 `/legacy/`。
 
 ## Cloudflare 商用版自动部署
 
@@ -169,4 +172,4 @@ Netlify 站点建议使用仓库根目录部署，配置已写入 `netlify.toml`
 - AI 已可并入产品授权码；正式订阅计费和自动续费流程尚未实现。
 - 商用版安全注意：核心离线应用是纯前端，授权码只能真正约束云同步与 AI；考虑给商用版加可选本地 PIN（隐私锁）。
 - `/license/auth` 尚无限流（防授权码暴力猜测）。
-- 旧版（根目录原生前端）仍保留；若决定「只保留新版」，需删旧版文件并改 `pages.yml`（尚未做）。
+- 旧版（根目录原生前端）已停止发布；确认 React 新版稳定后，可删除旧版归档文件。
