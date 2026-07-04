@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Play, Pause, RotateCcw, Copy, Download, Search, Sparkles, TrendingUp, TrendingDown, Save, Plus, ChevronUp, Clock3, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Play, Pause, Copy, Download, Search, Sparkles, TrendingUp, TrendingDown, Save, Plus, ChevronUp, Clock3, AlertCircle, CheckCircle2 } from "lucide-react";
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
@@ -700,9 +700,12 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     : batchState.failed.length
     ? "重试失败"
     : selectedBatchCount
-    ? `批量生成 ${selectedBatchCount}`
+    ? `生成 ${selectedBatchCount} 人`
     : "批量生成";
   const batchButtonAction = batchRunning ? pauseBatch : resumableCount ? resumeBatch : startBatch;
+  const batchActive = batchRunning || resumableCount > 0 || batchProgress > 0;
+  const headerProgress = selectedBatchCount > 0 && !batchActive ? 100 : batchProgress;
+  const showHeaderProgress = selectedBatchCount > 0 || batchActive;
   const selectedCount = selectedSummary.criteriaSummary.reduce((total, item) => total + item.values.length, 0) + selectedSummary.customOptions.length;
   const selectedTags = selectedStudent ? [...selectedStudent.academicTags, ...selectedStudent.tags].filter(tag => !tag.startsWith("comment_")) : [];
   const selectedInitial = selectedStudent?.name.slice(0, 1) || "";
@@ -739,15 +742,31 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-50 text-gray-900">
       <div className="shrink-0 border-b border-gray-100 bg-white/95 px-5 py-3">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-3">
             <h2 className="text-base text-gray-900" style={{ fontWeight: 800 }}>评语工作台</h2>
             <span className="text-sm text-gray-400" style={{ fontWeight: 700 }}>
               <span className="text-emerald-600">{generatedCount}</span> / {students.length} 已生成
             </span>
             {selectedBatchCount > 0 && (
-              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600" style={{ fontWeight: 800 }}>
+              <button
+                onClick={() => setSelectedBatchIds(new Set())}
+                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs text-blue-600 transition-colors hover:bg-blue-100"
+                style={{ fontWeight: 800 }}
+                title="清空已选"
+              >
                 已选 {selectedBatchCount} 人
-              </span>
+              </button>
+            )}
+            {showHeaderProgress && (
+              <div className="flex h-7 items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 text-blue-600">
+                <div className="h-1.5 w-24 overflow-hidden rounded-full bg-blue-100">
+                  <div
+                    className="h-full rounded-full bg-blue-600 transition-[width] duration-700 ease-out"
+                    style={{ width: `${Math.max(0, Math.min(100, headerProgress))}%` }}
+                  />
+                </div>
+                <span className="text-xs tabular-nums" style={{ fontWeight: 800 }}>{headerProgress}%</span>
+              </div>
             )}
           </div>
 
@@ -760,46 +779,11 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
               {batchRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
               {batchButtonLabel}
             </button>
-            <button
-              onClick={() => {
-                setComments(buildInitialComments(students));
-                clearBatchState();
-                setAiStatus("已重置工作台状态。");
-              }}
-              className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              title="重置"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </button>
             <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600">
               <X className="h-5 w-5" />
             </button>
           </div>
         </div>
-
-        {(() => {
-          const batchActive = batchRunning || resumableCount > 0 || batchProgress > 0;
-          const show = batchActive || selectedBatchCount > 0;
-          return (
-            <div className={`overflow-hidden transition-all duration-300 ${show ? "mt-2 max-h-12 opacity-100" : "max-h-0 opacity-0"}`}>
-              <div className="flex items-center gap-3">
-                {batchActive ? (
-                  <>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
-                      <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${batchProgress}%` }} />
-                    </div>
-                    <span className="text-xs text-gray-500">{batchProgress}% · 剩余 {batchState.queue.length} · 失败 {batchState.failed.length}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1 text-xs text-gray-500">已选择 {selectedBatchCount} 人，点上方「批量生成 {selectedBatchCount}」仅为选中学生生成</span>
-                    <button onClick={() => setSelectedBatchIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600">清空</button>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })()}
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[176px_minmax(360px,1fr)_360px] overflow-hidden">

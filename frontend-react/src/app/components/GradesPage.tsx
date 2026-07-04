@@ -291,19 +291,19 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
 
   return (
     <div className="flex flex-col bg-gray-50 min-h-full">
-      <div className="bg-white border-b border-gray-100 px-6 py-3 flex flex-col gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative">
+      <div className="bg-white border-b border-gray-100 px-6 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="relative min-w-0 shrink basis-[280px]">
             <button
               onClick={() => setExamOpen(v => !v)}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+              className="flex w-full min-w-0 items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-100 transition-colors"
               style={{ fontWeight: 600 }}
             >
-              {selectedExam.name} · {selectedExam.date || "未填写日期"}
-              <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+              <span className="min-w-0 truncate">{selectedExam.name} · {selectedExam.date || "未填写日期"}</span>
+              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" />
             </button>
             {examOpen && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-10 overflow-hidden min-w-max">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 overflow-hidden min-w-72 max-w-96">
                 {exams.map(exam => (
                   <button
                     key={exam.id}
@@ -313,7 +313,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                       setSelectedSubject("total");
                       setSortKey("total");
                     }}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${exam.id === selectedExam.id ? "text-blue-600 bg-blue-50" : "text-gray-700"}`}
+                    className={`w-full truncate text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${exam.id === selectedExam.id ? "text-blue-600 bg-blue-50" : "text-gray-700"}`}
                   >
                     {exam.name} · {exam.date || "未填写日期"}
                   </button>
@@ -322,7 +322,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
             )}
           </div>
 
-          <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto max-w-full">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1">
             {["total", ...subjects].map(subject => (
               <button
                 key={subject}
@@ -339,24 +339,52 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
             ))}
           </div>
 
-          <button
-            onClick={() => setThresholdOpen(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors"
-            style={{ fontWeight: 700 }}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />统计阈值
-          </button>
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setThresholdOpen(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs border rounded-xl transition-colors ${thresholdOpen ? "bg-blue-50 text-blue-700 border-blue-200" : "text-gray-600 bg-gray-50 hover:bg-gray-100 border-gray-200"}`}
+              style={{ fontWeight: 700 }}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />阈值设置
+            </button>
+
+            {thresholdOpen && (
+              <div className="surface-enter absolute right-0 top-full z-30 mt-2 w-64 rounded-2xl border border-gray-100 bg-white p-4 shadow-xl shadow-gray-200/70">
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    ["pass", "及格"],
+                    ["good", "良好"],
+                    ["excellent", "优秀"],
+                  ] as Array<[keyof Thresholds, string]>).map(([key, label]) => (
+                    <label key={key} className="space-y-1.5 text-xs text-gray-500" style={{ fontWeight: 700 }}>
+                      <span>{label}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={thresholds[key]}
+                        onChange={event => updateThreshold(key, Number(event.target.value))}
+                        className="h-9 w-full rounded-xl border border-gray-200 bg-gray-50 px-2 text-center text-sm text-gray-900 outline-none transition-colors focus:border-blue-300 focus:bg-white"
+                        style={{ fontWeight: 800 }}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-3 truncate text-xs text-gray-400">{metricKey === "total" ? totalThresholdHint : subjectThresholdHint}</p>
+              </div>
+            )}
+          </div>
 
           <button
             onClick={() => setExportOpen(true)}
             disabled={!exams.length}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 px-3 py-2 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors disabled:opacity-50"
             style={{ fontWeight: 700 }}
           >
             <Download className="w-3.5 h-3.5" />导出成绩
           </button>
 
-          <div className="ml-auto flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+          <div className="ml-auto flex shrink-0 items-center gap-1 p-1 bg-gray-100 rounded-xl">
             {(["single", "trend"] as const).map(tab => (
               <button
                 key={tab}
@@ -369,30 +397,6 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
             ))}
           </div>
         </div>
-
-        {thresholdOpen && (
-          <div className="flex items-center gap-3 flex-wrap rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
-            <span className="text-xs text-gray-500" style={{ fontWeight: 700 }}>统计口径</span>
-            {([
-              ["pass", "及格"],
-              ["good", "良好"],
-              ["excellent", "优秀"],
-            ] as Array<[keyof Thresholds, string]>).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-xs text-gray-500">
-                {label}
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={thresholds[key]}
-                  onChange={event => updateThreshold(key, Number(event.target.value))}
-                  className="w-16 px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-center outline-none focus:border-blue-300"
-                />
-              </label>
-            ))}
-            <p className="text-xs text-gray-400">{metricKey === "total" ? totalThresholdHint : subjectThresholdHint}</p>
-          </div>
-        )}
       </div>
 
       <div className="p-6 flex flex-col gap-5">
