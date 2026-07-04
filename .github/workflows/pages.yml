@@ -22,18 +22,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          package_json_file: frontend-react/package.json
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend-react/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: frontend-react
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build React frontend
         working-directory: frontend-react
-        run: npm run build
+        run: pnpm run build
 
       - name: Prepare Pages artifact
         run: |

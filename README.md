@@ -26,9 +26,11 @@
 
 ```bash
 cd frontend-react
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
+
+> 项目使用 pnpm（见 `frontend-react/pnpm-lock.yaml`），请勿混用 npm，否则依赖树可能不一致。
 
 ## Figma 设计协作
 
@@ -46,8 +48,8 @@ npm run dev
 
 ```bash
 cd frontend-react
-npm run build                      # 小张版（默认 edition）
-VITE_EDITION=commercial npm run build   # 商用版
+pnpm build                      # 小张版（默认 edition）
+VITE_EDITION=commercial pnpm build   # 商用版
 ```
 
 Vite 已设置：
@@ -85,11 +87,11 @@ base: "/seat-manager/"
 
 ## GitHub Pages 部署
 
-`.github/workflows/pages.yml` 会：
+`.github/workflows/pages.yml` 会在 `main` 推送后自动部署小张版到 GitHub Pages：
 
-1. 安装 React 前端依赖。
-2. 构建 `frontend-react/dist`。
-3. 将 React 构建结果作为站点根目录。
+1. 用 pnpm 安装 React 前端依赖（`pnpm install --frozen-lockfile`）。
+2. 构建 `frontend-react/dist`（小张版，`base: /seat-manager/`）。
+3. 上传构建产物并部署到 GitHub Pages 站点根路径。
 
 旧版原生前端不再复制到 `/legacy/`。
 
