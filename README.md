@@ -89,11 +89,27 @@ base: "/seat-manager/"
 
 `.github/workflows/pages.yml` 会在 `main` 推送后自动部署小张版到 GitHub Pages：
 
-1. 用 pnpm 安装 React 前端依赖（`pnpm install --frozen-lockfile`）。
+1. 用 pnpm 安装 React 前端依赖（`pnpm install --frozen-lockfile`，锁文件在 `frontend-react/pnpm-lock.yaml`）。
 2. 构建 `frontend-react/dist`（小张版，`base: /seat-manager/`）。
-3. 上传构建产物并部署到 GitHub Pages 站点根路径。
+3. 通过 `actions/upload-pages-artifact@v3` + `actions/deploy-pages@v4` 部署到 GitHub Pages 站点根路径。
 
 旧版原生前端不再复制到 `/legacy/`。
+
+### 历史问题与修复（2026-07-04）
+
+**症状**：一段时间内，push 后商用版（Cloudflare Pages）能正常更新，但小张版（GitHub Pages）一直停留在旧版本，且会收到 GitHub 发来的 workflow 失败邮件。
+
+**根因（两点叠加）**：
+
+1. **包管理器不一致**：`pages.yml` 原本用 `npm install`，但项目实际使用 pnpm（仓库里有 `frontend-react/pnpm-lock.yaml`，没有 `package-lock.json`）。npm 会忽略 pnpm 锁文件、自行解析 `package.json` 的版本范围，依赖树可能与本地 / 商用版构建不一致。
+2. **artifact action 版本不匹配**：原本用 `actions/upload-artifact@v4` 上传构建产物，但 `actions/deploy-pages@v4` 只能消费 `actions/upload-pages-artifact`（专用 Pages artifact action）上传的产物。普通 `upload-artifact` 上传的 artifact 在 deploy 阶段无法被 `deploy-pages` 识别，导致 deploy job 失败。
+
+**修复**：
+
+- 包管理器统一为 pnpm：加 `pnpm/action-setup@v4`（指定 `package_json_file: frontend-react/package.json`），`setup-node` 加 `cache: pnpm` + `cache-dependency-path: frontend-react/pnpm-lock.yaml`，安装/构建命令改为 `pnpm install --frozen-lockfile` / `pnpm run build`。
+- artifact 上传改回 `actions/upload-pages-artifact@v3`（配合 `deploy-pages@v4` 的专用 action），保留 `cp -R frontend-react/dist/. pages/` 步骤把产物搬到 `pages/` 目录再上传。
+
+> 注意：`pnpm-lock.yaml` 在 `frontend-react/` 子目录，不在仓库根。`pnpm/action-setup` 和 `setup-node` 的缓存都需要显式指定子目录路径，否则会找不到锁文件。
 
 ## Cloudflare 商用版自动部署
 
