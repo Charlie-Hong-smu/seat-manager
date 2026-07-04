@@ -202,16 +202,21 @@ export async function authorizeProduct(productCode: string, remember: boolean): 
     throw new Error("license_required");
   }
 
-  const response = await fetch(`${getWorkerBaseUrl()}/license/auth`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      productCode: code,
-      rememberDays: remember ? PRODUCT_REMEMBER_DAYS : 0,
-      deviceId: getProductDeviceId(),
-      deviceName: getDeviceName(),
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${getWorkerBaseUrl()}/license/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productCode: code,
+        rememberDays: remember ? PRODUCT_REMEMBER_DAYS : 0,
+        deviceId: getProductDeviceId(),
+        deviceName: getDeviceName(),
+      }),
+    });
+  } catch {
+    throw new Error("license_network_failed");
+  }
   if (response.status === 403) {
     throw new Error("license_unauthorized");
   }

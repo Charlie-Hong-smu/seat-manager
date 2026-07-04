@@ -28,10 +28,14 @@ export function LoginScreen({ onLogin }: Props) {
         setSecret("");
       } else if (message === "license_device_limit") {
         setError("这个授权码绑定设备已满，请联系我处理");
+      } else if (message === "license_required") {
+        setError("请输入产品授权码");
+      } else if (message === "license_network_failed") {
+        setError("授权服务连接失败，请刷新页面或换网络后重试");
       } else if (message === "license_auth_failed") {
         setError("授权服务暂时不可用，请稍后重试");
       } else {
-        setError("请输入产品授权码");
+        setError("授权服务暂时不可用，请稍后重试");
       }
     }
   }

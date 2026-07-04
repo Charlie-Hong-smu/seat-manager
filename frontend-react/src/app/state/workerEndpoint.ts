@@ -1,7 +1,7 @@
 const WORKER_URL_KEY = "seat-manager-ai-worker-url";
 const DEFAULT_WORKER_URL = "https://seat-manager-ai.hongchenglin03.workers.dev";
 
-const env = import.meta.env as { VITE_WORKER_URL?: string };
+const env = import.meta.env as { VITE_EDITION?: string; VITE_WORKER_URL?: string };
 
 export function getDefaultWorkerUrl(): string {
   return env.VITE_WORKER_URL?.trim() || DEFAULT_WORKER_URL;
@@ -9,6 +9,11 @@ export function getDefaultWorkerUrl(): string {
 
 export function getWorkerBaseUrl(): string {
   const defaultUrl = normalizeWorkerUrl(getDefaultWorkerUrl());
+  const isCommercial = env.VITE_EDITION?.trim() === "commercial";
+  const hasCommercialWorkerUrl = isCommercial && defaultUrl !== normalizeWorkerUrl(DEFAULT_WORKER_URL);
+  if (hasCommercialWorkerUrl) {
+    return defaultUrl;
+  }
   if (typeof window === "undefined" || !window.localStorage) {
     return defaultUrl;
   }
