@@ -1,6 +1,7 @@
 import { BookOpen, ChevronRight, Cloud, Grid3x3, KeyRound, Link2Off, LogOut, Monitor, Users } from "lucide-react";
 
 import { APP_NAME } from "../config";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 interface TopHeaderProps {
   studentCount: number;
@@ -16,6 +17,8 @@ interface TopHeaderProps {
   onOpenCloudSync: () => void;
   onUnbindDevice?: () => void;
   onLogout: () => void;
+  /** 切换 / 新建班级 / 升学期后,让上层重新加载当前班级数据。 */
+  onWorkspaceChanged: () => void;
 }
 
 export function TopHeader({
@@ -31,6 +34,7 @@ export function TopHeader({
   onOpenCloudSync,
   onUnbindDevice,
   onLogout,
+  onWorkspaceChanged,
 }: TopHeaderProps) {
   const accountItems = [
     { key: "install", icon: <Monitor className="w-3.5 h-3.5" />, label: "安装到桌面" },
@@ -47,6 +51,7 @@ export function TopHeader({
             <BookOpen className="w-4 h-4 text-white" />
           </div>
           <span className="text-gray-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>{APP_NAME}</span>
+          <WorkspaceSwitcher onChanged={onWorkspaceChanged} />
         </div>
 
         <div className="flex items-center gap-3">

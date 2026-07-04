@@ -135,3 +135,39 @@ Worker 顶层 `fetch()`（`deepseek-ai-worker.js:16`）**没有 try-catch**。�
 2. `git diff` 前先用 `git cat-file -e` 检查基准提交是否存在，取不到就直接全量部署，不再让脚本崩溃
 
 **这两个问题是叠加的**：workflow 挂了导致前端没部署 + Netlify 代理 gzip bug，两个都修+部署后才能真正解决登录问题。
+
+---
+
+## ✅ 多班级 + 学期切换功能（2026-07-04，Claude）
+
+### 功能概述
+
+新增「多班级管理」和「学期切换」，不破坏已有功能。核心：在原 localStorage 键外套一层"文件柜"（键 `seat-manager-workspaces-v1`），每个"抽屉"= 一个班级的一个学期，程序始终只操作当前选中的抽屉。
+
+### 新增文件
+
+- `frontend-react/src/app/state/workspaces.ts` — 文件柜核心（班级/学期/切换/升年级/编辑/删除）
+- `frontend-react/src/app/components/WorkspaceSwitcher.tsx` — 顶部切换器 UI
+
+### 改动文件
+
+| 文件 | 改了什么 |
+|------|---------|
+| `state/storage.ts` | read/writeLegacyRootState 重定向到当前切片 |
+| `state/types.ts` | 新增 WorkspaceSlice、WorkspaceBook、WorkspaceTerm 等类型 |
+| `state/syncStorage.ts` | 上传整个文件柜；恢复兼容新格式（整柜）和旧格式（单班） |
+| `state/legacyStateAdapter.ts` | 空班级/新学期不再强塞演示数据；新增 createEmptySeatManagerState |
+| `components/TopHeader.tsx` | 加入 WorkspaceSwitcher 和 onWorkspaceChanged prop |
+| `App.tsx` | 新增 onWorkspaceChanged={reloadFromLegacyState} |
+
+### 班级年级升级规则
+
+春季→秋季（进入新学年）年级 +1，秋季→春季年级不变。班号不变，只有年级变（如高二→高三）。
+
+### 首次迁移
+
+`ensureWorkspaceBook()` 首次运行时，若旧 `homeroom-seat-manager-v1` 有数据，自动搬进默认切片，已有数据不丢。
+
+### 待办
+
+- 云同步 5MB 上限：多班多学期时整柜体积增大，后续可考虑增量同步

@@ -582,7 +582,9 @@ function normalizeGradeExams(rawSavedExams: unknown, students: AppStudent[]): Gr
     .map((record, index) => normalizeSavedExamRecord(record, index, students))
     .filter((item): item is GradeExam => Boolean(item));
 
-  return exams.length ? exams : createMockGradeExams();
+  // 注意:不再"没有考试就回退到演示考试"。真实班级可能只是还没导入成绩,
+  // 应显示空,而不是塞演示数据(否则新学期会看到上学期/演示的考试)。
+  return exams;
 }
 
 export function createMockSeatManagerState(): SeatManagerState {
@@ -609,6 +611,27 @@ export function createMockSeatManagerState(): SeatManagerState {
   };
 }
 
+export function createEmptySeatManagerState(): SeatManagerState {
+  return {
+    source: "legacy",
+    hasLegacyData: true,
+    students: [],
+    seatOrder: [],
+    lockedSeats: [],
+    seatSettings: createDefaultSeatSettings(),
+    dormitories: [],
+    seatHistory: [],
+    savedExams: [],
+    exams: [],
+    manualTags: [],
+    autoTags: [],
+    aiComments: null,
+    commentRubric: null,
+    settings: {},
+    gradeExams: [],
+  };
+}
+
 export function createSeatManagerState(raw: unknown): SeatManagerState {
   if (!isRecord(raw)) {
     return createMockSeatManagerState();
@@ -619,7 +642,9 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     .filter((item): item is AppStudent => Boolean(item));
 
   if (!students.length) {
-    return createMockSeatManagerState();
+    // raw 是一个真实存在的对象(哪怕是空班级/新学期),就返回空状态,不塞演示数据。
+    // 只有 raw 完全不是对象(见上面 isRecord 判断)才回退演示数据 = 真正的首次使用。
+    return createEmptySeatManagerState();
   }
 
   const studentIds = new Set(students.map(student => student.id));

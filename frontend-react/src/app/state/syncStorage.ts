@@ -1,4 +1,5 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
+import { exportWholeBook, importWholeBook } from "./workspaces";
 import { getProductAuthToken } from "./authStorage";
 import { getWorkerBaseUrl } from "./workerEndpoint";
 
@@ -142,12 +143,18 @@ export async function fetchCloudStatus(): Promise<SyncStatus> {
 }
 
 export async function uploadCurrentStateToCloud(deviceName: string): Promise<SyncStatus> {
-  const data = readLegacyRootState();
+  // 上传整个文件柜（所有班级、所有学期）。
+  // 同时把当前切片也写进 data 字段，兼容不支持多班级的旧版客户端读取。
+  const book = exportWholeBook();
+  const legacyData = readLegacyRootState();
   const payload = {
     version: SYNC_VERSION,
     updatedAt: new Date().toISOString(),
     deviceName: setSyncDeviceName(deviceName),
-    data,
+    // 整柜数据
+    workspaceBook: book,
+    // 旧格式兼容字段：放当前切片数据，旧客户端只会读这个
+    data: legacyData,
   };
   const sizeBytes = new TextEncoder().encode(JSON.stringify(payload)).length;
   if (sizeBytes > SYNC_MAX_CLIENT_BYTES) {
@@ -167,11 +174,34 @@ export async function uploadCurrentStateToCloud(deviceName: string): Promise<Syn
 }
 
 export async function restoreStateFromCloud(): Promise<SyncStatus> {
-  const cloud = await fetchSyncEndpoint<{ updatedAt?: string; deviceName?: string; data?: unknown; version?: number }>("/sync/load");
-  if (!cloud.data || typeof cloud.data !== "object" || !Array.isArray((cloud.data as { students?: unknown }).students) || !Array.isArray((cloud.data as { seatOrder?: unknown }).seatOrder)) {
-    throw new Error("sync_invalid_data");
+  const cloud = await fetchSyncEndpoint<{
+    updatedAt?: string;
+    deviceName?: string;
+    data?: unknown;
+    workspaceBook?: unknown;
+    version?: number;
+  }>("/sync/load");
+
+  // 优先恢复整柜；没有整柜时回退到旧格式单班数据。
+  if (cloud.workspaceBook) {
+    if (!importWholeBook(cloud.workspaceBook)) {
+      throw new Error("sync_invalid_data");
+    }
+  } else {
+    // 旧格式：cloud.data 是单个班级的 legacy state
+    if (
+      !cloud.data
+      || typeof cloud.data !== "object"
+      || !Array.isArray((cloud.data as { students?: unknown }).students)
+      || !Array.isArray((cloud.data as { seatOrder?: unknown }).seatOrder)
+    ) {
+      throw new Error("sync_invalid_data");
+    }
+    // importWholeBook 会把旧格式包进默认切片
+    importWholeBook(cloud.data);
+    writeLegacyRootState(cloud.data);
   }
-  writeLegacyRootState(cloud.data);
+
   const restoredAt = new Date().toISOString();
   if (hasBrowserStorage()) {
     window.localStorage.setItem(SYNC_LAST_RESTORE_AT_KEY, restoredAt);

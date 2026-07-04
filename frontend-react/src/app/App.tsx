@@ -728,6 +728,7 @@ export default function App() {
           onChangePassword={IS_COMMERCIAL ? undefined : () => setShowChangePassword(true)}
           onOpenCloudSync={() => setShowCloudSync(true)}
           onUnbindDevice={IS_COMMERCIAL ? handleUnbindDevice : undefined}
+          onWorkspaceChanged={reloadFromLegacyState}
           onLogout={() => {
             clearAuth();
             setLoggedIn(false);
