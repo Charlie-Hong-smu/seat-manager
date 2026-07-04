@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Play, Pause, Copy, Download, Search, Sparkles, TrendingUp, TrendingDown, Save, Plus, ChevronUp, Clock3, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Play, Pause, Copy, Search, Sparkles, Save, Plus, Clock3, AlertCircle, CheckCircle2 } from "lucide-react";
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
@@ -704,8 +704,8 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     : "批量生成";
   const batchButtonAction = batchRunning ? pauseBatch : resumableCount ? resumeBatch : startBatch;
   const batchActive = batchRunning || resumableCount > 0 || batchProgress > 0;
-  const headerProgress = selectedBatchCount > 0 && !batchActive ? 100 : batchProgress;
-  const showHeaderProgress = selectedBatchCount > 0 || batchActive;
+  const headerProgress = Math.max(0, Math.min(100, batchProgress));
+  const showHeaderProgress = batchActive && batchState.total > 0;
   const selectedCount = selectedSummary.criteriaSummary.reduce((total, item) => total + item.values.length, 0) + selectedSummary.customOptions.length;
   const selectedTags = selectedStudent ? [...selectedStudent.academicTags, ...selectedStudent.tags].filter(tag => !tag.startsWith("comment_")) : [];
   const selectedInitial = selectedStudent?.name.slice(0, 1) || "";
@@ -747,22 +747,20 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
             <span className="text-sm text-gray-400" style={{ fontWeight: 700 }}>
               <span className="text-emerald-600">{generatedCount}</span> / {students.length} 已生成
             </span>
-            {selectedBatchCount > 0 && (
-              <button
-                onClick={() => setSelectedBatchIds(new Set())}
-                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs text-blue-600 transition-colors hover:bg-blue-100"
-                style={{ fontWeight: 800 }}
-                title="清空已选"
-              >
-                已选 {selectedBatchCount} 人
-              </button>
-            )}
+            <button
+              onClick={() => setSelectedBatchIds(new Set())}
+              className={`h-7 overflow-hidden whitespace-nowrap rounded-full border bg-blue-50 text-xs text-blue-600 transition-all duration-300 ${selectedBatchCount > 0 ? "max-w-28 scale-100 border-blue-100 px-3.5 opacity-100" : "pointer-events-none max-w-0 scale-95 border-transparent px-0 opacity-0"}`}
+              style={{ fontWeight: 800 }}
+              title="清空已选"
+            >
+              已选 {selectedBatchCount} 人
+            </button>
             {showHeaderProgress && (
               <div className="flex h-7 items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 text-blue-600">
                 <div className="h-1.5 w-24 overflow-hidden rounded-full bg-blue-100">
                   <div
                     className="h-full rounded-full bg-blue-600 transition-[width] duration-700 ease-out"
-                    style={{ width: `${Math.max(0, Math.min(100, headerProgress))}%` }}
+                    style={{ width: `${headerProgress}%` }}
                   />
                 </div>
                 <span className="text-xs tabular-nums" style={{ fontWeight: 800 }}>{headerProgress}%</span>
@@ -773,7 +771,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           <div className="flex items-center gap-2">
             <button
               onClick={batchButtonAction}
-              className={`flex h-9 items-center gap-1.5 rounded-xl px-4 text-sm transition-colors ${batchRunning ? "bg-gray-200 text-gray-700 hover:bg-gray-300" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+              className={`flex h-10 min-w-[112px] items-center justify-center gap-2 rounded-xl px-5 text-sm transition-colors ${batchRunning ? "bg-gray-200 text-gray-700 hover:bg-gray-300" : "bg-blue-600 text-white hover:bg-blue-700"}`}
               style={{ fontWeight: 800 }}
             >
               {batchRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -786,7 +784,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[176px_minmax(360px,1fr)_360px] overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-cols-[176px_minmax(460px,1fr)_320px] overflow-hidden bg-white">
         <aside className="flex min-h-0 flex-col border-r border-gray-100 bg-white">
           <div className="space-y-2 border-b border-gray-100 p-3">
             <div className="relative">
@@ -878,30 +876,30 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           </div>
         </aside>
 
-        <main className="col-span-2 grid min-w-0 grid-cols-[minmax(360px,1fr)_360px] overflow-hidden">
-          <div key={selectedId} className="min-h-0 space-y-4 overflow-y-auto px-6 py-4 workspace-tab-enter">
-            <section className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm shadow-gray-200/40">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="grid h-9 w-9 place-items-center rounded-full bg-blue-600 text-white" style={{ fontWeight: 900 }}>
-                    {selectedInitial}
+        <main key={`detail-${selectedId}`} className="comment-detail-enter flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-gray-100 bg-white">
+          <section className="shrink-0 border-b border-gray-100 px-4 py-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-600 text-white" style={{ fontWeight: 900 }}>
+                  {selectedInitial}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="truncate text-base text-gray-900" style={{ fontWeight: 900 }}>{selectedStudent.name}</h3>
+                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${getCommentStatus(selectedComment).badge}`} style={{ fontWeight: 800 }}>
+                      {getCommentStatus(selectedComment).label}
+                    </span>
+                    {selectedStudent.gender && <span className="shrink-0 text-xs text-gray-400">{selectedStudent.gender}</span>}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base text-gray-900" style={{ fontWeight: 900 }}>{selectedStudent.name}</h3>
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${getCommentStatus(selectedComment).badge}`} style={{ fontWeight: 800 }}>
-                        {getCommentStatus(selectedComment).label}
-                      </span>
-                      {selectedStudent.gender && <span className="text-xs text-gray-400">{selectedStudent.gender}</span>}
-                    </div>
-                    <div className="mt-0.5 text-xs text-gray-400">
-                      {latestExam ? `${latestExam.name} · 总分 ${latestExam.total ?? "—"} · ${latestExam.rank ? `第 ${latestExam.rank} 名` : "暂无排名"} · ${getBestSubject(latestExam.scores)} ↑ ${getWeakSubject(latestExam.scores)} ↓` : scoreSummary(selectedStudent)}
-                    </div>
+                  <div className="mt-0.5 truncate text-xs text-gray-400">
+                    {latestExam ? `${latestExam.name} · 总分 ${latestExam.total ?? "—"} · ${latestExam.rank ? `第 ${latestExam.rank} 名` : "暂无排名"} · ${getBestSubject(latestExam.scores)} ↑ ${getWeakSubject(latestExam.scores)} ↓` : scoreSummary(selectedStudent)}
                   </div>
                 </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
                 <button
                   onClick={() => onSelectStudent(selectedStudent)}
-                  className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-600 hover:bg-gray-50"
+                  className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-600 transition-colors hover:bg-gray-50"
                   style={{ fontWeight: 800 }}
                 >
                   查看详情
@@ -912,209 +910,201 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                   </span>
                 )}
               </div>
-            </section>
+            </div>
+          </section>
 
-            {selectedProfile && (
-              <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm shadow-gray-200/40">
-                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>评语素材</h3>
-                    <span className="text-xs text-gray-400">{selectedCount} 项</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={addCriterion}
-                      className="flex h-8 items-center gap-1.5 rounded-xl bg-blue-50 px-3 text-xs text-blue-600 hover:bg-blue-100"
-                      style={{ fontWeight: 800 }}
-                    >
-                      <Plus className="h-3.5 w-3.5" />新增
-                    </button>
-                    <ChevronUp className="h-4 w-4 text-gray-300" />
-                  </div>
+          {selectedProfile && (
+            <section className="flex min-h-0 flex-1 flex-col">
+              <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>评语素材</h3>
+                  <span className="text-xs text-gray-400">{selectedCount} 项</span>
                 </div>
+                <button
+                  onClick={addCriterion}
+                  className="flex h-8 items-center gap-1.5 rounded-xl bg-blue-50 px-3 text-xs text-blue-600 transition-colors hover:bg-blue-100"
+                  style={{ fontWeight: 800 }}
+                >
+                  <Plus className="h-3.5 w-3.5" />新增
+                </button>
+              </div>
 
-                <div className="divide-y divide-gray-50">
-                  {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
-                    const selected = new Set(selectedProfile.criteriaValues[criterion.id] || []);
-                    const customOptions = selectedProfile.customOptions[criterion.id] || [];
-                    return (
-                      <div key={criterion.id} className="px-4 py-4">
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="text-sm text-gray-700" style={{ fontWeight: 900 }}>{criterion.label}</span>
-                          {(selected.size > 0 || customOptions.length > 0) && (
-                            <button onClick={() => clearCriterion(criterion.id)} className="text-xs text-gray-300 hover:text-gray-500">清空</button>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {criterion.options.map(option => {
-                            const active = selected.has(option.id);
-                            return (
-                              <button
-                                key={option.id}
-                                onClick={() => toggleCriterionOption(criterion, option.id)}
-                                className={`h-9 rounded-full border px-3.5 text-sm transition-[background,border-color,color,transform] active:scale-95 ${active ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50/40"}`}
-                                style={{ fontWeight: 700 }}
-                              >
-                                {option.label}
-                              </button>
-                            );
-                          })}
-                          {customOptions.map(option => (
+              <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-gray-50">
+                {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
+                  const selected = new Set(selectedProfile.criteriaValues[criterion.id] || []);
+                  const customOptions = selectedProfile.customOptions[criterion.id] || [];
+                  return (
+                    <div key={criterion.id} className="px-4 py-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-sm text-gray-700" style={{ fontWeight: 900 }}>{criterion.label}</span>
+                        {(selected.size > 0 || customOptions.length > 0) && (
+                          <button onClick={() => clearCriterion(criterion.id)} className="text-xs text-gray-300 transition-colors hover:text-gray-500">清空</button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {criterion.options.map(option => {
+                          const active = selected.has(option.id);
+                          return (
                             <button
                               key={option.id}
-                              onClick={() => removeStudentCustomOption(criterion.id, option.id)}
-                              className="h-9 rounded-full border border-emerald-100 bg-emerald-50 px-3.5 text-sm text-emerald-700"
-                              style={{ fontWeight: 800 }}
+                              onClick={() => toggleCriterionOption(criterion, option.id)}
+                              className={`h-8 rounded-full border px-3 text-sm transition-[background,border-color,color,transform] active:scale-95 ${active ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50/40"}`}
+                              style={{ fontWeight: 700 }}
                             >
                               {option.label}
                             </button>
-                          ))}
+                          );
+                        })}
+                        {customOptions.map(option => (
                           <button
-                            onClick={() => addStudentCustomOption(criterion)}
-                            className="h-9 rounded-full border border-dashed border-gray-200 bg-white px-4 text-sm text-gray-400 hover:bg-gray-50"
-                            style={{ fontWeight: 700 }}
+                            key={option.id}
+                            onClick={() => removeStudentCustomOption(criterion.id, option.id)}
+                            className="h-8 rounded-full border border-emerald-100 bg-emerald-50 px-3 text-sm text-emerald-700"
+                            style={{ fontWeight: 800 }}
                           >
-                            自定义...
+                            {option.label}
                           </button>
-                        </div>
+                        ))}
+                        <button
+                          onClick={() => addStudentCustomOption(criterion)}
+                          className="h-8 rounded-full border border-dashed border-gray-200 bg-white px-3.5 text-sm text-gray-400 transition-colors hover:bg-gray-50"
+                          style={{ fontWeight: 700 }}
+                        >
+                          自定义...
+                        </button>
                       </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-          </div>
-
-          <aside className="flex min-h-0 flex-col border-l border-gray-100 bg-white">
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-            <section className="rounded-2xl border border-gray-100 bg-white p-4">
-              <h4 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>生成设置</h4>
-              <div className="mt-3 grid grid-cols-2 gap-4">
-                <div>
-                  <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>字数目标</div>
-                  <div className="flex flex-wrap gap-2">
-                    {LENGTH_MODES.map(mode => (
-                      <button
-                        key={mode.value}
-                        onClick={() => updateComment(selectedId, { lengthMode: mode.value })}
-                        className={`h-9 rounded-full border px-3 text-sm ${selectedComment.lengthMode === mode.value ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
-                        style={{ fontWeight: 800 }}
-                      >
-                        {mode.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>评语风格</div>
-                  <div className="flex flex-wrap gap-2">
-                    {STYLES.map(style => (
-                      <button
-                        key={style.value}
-                        onClick={() => updateComment(selectedId, { style: style.value })}
-                        className={`h-9 rounded-full border px-3 text-sm ${selectedComment.style === style.value ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
-                        style={{ fontWeight: 800 }}
-                      >
-                        {style.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  );
+                })}
               </div>
+            </section>
+          )}
+        </main>
 
-              {!hasAuth && (
-                <div className="mt-4 flex items-center gap-2 rounded-2xl bg-violet-50 p-3">
-                  <input
-                    type="password"
-                    value={accessCode}
-                    onChange={event => setAccessCode(event.target.value)}
-                    placeholder="AI 授权码"
-                    className="h-9 w-44 rounded-xl border border-violet-100 bg-white px-3 text-sm outline-none focus:border-violet-300"
-                  />
-                  <label className="flex items-center gap-1 text-xs text-violet-700">
-                    <input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-violet-600" />
-                    记住
-                  </label>
-                </div>
-              )}
-
-              <div className="mt-4">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-xs text-gray-500" style={{ fontWeight: 800 }}>老师补充说明（可选）</div>
+        <aside key={`generate-${selectedId}`} className="comment-detail-enter flex min-h-0 flex-col bg-white">
+          <section className="shrink-0 border-b border-gray-100 p-4">
+            <h4 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>生成评语</h4>
+            <div className="mt-4">
+              <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>字数目标</div>
+              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-gray-100 p-1">
+                {LENGTH_MODES.map(mode => (
                   <button
-                    onClick={saveSelectedTeacherNote}
-                    disabled={!hasUnsavedTeacherNote}
-                    className={`flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs transition-colors ${hasUnsavedTeacherNote ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "bg-gray-50 text-gray-300"}`}
+                    key={mode.value}
+                    onClick={() => updateComment(selectedId, { lengthMode: mode.value })}
+                    className={`h-8 rounded-xl text-xs transition-colors ${selectedComment.lengthMode === mode.value ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                     style={{ fontWeight: 800 }}
                   >
-                    <Save className="h-3.5 w-3.5" />
-                    暂存
+                    {mode.label}
                   </button>
-                </div>
-                <textarea
-                  value={teacherNote}
-                  onChange={e => setTeacherNote(e.target.value)}
-                  rows={3}
-                  placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。"
-                  className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm outline-none focus:border-blue-300 focus:bg-white"
-                />
+                ))}
               </div>
-            </section>
+            </div>
+            <div className="mt-4">
+              <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>评语风格</div>
+              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-gray-100 p-1">
+                {STYLES.map(style => (
+                  <button
+                    key={style.value}
+                    onClick={() => updateComment(selectedId, { style: style.value })}
+                    className={`h-8 rounded-xl text-xs transition-colors ${selectedComment.style === style.value ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                    style={{ fontWeight: 800 }}
+                  >
+                    {style.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm shadow-gray-200/40">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>AI 生成评语</h4>
-                <span className="text-xs text-gray-400">{selectedComment.text.length} 字</span>
+            {!hasAuth && (
+              <div className="mt-4 flex items-center gap-2 rounded-2xl bg-violet-50 p-3">
+                <input
+                  type="password"
+                  value={accessCode}
+                  onChange={event => setAccessCode(event.target.value)}
+                  placeholder="AI 授权码"
+                  className="h-9 min-w-0 flex-1 rounded-xl border border-violet-100 bg-white px-3 text-sm outline-none focus:border-violet-300"
+                />
+                <label className="flex items-center gap-1 text-xs text-violet-700">
+                  <input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-violet-600" />
+                  记住
+                </label>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-xs text-gray-500" style={{ fontWeight: 800 }}>老师补充说明（可选）</div>
+                <button
+                  onClick={saveSelectedTeacherNote}
+                  disabled={!hasUnsavedTeacherNote}
+                  className={`flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs transition-colors ${hasUnsavedTeacherNote ? "bg-blue-50 text-blue-600 hover:bg-blue-100" : "bg-gray-50 text-gray-300"}`}
+                  style={{ fontWeight: 800 }}
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  暂存
+                </button>
               </div>
               <textarea
-                value={selectedComment.text}
-                onChange={e => updateComment(selectedId, { text: e.target.value })}
-                rows={12}
-                placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。"
-                className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none focus:border-blue-300 focus:bg-white"
+                value={teacherNote}
+                onChange={e => setTeacherNote(e.target.value)}
+                rows={3}
+                placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。"
+                className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm outline-none transition-colors focus:border-blue-300 focus:bg-white"
               />
-              <p className="mt-2 text-xs text-blue-600">{aiStatus}</p>
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  onClick={generateSingle}
-                  disabled={batchRunning}
-                  className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
-                  style={{ fontWeight: 800 }}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  {selectedComment.generated ? "重新生成" : "生成评语"}
-                </button>
-                <button onClick={saveSelectedComment} className="grid h-10 w-12 place-items-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200">
-                  <Save className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    if (selectedComment.text) {
-                      navigator.clipboard.writeText(selectedComment.text).catch(() => {});
-                    }
-                  }}
-                  disabled={!selectedComment.generated}
-                  className="flex h-10 items-center gap-1.5 rounded-xl bg-gray-100 px-4 text-sm text-gray-600 hover:bg-gray-200 disabled:opacity-40"
-                  style={{ fontWeight: 800 }}
-                >
-                  <Copy className="h-4 w-4" />复制
-                </button>
-                <button
-                  onClick={() => {
-                    const currentIndex = filteredStudentIds.indexOf(selectedId);
-                    const nextId = filteredStudentIds[currentIndex + 1] || filteredStudentIds[0];
-                    if (nextId) setSelectedId(nextId);
-                  }}
-                  className="h-10 rounded-xl bg-gray-100 px-4 text-sm text-gray-600 hover:bg-gray-200"
-                  style={{ fontWeight: 800 }}
-                >
-                  下一位 →
-                </button>
-              </div>
-            </section>
             </div>
-          </aside>
-        </main>
+          </section>
+
+          <section className="flex min-h-0 flex-1 flex-col p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>AI 生成评语</h4>
+              <span className="text-xs text-gray-400">{selectedComment.text.length} 字</span>
+            </div>
+            <textarea
+              value={selectedComment.text}
+              onChange={e => updateComment(selectedId, { text: e.target.value })}
+              placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。"
+              className="min-h-0 flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none transition-colors focus:border-blue-300 focus:bg-white"
+            />
+            <p className="mt-2 text-xs text-blue-600">{aiStatus}</p>
+            <div className="mt-3 grid grid-cols-[1fr_40px_64px_72px] items-center gap-2">
+              <button
+                onClick={generateSingle}
+                disabled={batchRunning}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                style={{ fontWeight: 800 }}
+              >
+                <Sparkles className="h-4 w-4" />
+                {selectedComment.generated ? "重新生成" : "生成评语"}
+              </button>
+              <button onClick={saveSelectedComment} className="grid h-10 place-items-center rounded-xl bg-gray-100 text-gray-600 transition-colors hover:bg-gray-200" title="保存">
+                <Save className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedComment.text) {
+                    navigator.clipboard.writeText(selectedComment.text).catch(() => {});
+                  }
+                }}
+                disabled={!selectedComment.generated}
+                className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-gray-100 text-sm text-gray-600 transition-colors hover:bg-gray-200 disabled:opacity-40"
+                style={{ fontWeight: 800 }}
+              >
+                <Copy className="h-4 w-4" />复制
+              </button>
+              <button
+                onClick={() => {
+                  const currentIndex = filteredStudentIds.indexOf(selectedId);
+                  const nextId = filteredStudentIds[currentIndex + 1] || filteredStudentIds[0];
+                  if (nextId) setSelectedId(nextId);
+                }}
+                className="h-10 rounded-xl bg-gray-100 text-sm text-gray-600 transition-colors hover:bg-gray-200"
+                style={{ fontWeight: 800 }}
+              >
+                下一位
+              </button>
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
   );
