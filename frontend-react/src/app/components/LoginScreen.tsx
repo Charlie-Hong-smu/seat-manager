@@ -17,9 +17,9 @@ export function LoginScreen({ onLogin }: Props) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleCommercialSubmit() {
+  async function handleCommercialSubmit(submittedSecret: string) {
     try {
-      await authorizeProduct(secret, remember);
+      await authorizeProduct(submittedSecret, remember);
       onLogin();
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
@@ -36,22 +36,22 @@ export function LoginScreen({ onLogin }: Props) {
     }
   }
 
-  async function handleLocalSubmit() {
-    if (setupMode && secret.length < 4) {
+  async function handleLocalSubmit(submittedSecret: string, submittedConfirmSecret: string) {
+    if (setupMode && submittedSecret.length < 4) {
       setError("密码至少需要 4 位");
       return;
     }
-    if (setupMode && secret !== confirmSecret) {
+    if (setupMode && submittedSecret !== submittedConfirmSecret) {
       setError("两次输入的密码不一致");
       return;
     }
     if (setupMode) {
-      await setupPassword(secret);
+      await setupPassword(submittedSecret);
       setAuthenticated(remember);
       onLogin();
       return;
     }
-    if (await verifyPassword(secret)) {
+    if (await verifyPassword(submittedSecret)) {
       setAuthenticated(remember);
       onLogin();
       return;
@@ -62,7 +62,11 @@ export function LoginScreen({ onLogin }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!secret.trim()) {
+    const form = new FormData(e.currentTarget as HTMLFormElement);
+    const submittedSecret = String(form.get("secret") || secret).trim();
+    const submittedConfirmSecret = String(form.get("confirmSecret") || confirmSecret);
+    setSecret(submittedSecret);
+    if (!submittedSecret) {
       setError(IS_COMMERCIAL ? "请输入产品授权码" : "请输入密码");
       return;
     }
@@ -70,9 +74,9 @@ export function LoginScreen({ onLogin }: Props) {
     setError("");
     try {
       if (IS_COMMERCIAL) {
-        await handleCommercialSubmit();
+        await handleCommercialSubmit(submittedSecret);
       } else {
-        await handleLocalSubmit();
+        await handleLocalSubmit(submittedSecret, submittedConfirmSecret);
       }
     } finally {
       setLoading(false);
@@ -118,6 +122,7 @@ export function LoginScreen({ onLogin }: Props) {
               <div className="relative">
                 <Lock className="w-4 h-4 text-gray-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
+                  name="secret"
                   type="password"
                   value={secret}
                   onChange={e => { setSecret(e.target.value); setError(""); }}
@@ -133,6 +138,7 @@ export function LoginScreen({ onLogin }: Props) {
                 <div className="relative">
                   <Lock className="w-4 h-4 text-gray-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
+                    name="confirmSecret"
                     type="password"
                     value={confirmSecret}
                     onChange={e => { setConfirmSecret(e.target.value); setError(""); }}

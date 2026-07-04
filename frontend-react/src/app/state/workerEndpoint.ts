@@ -8,9 +8,18 @@ export function getDefaultWorkerUrl(): string {
 }
 
 export function getWorkerBaseUrl(): string {
+  const defaultUrl = normalizeWorkerUrl(getDefaultWorkerUrl());
   if (typeof window === "undefined" || !window.localStorage) {
-    return getDefaultWorkerUrl().replace(/\/+$/, "");
+    return defaultUrl;
   }
-  const configuredUrl = window.localStorage.getItem(WORKER_URL_KEY)?.trim() || getDefaultWorkerUrl();
-  return configuredUrl.replace(/\/+$/, "");
+  const configuredUrl = normalizeWorkerUrl(window.localStorage.getItem(WORKER_URL_KEY) || "");
+  const legacyDefaultUrl = normalizeWorkerUrl(DEFAULT_WORKER_URL);
+  if (configuredUrl && !(configuredUrl === legacyDefaultUrl && defaultUrl !== legacyDefaultUrl)) {
+    return configuredUrl;
+  }
+  return defaultUrl;
+}
+
+function normalizeWorkerUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "");
 }
