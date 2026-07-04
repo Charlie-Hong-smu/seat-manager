@@ -50,6 +50,21 @@ export interface Dormitory {
   history: DormPeriodArchive[];
 }
 
+// ── 班费管理 ──────────────────────────────────────────────────────────────
+export type FundTxType = "income" | "expense";
+
+export interface FundTransaction {
+  id: string;
+  type: FundTxType;
+  amount: number;
+  category: string;
+  note: string;
+  relatedStudentId?: StudentId;
+  relatedStudentName?: string;
+  date: string;
+  createdAt: string;
+}
+
 export interface StudentExamSummary {
   id: string;
   name: string;
@@ -228,6 +243,7 @@ export interface SeatManagerState {
   lockedSeats: number[];
   seatSettings: SeatSettings;
   dormitories: Dormitory[];
+  fundTransactions: FundTransaction[];
   seatHistory: SeatHistorySnapshot[];
   savedExams: unknown[];
   exams: unknown[];

@@ -11,7 +11,7 @@ import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import { HistorySeatModal } from "./components/HistorySeatModal";
-import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ScoresWorkspace } from "./components/WorkspacePages";
+import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ScoresWorkspace, ClassFundWorkspace } from "./components/WorkspacePages";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
@@ -23,13 +23,14 @@ import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authSto
 import { IS_COMMERCIAL } from "./config";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { closeDormitoryPeriod, createDormEvent, createDormitory, createDormStudentRecord, normalizeDormitoryScore, type NewDormEventInput } from "./state/dormitoryActions";
+import { createFundTransaction, type NewFundTxInput } from "./state/classFundActions";
 import { createStudent } from "./state/studentActions";
 import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
 import { generateClassAiTrend, generateStudentAiTrend, readCachedStudentAiTrend, type AiClassTrendResult } from "./state/aiTrendService";
-import type { AppStudent, Dormitory, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
+import type { AppStudent, Dormitory, FundTransaction, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
 
 type AppTab = SidebarTab;
 type StudentAdviceProgress = {
@@ -53,6 +54,7 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [students, setStudents] = useState<AppStudent[]>(() => initialState.students);
   const [dormitories, setDormitories] = useState<Dormitory[]>(() => initialState.dormitories);
+  const [fundTransactions, setFundTransactions] = useState<FundTransaction[]>(() => initialState.fundTransactions ?? []);
   const [selectedStudent, setSelectedStudent] = useState<AppStudent | null>(null);
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
   const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => initialState.seatOrder);
@@ -94,8 +96,9 @@ export default function App() {
       seatSettings,
       dormitories,
       seatHistory: savedSeatHistory,
+      fundTransactions,
     });
-  }, [students, seatOrder, lockedSeats, seatSettings, dormitories, savedSeatHistory, loggedIn]);
+  }, [students, seatOrder, lockedSeats, seatSettings, dormitories, savedSeatHistory, fundTransactions, loggedIn]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -387,6 +390,40 @@ export default function App() {
     )));
   }
 
+  function handleAddFundTransaction(input: NewFundTxInput) {
+    const tx = createFundTransaction(input, students);
+    setFundTransactions(prev => [tx, ...prev]);
+  }
+
+  function handleUpdateFundTransaction(id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentId">>) {
+    setFundTransactions(prev => prev.map(tx => {
+      if (tx.id !== id) {
+        return tx;
+      }
+      const nextAmount = patch.amount !== undefined && Number.isFinite(patch.amount) ? Math.abs(patch.amount) : tx.amount;
+      const relatedId = patch.relatedStudentId !== undefined ? patch.relatedStudentId : tx.relatedStudentId;
+      const relatedStudent = relatedId ? students.find(s => s.id === relatedId) : undefined;
+      return {
+        ...tx,
+        type: patch.type ?? tx.type,
+        amount: nextAmount,
+        category: patch.category !== undefined ? patch.category : tx.category,
+        note: patch.note !== undefined ? patch.note : tx.note,
+        date: patch.date !== undefined ? patch.date : tx.date,
+        relatedStudentId: relatedId || undefined,
+        relatedStudentName: relatedStudent?.name,
+      };
+    }));
+  }
+
+  function handleDeleteFundTransaction(id: string) {
+    setFundTransactions(prev => prev.filter(tx => tx.id !== id));
+  }
+
+  function handleClearFundTransactions() {
+    setFundTransactions([]);
+  }
+
   function handleApplyStudentRecord(studentId: StudentId, record: StudentRecord, syncIds: StudentId[]) {
     const syncSet = new Set(syncIds.filter(id => id !== studentId));
     setStudents(prev => prev.map(student => {
@@ -433,6 +470,7 @@ export default function App() {
       seatSettings,
       dormitories,
       seatHistory: savedSeatHistory,
+      fundTransactions,
     });
   }
 
@@ -444,6 +482,7 @@ export default function App() {
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
     setDormitories(next.dormitories);
+    setFundTransactions(next.fundTransactions ?? []);
     setSavedSeatHistory(next.seatHistory);
     setSeatHistory([]);
     setSelectedStudent(null);
@@ -468,6 +507,7 @@ export default function App() {
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
     setDormitories(next.dormitories);
+    setFundTransactions(next.fundTransactions ?? []);
     setSavedSeatHistory(next.seatHistory);
     setSeatHistory([]);
     setSidebarTab("scores");
@@ -495,6 +535,7 @@ export default function App() {
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
     setDormitories(next.dormitories);
+    setFundTransactions(next.fundTransactions ?? []);
     setSavedSeatHistory(next.seatHistory);
     return true;
   }
@@ -518,6 +559,7 @@ export default function App() {
     setLockedSeats(new Set(next.lockedSeats));
     setSeatSettings(next.seatSettings);
     setDormitories(next.dormitories);
+    setFundTransactions(next.fundTransactions ?? []);
     setSavedSeatHistory(next.seatHistory);
     return true;
   }
@@ -888,6 +930,17 @@ export default function App() {
             onView={setSelectedHistorySnapshot}
             onApply={handleApplySeatHistory}
             onDelete={handleDeleteSeatHistory}
+          />
+        )}
+
+        {sidebarTab === "funds" && (
+          <ClassFundWorkspace
+            transactions={fundTransactions}
+            students={students}
+            onAdd={handleAddFundTransaction}
+            onUpdate={handleUpdateFundTransaction}
+            onDelete={handleDeleteFundTransaction}
+            onClearAll={handleClearFundTransactions}
           />
         )}
       </div>

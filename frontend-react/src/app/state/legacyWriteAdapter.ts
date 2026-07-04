@@ -1,6 +1,6 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
-import type { AppStudent, Dormitory, SavedGradeExamEntry, SavedGradeExamRecord, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
+import type { AppStudent, Dormitory, FundTransaction, SavedGradeExamEntry, SavedGradeExamRecord, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 interface PersistSnapshotInput {
   students: AppStudent[];
@@ -9,6 +9,7 @@ interface PersistSnapshotInput {
   seatSettings?: SeatSettings;
   seatHistory?: SeatHistorySnapshot[];
   dormitories?: Dormitory[];
+  fundTransactions?: FundTransaction[];
 }
 
 interface SaveGradeExamInput extends PersistSnapshotInput {
@@ -213,7 +214,7 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
   return syncedStudents;
 }
 
-export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories }: PersistSnapshotInput): boolean {
+export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions }: PersistSnapshotInput): boolean {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -230,6 +231,7 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSetti
     seatOrder,
     lockedSeats,
     dormitories: dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
+    fundTransactions: fundTransactions ?? (Array.isArray(baseState.fundTransactions) ? baseState.fundTransactions : []),
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams: Array.isArray(baseState.savedExams) ? baseState.savedExams : [],
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],

@@ -1,9 +1,9 @@
 import { type ReactNode } from "react";
-import { Archive, BarChart2, History, Home, LayoutGrid, MessageSquareText, Upload } from "lucide-react";
+import { Archive, BarChart2, History, Home, LayoutGrid, MessageSquareText, Upload, Wallet } from "lucide-react";
 
 import type { AppStudent, Dormitory, GradeExam, StudentId } from "../state/types";
 
-export type SidebarTab = "daily" | "dormitories" | "scores" | "data" | "history";
+export type SidebarTab = "daily" | "dormitories" | "scores" | "funds" | "data" | "history";
 
 interface Props {
   activeTab: SidebarTab;
@@ -39,6 +39,12 @@ const NAV_ITEMS: Array<{
     label: "成绩",
     icon: <BarChart2 className="h-4 w-4" />,
     getMeta: ({ gradeExams }) => `${gradeExams.length} 次考试`,
+  },
+  {
+    key: "funds",
+    label: "班费",
+    icon: <Wallet className="h-4 w-4" />,
+    getMeta: () => `收支流水`,
   },
   {
     key: "data",

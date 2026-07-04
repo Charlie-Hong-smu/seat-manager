@@ -1,5 +1,6 @@
 import { EXAMS, INITIAL_SEATS, SAMPLE_RECORDS, STUDENTS } from "../components/mockData";
 import { calculateDormScore } from "./dormitoryActions";
+import { normalizeFundTransactions } from "./classFundActions";
 import { getTagLabels, isAcademicTagLabel } from "./tagCatalog";
 import type {
   AppStudent,
@@ -7,6 +8,7 @@ import type {
   DormEvent,
   DormPeriodArchive,
   Dormitory,
+  FundTransaction,
   Gender,
   GradeExam,
   GradeRow,
@@ -639,6 +641,7 @@ export function createMockSeatManagerState(): SeatManagerState {
     lockedSeats: [],
     seatSettings: createDefaultSeatSettings(),
     dormitories: [],
+    fundTransactions: [],
     seatHistory: [],
     savedExams: EXAMS,
     exams: EXAMS,
@@ -660,6 +663,7 @@ export function createEmptySeatManagerState(): SeatManagerState {
     lockedSeats: [],
     seatSettings: createDefaultSeatSettings(),
     dormitories: [],
+    fundTransactions: [],
     seatHistory: [],
     savedExams: [],
     exams: [],
@@ -718,6 +722,7 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     lockedSeats: normalizeLockedSeats(raw.lockedSeats, seatOrder.length),
     seatSettings: normalizeSeatSettings(settings, normalizedStudents),
     dormitories: normalizedDormitories,
+    fundTransactions: normalizeFundTransactions(raw.fundTransactions),
     seatHistory: normalizeSeatHistory(raw.seatHistory),
     savedExams: toUnknownArray(raw.savedExams),
     exams: toUnknownArray(raw.exams),
