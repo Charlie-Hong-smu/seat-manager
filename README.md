@@ -6,13 +6,13 @@
 
 - 主应用源码：`frontend-react/`
 - GitHub Pages 部署后：React 新版在站点根路径。
-- 旧版原生前端：根目录旧版文件已移到垃圾箱；需要时也可从 Git 历史找回。
+- 根目录 `index.html`：仅用于 GitHub Pages 分支发布兜底，加载 `frontend-react/dist` 的 React 构建产物，不是旧版应用。
+- 旧版原生前端：旧版大文件已移到垃圾箱；需要时也可从 Git 历史找回。
 
 ## 旧版移除
 
 旧版原生前端已停止作为发布入口，并已从仓库工作区移除：
 
-- `index.html`
 - `style.css`
 - `app.js`
 - `manifest.webmanifest`
@@ -20,7 +20,7 @@
 - `avatar.jpg`
 - `vendor/`
 
-这些文件删除时先移入 macOS 垃圾箱，不是永久删除；提交后也仍可从 Git 历史恢复。`cloudflare-worker/` 是独立后端，不属于旧版前端。
+根目录新保留的 `index.html` 是一个很小的 React 启动页，用于防止 GitHub Pages 仍按分支根目录发布时渲染 README。旧版文件删除时先移入 macOS 垃圾箱，不是永久删除；提交后也仍可从 Git 历史恢复。`cloudflare-worker/` 是独立后端，不属于旧版前端。
 
 ## React 新版开发
 
