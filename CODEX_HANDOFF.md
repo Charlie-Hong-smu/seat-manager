@@ -78,7 +78,60 @@ COMMERCIAL_WORKER_URL=https://seat-manager-worker-proxy.netlify.app/api
 
 ---
 
-**注意**：如果部署后仍有问题，可能需要：
-1. 检查 Netlify 代理是否正常工作（可以用 curl 测试）
+## 🔴 真正的根因（2026-07-04 补充，Claude 定位）
+
+**症状**：商用站输入**正确**授权码 → 提示"请输入产品授权码"进不去；输入**错误**授权码 → 提示"授权码不正确"（正常）。
+
+**根因**：不是 CORS，不是授权码，不是 VPN。是 **Netlify 代理转发 gzip 响应时头没剥干净**。
+
+浏览器 Network 面板报错：
+```
+POST https://seat-manager-worker-proxy.netlify.app/api/license/auth
+net::ERR_CONTENT_DECODING_FAILED 200 (OK)
+```
+
+链路分析：
+- `worker-proxy.mjs` 用 `fetch()` 请求上游 Worker，fetch **自动把 gzip body 解压成明文**
+- 但转发时 `new Headers(response.headers)` **原样保留了上游的 `Content-Encoding: gzip`**
+- 浏览器收到"声明 gzip 但其实是明文"的响应 → 按 gzip 解压明文失败 → `ERR_CONTENT_DECODING_FAILED` → fetch reject → 前端落到兜底文案
+
+**为什么只有正确码触发**：
+- 错误码返回 403，body 极小，Cloudflare 不压缩 → 转发无损 → 浏览器能读 ✓
+- 正确码返回 200，body 较大（含 token/licenseId），Cloudflare gzip 压缩 → 触发上述 bug ✗
+
+**修复**：`netlify/functions/worker-proxy.mjs` 转发响应前删掉：
+```js
+headers.delete("content-encoding");
+headers.delete("content-length");
+headers.delete("transfer-encoding");
+```
+
+**部署方式**：该 Netlify 站点是用 **Netlify CLI 手动部署**（`.netlify/state.json` 有 siteId，未连 Git 自动部署）。修改后必须手动重新部署：
+```bash
+netlify deploy --prod
+```
+
+## 建议的后端加固（尚未做）
+
+Worker 顶层 `fetch()`（`deepseek-ai-worker.js:16`）**没有 try-catch**。任何 handler 抛异常会返回不带 CORS 头的运行时错误页，被浏览器当成 CORS 失败吞掉真实错误。建议包一层 try-catch，异常也返回带 corsHeaders 的 JSON，便于以后排查。
+
+---
+
+**其他排查提示**（如果部署后仍有问题）：
+1. 检查 Netlify 代理是否正常工作（curl POST 测试，注意接口要 POST，GET 会返回 405）
 2. 检查浏览器控制台的具体错误信息
 3. 清除浏览器 localStorage 中的 `seat-manager-ai-worker-url` 键（可能残留旧地址）
+
+---
+
+## 🔴 第二个问题：GitHub 自动部署 5 秒就失败（2026-07-04 补充）
+
+**症状**：push 后收到 GitHub 邮件，`changes` job 5 秒失败，后面三个部署 job 全部跳过 → 前端改动根本没上线，商用站一直是旧版本。
+
+**根因**：`cloudflare-commercial.yml` 的 `changes` job 里用 `git diff` 判断改了哪些目录。当一次 push 含多个 commit 时，浅克隆（`fetch-depth: 2`）里取不到对比基准提交 → `git diff` 报错 → 整个 job 挂掉。
+
+**修复**（两处）：
+1. checkout 改 `fetch-depth: 0`（拉全历史）
+2. `git diff` 前先用 `git cat-file -e` 检查基准提交是否存在，取不到就直接全量部署，不再让脚本崩溃
+
+**这两个问题是叠加的**：workflow 挂了导致前端没部署 + Netlify 代理 gzip bug，两个都修+部署后才能真正解决登录问题。

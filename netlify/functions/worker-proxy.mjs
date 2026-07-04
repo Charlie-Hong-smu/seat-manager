@@ -72,6 +72,12 @@ export default async (req, context) => {
   });
 
   const headers = new Headers(response.headers);
+  // fetch 已把上游响应体解码成明文,但 Content-Encoding / Content-Length 仍是压缩前的值。
+  // 若原样转发,浏览器会按 gzip 去解压明文,导致 ERR_CONTENT_DECODING_FAILED(表现为登录成功却进不去)。
+  // 这里删掉与编码/长度相关的头,让浏览器按未压缩的明文正确读取。
+  headers.delete("content-encoding");
+  headers.delete("content-length");
+  headers.delete("transfer-encoding");
   Object.entries(corsHeaders).forEach(([key, value]) => headers.set(key, value));
   return new Response(response.body, {
     status: response.status,

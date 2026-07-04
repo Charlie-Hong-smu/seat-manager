@@ -30,7 +30,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # 拉全历史,否则 git diff 在多提交 push / force push 时会因浅克隆缺 before 提交而失败。
+          fetch-depth: 0
 
       - name: Check Cloudflare secrets
         id: secrets
@@ -56,7 +57,17 @@ jobs:
             exit 0
           fi
 
-          git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" > /tmp/changed-files.txt
+          BEFORE="${{ github.event.before }}"
+          # 首次推送、force push 或浅克隆里取不到 before 提交时,git diff 会失败。
+          # 这种情况下无法可靠判断改了哪些目录,直接全部部署,避免 job 整体挂掉。
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "commercial_frontend=true" >> "$GITHUB_OUTPUT"
+            echo "worker=true" >> "$GITHUB_OUTPUT"
+            echo "license_admin=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --name-only "$BEFORE" "${{ github.sha }}" > /tmp/changed-files.txt
 
           if grep -Eq '^(frontend-react/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/changed-files.txt; then
             echo "commercial_frontend=true" >> "$GITHUB_OUTPUT"
