@@ -73,19 +73,25 @@ function SeatCard({
     }
   }
 
+  const row = Math.floor(seatIndex / COLS) + 1;
+  const col = (seatIndex % COLS) + 1;
+
   if (!studentId || !student) {
     return (
       <div
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        className={`rounded-xl border-2 border-dashed flex items-center justify-center text-gray-300 text-xs select-none transition-colors ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/40"} ${cardMode === "compact" ? "h-12" : "h-20"}`}
+        className={`rounded-xl border-2 border-dashed flex items-center justify-center text-gray-300 text-xs select-none transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/40"} ${cardMode === "compact" ? "h-12" : "h-20"}`}
       >
-        空
+        {cardMode === "detail" ? (
+          <span className="text-gray-300">{row}-{col}</span>
+        ) : "空"}
       </div>
     );
   }
 
   const genderDot = student.gender === "男" ? "bg-blue-400" : student.gender === "女" ? "bg-pink-400" : "bg-gray-300";
+  const hasTags = student.academicTags.length > 0;
 
   return (
     <div
@@ -98,11 +104,11 @@ function SeatCard({
       onDragEnd={() => onDragStateChange(null)}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={`relative w-full rounded-xl border border-gray-200 bg-white hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30 transition-all text-left group ${isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"} ${
-        isLocked ? "border-amber-300 bg-amber-50/30" : ""
-      } ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""} ${cardMode === "compact" ? "h-12 px-3" : "h-20 px-2.5 pt-2.5 pb-2"}`}
+      className={`relative w-full rounded-xl border bg-white hover:border-blue-300 hover:shadow-sm hover:bg-blue-50/30 text-left group transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] cursor-pointer ${
+        isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+      } ${isLocked ? "border-amber-300 bg-amber-50/30" : "border-gray-200"} ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""} ${cardMode === "compact" ? "h-12 px-2.5" : "h-20 px-2.5 pt-2 pb-2"}`}
     >
-      {/* Lock toggle: 锁定时常显(琥珀)，未锁定时悬停显示(灰)。单一元素、固定位置，避免点击后位移。 */}
+      {/* Lock toggle */}
       <button
         onClick={e => { e.stopPropagation(); onToggleLock(seatIndex); }}
         onMouseDown={e => e.stopPropagation()}
@@ -112,28 +118,30 @@ function SeatCard({
         <Lock className={`h-3 w-3 ${isLocked ? "text-amber-400" : "text-gray-300"}`} />
       </button>
 
-      {cardMode === "compact" ? (
-        <div className="flex items-center gap-2 h-full">
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderDot}`} />
-          <span className="min-w-0 flex-1 truncate text-sm text-gray-800" style={{ fontWeight: 600 }}>{student.name}</span>
-          {student.academicTags.length > 0 && (
-            <span className="shrink-0 text-xs text-gray-400 truncate hidden group-hover:block">{student.academicTags[0]}</span>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1 h-full">
-          <div className="flex items-center gap-1 min-w-0">
+      {/* 简洁模式：紧凑单行，只显示名字 */}
+      <div className={`flex items-center gap-1.5 h-full transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${cardMode === "compact" ? "opacity-100" : "opacity-0 h-0 overflow-hidden absolute"}`}>
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderDot}`} />
+        <span className="min-w-0 flex-1 truncate text-sm text-gray-800" style={{ fontWeight: 600 }}>{student.name}</span>
+      </div>
+
+      {/* 详细模式：多行，名字 + 标签 + 座位号 */}
+      <div className={`flex flex-col gap-1 h-full transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${cardMode === "detail" ? "opacity-100" : "opacity-0 h-0 overflow-hidden absolute"}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 min-w-0">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderDot}`} title={student.gender || "未知"} />
             <span className="min-w-0 flex-1 truncate text-sm text-gray-800" style={{ fontWeight: 700 }}>{student.name}</span>
           </div>
-          {student.academicTags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-auto">
-              {student.academicTags.slice(0, 2).map(tag => {
+          <span className="text-[10px] text-gray-300 tabular-nums shrink-0">{row}-{col}</span>
+        </div>
+        <div className="flex items-center justify-between mt-auto">
+          {hasTags ? (
+            <div className="flex flex-wrap gap-1">
+              {student.academicTags.slice(0, 3).map(tag => {
                 const isStrong = tag.endsWith("强");
                 return (
                   <span
                     key={tag}
-                    className={`text-xs px-1.5 py-0.5 rounded-full ${isStrong ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-red-50 text-red-400 border border-red-100"}`}
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full ${isStrong ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-red-50 text-red-400 border border-red-100"}`}
                     style={{ fontWeight: 600 }}
                   >
                     {tag}
@@ -141,9 +149,11 @@ function SeatCard({
                 );
               })}
             </div>
+          ) : (
+            <span className="text-[10px] text-gray-300">—</span>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

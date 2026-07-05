@@ -823,6 +823,7 @@ export default function App() {
               onRegenerate={handleRandomizeSeats}
               onApply={handleApplyShufflePreview}
               onClose={() => setShufflePreview(null)}
+              onSelectStudent={setSelectedStudent}
             />
           )}
 

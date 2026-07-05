@@ -21,6 +21,7 @@ interface Props {
   onRegenerate: () => void;
   onApply: () => void;
   onClose: () => void;
+  onSelectStudent?: (student: AppStudent) => void;
 }
 
 type DetailTab = "changed" | "required" | "gender" | "complement" | "front";
@@ -143,7 +144,7 @@ function renderFrontDetails(evaluation: SeatEvaluation) {
   );
 }
 
-export function SeatShufflePreview({ students, currentOrder, candidate, seatSettings, onOrderChange, onRegenerate, onApply, onClose }: Props) {
+export function SeatShufflePreview({ students, currentOrder, candidate, seatSettings, onOrderChange, onRegenerate, onApply, onClose, onSelectStudent }: Props) {
   const [activeDetail, setActiveDetail] = useState<DetailTab>("required");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
@@ -205,6 +206,11 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
                         onDragOver={event => event.preventDefault()}
                         onDrop={() => swapSeats(index)}
                         onDragEnd={() => setDragIndex(null)}
+                        onClick={() => {
+                          if (student && onSelectStudent) {
+                            onSelectStudent(student);
+                          }
+                        }}
                         className={`h-12 rounded-xl border px-2 text-left transition-colors ${
                           student ? "bg-white border-gray-200 hover:border-blue-200" : "bg-gray-50 border-dashed border-gray-200 text-gray-300"
                         } ${changedSet.has(index) ? "ring-2 ring-blue-100" : ""} ${dragIndex === index ? "opacity-50" : ""}`}
