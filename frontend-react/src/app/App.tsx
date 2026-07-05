@@ -401,14 +401,18 @@ export default function App() {
     setFundTransactions(prev => [tx, ...prev]);
   }
 
-  function handleUpdateFundTransaction(id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentId">>) {
+  function handleUpdateFundTransaction(id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds">>) {
     setFundTransactions(prev => prev.map(tx => {
       if (tx.id !== id) {
         return tx;
       }
       const nextAmount = patch.amount !== undefined && Number.isFinite(patch.amount) ? Math.abs(patch.amount) : tx.amount;
-      const relatedId = patch.relatedStudentId !== undefined ? patch.relatedStudentId : tx.relatedStudentId;
-      const relatedStudent = relatedId ? students.find(s => s.id === relatedId) : undefined;
+      const nextRelatedIds = patch.relatedStudentIds !== undefined ? patch.relatedStudentIds : tx.relatedStudentIds;
+      const resolved = (nextRelatedIds ?? [])
+        .map(rid => students.find(s => s.id === rid))
+        .filter((s): s is AppStudent => Boolean(s));
+      const relatedIds = resolved.map(s => s.id);
+      const relatedNames = resolved.map(s => s.name);
       return {
         ...tx,
         type: patch.type ?? tx.type,
@@ -416,8 +420,10 @@ export default function App() {
         category: patch.category !== undefined ? patch.category : tx.category,
         note: patch.note !== undefined ? patch.note : tx.note,
         date: patch.date !== undefined ? patch.date : tx.date,
-        relatedStudentId: relatedId || undefined,
-        relatedStudentName: relatedStudent?.name,
+        relatedStudentId: relatedIds[0],
+        relatedStudentName: relatedNames[0],
+        relatedStudentIds: relatedIds.length ? relatedIds : undefined,
+        relatedStudentNames: relatedNames.length ? relatedNames : undefined,
       };
     }));
   }

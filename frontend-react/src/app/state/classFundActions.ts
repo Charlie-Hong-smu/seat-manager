@@ -19,7 +19,8 @@ export interface NewFundTxInput {
   amount: number;
   category: string;
   note?: string;
-  relatedStudentId?: StudentId;
+  /** 多个关联学生 ID（支持多人）。 */
+  relatedStudentIds?: StudentId[];
   date?: string;
 }
 
@@ -49,17 +50,22 @@ export function calcBalance(transactions: FundTransaction[]): number {
 
 export function createFundTransaction(input: NewFundTxInput, students: AppStudent[]): FundTransaction {
   const amount = Number.isFinite(input.amount) ? Math.round(input.amount * 100) / 100 : 0;
-  const related = input.relatedStudentId
-    ? students.find(student => student.id === input.relatedStudentId)
-    : undefined;
+  const ids = (input.relatedStudentIds ?? []).filter(Boolean);
+  const resolved = ids
+    .map(id => students.find(student => student.id === id))
+    .filter((student): student is AppStudent => Boolean(student));
+  const relatedIds = resolved.map(student => student.id);
+  const relatedNames = resolved.map(student => student.name);
   return {
     id: createId("fund-tx"),
     type: input.type,
     amount: Math.abs(amount),
     category: input.category.trim() || (input.type === "income" ? "其他收入" : "其他支出"),
     note: input.note?.trim() || "",
-    relatedStudentId: related?.id,
-    relatedStudentName: related?.name,
+    relatedStudentId: relatedIds[0],
+    relatedStudentName: relatedNames[0],
+    relatedStudentIds: relatedIds.length ? relatedIds : undefined,
+    relatedStudentNames: relatedNames.length ? relatedNames : undefined,
     date: input.date || todayString(),
     createdAt: new Date().toISOString(),
   };
@@ -89,6 +95,12 @@ export function normalizeFundTransactions(raw: unknown): FundTransaction[] {
         note: typeof record.note === "string" ? record.note : "",
         relatedStudentId: typeof record.relatedStudentId === "string" ? record.relatedStudentId : undefined,
         relatedStudentName: typeof record.relatedStudentName === "string" ? record.relatedStudentName : undefined,
+        relatedStudentIds: Array.isArray(record.relatedStudentIds)
+          ? record.relatedStudentIds.filter((id: unknown): id is string => typeof id === "string" && Boolean(id))
+          : undefined,
+        relatedStudentNames: Array.isArray(record.relatedStudentNames)
+          ? record.relatedStudentNames.filter((n: unknown): n is string => typeof n === "string" && Boolean(n))
+          : undefined,
         date: typeof record.date === "string" ? record.date : todayString(),
         createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
       };

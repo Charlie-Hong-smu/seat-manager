@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
 
 import { FUND_EXPENSE_PRESETS, FUND_INCOME_PRESETS, type NewFundTxInput } from "../state/classFundActions";
 import type { AppStudent, FundTxType } from "../state/types";
@@ -16,7 +16,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
   const [note, setNote] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [showRelated, setShowRelated] = useState(false);
-  const [relatedId, setRelatedId] = useState("");
+  const [relatedIds, setRelatedIds] = useState<string[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
 
   const presets = type === "income" ? FUND_INCOME_PRESETS : FUND_EXPENSE_PRESETS;
@@ -37,6 +37,14 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
     setNote("");
   }
 
+  function toggleRelated(studentId: string) {
+    setRelatedIds(prev =>
+      prev.includes(studentId)
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    );
+  }
+
   function submit() {
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0) return;
@@ -45,12 +53,12 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
       amount: value,
       category,
       note: note || undefined,
-      relatedStudentId: relatedId || undefined,
+      relatedStudentIds: relatedIds.length > 0 ? relatedIds : undefined,
       date,
     });
     setAmount("");
     setNote("");
-    setRelatedId("");
+    setRelatedIds([]);
     setStudentSearch("");
     setShowRelated(false);
   }
@@ -59,7 +67,9 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
     ? students.filter(s => s.name.includes(studentSearch.trim()) || s.aliases.some(a => a.includes(studentSearch.trim())))
     : students;
 
-  const relatedStudent = students.find(s => s.id === relatedId);
+  const selectedRelatedStudents = relatedIds
+    .map(id => students.find(s => s.id === id))
+    .filter((s): s is AppStudent => Boolean(s));
 
   return (
     <div className="space-y-4">
@@ -134,7 +144,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
         className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-blue-300"
       />
 
-      {/* 关联学生（可展开，带动画） */}
+      {/* 关联学生（可展开，带动画，多选） */}
       <div>
         <button
           type="button"
@@ -142,14 +152,35 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
           className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-600"
         >
           <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showRelated ? "rotate-180" : ""}`} />
-          关联学生（可选）
-          {relatedStudent && <span className="text-blue-500">· {relatedStudent.name}</span>}
+          关联学生（可选，可多选）
+          {relatedIds.length > 0 && <span className="text-blue-500">· 已选 {relatedIds.length} 人</span>}
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${
-            showRelated ? "max-h-80 mt-3 opacity-100" : "max-h-0 mt-0 opacity-0"
+            showRelated ? "max-h-96 mt-3 opacity-100" : "max-h-0 mt-0 opacity-0"
           }`}
         >
+          {/* 已选学生药丸 */}
+          {selectedRelatedStudents.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {selectedRelatedStudents.map(student => (
+                <span
+                  key={student.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 py-0.5 pl-2.5 pr-1 text-xs font-semibold text-blue-700"
+                >
+                  {student.name}
+                  <button
+                    type="button"
+                    onClick={() => toggleRelated(student.id)}
+                    className="grid h-3.5 w-3.5 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {/* 搜索 */}
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -159,41 +190,29 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
               placeholder="搜索学生姓名"
             />
           </div>
+          {/* 学生列表（多选切换） */}
           <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-white py-1">
             {filteredStudents.length === 0 ? (
               <div className="py-3 text-center text-xs text-gray-400">无匹配学生</div>
             ) : (
-              filteredStudents.map(student => (
-                <button
-                  key={student.id}
-                  type="button"
-                  onClick={() => {
-                    setRelatedId(student.id);
-                    setStudentSearch(student.name);
-                  }}
-                  className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
-                    relatedId === student.id ? "bg-blue-50 text-blue-600" : "text-gray-700"
-                  }`}
-                >
-                  {student.name}
-                </button>
-              ))
+              filteredStudents.map(student => {
+                const selected = relatedIds.includes(student.id);
+                return (
+                  <button
+                    key={student.id}
+                    type="button"
+                    onClick={() => toggleRelated(student.id)}
+                    className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
+                      selected ? "bg-blue-50 text-blue-600" : "text-gray-700"
+                    }`}
+                  >
+                    {student.name}
+                    {selected && <Check className="h-3.5 w-3.5" />}
+                  </button>
+                );
+              })
             )}
           </div>
-          {relatedId && (
-            <div className="mt-2 flex items-center gap-2">
-              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
-                {relatedStudent?.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => { setRelatedId(""); setStudentSearch(""); }}
-                className="text-xs text-gray-400 hover:text-gray-600"
-              >
-                清除
-              </button>
-            </div>
-          )}
         </div>
       </div>
 

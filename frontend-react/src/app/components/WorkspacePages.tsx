@@ -673,7 +673,7 @@ export function ClassFundWorkspace({
   transactions: FundTransaction[];
   students: AppStudent[];
   onAdd: (input: NewFundTxInput) => void;
-  onUpdate: (id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentId">>) => void;
+  onUpdate: (id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds">>) => void;
   onDelete: (id: string) => void;
   onClearAll: () => void;
 }) {
@@ -874,8 +874,8 @@ export function ClassFundWorkspace({
                               {tx.note && (
                                 <span className="text-xs text-gray-400">{tx.note}</span>
                               )}
-                              {tx.relatedStudentName && (
-                                <span className="text-xs text-blue-500">@{tx.relatedStudentName}</span>
+                              {(tx.relatedStudentNames?.length ? tx.relatedStudentNames.join("、") : tx.relatedStudentName) && (
+                                <span className="text-xs text-blue-500">@{tx.relatedStudentNames?.length ? tx.relatedStudentNames.join("、") : tx.relatedStudentName}</span>
                               )}
                             </div>
                             <div className="mt-0.5 text-xs text-gray-400">{tx.date}</div>

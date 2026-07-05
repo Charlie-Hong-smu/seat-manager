@@ -65,8 +65,14 @@ export interface FundTransaction {
   amount: number;
   category: string;
   note: string;
+  /** @deprecated 旧字段，仅保留向后兼容（单个关联学生）。新数据请用 relatedStudentIds。 */
   relatedStudentId?: StudentId;
+  /** @deprecated 旧字段，仅保留向后兼容。 */
   relatedStudentName?: string;
+  /** 多个关联学生 ID（新）。 */
+  relatedStudentIds?: StudentId[];
+  /** 多个关联学生姓名（新）。 */
+  relatedStudentNames?: string[];
   date: string;
   createdAt: string;
 }
