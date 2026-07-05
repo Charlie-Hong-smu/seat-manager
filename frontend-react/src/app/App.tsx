@@ -309,18 +309,22 @@ export default function App() {
       events: [event, ...dormitory.events].slice(0, 200),
     });
     setDormitories(prev => prev.map(item => (item.id === dormitory.id ? nextDormitory : item)));
-    const record = input.recordToStudent === false ? null : createDormStudentRecord(event, nextDormitory);
-    if (record && event.responsibleStudentId) {
-      setStudents(prev => prev.map(student => (
-        student.id === event.responsibleStudentId
-          ? { ...student, records: [record, ...student.records] }
-          : student
-      )));
-      setSelectedStudent(prev => (
-        prev?.id === event.responsibleStudentId
-          ? { ...prev, records: [record, ...prev.records] }
-          : prev
-      ));
+    // 同时把这条事件写入每个责任人的个人奖惩档案
+    const shouldRecord = input.recordToStudent !== false;
+    const responsibleIds = event.responsibleStudentIds
+      ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []);
+    if (shouldRecord && responsibleIds.length > 0) {
+      const idSet = new Set(responsibleIds);
+      setStudents(prev => prev.map(student => {
+        if (!idSet.has(student.id)) return student;
+        const record = createDormStudentRecord(event, nextDormitory, student.id);
+        return record ? { ...student, records: [record, ...student.records] } : student;
+      }));
+      setSelectedStudent(prev => {
+        if (!prev || !idSet.has(prev.id)) return prev;
+        const record = createDormStudentRecord(event, nextDormitory, prev.id);
+        return record ? { ...prev, records: [record, ...prev.records] } : prev;
+      });
     }
     return event;
   }
@@ -339,7 +343,7 @@ export default function App() {
           ...event,
           reason: patch.reason !== undefined ? patch.reason.trim() || event.reason : event.reason,
           score: nextScore,
-          type: nextScore > 0 ? "reward" : nextScore < 0 ? "punish" : "note",
+          type: nextScore > 0 ? "reward" as const : nextScore < 0 ? "punish" as const : "note" as const,
           note: patch.note !== undefined ? patch.note.trim() : event.note,
           punishment: patch.punishment !== undefined ? patch.punishment.trim() : event.punishment,
           punishmentDone: patch.punishmentDone !== undefined ? patch.punishmentDone : event.punishmentDone,
@@ -350,31 +354,33 @@ export default function App() {
   }
 
   function handleDeleteDormEvent(dormId: string, eventId: string) {
-    let responsibleStudentId: StudentId | undefined;
+    let responsibleIds: StudentId[] = [];
     setDormitories(prev => prev.map(dormitory => {
       if (dormitory.id !== dormId) {
         return dormitory;
       }
       const target = dormitory.events.find(event => event.id === eventId);
-      responsibleStudentId = target?.responsibleStudentId;
+      responsibleIds = target?.responsibleStudentIds
+        ?? (target?.responsibleStudentId ? [target.responsibleStudentId] : []);
       return normalizeDormitoryScore({
         ...dormitory,
         events: dormitory.events.filter(event => event.id !== eventId),
       });
     }));
-    // 删除事件时，一并清掉当初联动写入责任人个人档案的那条记录（id 为 record-<eventId>），保持一致。
-    if (responsibleStudentId) {
-      const linkedRecordId = `record-${eventId}`;
-      setStudents(prev => prev.map(student => (
-        student.id === responsibleStudentId
-          ? { ...student, records: student.records.filter(record => record.id !== linkedRecordId) }
-          : student
-      )));
-      setSelectedStudent(prev => (
-        prev?.id === responsibleStudentId
-          ? { ...prev, records: prev.records.filter(record => record.id !== linkedRecordId) }
-          : prev
-      ));
+    // 删除事件时，一并清掉当初联动写入每个责任人个人档案的记录
+    if (responsibleIds.length > 0) {
+      const idSet = new Set(responsibleIds);
+      // 兼容新旧两种 record id 格式
+      const isLinkedRecord = (recordId: string) =>
+        recordId === `record-${eventId}` || responsibleIds.some(sid => recordId === `record-${eventId}-${sid}`);
+      setStudents(prev => prev.map(student => {
+        if (!idSet.has(student.id)) return student;
+        return { ...student, records: student.records.filter(record => !isLinkedRecord(record.id)) };
+      }));
+      setSelectedStudent(prev => {
+        if (!prev || !idSet.has(prev.id)) return prev;
+        return { ...prev, records: prev.records.filter(record => !isLinkedRecord(record.id)) };
+      });
     }
   }
 

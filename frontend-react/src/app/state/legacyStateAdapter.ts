@@ -114,6 +114,12 @@ function normalizeDormEvent(value: unknown, index: number, dormId: string): Dorm
     reason: reason || "宿舍记录",
     responsibleStudentId: toStudentId(value.responsibleStudentId) || undefined,
     responsibleStudentName: toStringValue(value.responsibleStudentName) || undefined,
+    responsibleStudentIds: Array.isArray(value.responsibleStudentIds)
+      ? value.responsibleStudentIds.map((id: unknown) => toStudentId(id)).filter(Boolean)
+      : undefined,
+    responsibleStudentNames: Array.isArray(value.responsibleStudentNames)
+      ? value.responsibleStudentNames.map((n: unknown) => toStringValue(n)).filter(Boolean)
+      : undefined,
     note: toStringValue(value.note),
     punishment: toStringValue(value.punishment) || undefined,
     punishmentDone: value.punishmentDone === true,

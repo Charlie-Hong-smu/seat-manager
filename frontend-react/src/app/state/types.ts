@@ -18,8 +18,14 @@ export interface DormEvent {
   type: DormEventType;
   score: number;
   reason: string;
+  /** @deprecated 旧字段，仅保留向后兼容（单个责任人）。新数据请用 responsibleStudentIds。 */
   responsibleStudentId?: StudentId;
+  /** @deprecated 旧字段，仅保留向后兼容。 */
   responsibleStudentName?: string;
+  /** 多个责任人 ID（新）。 */
+  responsibleStudentIds?: StudentId[];
+  /** 多个责任人姓名（新）。 */
+  responsibleStudentNames?: string[];
   note: string;
   /** 老师拟定的处罚措施（可选）。 */
   punishment?: string;

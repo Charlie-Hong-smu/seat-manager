@@ -13,7 +13,8 @@ export interface NewDormEventInput {
   dormId: string;
   score: number;
   reason: string;
-  responsibleStudentId?: StudentId;
+  /** 多个责任人 ID（支持多人）。 */
+  responsibleStudentIds?: StudentId[];
   note?: string;
   date?: string;
   /** 老师拟定的处罚措施（可选）。 */
@@ -93,17 +94,23 @@ export function closeDormitoryPeriod(dormitory: Dormitory, options: { carryOver?
 
 export function createDormEvent(input: NewDormEventInput, students: AppStudent[]): DormEvent {
   const score = Number.isFinite(input.score) ? Math.round(input.score * 10) / 10 : 0;
-  const responsible = input.responsibleStudentId
-    ? students.find(student => student.id === input.responsibleStudentId)
-    : undefined;
+  const ids = (input.responsibleStudentIds ?? []).filter(Boolean);
+  const resolved = ids
+    .map(id => students.find(student => student.id === id))
+    .filter((student): student is AppStudent => Boolean(student));
+  const responsibleIds = resolved.map(student => student.id);
+  const responsibleNames = resolved.map(student => student.name);
   return {
     id: createId("dorm-event"),
     dormId: input.dormId,
     type: score > 0 ? "reward" : score < 0 ? "punish" : "note",
     score,
     reason: input.reason.trim() || "宿舍记录",
-    responsibleStudentId: responsible?.id,
-    responsibleStudentName: responsible?.name,
+    // 向后兼容：保留单值字段（取第一个）
+    responsibleStudentId: responsibleIds[0],
+    responsibleStudentName: responsibleNames[0],
+    responsibleStudentIds: responsibleIds.length ? responsibleIds : undefined,
+    responsibleStudentNames: responsibleNames.length ? responsibleNames : undefined,
     note: input.note?.trim() || "",
     punishment: input.punishment?.trim() || "",
     punishmentDone: false,
@@ -112,8 +119,8 @@ export function createDormEvent(input: NewDormEventInput, students: AppStudent[]
   };
 }
 
-export function createDormStudentRecord(event: DormEvent, dormitory: Dormitory): StudentRecord | null {
-  if (!event.responsibleStudentId || event.score === 0) {
+export function createDormStudentRecord(event: DormEvent, dormitory: Dormitory, studentId: StudentId): StudentRecord | null {
+  if (!studentId || event.score === 0) {
     return null;
   }
   const action = event.score > 0 ? "加分" : "扣分";
@@ -122,7 +129,7 @@ export function createDormStudentRecord(event: DormEvent, dormitory: Dormitory):
     noteParts.push(event.note);
   }
   return {
-    id: `record-${event.id}`,
+    id: `record-${event.id}-${studentId}`,
     type: event.score > 0 ? "reward" : "punish",
     note: noteParts.join(" · "),
     date: event.date,

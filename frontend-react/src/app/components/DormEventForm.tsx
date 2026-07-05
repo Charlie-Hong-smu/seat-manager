@@ -27,12 +27,13 @@ export function DormEventForm({ members, lockedResponsible, submitLabel = "‰øùÂ≠
     if (!reason.trim()) {
       return;
     }
+    const effectiveId = lockedResponsible?.id || responsibleId;
     onSubmit({
       reason,
       score,
       note,
       punishment,
-      responsibleStudentId: lockedResponsible?.id || responsibleId || undefined,
+      responsibleStudentIds: effectiveId ? [effectiveId] : undefined,
       recordToStudent: canSync ? recordToStudent : false,
     });
     setNote("");
