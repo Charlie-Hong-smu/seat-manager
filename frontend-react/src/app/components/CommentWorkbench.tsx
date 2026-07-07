@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Play, Pause, Copy, Search, Sparkles, Save, Plus, Clock3, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Play, Pause, Copy, Search, Sparkles, Save, Plus, Clock3, AlertCircle, CheckCircle2, Download, Check } from "lucide-react";
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
@@ -104,9 +104,10 @@ interface Props {
 }
 
 const LENGTH_MODES = [
-  { value: "short",    label: "80～100 字" },
-  { value: "standard", label: "100～150 字" },
-  { value: "long",     label: "150～200 字" },
+  { value: "short",    label: "80～100" },
+  { value: "standard", label: "100～150" },
+  { value: "long",     label: "150～200" },
+  { value: "custom",   label: "自选" },
 ];
 
 const STYLES = [
@@ -169,6 +170,10 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiAuth());
   const [aiStatus, setAiStatus] = useState("AI 会使用学生成绩、标签和教师补充评价生成。");
+  const [customWordCount, setCustomWordCount] = useState(120);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<StudentId>>(() => new Set());
+  const [exportFormat, setExportFormat] = useState<"csv" | "txt">("csv");
   const pauseRequested = useRef(false);
   const batchProgress = batchState.total ? Math.round((batchState.done / batchState.total) * 100) : 0;
   const resumableCount = batchState.queue.length + batchState.failed.length;
@@ -275,7 +280,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       teacherNote: draftTeacherNote,
       style: comment.style as "warm" | "formal" | "brief",
       lengthMode: comment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: 120,
+      targetWordCount: comment.lengthMode === "custom" ? customWordCount : comment.lengthMode === "long" ? 175 : comment.lengthMode === "standard" ? 125 : 90,
       updatedAt: new Date().toISOString(),
       criteriaSummary: summary.criteriaSummary,
       customOptions: summary.customOptions,
@@ -351,7 +356,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       teacherNote,
       style: selectedComment.style as "warm" | "formal" | "brief",
       lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: 120,
+      targetWordCount: selectedComment.lengthMode === "custom" ? customWordCount : selectedComment.lengthMode === "long" ? 175 : selectedComment.lengthMode === "standard" ? 125 : 90,
       updatedAt: new Date().toISOString(),
     });
     updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
@@ -685,6 +690,32 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     downloadTextFile(`期末评语-${new Date().toISOString().slice(0, 10)}.csv`, content, "text/csv;charset=utf-8");
   }
 
+  function exportSelectedComments(format: "csv" | "txt") {
+    const chosen = students.filter(s => exportSelectedIds.has(s.id));
+    if (chosen.length === 0) return;
+    if (format === "txt") {
+      const text = chosen
+        .map(s => {
+          const state = comments.find(c => c.studentId === s.id);
+          return `【${s.name}】\n${state?.text || ""}`;
+        })
+        .join("\n\n");
+      downloadTextFile(`期末评语-${new Date().toISOString().slice(0, 10)}.txt`, text, "text/plain;charset=utf-8");
+    } else {
+      const rows = [
+        ["姓名", "状态", "字数", "评语"],
+        ...chosen.map(s => {
+          const state = comments.find(c => c.studentId === s.id);
+          const status = state?.failed ? "失败待重试" : state?.generated ? "已生成" : state?.needsInfo ? "需补充" : "待生成";
+          return [s.name, status, state?.text.length || 0, state?.text || ""];
+        }),
+      ];
+      const content = `\ufeff${rows.map(row => row.map(csvEscape).join(",")).join("\n")}`;
+      downloadTextFile(`期末评语-${new Date().toISOString().slice(0, 10)}.csv`, content, "text/csv;charset=utf-8");
+    }
+    setShowExportModal(false);
+  }
+
   const tagSummary = (s: AppStudent) =>
     s.academicTags.length > 0 ? s.academicTags.slice(0, 2).join("、") : "暂无标签";
 
@@ -776,6 +807,13 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
             >
               {batchRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
               {batchButtonLabel}
+            </button>
+            <button
+              onClick={() => { setExportSelectedIds(new Set(students.map(s => s.id))); setShowExportModal(true); }}
+              className="flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+              style={{ fontWeight: 800 }}
+            >
+              <Download className="h-4 w-4" />导出
             </button>
             <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600">
               <X className="h-5 w-5" />
@@ -986,7 +1024,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
             <h4 className="text-sm text-gray-800" style={{ fontWeight: 900 }}>生成评语</h4>
             <div className="mt-4">
               <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>字数目标</div>
-              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-gray-100 p-1">
+              <div className="grid grid-cols-4 gap-1.5 rounded-2xl bg-gray-100 p-1">
                 {LENGTH_MODES.map(mode => (
                   <button
                     key={mode.value}
@@ -998,6 +1036,22 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                   </button>
                 ))}
               </div>
+              {selectedComment.lengthMode === "custom" && (
+                <div className="mt-2">
+                  <input
+                    type="number"
+                    value={customWordCount}
+                    onChange={e => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v) && v > 0) setCustomWordCount(v);
+                    }}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium outline-none focus:border-blue-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    placeholder="自定义字数"
+                    min={10}
+                    max={999}
+                  />
+                </div>
+              )}
             </div>
             <div className="mt-4">
               <div className="mb-2 text-xs text-gray-500" style={{ fontWeight: 800 }}>评语风格</div>
@@ -1106,6 +1160,94 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           </section>
         </aside>
       </div>
+
+      {showExportModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowExportModal(false)}
+        >
+          <div
+            className="flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3.5">
+              <h3 className="text-base text-gray-900" style={{ fontWeight: 800 }}>导出评语</h3>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="grid h-8 w-8 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
+              <button
+                onClick={() => setExportSelectedIds(prev => (prev.size === students.length ? new Set() : new Set(students.map(s => s.id))))}
+                className="flex items-center gap-2 text-sm text-gray-700"
+                style={{ fontWeight: 800 }}
+              >
+                <span className={`grid h-4 w-4 place-items-center rounded border ${exportSelectedIds.size === students.length ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300"}`}>
+                  {exportSelectedIds.size === students.length && <Check className="h-3 w-3" />}
+                </span>
+                全选
+              </button>
+              <span className="text-xs text-gray-400">已选 {exportSelectedIds.size} / {students.length} 人</span>
+            </div>
+
+            <div className="max-h-80 flex-1 overflow-y-auto border-b border-gray-100 px-2 py-1">
+              {students.map(student => {
+                const state = comments.find(c => c.studentId === student.id);
+                const checked = exportSelectedIds.has(student.id);
+                return (
+                  <button
+                    key={student.id}
+                    onClick={() => setExportSelectedIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(student.id)) next.delete(student.id);
+                      else next.add(student.id);
+                      return next;
+                    })}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
+                  >
+                    <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${checked ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300"}`}>
+                      {checked && <Check className="h-3 w-3" />}
+                    </span>
+                    <span className="flex-1 text-sm text-gray-800">{student.name}</span>
+                    <span className="text-xs text-gray-400">{state?.generated ? `${state.text.length} 字` : "未生成"}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-3 px-5 py-3.5">
+              <div className="flex rounded-xl border border-gray-200 p-0.5">
+                <button
+                  onClick={() => setExportFormat("csv")}
+                  className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${exportFormat === "csv" ? "bg-blue-600 text-white" : "text-gray-500"}`}
+                  style={{ fontWeight: 800 }}
+                >
+                  CSV
+                </button>
+                <button
+                  onClick={() => setExportFormat("txt")}
+                  className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${exportFormat === "txt" ? "bg-blue-600 text-white" : "text-gray-500"}`}
+                  style={{ fontWeight: 800 }}
+                >
+                  纯文本
+                </button>
+              </div>
+              <button
+                onClick={() => exportSelectedComments(exportFormat)}
+                disabled={exportSelectedIds.size === 0}
+                className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm text-white transition-colors hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"
+                style={{ fontWeight: 800 }}
+              >
+                {exportSelectedIds.size > 0 ? `导出 ${exportSelectedIds.size} 人` : "导出"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,20 +11,32 @@ export function getWorkerBaseUrl(): string {
   const defaultUrl = normalizeWorkerUrl(getDefaultWorkerUrl());
   const isCommercial = env.VITE_EDITION?.trim() === "commercial";
   const hasCommercialWorkerUrl = isCommercial && defaultUrl !== normalizeWorkerUrl(DEFAULT_WORKER_URL);
-  if (hasCommercialWorkerUrl) {
+  if (hasCommercialWorkerUrl && !isSameOriginApiUrl(defaultUrl)) {
     return defaultUrl;
   }
   if (typeof window === "undefined" || !window.localStorage) {
-    return defaultUrl;
+    return isSameOriginApiUrl(defaultUrl) ? normalizeWorkerUrl(DEFAULT_WORKER_URL) : defaultUrl;
   }
   const configuredUrl = normalizeWorkerUrl(window.localStorage.getItem(WORKER_URL_KEY) || "");
   const legacyDefaultUrl = normalizeWorkerUrl(DEFAULT_WORKER_URL);
-  if (configuredUrl && !(configuredUrl === legacyDefaultUrl && defaultUrl !== legacyDefaultUrl)) {
+  if (configuredUrl && !isSameOriginApiUrl(configuredUrl) && !(configuredUrl === legacyDefaultUrl && defaultUrl !== legacyDefaultUrl)) {
     return configuredUrl;
   }
-  return defaultUrl;
+  return isSameOriginApiUrl(defaultUrl) ? legacyDefaultUrl : defaultUrl;
 }
 
 function normalizeWorkerUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
+}
+
+function isSameOriginApiUrl(url: string): boolean {
+  if (typeof window === "undefined" || !url) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.origin === window.location.origin && parsed.pathname.replace(/\/+$/, "") === "/api";
+  } catch {
+    return false;
+  }
 }

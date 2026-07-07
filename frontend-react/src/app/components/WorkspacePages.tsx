@@ -41,6 +41,8 @@ import {
   detectScoreMapping,
   parseRowsWithMapping,
   readRowsFromFile,
+  SUBJECT_ORDER,
+  type ScoreMapping,
 } from "../state/scoreImport";
 import type { RosterImportOptions, RosterImportResult } from "../state/rosterImport";
 import type { AiClassTrendResult } from "../state/aiTrendService";
@@ -170,33 +172,24 @@ export function DailyWorkspace({
         </div>
         <aside className="min-h-0 space-y-4 overflow-y-auto">
           <Panel title="排座">
-            <div className="space-y-3">
+            <div className="flex gap-2">
               {(() => {
                 const c = seatSettings.constraints;
                 const activeCount = c.lockedDeskmatePairs.length + c.noDeskmatePairs.length + c.frontRowStudentIds.length + seatSettings.complementRuleIds.length + (seatSettings.pairByGender ? 1 : 0);
                 return (
-                  <button onClick={() => setShowSeatSettings(true)} className="w-full rounded-xl bg-blue-600 py-2.5 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>
+                  <button onClick={() => setShowSeatSettings(true)} className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>
                     <Shuffle className="mr-1.5 inline h-4 w-4 -mt-0.5" />排座
                     {activeCount > 0 && <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-xs">{activeCount}</span>}
                   </button>
                 );
               })()}
-              <div className="flex gap-2">
-                <button
-                  onClick={onRandomizeSeats}
-                  disabled={!canUndoSeatOrder}
-                  className="flex-1 rounded-xl border border-blue-200 bg-blue-50 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-100 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
-                >
-                  随机
-                </button>
-                <button
-                  onClick={onUndoSeatOrder}
-                  disabled={!canUndoSeatOrder}
-                  className="flex-1 rounded-xl border border-gray-200 bg-white py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
-                >
-                  撤销
-                </button>
-              </div>
+              <button
+                onClick={onUndoSeatOrder}
+                disabled={!canUndoSeatOrder}
+                className="flex-1 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+              >
+                撤销
+              </button>
             </div>
           </Panel>
 
@@ -523,6 +516,8 @@ export function ScoresWorkspace({
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
   const [scoreRows, setScoreRows] = useState<string[][]>([]);
   const [scoreFilename, setScoreFilename] = useState("");
+  const [manualMapping, setManualMapping] = useState<ScoreMapping | null>(null);
+  const [manualMappingOpen, setManualMappingOpen] = useState(false);
   const [scoreStatus, setScoreStatus] = useState("");
   const [examName, setExamName] = useState("");
   const [examDate, setExamDate] = useState(new Date().toISOString().slice(0, 10));
@@ -546,6 +541,7 @@ export function ScoresWorkspace({
     try {
       const rows = await readRowsFromFile(file);
       const mapping = detectScoreMapping(rows);
+      setManualMapping(mapping);
       const nextDraft = {
         ...parseRowsWithMapping(rows, mapping),
         filename: file.name,
@@ -559,6 +555,7 @@ export function ScoresWorkspace({
     } catch (error) {
       try {
         const rows = await readRowsFromFile(file);
+        setManualMapping(detectScoreMapping(rows));
         setScoreRows(rows);
         setScoreFilename(file.name);
         setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
@@ -566,9 +563,34 @@ export function ScoresWorkspace({
       } catch {
         setScoreRows([]);
         setScoreFilename("");
+        setManualMapping(null);
       }
       setDraft(null);
       setScoreStatus(error instanceof Error && error.message === "mapping_failed" ? "未能自动识别姓名或科目列，可尝试 AI 识别列。" : "成绩表解析失败，请检查文件格式。");
+    }
+  }
+
+  function updateManualMapping(updater: (mapping: ScoreMapping) => ScoreMapping) {
+    if (!manualMapping && scoreRows.length) {
+      setManualMapping(updater(detectScoreMapping(scoreRows)));
+      return;
+    }
+    if (manualMapping) {
+      setManualMapping(updater(manualMapping));
+    }
+  }
+
+  function applyManualMapping() {
+    if (!manualMapping || !scoreRows.length) {
+      setScoreStatus("请先上传成绩表并设置映射。");
+      return;
+    }
+    try {
+      const nextDraft = buildScoreImportDraftFromRows(scoreRows, scoreFilename, manualMapping);
+      setDraft(nextDraft);
+      setScoreStatus(`已应用手动映射：${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。`);
+    } catch {
+      setScoreStatus("手动映射无法应用，请至少选择姓名列和一个科目分数列。");
     }
   }
 
@@ -598,6 +620,8 @@ export function ScoresWorkspace({
         remember: aiMappingRemember,
       });
       setAiMappingSuggestion(suggestion);
+      setManualMapping(suggestion.mapping);
+      setManualMappingOpen(true);
       setAiMappingAccessCode("");
       setHasAiMappingAuth(true);
       setScoreStatus(suggestion.note);
@@ -617,6 +641,7 @@ export function ScoresWorkspace({
     try {
       const nextDraft = buildScoreImportDraftFromRows(scoreRows, scoreFilename, aiMappingSuggestion.mapping);
       setDraft(nextDraft);
+      setManualMapping(aiMappingSuggestion.mapping);
       setAiMappingSuggestion(null);
       setScoreStatus(`已应用 AI 识别结果：${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。`);
     } catch {
@@ -633,6 +658,8 @@ export function ScoresWorkspace({
     setDraft(null);
     setScoreRows([]);
     setScoreFilename("");
+    setManualMapping(null);
+    setManualMappingOpen(false);
     setAiMappingSuggestion(null);
     setScoreStatus(saved ? `已保存「${saved.name}」。` : "保存失败。");
   }
@@ -658,6 +685,12 @@ export function ScoresWorkspace({
     }
   }
 
+  const scoreHeaders = scoreRows[0] || [];
+  const columnOptions = scoreHeaders.map((header, index) => ({
+    value: index,
+    label: `${index + 1}. ${header || "空列"}`,
+  }));
+
   return (
     <div className="flex h-full flex-col bg-gray-50">
       <div className="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)] gap-4 overflow-hidden p-4">
@@ -673,6 +706,153 @@ export function ScoresWorkspace({
                   <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
                   <input type="date" value={examDate} onChange={event => setExamDate(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" />
                   <Button onClick={saveDraft} className="w-full">保存考试</Button>
+                </div>
+              )}
+              {scoreRows.length > 0 && manualMapping && (
+                <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                  <button
+                    type="button"
+                    onClick={() => setManualMappingOpen(value => !value)}
+                    className="flex w-full items-center justify-between gap-2 text-left text-sm text-gray-700"
+                    style={{ fontWeight: 900 }}
+                  >
+                    <span>手动调整映射</span>
+                    <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${manualMappingOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {manualMappingOpen && (
+                    <div className="mt-3 space-y-3">
+                      <label className="block text-xs text-gray-500" style={{ fontWeight: 800 }}>
+                        姓名列
+                        <select
+                          value={manualMapping.nameCol}
+                          onChange={event => updateManualMapping(mapping => ({ ...mapping, nameCol: Number(event.target.value) }))}
+                          className="mt-1 h-9 w-full rounded-xl border border-gray-200 bg-white px-2 text-sm text-gray-700 outline-none focus:border-blue-300"
+                        >
+                          <option value={-1}>未选择</option>
+                          {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </label>
+
+                      <div className="space-y-2">
+                        <div className="text-xs text-gray-500" style={{ fontWeight: 800 }}>科目分数列</div>
+                        {manualMapping.subjectMappings.map((item, index) => (
+                          <div key={`${item.subject}-${index}`} className="rounded-xl border border-gray-100 bg-white p-2">
+                            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                              <select
+                                value={item.subject}
+                                onChange={event => updateManualMapping(mapping => ({
+                                  ...mapping,
+                                  subjectMappings: mapping.subjectMappings.map((current, currentIndex) => currentIndex === index ? { ...current, subject: event.target.value } : current),
+                                }))}
+                                className="h-9 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm outline-none focus:border-blue-300"
+                              >
+                                {SUBJECT_ORDER.map(subject => <option key={subject} value={subject}>{subject}</option>)}
+                              </select>
+                              <select
+                                value={item.scoreCol}
+                                onChange={event => updateManualMapping(mapping => ({
+                                  ...mapping,
+                                  subjectMappings: mapping.subjectMappings.map((current, currentIndex) => currentIndex === index ? { ...current, scoreCol: Number(event.target.value) } : current),
+                                }))}
+                                className="h-9 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm outline-none focus:border-blue-300"
+                              >
+                                <option value={-1}>分数列</option>
+                                {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => updateManualMapping(mapping => ({ ...mapping, subjectMappings: mapping.subjectMappings.filter((_, currentIndex) => currentIndex !== index) }))}
+                                className="h-9 rounded-lg px-2 text-xs text-red-400 hover:bg-red-50"
+                                style={{ fontWeight: 800 }}
+                              >
+                                删除
+                              </button>
+                            </div>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              <select
+                                value={item.rankClassCol}
+                                onChange={event => updateManualMapping(mapping => ({
+                                  ...mapping,
+                                  subjectMappings: mapping.subjectMappings.map((current, currentIndex) => currentIndex === index ? { ...current, rankClassCol: Number(event.target.value) } : current),
+                                }))}
+                                className="h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-xs outline-none focus:border-blue-300"
+                              >
+                                <option value={-1}>班排列（可选）</option>
+                                {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                              </select>
+                              <select
+                                value={item.rankSchoolCol}
+                                onChange={event => updateManualMapping(mapping => ({
+                                  ...mapping,
+                                  subjectMappings: mapping.subjectMappings.map((current, currentIndex) => currentIndex === index ? { ...current, rankSchoolCol: Number(event.target.value) } : current),
+                                }))}
+                                className="h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-xs outline-none focus:border-blue-300"
+                              >
+                                <option value={-1}>校排列（可选）</option>
+                                {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => updateManualMapping(mapping => ({
+                            ...mapping,
+                            subjectMappings: [...mapping.subjectMappings, { subject: SUBJECT_ORDER[0], scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }],
+                          }))}
+                          className="w-full rounded-xl border border-dashed border-gray-200 bg-white py-2 text-sm text-gray-500 hover:bg-gray-50"
+                          style={{ fontWeight: 800 }}
+                        >
+                          添加科目
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <label className="block text-xs text-gray-500" style={{ fontWeight: 800 }}>
+                          总分列
+                          <select
+                            value={manualMapping.totalMapping.scoreCol}
+                            onChange={event => updateManualMapping(mapping => ({ ...mapping, totalMapping: { ...mapping.totalMapping, scoreCol: Number(event.target.value) } }))}
+                            className="mt-1 h-9 w-full rounded-xl border border-gray-200 bg-white px-2 text-sm outline-none focus:border-blue-300"
+                          >
+                            <option value={-1}>可选</option>
+                            {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="block text-xs text-gray-500" style={{ fontWeight: 800 }}>
+                          总班排
+                          <select
+                            value={manualMapping.totalMapping.rankClassCol}
+                            onChange={event => updateManualMapping(mapping => ({ ...mapping, totalMapping: { ...mapping.totalMapping, rankClassCol: Number(event.target.value) } }))}
+                            className="mt-1 h-9 w-full rounded-xl border border-gray-200 bg-white px-2 text-sm outline-none focus:border-blue-300"
+                          >
+                            <option value={-1}>可选</option>
+                            {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="block text-xs text-gray-500" style={{ fontWeight: 800 }}>
+                          总校排
+                          <select
+                            value={manualMapping.totalMapping.rankSchoolCol}
+                            onChange={event => updateManualMapping(mapping => ({ ...mapping, totalMapping: { ...mapping.totalMapping, rankSchoolCol: Number(event.target.value) } }))}
+                            className="mt-1 h-9 w-full rounded-xl border border-gray-200 bg-white px-2 text-sm outline-none focus:border-blue-300"
+                          >
+                            <option value={-1}>可选</option>
+                            {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select>
+                        </label>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={applyManualMapping}
+                        className="w-full rounded-xl bg-gray-900 py-2 text-sm text-white hover:bg-gray-800"
+                        style={{ fontWeight: 800 }}
+                      >
+                        应用手动映射
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               {scoreRows.length > 0 && (!draft || draft.warnings.length > 0) && (
