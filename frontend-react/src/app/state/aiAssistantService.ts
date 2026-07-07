@@ -34,12 +34,18 @@ export interface AiAssistantContext {
     subjectCount: number;
     averageTotal: number | null;
   };
+  examInsights: string[];
   gradeTrend: string[];
   focusStudents: Array<{
     name: string;
+    category: string;
+    latestTotal: number | null;
     reasons: string[];
     tags: string[];
   }>;
+  tagSummary: string[];
+  recordSummary: string[];
+  seatSummary: string;
   dormitorySummary: string[];
   fundSummary: string;
 }
@@ -159,23 +165,34 @@ function getStudentLatestTotal(student: AppStudent): number | null {
   return scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) * 10) / 10 : null;
 }
 
-function buildStudentReasons(student: AppStudent): string[] {
-  const reasons: string[] = [];
+function getStudentTrend(student: AppStudent): number | null {
   const chronological = [...student.exams].sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`));
-  if (chronological.length >= 2) {
-    const first = chronological[0];
-    const latest = chronological[chronological.length - 1];
-    const firstTotal = typeof first.total === "number" ? first.total : null;
-    const latestTotal = typeof latest.total === "number" ? latest.total : null;
-    if (firstTotal !== null && latestTotal !== null) {
-      const diff = Math.round((latestTotal - firstTotal) * 10) / 10;
-      if (diff < 0) {
-        reasons.push(`总分下降 ${Math.abs(diff)}`);
-      } else if (diff > 0) {
-        reasons.push(`总分提升 ${diff}`);
-      }
+  if (chronological.length < 2) {
+    return null;
+  }
+  const first = chronological[0];
+  const latest = chronological[chronological.length - 1];
+  const firstTotal = typeof first.total === "number" ? first.total : null;
+  const latestTotal = typeof latest.total === "number" ? latest.total : null;
+  if (firstTotal === null || latestTotal === null) {
+    return null;
+  }
+  return Math.round((latestTotal - firstTotal) * 10) / 10;
+}
+
+function buildStudentReasons(student: AppStudent, latestTotal: number | null, averageTotal: number | null): string[] {
+  const reasons: string[] = [];
+  if (latestTotal !== null) {
+    reasons.push(`最新总分 ${latestTotal}`);
+    if (averageTotal !== null) {
+      const gap = Math.round((latestTotal - averageTotal) * 10) / 10;
+      if (gap < 0) reasons.push(`低于班均 ${Math.abs(gap)}`);
+      if (gap > 0) reasons.push(`高于班均 ${gap}`);
     }
   }
+  const diff = getStudentTrend(student);
+  if (diff !== null && diff < 0) reasons.push(`总分下降 ${Math.abs(diff)}`);
+  if (diff !== null && diff > 0) reasons.push(`总分提升 ${diff}`);
   if (student.records.length) {
     reasons.push(`近期记录 ${student.records.slice(0, 3).map(record => record.note).filter(Boolean).join("；")}`);
   }
@@ -183,6 +200,57 @@ function buildStudentReasons(student: AppStudent): string[] {
     reasons.push("有标签可参考");
   }
   return reasons.slice(0, 3);
+}
+
+function average(values: number[]): number | null {
+  return values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10 : null;
+}
+
+function getSubjectAverages(exam: GradeExam | undefined): Record<string, number> {
+  if (!exam) {
+    return {};
+  }
+  return Object.fromEntries(exam.subjects.map(subject => {
+    const values = exam.rows
+      .map(row => row.scores[subject]?.score)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    return [subject, average(values) ?? 0];
+  }).filter(([, value]) => value > 0));
+}
+
+function getExamTotals(exam: GradeExam | undefined): number[] {
+  if (!exam) {
+    return [];
+  }
+  return exam.rows
+    .map(row => {
+      if (typeof row.total === "number" && Number.isFinite(row.total)) {
+        return row.total;
+      }
+      const values = Object.values(row.scores).map(cell => cell.score).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+      return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+    })
+    .filter((value): value is number => value !== null);
+}
+
+function summarizeCounts(values: string[], limit: number): string[] {
+  const counts = new Map<string, number>();
+  values.filter(Boolean).forEach(value => counts.set(value, (counts.get(value) || 0) + 1));
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, count]) => `${label} ${count} 人`);
+}
+
+function dedupeFocusStudents(items: Array<{ student: AppStudent; category: string; latestTotal: number | null; reasons: string[] }>) {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    if (seen.has(item.student.id) || !item.reasons.length) {
+      return false;
+    }
+    seen.add(item.student.id);
+    return true;
+  });
 }
 
 export function buildAiAssistantContext(input: {
@@ -193,33 +261,83 @@ export function buildAiAssistantContext(input: {
   dormitories: Dormitory[];
   fundTransactions: FundTransaction[];
   seatCount: number;
+  occupiedSeatCount?: number;
 }): AiAssistantContext {
   const exams = [...input.exams].sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`));
   const latestExam = exams[exams.length - 1];
   const previousExam = exams[exams.length - 2];
+  const latestAverage = getExamTotalAverage(latestExam);
   const gradeTrend: string[] = [];
   if (previousExam && latestExam) {
     const previousAvg = getExamTotalAverage(previousExam);
-    const latestAvg = getExamTotalAverage(latestExam);
+    const latestAvg = latestAverage;
     if (previousAvg !== null && latestAvg !== null) {
       const diff = Math.round((latestAvg - previousAvg) * 10) / 10;
       gradeTrend.push(`班级均分较上次${diff >= 0 ? "上升" : "下降"} ${Math.abs(diff)} 分`);
     }
+    const previousSubjects = getSubjectAverages(previousExam);
+    const latestSubjects = getSubjectAverages(latestExam);
+    const subjectChanges = Object.keys(latestSubjects)
+      .map(subject => previousSubjects[subject] ? `${subject}${latestSubjects[subject] >= previousSubjects[subject] ? "+" : ""}${Math.round((latestSubjects[subject] - previousSubjects[subject]) * 10) / 10}` : "")
+      .filter(Boolean)
+      .slice(0, 8);
+    if (subjectChanges.length) {
+      gradeTrend.push(`各科均分变化：${subjectChanges.join("、")}`);
+    }
   }
-  const focusStudents = input.students
-    .map(student => ({
-      student,
-      latestTotal: getStudentLatestTotal(student),
-      reasons: buildStudentReasons(student),
-    }))
-    .filter(item => item.reasons.length)
-    .sort((a, b) => (a.latestTotal ?? Number.NEGATIVE_INFINITY) - (b.latestTotal ?? Number.NEGATIVE_INFINITY))
-    .slice(0, 12)
+  const latestSubjectAverages = getSubjectAverages(latestExam);
+  const totals = getExamTotals(latestExam).sort((a, b) => a - b);
+  const examInsights = [
+    Object.keys(latestSubjectAverages).length ? `最近考试各科均分：${Object.entries(latestSubjectAverages).map(([subject, value]) => `${subject}${value}`).join("、")}` : "",
+    totals.length ? `总分区间：最低 ${totals[0]}，中位 ${totals[Math.floor(totals.length / 2)]}，最高 ${totals[totals.length - 1]}` : "",
+    latestAverage !== null && totals.length ? `低于班均 ${totals.filter(value => value < latestAverage).length} 人，高于或等于班均 ${totals.filter(value => value >= latestAverage).length} 人` : "",
+  ].filter(Boolean);
+
+  const scoredStudents = input.students.map(student => ({
+    student,
+    latestTotal: getStudentLatestTotal(student),
+    trend: getStudentTrend(student),
+    reasons: buildStudentReasons(student, getStudentLatestTotal(student), latestAverage),
+  }));
+  const focusStudents = dedupeFocusStudents([
+    ...scoredStudents
+      .filter(item => item.latestTotal !== null)
+      .sort((a, b) => (a.latestTotal ?? 0) - (b.latestTotal ?? 0))
+      .slice(0, 6)
+      .map(item => ({ ...item, category: "低分关注" })),
+    ...scoredStudents
+      .filter(item => item.trend !== null && item.trend < 0)
+      .sort((a, b) => (a.trend ?? 0) - (b.trend ?? 0))
+      .slice(0, 5)
+      .map(item => ({ ...item, category: "退步关注" })),
+    ...scoredStudents
+      .filter(item => item.trend !== null && item.trend > 0)
+      .sort((a, b) => (b.trend ?? 0) - (a.trend ?? 0))
+      .slice(0, 4)
+      .map(item => ({ ...item, category: "进步样本" })),
+    ...scoredStudents
+      .filter(item => item.student.records.length)
+      .sort((a, b) => (b.student.records[0]?.date || "").localeCompare(a.student.records[0]?.date || ""))
+      .slice(0, 4)
+      .map(item => ({ ...item, category: "近期记录" })),
+  ])
+    .slice(0, 14)
     .map(item => ({
       name: item.student.name,
+      category: item.category,
+      latestTotal: item.latestTotal,
       reasons: item.reasons,
       tags: [...item.student.academicTags, ...item.student.tags].slice(0, 6),
     }));
+  const tagSummary = summarizeCounts(input.students.flatMap(student => [...student.academicTags, ...student.tags]), 10);
+  const records = input.students.flatMap(student => student.records.map(record => ({ ...record, studentName: student.name })));
+  const recordSummary = [
+    `日常记录 ${records.length} 条：奖励 ${records.filter(record => record.type === "reward").length}，提醒 ${records.filter(record => record.type === "punish").length}，备注 ${records.filter(record => record.type === "note").length}`,
+    ...records
+      .sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`))
+      .slice(0, 6)
+      .map(record => `${record.date} ${record.studentName}：${record.note}`),
+  ].filter(Boolean);
   const dormitorySummary = input.dormitories
     .map(dorm => `${dorm.name} 当前 ${dorm.currentScore} 分，成员 ${dorm.memberIds.length} 人`)
     .slice(0, 8);
@@ -235,10 +353,14 @@ export function buildAiAssistantContext(input: {
       date: latestExam.date,
       studentCount: latestExam.rows.length,
       subjectCount: latestExam.subjects.length,
-      averageTotal: getExamTotalAverage(latestExam),
+      averageTotal: latestAverage,
     } : undefined,
+    examInsights,
     gradeTrend,
     focusStudents,
+    tagSummary,
+    recordSummary,
+    seatSummary: `座位 ${input.seatCount} 个，已安排 ${input.occupiedSeatCount ?? 0} 人，未安排约 ${Math.max(input.students.length - (input.occupiedSeatCount ?? 0), 0)} 人`,
     dormitorySummary,
     fundSummary: `收入 ${Math.round(income * 100) / 100}，支出 ${Math.round(expense * 100) / 100}，余额 ${Math.round((income - expense) * 100) / 100}`,
   };

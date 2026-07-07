@@ -1,6 +1,7 @@
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 20 * 1024;
+const ASSISTANT_MAX_BODY_BYTES = 48 * 1024;
 const SCORE_MAPPING_MAX_BODY_BYTES = 120 * 1024;
 const SYNC_MAX_BODY_BYTES = 5 * 1024 * 1024;
 const DAILY_LIMIT = 100;
@@ -617,7 +618,7 @@ async function handleChatAssistant(request, env, corsHeaders) {
     return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
   }
 
-  const body = await readJsonBody(request);
+  const body = await readJsonBody(request, ASSISTANT_MAX_BODY_BYTES);
   if (!body.ok || !isValidAssistantPayload(body.value)) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
   }
@@ -1423,14 +1424,20 @@ function trimAssistantContext(context) {
       subjectCount: Number(context.latestExam.subjectCount) || 0,
       averageTotal: Number.isFinite(Number(context.latestExam.averageTotal)) ? Number(context.latestExam.averageTotal) : null
     } : null,
+    examInsights: Array.isArray(context.examInsights) ? context.examInsights.map((item) => toAssistantText(item, 180)).filter(Boolean).slice(0, 8) : [],
     gradeTrend: Array.isArray(context.gradeTrend) ? context.gradeTrend.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
     focusStudents: Array.isArray(context.focusStudents)
       ? context.focusStudents.map((student) => ({
           name: toAssistantText(student?.name, 40),
+          category: toAssistantText(student?.category, 40),
+          latestTotal: Number.isFinite(Number(student?.latestTotal)) ? Number(student.latestTotal) : null,
           reasons: Array.isArray(student?.reasons) ? student.reasons.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 3) : [],
           tags: Array.isArray(student?.tags) ? student.tags.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : []
-        })).filter((student) => student.name).slice(0, 12)
+        })).filter((student) => student.name).slice(0, 14)
       : [],
+    tagSummary: Array.isArray(context.tagSummary) ? context.tagSummary.map((item) => toAssistantText(item, 80)).filter(Boolean).slice(0, 10) : [],
+    recordSummary: Array.isArray(context.recordSummary) ? context.recordSummary.map((item) => toAssistantText(item, 140)).filter(Boolean).slice(0, 8) : [],
+    seatSummary: toAssistantText(context.seatSummary, 120),
     dormitorySummary: Array.isArray(context.dormitorySummary) ? context.dormitorySummary.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
     fundSummary: toAssistantText(context.fundSummary, 160)
   };

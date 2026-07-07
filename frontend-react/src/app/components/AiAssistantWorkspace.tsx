@@ -117,7 +117,8 @@ export function AiAssistantWorkspace({
     dormitories,
     fundTransactions,
     seatCount: seatOrder.length,
-  }), [dormitories, exams, fundTransactions, seatOrder.length, slice, students]);
+    occupiedSeatCount: seatOrder.filter(Boolean).length,
+  }), [dormitories, exams, fundTransactions, seatOrder, slice, students]);
 
   async function sendPrompt(prompt: string) {
     const text = prompt.trim();

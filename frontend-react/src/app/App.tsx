@@ -875,7 +875,7 @@ export default function App() {
         </>
       }
     >
-      <div key={sidebarTab} className="h-full workspace-tab-enter">
+      <div className="h-full workspace-tab-enter">
         {sidebarTab === "daily" && (
           <DailyWorkspace
             students={students}
@@ -926,7 +926,7 @@ export default function App() {
           />
         )}
 
-        {sidebarTab === "ai" && (
+        <div className={sidebarTab === "ai" ? "h-full" : "hidden"}>
           <AiAssistantWorkspace
             students={students}
             exams={appState.gradeExams}
@@ -934,7 +934,7 @@ export default function App() {
             fundTransactions={fundTransactions}
             seatOrder={seatOrder}
           />
-        )}
+        </div>
 
         {sidebarTab === "data" && (
           <DataWorkspace
