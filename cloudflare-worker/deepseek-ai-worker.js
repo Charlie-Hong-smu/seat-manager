@@ -1,6 +1,7 @@
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 20 * 1024;
+const SCORE_MAPPING_MAX_BODY_BYTES = 120 * 1024;
 const SYNC_MAX_BODY_BYTES = 5 * 1024 * 1024;
 const DAILY_LIMIT = 100;
 const MODEL = "deepseek-v4-flash";
@@ -679,7 +680,7 @@ async function handleSuggestScoreMapping(request, env, corsHeaders) {
     return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
   }
 
-  const body = await readJsonBody(request);
+  const body = await readJsonBody(request, SCORE_MAPPING_MAX_BODY_BYTES);
   if (!body.ok || !isValidScoreMappingPayload(body.value)) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
   }
@@ -1133,7 +1134,7 @@ function isValidScoreMappingPayload(payload) {
     payload.headers.length > 0 &&
     payload.headers.length <= 80 &&
     Array.isArray(payload.sampleRows) &&
-    payload.sampleRows.length <= 10 &&
+    payload.sampleRows.length <= 80 &&
     Array.isArray(payload.knownSubjects)
   );
 }

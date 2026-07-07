@@ -7,6 +7,10 @@ export function getDefaultWorkerUrl(): string {
   return env.VITE_WORKER_URL?.trim() || DEFAULT_WORKER_URL;
 }
 
+export function getDirectWorkerUrl(): string {
+  return normalizeWorkerUrl(DEFAULT_WORKER_URL);
+}
+
 export function getWorkerBaseUrl(): string {
   const defaultUrl = normalizeWorkerUrl(getDefaultWorkerUrl());
   const isCommercial = env.VITE_EDITION?.trim() === "commercial";

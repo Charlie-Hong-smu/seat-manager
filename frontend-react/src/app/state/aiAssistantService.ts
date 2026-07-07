@@ -1,6 +1,6 @@
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
-import { getWorkerBaseUrl } from "./workerEndpoint";
+import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, Dormitory, FundTransaction, GradeExam } from "./types";
 
 const AI_AUTH_TOKEN_KEY = "seat-manager-ai-auth-token";
@@ -257,20 +257,25 @@ export async function sendAiAssistantChat(input: {
     throw new Error("ai_offline");
   }
   const auth = await getAuth({ accessCode: input.accessCode, remember: input.remember });
-  const response = await fetch(`${getWorkerBaseUrl()}/chat-assistant`, {
+  const requestBody = JSON.stringify({
+    messages: input.messages.slice(-AI_CHAT_LIMIT).map(message => ({
+      role: message.role,
+      content: message.content,
+    })),
+    context: input.context,
+  });
+  const send = (baseUrl: string) => fetch(`${baseUrl}/chat-assistant`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${auth.token}`,
     },
-    body: JSON.stringify({
-      messages: input.messages.slice(-AI_CHAT_LIMIT).map(message => ({
-        role: message.role,
-        content: message.content,
-      })),
-      context: input.context,
-    }),
+    body: requestBody,
   });
+  let response = await send(getWorkerBaseUrl());
+  if (response.status === 404 || response.status === 405) {
+    response = await send(getDirectWorkerUrl());
+  }
   if (response.status === 401) {
     if (!IS_COMMERCIAL) {
       clearAiAuth();
@@ -287,7 +292,8 @@ export async function sendAiAssistantChat(input: {
     throw new Error("ai_rate_limited");
   }
   if (!response.ok) {
-    throw new Error("ai_failed");
+    const errorData = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(errorData.error ? `ai_failed:${errorData.error}` : "ai_failed");
   }
   const data = await response.json() as Partial<AiAssistantResponse>;
   const message = String(data.message || "").trim();

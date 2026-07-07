@@ -77,7 +77,7 @@ function getAiErrorMessage(reason: string): string {
     ai_offline: "当前离线，联网后可使用 AI 助手。",
     ai_payload_too_large: "当前摘要或对话过多，请清空对话后再试。",
     ai_rate_limited: "今日 AI 调用较多，请稍后再试。",
-  }[reason] || "AI 助手暂时不可用，请稍后重试。";
+  }[reason] || (reason.startsWith("ai_failed:") ? `AI 助手暂时不可用：${reason.replace("ai_failed:", "")}` : "AI 助手暂时不可用，请稍后重试。");
 }
 
 export function AiAssistantWorkspace({

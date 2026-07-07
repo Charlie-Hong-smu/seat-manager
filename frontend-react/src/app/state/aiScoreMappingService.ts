@@ -1,7 +1,7 @@
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
 import { SUBJECT_ORDER, type ScoreMapping } from "./scoreImport";
-import { getWorkerBaseUrl } from "./workerEndpoint";
+import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 
 const AI_AUTH_TOKEN_KEY = "seat-manager-ai-auth-token";
 const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
@@ -135,6 +135,12 @@ function normalizeMapping(headers: string[], result: {
   };
 }
 
+function compactRowsForAi(rows: string[][]): string[][] {
+  return rows
+    .slice(1, 81)
+    .map(row => row.map(cell => String(cell ?? "").trim().slice(0, 80)));
+}
+
 export async function suggestScoreMappingWithAi(
   rows: string[][],
   input?: { accessCode?: string; remember?: boolean },
@@ -150,18 +156,23 @@ export async function suggestScoreMappingWithAi(
     throw new Error("ai_mapping_empty");
   }
   const auth = await getAuth(input);
-  const response = await fetch(`${getWorkerBaseUrl()}/suggest-score-mapping`, {
+  const requestBody = JSON.stringify({
+    headers,
+    sampleRows: compactRowsForAi(rows),
+    knownSubjects: SUBJECT_ORDER,
+  });
+  const send = (baseUrl: string) => fetch(`${baseUrl}/suggest-score-mapping`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${auth.token}`,
     },
-    body: JSON.stringify({
-      headers,
-      sampleRows: rows.slice(1, 8),
-      knownSubjects: SUBJECT_ORDER,
-    }),
+    body: requestBody,
   });
+  let response = await send(getWorkerBaseUrl());
+  if (response.status === 404 || response.status === 405) {
+    response = await send(getDirectWorkerUrl());
+  }
   if (response.status === 401) {
     if (!IS_COMMERCIAL) {
       clearAiAuth();
