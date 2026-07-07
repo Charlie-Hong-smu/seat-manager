@@ -34,7 +34,14 @@ import { DormEventForm } from "./DormEventForm";
 import { FundTransactionForm } from "./FundTransactionForm";
 import { SeatSettingsModal } from "./SeatSettingsModal";
 import { Button, FileDropZone } from "./ui";
-import { createSavedGradeExamRecord, parseScoreFile } from "../state/scoreImport";
+import { hasStoredAiScoreMappingAuth, suggestScoreMappingWithAi, type AiScoreMappingSuggestion } from "../state/aiScoreMappingService";
+import {
+  buildScoreImportDraftFromRows,
+  createSavedGradeExamRecord,
+  detectScoreMapping,
+  parseRowsWithMapping,
+  readRowsFromFile,
+} from "../state/scoreImport";
 import type { RosterImportOptions, RosterImportResult } from "../state/rosterImport";
 import type { AiClassTrendResult } from "../state/aiTrendService";
 import type {
@@ -514,9 +521,16 @@ export function ScoresWorkspace({
   };
 }) {
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
+  const [scoreRows, setScoreRows] = useState<string[][]>([]);
+  const [scoreFilename, setScoreFilename] = useState("");
   const [scoreStatus, setScoreStatus] = useState("");
   const [examName, setExamName] = useState("");
   const [examDate, setExamDate] = useState(new Date().toISOString().slice(0, 10));
+  const [aiMappingBusy, setAiMappingBusy] = useState(false);
+  const [aiMappingSuggestion, setAiMappingSuggestion] = useState<AiScoreMappingSuggestion | null>(null);
+  const [aiMappingAccessCode, setAiMappingAccessCode] = useState("");
+  const [aiMappingRemember, setAiMappingRemember] = useState(true);
+  const [hasAiMappingAuth, setHasAiMappingAuth] = useState(() => hasStoredAiScoreMappingAuth());
   const [examTable, setExamTable] = useState<GradeExam | null>(null);
   const [editingExamId, setEditingExamId] = useState("");
   const [editExamName, setEditExamName] = useState("");
@@ -528,14 +542,85 @@ export function ScoresWorkspace({
   async function readScoreFile(file?: File) {
     if (!file) return;
     setScoreStatus("正在解析成绩表...");
+    setAiMappingSuggestion(null);
     try {
-      const nextDraft = await parseScoreFile(file);
+      const rows = await readRowsFromFile(file);
+      const mapping = detectScoreMapping(rows);
+      const nextDraft = {
+        ...parseRowsWithMapping(rows, mapping),
+        filename: file.name,
+      };
+      setScoreRows(rows);
+      setScoreFilename(file.name);
       setDraft(nextDraft);
       setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
       setExamDate(new Date().toISOString().slice(0, 10));
-      setScoreStatus(`已解析 ${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。`);
+      setScoreStatus(`已解析 ${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。${nextDraft.warnings.length ? " 可使用 AI 识别列进一步确认。" : ""}`);
+    } catch (error) {
+      try {
+        const rows = await readRowsFromFile(file);
+        setScoreRows(rows);
+        setScoreFilename(file.name);
+        setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
+        setExamDate(new Date().toISOString().slice(0, 10));
+      } catch {
+        setScoreRows([]);
+        setScoreFilename("");
+      }
+      setDraft(null);
+      setScoreStatus(error instanceof Error && error.message === "mapping_failed" ? "未能自动识别姓名或科目列，可尝试 AI 识别列。" : "成绩表解析失败，请检查文件格式。");
+    }
+  }
+
+  function getAiMappingErrorMessage(reason: string): string {
+    return {
+      ai_auth_required: "请输入 AI 授权码后再识别。",
+      ai_unauthorized: "当前授权未开通 AI 或 AI 已到期。",
+      ai_auth_failed: "AI 授权暂时不可用，请稍后重试。",
+      ai_file_protocol: "当前是本地文件打开方式，请通过网页地址打开后再使用 AI。",
+      ai_offline: "当前离线，联网后可使用 AI 识别列。",
+      ai_rate_limited: "今日 AI 调用较多，请稍后再试。",
+      ai_mapping_empty: "成绩表没有可识别的表头。",
+      ai_mapping_failed: "AI 暂未能识别出姓名和科目列。",
+    }[reason] || "AI 识别列暂时不可用，请稍后重试。";
+  }
+
+  async function generateAiMapping() {
+    if (!scoreRows.length) {
+      setScoreStatus("请先上传成绩表。");
+      return;
+    }
+    setAiMappingBusy(true);
+    setScoreStatus("AI 正在识别成绩表列...");
+    try {
+      const suggestion = await suggestScoreMappingWithAi(scoreRows, {
+        accessCode: aiMappingAccessCode,
+        remember: aiMappingRemember,
+      });
+      setAiMappingSuggestion(suggestion);
+      setAiMappingAccessCode("");
+      setHasAiMappingAuth(true);
+      setScoreStatus(suggestion.note);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      setScoreStatus(getAiMappingErrorMessage(reason));
+      setHasAiMappingAuth(hasStoredAiScoreMappingAuth());
+    } finally {
+      setAiMappingBusy(false);
+    }
+  }
+
+  function applyAiMapping() {
+    if (!aiMappingSuggestion || !scoreRows.length) {
+      return;
+    }
+    try {
+      const nextDraft = buildScoreImportDraftFromRows(scoreRows, scoreFilename, aiMappingSuggestion.mapping);
+      setDraft(nextDraft);
+      setAiMappingSuggestion(null);
+      setScoreStatus(`已应用 AI 识别结果：${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。`);
     } catch {
-      setScoreStatus("成绩表解析失败，请检查文件格式。");
+      setScoreStatus("AI 识别结果无法应用，请检查表头或换一个成绩表。");
     }
   }
 
@@ -546,6 +631,9 @@ export function ScoresWorkspace({
     }
     const saved = onSaveScoreImport(createSavedGradeExamRecord(draft, { name: examName, date: examDate }));
     setDraft(null);
+    setScoreRows([]);
+    setScoreFilename("");
+    setAiMappingSuggestion(null);
     setScoreStatus(saved ? `已保存「${saved.name}」。` : "保存失败。");
   }
 
@@ -587,6 +675,60 @@ export function ScoresWorkspace({
                   <Button onClick={saveDraft} className="w-full">保存考试</Button>
                 </div>
               )}
+              {scoreRows.length > 0 && (!draft || draft.warnings.length > 0) && (
+                <div className="rounded-2xl border border-violet-100 bg-violet-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm text-violet-700" style={{ fontWeight: 900 }}>AI 识别列</div>
+                      <div className="mt-0.5 text-xs text-violet-500">自动识别不确定时，可让 AI 根据表头和样例建议映射。</div>
+                    </div>
+                    <button
+                      onClick={() => void generateAiMapping()}
+                      disabled={aiMappingBusy}
+                      className="shrink-0 rounded-xl bg-violet-600 px-3 py-2 text-sm text-white hover:bg-violet-700 disabled:opacity-50"
+                      style={{ fontWeight: 800 }}
+                    >
+                      {aiMappingBusy ? "识别中" : "AI 识别列"}
+                    </button>
+                  </div>
+                  {!hasAiMappingAuth && (
+                    <div className="mt-3 grid grid-cols-1 gap-2">
+                      <input
+                        value={aiMappingAccessCode}
+                        onChange={event => setAiMappingAccessCode(event.target.value)}
+                        type="password"
+                        placeholder="输入 AI 授权码"
+                        className="h-9 rounded-xl border border-violet-100 bg-white px-3 text-sm outline-none focus:border-violet-300"
+                      />
+                      <label className="flex items-center gap-2 text-xs text-violet-700">
+                        <input type="checkbox" checked={aiMappingRemember} onChange={event => setAiMappingRemember(event.target.checked)} className="accent-violet-600" />
+                        记住授权 30 天
+                      </label>
+                    </div>
+                  )}
+                  {aiMappingSuggestion && (
+                    <div className="mt-3 rounded-xl border border-violet-100 bg-white p-3">
+                      <div className="text-xs leading-5 text-violet-700">{aiMappingSuggestion.note}</div>
+                      <div className="mt-2 text-xs text-gray-500">
+                        姓名列：{aiMappingSuggestion.mapping.headers[aiMappingSuggestion.mapping.nameCol] || "未识别"} ·
+                        科目：{aiMappingSuggestion.mapping.subjectMappings.map(item => item.subject).join("、")}
+                      </div>
+                      <button
+                        onClick={applyAiMapping}
+                        className="mt-3 w-full rounded-xl bg-violet-600 py-2 text-sm text-white hover:bg-violet-700"
+                        style={{ fontWeight: 800 }}
+                      >
+                        确认应用 AI 识别结果
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {draft?.warnings.length ? (
+                <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+                  {draft.warnings.join(" ")}
+                </div>
+              ) : null}
               {scoreStatus && <p className="text-sm text-blue-600">{scoreStatus}</p>}
             </div>
           </Panel>

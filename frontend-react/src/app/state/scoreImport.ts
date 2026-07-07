@@ -23,7 +23,7 @@ declare global {
   }
 }
 
-interface ScoreMapping {
+export interface ScoreMapping {
   headers: string[];
   nameCol: number;
   subjectMappings: Array<{ subject: string; scoreCol: number; rankClassCol: number; rankSchoolCol: number }>;
@@ -204,7 +204,7 @@ export async function readRowsFromFile(file: File): Promise<string[][]> {
   throw new Error("unsupported_file");
 }
 
-function detectScoreMapping(rows: string[][]): ScoreMapping {
+export function detectScoreMapping(rows: string[][]): ScoreMapping {
   const headers = rows[0]?.map(cell => String(cell || "").trim()) || [];
   const normalizedHeaders = headers.map(normalizeHeader);
   const nameCol = normalizedHeaders.findIndex(cell => /姓名|名字|学生/.test(cell));
@@ -279,7 +279,7 @@ function readScoreCell(row: string[], scoreCol: number, rankClassCol: number, ra
   };
 }
 
-function parseRowsWithMapping(rows: string[][], mapping: ScoreMapping): ScoreImportDraft {
+export function parseRowsWithMapping(rows: string[][], mapping: ScoreMapping): ScoreImportDraft {
   if (mapping.nameCol === -1 || !mapping.subjectMappings.length) {
     throw new Error("mapping_failed");
   }
@@ -313,6 +313,11 @@ function parseRowsWithMapping(rows: string[][], mapping: ScoreMapping): ScoreImp
     rowCount: rows.length - 1,
     warnings: mapping.warnings.filter(Boolean),
   };
+}
+
+export function buildScoreImportDraftFromRows(rows: string[][], filename: string, mapping: ScoreMapping): ScoreImportDraft {
+  const draft = parseRowsWithMapping(rows, mapping);
+  return { ...draft, filename };
 }
 
 function makeId(): string {

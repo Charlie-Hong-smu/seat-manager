@@ -49,6 +49,9 @@ export default {
     if (url.pathname === "/analyze-class") {
       return handleAnalyzeClass(request, env, corsHeaders);
     }
+    if (url.pathname === "/chat-assistant") {
+      return handleChatAssistant(request, env, corsHeaders);
+    }
     if (url.pathname === "/generate-comment") {
       return handleGenerateStudentComment(request, env, corsHeaders);
     }
@@ -599,6 +602,69 @@ async function handleAnalyzeClass(request, env, corsHeaders) {
   }
 }
 
+async function handleChatAssistant(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  const token = getBearerToken(request);
+  const verified = await verifyAiRequest(token, env);
+  if (!verified.ok) {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+  if (isOverDailyLimit(token, verified.dailyLimit)) {
+    return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
+  }
+
+  const body = await readJsonBody(request);
+  if (!body.ok || !isValidAssistantPayload(body.value)) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是谨慎、务实的班主任 AI 助手。你只能根据用户提供的当前班级、当前学期摘要回答；不能声称看到了其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。可以给老师提供班级分析、重点学生跟进、沟通话术、评语素材方向和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              context: trimAssistantContext(body.value.context),
+              messages: body.value.messages.map((message) => ({
+                role: message.role,
+                content: toAssistantText(message.content, 1200)
+              }))
+            })
+          }
+        ]
+      })
+    });
+    if (!response.ok) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    const data = await response.json();
+    const parsed = parseModelJson(data?.choices?.[0]?.message?.content || "");
+    if (!parsed) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    return jsonResponse(sanitizeAssistantResult(parsed), 200, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
 async function handleSuggestScoreMapping(request, env, corsHeaders) {
   if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
     return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
@@ -1039,6 +1105,27 @@ function isValidClassPayload(payload) {
   );
 }
 
+function isValidAssistantPayload(payload) {
+  return (
+    payload &&
+    typeof payload === "object" &&
+    Array.isArray(payload.messages) &&
+    payload.messages.length > 0 &&
+    payload.messages.length <= 20 &&
+    payload.messages.every((message) => (
+      message &&
+      (message.role === "user" || message.role === "assistant") &&
+      typeof message.content === "string" &&
+      message.content.trim().length > 0 &&
+      message.content.length <= 2000
+    )) &&
+    payload.context &&
+    typeof payload.context === "object" &&
+    Number.isInteger(payload.context.studentCount) &&
+    payload.context.studentCount >= 0
+  );
+}
+
 function isValidScoreMappingPayload(payload) {
   return (
     payload &&
@@ -1248,6 +1335,17 @@ function sanitizeClassAiResult(result) {
   };
 }
 
+function sanitizeAssistantResult(result) {
+  const prompts = Array.isArray(result.suggestedPrompts)
+    ? result.suggestedPrompts.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 4)
+    : [];
+  return {
+    message: toAssistantText(result.message || result.answer || result.content, 2400),
+    disclaimer: toAssistantText(result.disclaimer, 200) || "AI 内容仅供教师参考，请结合实际课堂观察判断。",
+    suggestedPrompts: prompts
+  };
+}
+
 function sanitizeScoreMappingResult(result, payload) {
   const maxIndex = payload.headers.length - 1;
   const safeIndex = (value) => {
@@ -1305,4 +1403,34 @@ function toText(value) {
       .slice(0, 8);
   }
   return String(value || "").trim().slice(0, 800);
+}
+
+function toAssistantText(value, limit = 800) {
+  return String(value || "").replace(/\r\n/g, "\n").trim().slice(0, limit);
+}
+
+function trimAssistantContext(context) {
+  return {
+    className: toAssistantText(context.className, 80),
+    termLabel: toAssistantText(context.termLabel, 80),
+    studentCount: Number(context.studentCount) || 0,
+    seatCount: Number(context.seatCount) || 0,
+    latestExam: context.latestExam && typeof context.latestExam === "object" ? {
+      name: toAssistantText(context.latestExam.name, 80),
+      date: toAssistantText(context.latestExam.date, 40),
+      studentCount: Number(context.latestExam.studentCount) || 0,
+      subjectCount: Number(context.latestExam.subjectCount) || 0,
+      averageTotal: Number.isFinite(Number(context.latestExam.averageTotal)) ? Number(context.latestExam.averageTotal) : null
+    } : null,
+    gradeTrend: Array.isArray(context.gradeTrend) ? context.gradeTrend.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
+    focusStudents: Array.isArray(context.focusStudents)
+      ? context.focusStudents.map((student) => ({
+          name: toAssistantText(student?.name, 40),
+          reasons: Array.isArray(student?.reasons) ? student.reasons.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 3) : [],
+          tags: Array.isArray(student?.tags) ? student.tags.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : []
+        })).filter((student) => student.name).slice(0, 12)
+      : [],
+    dormitorySummary: Array.isArray(context.dormitorySummary) ? context.dormitorySummary.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
+    fundSummary: toAssistantText(context.fundSummary, 160)
+  };
 }

@@ -4,6 +4,7 @@ const ALLOWED_PATHS = [
   "/auth",
   "/analyze-class",
   "/analyze-trend",
+  "/chat-assistant",
   "/generate-comment",
   "/suggest-score-mapping",
   "/license/auth",

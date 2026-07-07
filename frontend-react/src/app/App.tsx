@@ -11,6 +11,7 @@ import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import { HistorySeatModal } from "./components/HistorySeatModal";
+import { AiAssistantWorkspace } from "./components/AiAssistantWorkspace";
 import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ScoresWorkspace, ClassFundWorkspace } from "./components/WorkspacePages";
 import {
   buildSeatOrderByStudentList,
@@ -922,6 +923,16 @@ export default function App() {
             onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
             onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
             studentAdviceProgress={studentAdviceProgress}
+          />
+        )}
+
+        {sidebarTab === "ai" && (
+          <AiAssistantWorkspace
+            students={students}
+            exams={appState.gradeExams}
+            dormitories={dormitories}
+            fundTransactions={fundTransactions}
+            seatOrder={seatOrder}
           />
         )}
 
