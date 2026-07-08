@@ -369,6 +369,9 @@ export function StudentModal({
               </>
             ) : (
               <>
+                <button onClick={() => setActiveTab("followup")} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors" style={{ fontWeight: 700 }}>
+                  <Sparkles className="w-3.5 h-3.5" />AI跟进
+                </button>
                 {onOpenAiComment && (
                   <button onClick={onOpenAiComment} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-600 border border-violet-200 rounded-xl hover:bg-violet-50 transition-colors" style={{ fontWeight: 600 }}>
                     <Sparkles className="w-3.5 h-3.5" />AI评语

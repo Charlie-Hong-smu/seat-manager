@@ -164,9 +164,10 @@ function SeatCard({
               onMouseDown={event => event.stopPropagation()}
               title="AI 跟进建议"
               aria-label={`打开 ${student.name} 的 AI 跟进建议`}
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-500 opacity-0 transition-all hover:bg-violet-100 hover:text-violet-700 group-hover:opacity-100"
+              className="inline-flex h-6 shrink-0 items-center gap-1 rounded-lg bg-violet-50 px-1.5 text-[10px] font-bold text-violet-600 shadow-sm shadow-violet-100/60 transition-all hover:-translate-y-0.5 hover:bg-violet-100 hover:text-violet-700"
             >
-              <Sparkles className="h-3.5 w-3.5" />
+              <Sparkles className="h-3 w-3" />
+              <span>AI</span>
             </button>
           )}
         </div>
