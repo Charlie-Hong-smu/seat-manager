@@ -19,6 +19,7 @@ import {
   ChevronDown,
   SlidersHorizontal,
   Download,
+  Sparkles,
 } from "lucide-react";
 
 import { TrendDashboard } from "./TrendDashboard";
@@ -40,6 +41,7 @@ interface GradesPageProps {
   exams: GradeExam[];
   students: AppStudent[];
   onSelectStudent: (student: AppStudent) => void;
+  onOpenStudentFollowup: (student: AppStudent) => void;
 }
 
 function getRowTotal(row: GradeRow): number | null {
@@ -73,6 +75,59 @@ function getRowAverage(row: GradeRow, subjects: string[]): number | null {
     return null;
   }
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
+function getStudentExamTotal(exam: AppStudent["exams"][number]): number | null {
+  if (typeof exam.total === "number" && Number.isFinite(exam.total)) {
+    return Math.round(exam.total * 10) / 10;
+  }
+  const values = Object.values(exam.scores).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10 : null;
+}
+
+function getStudentExamSortValue(exam: AppStudent["exams"][number]): string {
+  return `${exam.date || "9999-12-31"}-${exam.name}-${exam.id}`;
+}
+
+function getTrendFollowupReason(student: AppStudent): { reason: string; score: number; diff: number | null } | null {
+  const exams = [...student.exams].sort((a, b) => getStudentExamSortValue(a).localeCompare(getStudentExamSortValue(b)));
+  if (exams.length < 2) {
+    return null;
+  }
+  const previous = exams[exams.length - 2];
+  const latest = exams[exams.length - 1];
+  const previousTotal = getStudentExamTotal(previous);
+  const latestTotal = getStudentExamTotal(latest);
+  const totalDiff = previousTotal !== null && latestTotal !== null ? Math.round((latestTotal - previousTotal) * 10) / 10 : null;
+  const previousRank = Number.parseInt(previous.rank || "", 10);
+  const latestRank = Number.parseInt(latest.rank || "", 10);
+  const rankDiff = Number.isFinite(previousRank) && Number.isFinite(latestRank) ? latestRank - previousRank : null;
+  const subjectDrop = Object.keys(latest.scores)
+    .map(subject => {
+      const before = previous.scores[subject];
+      const after = latest.scores[subject];
+      return Number.isFinite(before) && Number.isFinite(after) ? { subject, diff: Math.round((after - before) * 10) / 10 } : null;
+    })
+    .filter((item): item is { subject: string; diff: number } => Boolean(item))
+    .sort((a, b) => a.diff - b.diff)[0];
+  const reasons: string[] = [];
+  let score = 0;
+  if (totalDiff !== null && totalDiff < 0) {
+    reasons.push(`总分下降 ${Math.abs(totalDiff)}`);
+    score += Math.abs(totalDiff);
+  }
+  if (rankDiff !== null && rankDiff > 0) {
+    reasons.push(`排名退步 ${rankDiff}`);
+    score += Math.min(rankDiff, 80) / 2;
+  }
+  if (subjectDrop && subjectDrop.diff <= -8) {
+    reasons.push(`${subjectDrop.subject}下降 ${Math.abs(subjectDrop.diff)}`);
+    score += Math.abs(subjectDrop.diff);
+  }
+  if (!reasons.length) {
+    return null;
+  }
+  return { reason: reasons.slice(0, 2).join(" · "), score, diff: totalDiff };
 }
 
 function getGradeLabel(avg: number | null, thresholds: Thresholds) {
@@ -142,7 +197,7 @@ function StatCard({ icon, label, value, sub, accent }: {
   );
 }
 
-export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps) {
+export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFollowup }: GradesPageProps) {
   const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id || "");
   const [selectedSubject, setSelectedSubject] = useState("total");
   const [examOpen, setExamOpen] = useState(false);
@@ -268,6 +323,14 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
     }))
     .filter(item => typeof item.value === "number" && Number.isFinite(item.value))
     .sort((a, b) => compareValues(a.value, b.value, false));
+  const trendFollowupCandidates = students
+    .map(student => {
+      const signal = getTrendFollowupReason(student);
+      return signal ? { student, ...signal } : null;
+    })
+    .filter((item): item is { student: AppStudent; reason: string; score: number; diff: number | null } => Boolean(item))
+    .sort((a, b) => b.score - a.score || a.student.name.localeCompare(b.student.name, "zh-Hans-CN"))
+    .slice(0, 6);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortAsc(v => !v);
@@ -554,6 +617,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                           <span className="flex items-center justify-center gap-1">全部 <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
                         <th className="text-center px-4 py-3">等级</th>
+                        <th className="text-right px-6 py-3">AI</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -588,6 +652,23 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                             <td className="text-center px-4 py-3">
                               <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
                             </td>
+                            <td className="px-6 py-3 text-right">
+                              <button
+                                type="button"
+                                disabled={!matchedStudent}
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  if (matchedStudent) {
+                                    onOpenStudentFollowup(matchedStudent);
+                                  }
+                                }}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                                style={{ fontWeight: 800 }}
+                                title={matchedStudent ? "打开 AI 跟进建议" : "未匹配到学生档案"}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />跟进
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -601,6 +682,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                         <th className="text-left px-4 py-3">姓名</th>
                         <th className="text-center px-4 py-3">{metricLabel} 成绩</th>
                         <th className="text-center px-4 py-3">等级</th>
+                        <th className="text-right px-6 py-3">AI</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -626,6 +708,23 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                             <td className="text-center px-4 py-3">
                               <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
                             </td>
+                            <td className="px-6 py-3 text-right">
+                              <button
+                                type="button"
+                                disabled={!item.matchedStudent}
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  if (item.matchedStudent) {
+                                    onOpenStudentFollowup(item.matchedStudent);
+                                  }
+                                }}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                                style={{ fontWeight: 800 }}
+                                title={item.matchedStudent ? "打开 AI 跟进建议" : "未匹配到学生档案"}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />跟进
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -636,7 +735,40 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
             </div>
           </>
         ) : (
-          <TrendDashboard exams={exams} subjects={trendSubjects} />
+          <>
+            {trendFollowupCandidates.length > 0 && (
+              <div className="surface-enter rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-gray-800" style={{ fontWeight: 900 }}>AI 跟进候选</h3>
+                    <p className="mt-0.5 text-sm text-gray-400">根据最近两次考试变化自动挑出需要先看的学生</p>
+                  </div>
+                  <Sparkles className="h-5 w-5 text-violet-500" />
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  {trendFollowupCandidates.map(item => (
+                    <button
+                      key={item.student.id}
+                      onClick={() => onOpenStudentFollowup(item.student)}
+                      className="group rounded-2xl border border-gray-100 bg-gray-50 p-3 text-left transition-all hover:-translate-y-0.5 hover:border-violet-100 hover:bg-violet-50/60 hover:shadow-sm"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-gray-900" style={{ fontWeight: 900 }}>{item.student.name}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${item.diff !== null && item.diff < 0 ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-400"}`} style={{ fontWeight: 800 }}>
+                          {item.diff !== null ? `${item.diff > 0 ? "+" : ""}${item.diff}` : "关注"}
+                        </span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-gray-500">{item.reason}</p>
+                      <div className="mt-3 flex items-center gap-1.5 text-xs text-violet-600 opacity-80 group-hover:opacity-100" style={{ fontWeight: 800 }}>
+                        <Sparkles className="h-3.5 w-3.5" />打开跟进建议
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <TrendDashboard exams={exams} subjects={trendSubjects} />
+          </>
         )}
       </div>
       {exportOpen && (

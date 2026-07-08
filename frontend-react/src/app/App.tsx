@@ -25,7 +25,8 @@ import { IS_COMMERCIAL } from "./config";
 import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { closeDormitoryPeriod, createDormEvent, createDormitory, createDormStudentRecord, normalizeDormitoryScore, type NewDormEventInput } from "./state/dormitoryActions";
 import { createFundTransaction, type NewFundTxInput } from "./state/classFundActions";
-import { createStudent } from "./state/studentActions";
+import { createStudent, createStudentRecord } from "./state/studentActions";
+import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "./state/commentRubricStorage";
 import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { readLegacyRootState } from "./state/storage";
@@ -57,6 +58,7 @@ export default function App() {
   const [dormitories, setDormitories] = useState<Dormitory[]>(() => initialState.dormitories);
   const [fundTransactions, setFundTransactions] = useState<FundTransaction[]>(() => initialState.fundTransactions ?? []);
   const [selectedStudent, setSelectedStudent] = useState<AppStudent | null>(null);
+  const [selectedStudentInitialTab, setSelectedStudentInitialTab] = useState<"records" | "profile" | "trend" | "followup">("records");
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
   const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => initialState.seatOrder);
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
@@ -247,6 +249,11 @@ export default function App() {
     const student = createStudent({ name, gender, alias });
     setStudents(prev => [...prev, student]);
     commitSeatOrder(placeStudentInFirstEmptySeat(seatOrder, student.id, students.length + 1));
+  }
+
+  function openStudentDetail(student: AppStudent, initialTab: "records" | "profile" | "trend" | "followup" = "records") {
+    setSelectedStudentInitialTab(initialTab);
+    setSelectedStudent(student);
   }
 
   function handleUpdateStudent(nextStudent: AppStudent) {
@@ -456,6 +463,40 @@ export default function App() {
     ));
   }
 
+  function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function handleSaveAiAssistantRecord(student: AppStudent, note: string) {
+    const record = createStudentRecord("note", `AI助手：${note}`.slice(0, 800));
+    handleApplyStudentRecord(student.id, record, []);
+  }
+
+  function handleAppendAiAssistantMaterial(student: AppStudent, text: string) {
+    const rubric = readCommentRubric();
+    const profile = readStudentCommentProfile(student);
+    const nextNote = [profile.teacherNote, `AI助手素材：${text}`]
+      .map(item => item.trim())
+      .filter(Boolean)
+      .join("\n");
+    const savedProfile = saveStudentCommentProfile(student.id, rubric, {
+      ...profile,
+      teacherNote: nextNote,
+      status: profile.generatedComment ? "edited" : "draft",
+      updatedAt: new Date().toISOString(),
+    });
+    const aiComments = isPlainRecord(student.aiComments) ? student.aiComments : {};
+    const nextStudent = {
+      ...student,
+      aiComments: {
+        ...aiComments,
+        profile: savedProfile,
+      },
+    };
+    setStudents(prev => prev.map(item => (item.id === student.id ? nextStudent : item)));
+    setSelectedStudent(prev => (prev?.id === student.id ? nextStudent : prev));
+  }
+
   function handleDeleteStudent(studentId: StudentId) {
     setStudents(prev => prev.filter(student => student.id !== studentId));
     setDormitories(prev => prev.map(dormitory => ({
@@ -472,6 +513,7 @@ export default function App() {
         frontRowStudentIds: current.constraints.frontRowStudentIds.filter(id => id !== studentId),
       },
     }));
+    setSelectedStudentInitialTab("records");
     setSelectedStudent(null);
   }
 
@@ -498,6 +540,7 @@ export default function App() {
     setFundTransactions(next.fundTransactions ?? []);
     setSavedSeatHistory(next.seatHistory);
     setSeatHistory([]);
+    setSelectedStudentInitialTab("records");
     setSelectedStudent(null);
   }
 
@@ -720,6 +763,7 @@ export default function App() {
     setDormitories(result.state.dormitories);
     setSavedSeatHistory(result.state.seatHistory);
     setSeatHistory([]);
+    setSelectedStudentInitialTab("records");
     setSelectedStudent(null);
     return result;
   }
@@ -805,7 +849,7 @@ export default function App() {
       overlays={
         <>
           {showCommentWorkbench && (
-            <CommentWorkbench students={students} onClose={() => setShowCommentWorkbench(false)} onSelectStudent={setSelectedStudent} />
+            <CommentWorkbench students={students} onClose={() => setShowCommentWorkbench(false)} onSelectStudent={student => openStudentDetail(student)} />
           )}
 
           {selectedStudent && (
@@ -813,7 +857,10 @@ export default function App() {
               student={selectedStudent}
               students={students}
               dormitories={dormitories}
-              onClose={() => setSelectedStudent(null)}
+              onClose={() => {
+                setSelectedStudentInitialTab("records");
+                setSelectedStudent(null);
+              }}
               onUpdateStudent={handleUpdateStudent}
               onApplyRecord={handleApplyStudentRecord}
               onDeleteStudent={handleDeleteStudent}
@@ -823,6 +870,8 @@ export default function App() {
                 setSidebarTab("dormitories");
                 setSidebarCollapsed(false);
               }}
+              seatOrder={seatOrder}
+              initialActiveTab={selectedStudentInitialTab}
             />
           )}
 
@@ -836,7 +885,7 @@ export default function App() {
               onRegenerate={handleRandomizeSeats}
               onApply={handleApplyShufflePreview}
               onClose={() => setShufflePreview(null)}
-              onSelectStudent={setSelectedStudent}
+              onSelectStudent={student => openStudentDetail(student)}
             />
           )}
 
@@ -888,7 +937,8 @@ export default function App() {
             onUndoSeatOrder={handleUndoSeatOrder}
             onUpdateSeatSettings={updateSeatSettings}
             onAddStudent={handleAddStudent}
-            onSelectStudent={setSelectedStudent}
+            onSelectStudent={student => openStudentDetail(student)}
+            onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
             onMoveSeat={handleMoveSeat}
             onToggleLock={toggleLock}
           />
@@ -907,7 +957,7 @@ export default function App() {
             onDeleteDormitoryEvent={handleDeleteDormEvent}
             onCloseDormitoryPeriod={handleCloseDormitoryPeriod}
             onCloseAllDormitoryPeriods={handleCloseAllDormitoryPeriods}
-            onSelectStudent={setSelectedStudent}
+            onSelectStudent={student => openStudentDetail(student)}
           />
         )}
 
@@ -915,7 +965,8 @@ export default function App() {
           <ScoresWorkspace
             exams={appState.gradeExams}
             students={students}
-            onSelectStudent={setSelectedStudent}
+            onSelectStudent={student => openStudentDetail(student)}
+            onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
             onSaveScoreImport={handleSaveScoreImport}
             onUpdateGradeExam={handleUpdateGradeExam}
             onDeleteGradeExam={handleDeleteGradeExam}
@@ -934,6 +985,8 @@ export default function App() {
             dormitories={dormitories}
             fundTransactions={fundTransactions}
             seatOrder={seatOrder}
+            onSaveStudentRecord={handleSaveAiAssistantRecord}
+            onAppendCommentMaterial={handleAppendAiAssistantMaterial}
           />
         </div>
 

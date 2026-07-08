@@ -1,11 +1,12 @@
 import { type DragEvent, type KeyboardEvent, useMemo, useState } from "react";
-import { Lock, Star, Maximize2, Minimize2 } from "lucide-react";
+import { Lock, Star, Maximize2, Minimize2, Sparkles } from "lucide-react";
 import type { AppStudent, StudentId } from "../state/types";
 
 interface Props {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
   onSelectStudent: (student: AppStudent) => void;
+  onOpenStudentFollowup?: (student: AppStudent) => void;
   onMoveSeat: (fromIndex: number, toIndex: number) => void;
   lockedSeats: Set<number>;
   onToggleLock: (idx: number) => void;
@@ -21,6 +22,7 @@ function SeatCard({
   isDragging,
   cardMode,
   onSelect,
+  onOpenFollowup,
   onMoveSeat,
   onDragStateChange,
   onToggleLock,
@@ -32,6 +34,7 @@ function SeatCard({
   isDragging: boolean;
   cardMode: "compact" | "detail";
   onSelect: (s: AppStudent) => void;
+  onOpenFollowup?: (s: AppStudent) => void;
   onMoveSeat: (fromIndex: number, toIndex: number) => void;
   onDragStateChange: (seatIndex: number | null) => void;
   onToggleLock: (idx: number) => void;
@@ -133,9 +136,9 @@ function SeatCard({
           </div>
           <span className="text-[10px] text-gray-300 tabular-nums shrink-0">{row}-{col}</span>
         </div>
-        <div className="flex items-center justify-between mt-auto">
+        <div className="flex items-center justify-between gap-2 mt-auto">
           {hasTags ? (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex min-w-0 flex-wrap gap-1">
               {student.academicTags.slice(0, 3).map(tag => {
                 const isStrong = tag.endsWith("强");
                 return (
@@ -152,13 +155,27 @@ function SeatCard({
           ) : (
             <span className="text-[10px] text-gray-300">—</span>
           )}
+          {onOpenFollowup && (
+            <button
+              onClick={event => {
+                event.stopPropagation();
+                onOpenFollowup(student);
+              }}
+              onMouseDown={event => event.stopPropagation()}
+              title="AI 跟进建议"
+              aria-label={`打开 ${student.name} 的 AI 跟进建议`}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-500 opacity-0 transition-all hover:bg-violet-100 hover:text-violet-700 group-hover:opacity-100"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-export function SeatBoard({ students, seatOrder, onSelectStudent, onMoveSeat, lockedSeats, onToggleLock }: Props) {
+export function SeatBoard({ students, seatOrder, onSelectStudent, onOpenStudentFollowup, onMoveSeat, lockedSeats, onToggleLock }: Props) {
   const [cardMode, setCardMode] = useState<"compact" | "detail">("compact");
   const [draggingSeat, setDraggingSeat] = useState<number | null>(null);
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
@@ -236,6 +253,7 @@ export function SeatBoard({ students, seatOrder, onSelectStudent, onMoveSeat, lo
                         isDragging={draggingSeat === cell.seatIndex}
                         cardMode={cardMode}
                         onSelect={onSelectStudent}
+                        onOpenFollowup={onOpenStudentFollowup}
                         onMoveSeat={onMoveSeat}
                         onDragStateChange={setDraggingSeat}
                         onToggleLock={onToggleLock}

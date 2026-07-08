@@ -104,6 +104,7 @@ export function DailyWorkspace({
   onUpdateSeatSettings,
   onAddStudent,
   onSelectStudent,
+  onOpenStudentFollowup,
   onMoveSeat,
   onToggleLock,
 }: {
@@ -118,6 +119,7 @@ export function DailyWorkspace({
   onUpdateSeatSettings: (updater: (current: SeatSettings) => SeatSettings) => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
   onSelectStudent: (student: AppStudent) => void;
+  onOpenStudentFollowup: (student: AppStudent) => void;
   onMoveSeat: (fromIndex: number, toIndex: number) => void;
   onToggleLock: (idx: number) => void;
 }) {
@@ -168,7 +170,7 @@ export function DailyWorkspace({
     <div className="flex h-full flex-col bg-gray-50">
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_320px] gap-4 overflow-hidden p-4">
         <div className="min-h-0 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-          <SeatBoard students={students} seatOrder={seatOrder} onSelectStudent={onSelectStudent} onMoveSeat={onMoveSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+          <SeatBoard students={students} seatOrder={seatOrder} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
         </div>
         <aside className="min-h-0 space-y-4 overflow-y-auto">
           <Panel title="排座">
@@ -487,6 +489,7 @@ export function ScoresWorkspace({
   exams,
   students,
   onSelectStudent,
+  onOpenStudentFollowup,
   onSaveScoreImport,
   onUpdateGradeExam,
   onDeleteGradeExam,
@@ -498,6 +501,7 @@ export function ScoresWorkspace({
   exams: GradeExam[];
   students: AppStudent[];
   onSelectStudent: (student: AppStudent) => void;
+  onOpenStudentFollowup: (student: AppStudent) => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
   onUpdateGradeExam: (examId: string, name: string, date: string) => boolean;
   onDeleteGradeExam: (examId: string) => boolean;
@@ -773,7 +777,7 @@ export function ScoresWorkspace({
         </aside>
 
         <main className="min-h-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} />
+          <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} />
         </main>
       </div>
       {mappingModalOpen && manualMapping && (

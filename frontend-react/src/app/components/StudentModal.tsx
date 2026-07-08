@@ -11,7 +11,9 @@ import {
 } from "recharts";
 import { type NewDormEventInput } from "../state/dormitoryActions";
 import { DormEventForm } from "./DormEventForm";
+import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
 import { createStudentRecord, updateStudentProfile } from "../state/studentActions";
+import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
 import type { AppStudent, Dormitory, Gender, RecordType, StudentExamSummary, StudentId, StudentRecord } from "../state/types";
@@ -28,6 +30,8 @@ interface Props {
   onAddDormitoryEvent: (input: NewDormEventInput) => void;
   onOpenDormitories: () => void;
   onOpenAiComment?: () => void;
+  seatOrder?: Array<StudentId | null>;
+  initialActiveTab?: "records" | "profile" | "trend" | "followup";
 }
 
 interface LocalRecord {
@@ -92,6 +96,8 @@ export function StudentModal({
   onAddDormitoryEvent,
   onOpenDormitories,
   onOpenAiComment,
+  seatOrder = [],
+  initialActiveTab = "records",
 }: Props) {
   const [nameInput, setNameInput] = useState(student.name);
   const [genderInput, setGenderInput] = useState<Gender>(student.gender);
@@ -114,7 +120,7 @@ export function StudentModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [profileStatus, setProfileStatus] = useState("");
   const [dormStatus, setDormStatus] = useState("");
-  const [activeTab, setActiveTab] = useState<"records" | "profile" | "trend">("records");
+  const [activeTab, setActiveTab] = useState<"records" | "profile" | "trend" | "followup">(initialActiveTab);
   const [dormAssignmentOpen, setDormAssignmentOpen] = useState(false);
   const [dormEventOpen, setDormEventOpen] = useState(false);
   const [pendingDormitoryId, setPendingDormitoryId] = useState(student.dormitoryId || "");
@@ -132,6 +138,7 @@ export function StudentModal({
     setAiTrendStatus(cached ? "已载入上次生成的趋势分析。" : "");
     setAiTrendAccessCode("");
     setHasAiTrendAuth(hasStoredAiTrendAuth());
+    setActiveTab(initialActiveTab);
   }, [student]);
 
   useEffect(() => {
@@ -248,6 +255,38 @@ export function StudentModal({
     setProfileStatus("记录已删除。");
   }
 
+  function isRecordValue(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function saveAiFollowupRecord(note: string) {
+    const record = createStudentRecord("note", note);
+    setLocalRecords(prev => [record, ...prev]);
+    onApplyRecord(student.id, record, []);
+    setProfileStatus("AI 跟进记录已保存。");
+  }
+
+  function appendAiFollowupMaterial(text: string) {
+    const rubric = readCommentRubric();
+    const profile = readStudentCommentProfile(student);
+    const nextNote = [profile.teacherNote, text].map(item => item.trim()).filter(Boolean).join("\n");
+    const savedProfile = saveStudentCommentProfile(student.id, rubric, {
+      ...profile,
+      teacherNote: nextNote,
+      status: profile.generatedComment ? "edited" : "draft",
+      updatedAt: new Date().toISOString(),
+    });
+    const aiComments = isRecordValue(student.aiComments) ? student.aiComments : {};
+    onUpdateStudent({
+      ...student,
+      aiComments: {
+        ...aiComments,
+        profile: savedProfile,
+      },
+    });
+    setProfileStatus("AI 跟进素材已加入评语补充说明。");
+  }
+
   const syncCandidates = students.filter(s => s.id !== student.id && s.name.includes(syncSearch));
 
   function toggleSync(id: StudentId) {
@@ -263,6 +302,19 @@ export function StudentModal({
     punish: { bg: "bg-red-50 border-red-100", text: "text-red-600", label: "罚" },
     note:   { bg: "bg-gray-50 border-gray-100", text: "text-gray-600", label: "备注" },
   };
+
+  const seatIndex = seatOrder.findIndex(id => id === student.id);
+  const seatRow = seatIndex >= 0 ? Math.floor(seatIndex / 8) + 1 : null;
+  const seatCol = seatIndex >= 0 ? (seatIndex % 8) + 1 : null;
+  const deskMateIndex = seatIndex >= 0 ? (seatIndex % 2 === 0 ? seatIndex + 1 : seatIndex - 1) : -1;
+  const nearbyIndexes = seatIndex >= 0
+    ? [seatIndex - 8, seatIndex + 8, seatIndex - 1, seatIndex + 1].filter(index => index >= 0 && index < seatOrder.length && index !== deskMateIndex)
+    : [];
+  const studentById = new Map(students.map(item => [item.id, item]));
+  const deskMateName = deskMateIndex >= 0 ? studentById.get(seatOrder[deskMateIndex] || "")?.name || "" : "";
+  const nearbyNames = nearbyIndexes
+    .map(index => studentById.get(seatOrder[index] || "")?.name || "")
+    .filter(Boolean);
 
   async function handleGenerateAiTrend() {
     setAiTrendBusy(true);
@@ -334,14 +386,14 @@ export function StudentModal({
         </div>
 
         <div className="flex items-center gap-1 border-b border-gray-100 px-6 pt-3">
-          {([["records", "奖罚记录"], ["profile", "档案"], ["trend", "成绩"]] as Array<["records" | "profile" | "trend", string]>).map(([key, label]) => (
+          {([["records", "奖罚记录"], ["profile", "档案"], ["trend", "成绩"], ["followup", "AI跟进"]] as Array<["records" | "profile" | "trend" | "followup", string]>).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={`relative px-4 py-2.5 text-sm font-semibold transition-colors ${activeTab === key ? "text-blue-700" : "text-gray-400 hover:text-gray-600"}`}
+              className={`relative px-4 py-2.5 text-sm font-semibold transition-colors ${activeTab === key ? key === "followup" ? "text-violet-700" : "text-blue-700" : "text-gray-400 hover:text-gray-600"}`}
             >
               {label}
-              {activeTab === key && <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-blue-600" />}
+              {activeTab === key && <span className={`absolute inset-x-3 -bottom-px h-0.5 rounded-full ${key === "followup" ? "bg-violet-600" : "bg-blue-600"}`} />}
             </button>
           ))}
         </div>
@@ -560,6 +612,22 @@ export function StudentModal({
             <p className="text-sm text-gray-400 text-center py-3">本周暂无记录，可以先来添加奖罚。</p>
           )}
           </div>
+          )}
+
+          {activeTab === "followup" && (
+            <AiStudentFollowupPanel
+              student={student}
+              context={{
+                dormitories,
+                seatIndex: seatIndex >= 0 ? seatIndex : null,
+                seatLabel: seatRow && seatCol ? `第${seatRow}排 第${seatCol}列` : "",
+                deskMateName,
+                nearbyNames,
+                scenario: "detail",
+              }}
+              onSaveRecord={saveAiFollowupRecord}
+              onAppendCommentMaterial={appendAiFollowupMaterial}
+            />
           )}
 
           {activeTab === "trend" && (

@@ -16,6 +16,8 @@ interface StudentDetailProps {
   onAssignDormitory: (studentId: StudentId, dormitoryId?: string) => void;
   onAddDormitoryEvent: (input: NewDormEventInput) => void;
   onOpenDormitories: () => void;
+  seatOrder?: Array<StudentId | null>;
+  initialActiveTab?: "records" | "profile" | "trend" | "followup";
 }
 
 export function StudentDetail({
@@ -29,6 +31,8 @@ export function StudentDetail({
   onAssignDormitory,
   onAddDormitoryEvent,
   onOpenDormitories,
+  seatOrder,
+  initialActiveTab,
 }: StudentDetailProps) {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
@@ -47,6 +51,8 @@ export function StudentDetail({
         onAddDormitoryEvent={onAddDormitoryEvent}
         onOpenDormitories={onOpenDormitories}
         onOpenAiComment={() => setAiDrawerOpen(true)}
+        seatOrder={seatOrder}
+        initialActiveTab={initialActiveTab}
       />
       <AiCommentDrawer
         open={aiDrawerOpen}

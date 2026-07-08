@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Play, Pause, Copy, Search, Sparkles, Save, Plus, Clock3, AlertCircle, CheckCircle2, Download, Check } from "lucide-react";
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
+import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
   readCommentRubric,
@@ -172,6 +173,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const [aiStatus, setAiStatus] = useState("AI 会使用学生成绩、标签和教师补充评价生成。");
   const [customWordCount, setCustomWordCount] = useState(120);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showFollowupPanel, setShowFollowupPanel] = useState(false);
   const [exportSelectedIds, setExportSelectedIds] = useState<Set<StudentId>>(() => new Set());
   const [exportFormat, setExportFormat] = useState<"csv" | "txt">("csv");
   const pauseRequested = useRef(false);
@@ -384,6 +386,26 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       needsInfo: savedProfile.teacherNote.trim() ? false : selectedStudent.academicTags.length === 0,
     });
     setAiStatus(`已暂存 ${selectedStudent.name} 的补充说明。`);
+  }
+
+  function appendFollowupMaterialToTeacherNote(text: string) {
+    if (!selectedStudent || !selectedComment || !selectedProfile) return;
+    const nextNote = [teacherNote || selectedProfile.teacherNote, text]
+      .map(item => item.trim())
+      .filter(Boolean)
+      .join("\n");
+    const savedProfile = saveStudentCommentProfile(selectedStudent.id, rubric, {
+      ...selectedProfile,
+      teacherNote: nextNote,
+      style: selectedComment.style as "warm" | "formal" | "brief",
+      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
+      status: selectedProfile.generatedComment ? "edited" : "draft",
+      updatedAt: new Date().toISOString(),
+    });
+    setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
+    setTeacherNote(savedProfile.teacherNote);
+    updateComment(selectedStudent.id, { needsInfo: false });
+    setAiStatus(`已把 AI 跟进素材加入 ${selectedStudent.name} 的补充说明。`);
   }
 
   function toggleCriterionOption(criterion: CommentCriterion, optionId: string) {
@@ -946,6 +968,13 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                 >
                   查看详情
                 </button>
+                <button
+                  onClick={() => setShowFollowupPanel(value => !value)}
+                  className={`flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm transition-colors ${showFollowupPanel ? "bg-violet-600 text-white" : "border border-violet-100 bg-violet-50 text-violet-600 hover:bg-violet-100"}`}
+                  style={{ fontWeight: 800 }}
+                >
+                  <Sparkles className="h-4 w-4" />AI素材
+                </button>
                 {selectedTags[0] && (
                   <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-600" style={{ fontWeight: 800 }}>
                     {selectedTags[0]}
@@ -972,6 +1001,20 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-gray-50">
+                {showFollowupPanel && (
+                  <div className="p-4">
+                    <AiStudentFollowupPanel
+                      compact
+                      student={selectedStudent}
+                      context={{
+                        scenario: "comment",
+                        teacherNote,
+                        commentDraft: buildDraft(selectedComment, teacherNote),
+                      }}
+                      onAppendCommentMaterial={appendFollowupMaterialToTeacherNote}
+                    />
+                  </div>
+                )}
                 {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
                   const selected = new Set(selectedProfile.criteriaValues[criterion.id] || []);
                   const customOptions = selectedProfile.customOptions[criterion.id] || [];

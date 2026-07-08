@@ -54,6 +54,9 @@ export default {
     if (url.pathname === "/chat-assistant") {
       return handleChatAssistant(request, env, corsHeaders);
     }
+    if (url.pathname === "/student-followup") {
+      return handleStudentFollowup(request, env, corsHeaders);
+    }
     if (url.pathname === "/generate-comment") {
       return handleGenerateStudentComment(request, env, corsHeaders);
     }
@@ -721,6 +724,64 @@ async function handleSuggestScoreMapping(request, env, corsHeaders) {
   }
 }
 
+async function handleStudentFollowup(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  const token = getBearerToken(request);
+  const verified = await verifyAiRequest(token, env);
+  if (!verified.ok) {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+  if (isOverDailyLimit(token, verified.dailyLimit)) {
+    return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
+  }
+
+  const body = await readJsonBody(request, MAX_BODY_BYTES + 8 * 1024);
+  if (!body.ok || !isValidStudentFollowupPayload(body.value)) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是谨慎、务实的班主任学生跟进助手。只能根据用户提供的单个学生成绩、标签、日常记录、宿舍、座位和评语素材生成建议，不能编造家庭情况、心理/医学判断或未提供事实。输出要帮助老师马上行动：近期变化、风险信号、可表扬点、3条跟进动作、家校沟通草稿、可放入期末评语的素材。语言温和具体。必须返回 JSON，字段为 summary、riskSignals、strengths、actions、parentMessageDraft、commentMaterials、disclaimer。riskSignals、strengths、actions、commentMaterials 都必须是字符串数组；actions 恰好 3 条；如果资料不足，要在 riskSignals 或 actions 中提示需要补充的信息，而不是编造。"
+          },
+          {
+            role: "user",
+            content: JSON.stringify(trimStudentFollowupPayload(body.value))
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    const data = await response.json();
+    const parsed = parseModelJson(data?.choices?.[0]?.message?.content || "");
+    if (!parsed) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    return jsonResponse(sanitizeStudentFollowupResult(parsed), 200, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
 async function handleGenerateStudentComment(request, env, corsHeaders) {
   if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
     return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
@@ -1164,6 +1225,26 @@ function isValidStudentCommentPayload(payload) {
   );
 }
 
+function isValidStudentFollowupPayload(payload) {
+  const context = payload?.context;
+  const student = context?.student;
+  return (
+    payload &&
+    typeof payload === "object" &&
+    Boolean(toText(payload.studentId)) &&
+    context &&
+    typeof context === "object" &&
+    student &&
+    typeof student === "object" &&
+    Boolean(toText(student.name)) &&
+    Array.isArray(context.exams) &&
+    context.exams.length <= 40 &&
+    Array.isArray(context.tags) &&
+    context.tags.length <= 20 &&
+    (!payload.seatContext || typeof payload.seatContext === "object")
+  );
+}
+
 function getStudentCommentLengthSettings(payload) {
   const mode = toText(payload?.commentLengthMode || "standard");
   const customTarget = Math.round(Number(payload?.targetWordCount));
@@ -1350,6 +1431,30 @@ function sanitizeAssistantResult(result) {
   };
 }
 
+function sanitizeStudentFollowupResult(result) {
+  const toList = (value, limit) => {
+    const raw = Array.isArray(value)
+      ? value
+      : typeof value === "string"
+        ? value.split(/\n|；|;/)
+        : [];
+    return raw
+      .map((item) => toAssistantPlainText(item, 180))
+      .filter(Boolean)
+      .slice(0, limit);
+  };
+  const actions = toList(result.actions, 3);
+  return {
+    summary: toAssistantPlainText(result.summary || result.overall, 360),
+    riskSignals: toList(result.riskSignals || result.risks, 5),
+    strengths: toList(result.strengths, 5),
+    actions,
+    parentMessageDraft: toAssistantPlainText(result.parentMessageDraft || result.parentMessage, 700),
+    commentMaterials: toList(result.commentMaterials || result.materials, 6),
+    disclaimer: toAssistantPlainText(result.disclaimer, 200) || "AI 跟进建议仅供教师参考，请结合课堂观察判断。"
+  };
+}
+
 function sanitizeScoreMappingResult(result, payload) {
   const maxIndex = payload.headers.length - 1;
   const safeIndex = (value) => {
@@ -1457,6 +1562,62 @@ function trimAssistantComparisonContext(context) {
     } : null,
     notice: toAssistantText(context.notice, 180),
     comparisonPacks: packs
+  };
+}
+
+function trimStudentFollowupPayload(payload) {
+  const context = payload.context || {};
+  const trimExam = (exam) => ({
+    name: toAssistantText(exam?.name, 80),
+    date: toAssistantText(exam?.date, 40),
+    period: ["oldest", "middle", "latest"].includes(exam?.period) ? exam.period : "",
+    totalScore: Number.isFinite(Number(exam?.totalScore)) ? Number(exam.totalScore) : null,
+    classRank: Number.isFinite(Number(exam?.classRank)) ? Number(exam.classRank) : null,
+    subjects: Array.isArray(exam?.subjects)
+      ? exam.subjects.map((item) => ({
+          subject: toAssistantText(item?.subject, 30),
+          score: Number.isFinite(Number(item?.score)) ? Number(item.score) : null
+        })).filter((item) => item.subject).slice(0, 12)
+      : [],
+    zeroSubjects: Array.isArray(exam?.zeroSubjects) ? exam.zeroSubjects.map((item) => toAssistantText(item, 30)).filter(Boolean).slice(0, 8) : []
+  });
+  return {
+    student: {
+      name: toAssistantText(payload.studentName || context.student?.name || "学生", 40)
+    },
+    scenario: ["detail", "grade", "seat", "comment"].includes(payload.scenario) ? payload.scenario : "detail",
+    context: {
+      latestExam: context.latestExam ? trimExam(context.latestExam) : null,
+      exams: Array.isArray(context.exams) ? context.exams.map(trimExam).slice(-12) : [],
+      trend: {
+        examCount: Number(context.trend?.examCount) || 0,
+        totalScoreChange: Number.isFinite(Number(context.trend?.totalScoreChange)) ? Number(context.trend.totalScoreChange) : null,
+        classRankChange: Number.isFinite(Number(context.trend?.classRankChange)) ? Number(context.trend.classRankChange) : null,
+        changedSubjects: Array.isArray(context.trend?.changedSubjects)
+          ? context.trend.changedSubjects.map((item) => ({
+              subject: toAssistantText(item?.subject, 30),
+              diff: Number.isFinite(Number(item?.diff)) ? Number(item.diff) : null
+            })).filter((item) => item.subject).slice(0, 8)
+          : [],
+        summary: toAssistantText(context.trend?.summary, 260)
+      },
+      strengths: Array.isArray(context.strengths) ? context.strengths.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : [],
+      weaknesses: Array.isArray(context.weaknesses) ? context.weaknesses.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : [],
+      tags: Array.isArray(context.tags) ? context.tags.map((item) => toAssistantText(item, 60)).filter(Boolean).slice(0, 16) : [],
+      records: Array.isArray(context.records) ? context.records.map((item) => toAssistantText(item, 160)).filter(Boolean).slice(0, 10) : [],
+      dormitory: toAssistantText(context.dormitory, 160),
+      commentProfile: {
+        criteriaSummary: Array.isArray(context.commentProfile?.criteriaSummary) ? context.commentProfile.criteriaSummary.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
+        customOptions: Array.isArray(context.commentProfile?.customOptions) ? context.commentProfile.customOptions.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
+        teacherNote: toAssistantText(context.commentProfile?.teacherNote || payload.teacherNote, 240)
+      }
+    },
+    seatContext: {
+      seatLabel: toAssistantText(payload.seatContext?.seatLabel, 40),
+      deskMateName: toAssistantText(payload.seatContext?.deskMateName, 40),
+      nearbyNames: Array.isArray(payload.seatContext?.nearbyNames) ? payload.seatContext.nearbyNames.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : []
+    },
+    requirements: payload.requirements || {}
   };
 }
 

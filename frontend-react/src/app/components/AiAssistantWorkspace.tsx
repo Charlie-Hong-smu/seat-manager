@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, Copy, Loader2, RotateCcw, Send, Sparkles, Trash2, UserRound } from "lucide-react";
+import { Bot, Check, Copy, FilePlus2, Loader2, RotateCcw, Save, Send, Sparkles, Trash2, UserRound } from "lucide-react";
 
 import {
   buildAiAssistantBaseContext,
@@ -299,6 +299,8 @@ export function AiAssistantWorkspace({
   dormitories,
   fundTransactions,
   seatOrder,
+  onSaveStudentRecord,
+  onAppendCommentMaterial,
 }: {
   active: boolean;
   students: AppStudent[];
@@ -306,6 +308,8 @@ export function AiAssistantWorkspace({
   dormitories: Dormitory[];
   fundTransactions: FundTransaction[];
   seatOrder: Array<StudentId | null>;
+  onSaveStudentRecord?: (student: AppStudent, note: string) => void;
+  onAppendCommentMaterial?: (student: AppStudent, text: string) => void;
 }) {
   const [messages, setMessages] = useState<AiChatMessage[]>(() => loadChatHistory());
   const [input, setInput] = useState(() => loadDraftInput());
@@ -316,6 +320,7 @@ export function AiAssistantWorkspace({
   const [status, setStatus] = useState("AI 只会读取当前班级、当前学期的摘要，不会自动修改数据。");
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>(QUICK_PROMPTS);
   const [copiedMessageId, setCopiedMessageId] = useState<string>("");
+  const [savedActionKey, setSavedActionKey] = useState("");
   const [studentSuggestOpen, setStudentSuggestOpen] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -423,6 +428,42 @@ export function AiAssistantWorkspace({
         setCopiedMessageId(current => (current === message.id ? "" : current));
       }, 1400);
     }).catch(() => {});
+  }
+
+  function findMessageTargetStudent(message: AiChatMessage): AppStudent | null {
+    if (message.role !== "assistant") {
+      return null;
+    }
+    const labels = [
+      ...(message.contextLabels || []),
+      ...(message.contextEvidence || []).flatMap(item => [item.title, item.detail]),
+    ].join(" ");
+    if (!labels.trim()) {
+      return null;
+    }
+    return students.find(student => labels.includes(student.name)) || null;
+  }
+
+  function saveAssistantRecord(message: AiChatMessage, student: AppStudent) {
+    if (!onSaveStudentRecord) {
+      return;
+    }
+    if (!window.confirm(`把这条 AI 回复保存到 ${student.name} 的学生记录？`)) {
+      return;
+    }
+    onSaveStudentRecord(student, formatChatDisplayText(message));
+    setSavedActionKey(`${message.id}:record`);
+  }
+
+  function appendAssistantMaterial(message: AiChatMessage, student: AppStudent) {
+    if (!onAppendCommentMaterial) {
+      return;
+    }
+    if (!window.confirm(`把这条 AI 回复加入 ${student.name} 的评语素材？`)) {
+      return;
+    }
+    onAppendCommentMaterial(student, formatChatDisplayText(message));
+    setSavedActionKey(`${message.id}:material`);
   }
 
   async function sendPrompt(prompt: string) {
@@ -620,7 +661,7 @@ export function AiAssistantWorkspace({
                       ))}
                     </div>
                   ) : null}
-                  <div className={`mt-2 flex items-center gap-3 text-xs ${message.role === "user" ? "text-gray-400" : "text-gray-400"}`}>
+                  <div className={`mt-2 flex flex-wrap items-center gap-3 text-xs ${message.role === "user" ? "text-gray-400" : "text-gray-400"}`}>
                     <button
                       type="button"
                       onClick={() => copyMessage(message)}
@@ -631,6 +672,36 @@ export function AiAssistantWorkspace({
                       {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                       {copiedMessageId === message.id ? "已复制" : "复制"}
                     </button>
+                    {message.role === "assistant" && findMessageTargetStudent(message) && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const target = findMessageTargetStudent(message);
+                            if (target) saveAssistantRecord(message, target);
+                          }}
+                          title="保存为学生跟进记录"
+                          aria-label="保存为学生跟进记录"
+                          className="inline-flex items-center gap-1 hover:text-gray-600"
+                        >
+                          {savedActionKey === `${message.id}:record` ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+                          {savedActionKey === `${message.id}:record` ? "已存记录" : "存记录"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const target = findMessageTargetStudent(message);
+                            if (target) appendAssistantMaterial(message, target);
+                          }}
+                          title="加入评语素材"
+                          aria-label="加入评语素材"
+                          className="inline-flex items-center gap-1 hover:text-gray-600"
+                        >
+                          {savedActionKey === `${message.id}:material` ? <Check className="h-3.5 w-3.5" /> : <FilePlus2 className="h-3.5 w-3.5" />}
+                          {savedActionKey === `${message.id}:material` ? "已加素材" : "加素材"}
+                        </button>
+                      </>
+                    )}
                     {message.role === "user" && (
                       <button
                         type="button"
