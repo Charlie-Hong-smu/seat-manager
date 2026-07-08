@@ -22,7 +22,7 @@ export interface AiChatMessage {
   createdAt: string;
 }
 
-export interface AiAssistantContext {
+export interface AiAssistantBaseContext {
   className: string;
   termLabel: string;
   studentCount: number;
@@ -43,21 +43,41 @@ export interface AiAssistantContext {
     reasons: string[];
     tags: string[];
   }>;
-  studentGradeProfiles: Array<{
-    name: string;
-    latestExam: string;
-    latestTotal: number | null;
-    previousTotal: number | null;
-    trend: number | null;
-    latestScores: string[];
-    weakSubjects: string[];
-    tags: string[];
-  }>;
   tagSummary: string[];
   recordSummary: string[];
   seatSummary: string;
   dormitorySummary: string[];
   fundSummary: string;
+}
+
+export interface AiContextPackItem {
+  name?: string;
+  category?: string;
+  summary?: string;
+  latestExam?: string;
+  latestTotal?: number | null;
+  previousTotal?: number | null;
+  trend?: number | null;
+  latestScores?: string[];
+  weakSubjects?: string[];
+  exams?: string[];
+  records?: string[];
+  tags?: string[];
+  dormitory?: string;
+  members?: string[];
+  events?: string[];
+}
+
+export interface AiContextPack {
+  kind: "student" | "candidate_students" | "exam" | "dormitory" | "tag" | "records";
+  title: string;
+  reason: string;
+  items: AiContextPackItem[];
+}
+
+export interface AiAssistantContext {
+  baseContext: AiAssistantBaseContext;
+  contextPacks: AiContextPack[];
 }
 
 export interface AiAssistantResponse {
@@ -305,32 +325,133 @@ function getWeakSubjects(row: GradeRow | null, subjectAverages: Record<string, n
     .map(item => `${item.subject}${item.score}（较均${item.gap >= 0 ? "+" : ""}${item.gap}）`);
 }
 
-function buildStudentGradeProfiles(input: {
-  students: AppStudent[];
-  latestExam?: GradeExam;
-  previousExam?: GradeExam;
-  latestSubjectAverages: Record<string, number>;
-}) {
-  return input.students
-    .map(student => {
-      const latestRow = findStudentExamRow(input.latestExam, student);
-      const previousRow = findStudentExamRow(input.previousExam, student);
-      const latestTotal = getRowTotal(latestRow);
-      const previousTotal = getRowTotal(previousRow);
-      const trend = latestTotal !== null && previousTotal !== null ? Math.round((latestTotal - previousTotal) * 10) / 10 : null;
-      return {
-        name: student.name,
-        latestExam: input.latestExam?.name || "",
-        latestTotal,
-        previousTotal,
-        trend,
-        latestScores: formatRowScores(latestRow, input.latestExam?.subjects || []),
-        weakSubjects: getWeakSubjects(latestRow, input.latestSubjectAverages),
-        tags: [...student.academicTags, ...student.tags].slice(0, 5),
-      };
+function normalizeQuery(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, "").replace(/[，。！？、,.!?;；:：()（）【】\[\]]/g, "");
+}
+
+function includesAny(text: string, words: string[]): boolean {
+  return words.some(word => text.includes(word));
+}
+
+function findMentionedStudents(prompt: string, students: AppStudent[]): AppStudent[] {
+  const normalized = normalizeQuery(prompt);
+  return students
+    .filter(student => {
+      const names = [student.name, ...student.aliases].map(normalizeQuery).filter(Boolean);
+      return names.some(name => normalized.includes(name));
     })
-    .filter(profile => profile.latestScores.length || profile.latestTotal !== null || profile.previousTotal !== null || profile.tags.length)
-    .slice(0, 80);
+    .slice(0, 6);
+}
+
+function findMentionedTags(prompt: string, students: AppStudent[]): string[] {
+  const normalized = normalizeQuery(prompt);
+  const tags = new Set(students.flatMap(student => [...student.academicTags, ...student.tags]).filter(Boolean));
+  return Array.from(tags).filter(tag => normalized.includes(normalizeQuery(tag))).slice(0, 5);
+}
+
+function findMentionedExams(prompt: string, exams: GradeExam[]): GradeExam[] {
+  const normalized = normalizeQuery(prompt);
+  return exams.filter(exam => normalized.includes(normalizeQuery(exam.name))).slice(0, 3);
+}
+
+function findMentionedDormitories(prompt: string, dormitories: Dormitory[]): Dormitory[] {
+  const normalized = normalizeQuery(prompt);
+  return dormitories.filter(dorm => normalized.includes(normalizeQuery(dorm.name))).slice(0, 4);
+}
+
+function formatStudentExamSummary(student: AppStudent, exam: GradeExam | undefined, subjectAverages: Record<string, number>): AiContextPackItem {
+  const row = findStudentExamRow(exam, student);
+  return {
+    name: student.name,
+    latestExam: exam?.name || "",
+    latestTotal: getRowTotal(row),
+    latestScores: formatRowScores(row, exam?.subjects || []),
+    weakSubjects: getWeakSubjects(row, subjectAverages),
+    records: [...student.records]
+      .sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`))
+      .slice(0, 8)
+      .map(record => `${record.date} ${record.type}：${record.note}`),
+    tags: [...student.academicTags, ...student.tags].slice(0, 8),
+  };
+}
+
+function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>, dormitories: Dormitory[]): AiContextPack {
+  const chronological = [...exams].sort((a, b) => `${b.date || ""}-${b.name}`.localeCompare(`${a.date || ""}-${a.name}`));
+  const recentExams = chronological.slice(0, 4);
+  const latestRow = findStudentExamRow(latestExam, student);
+  const previousRow = recentExams[1] ? findStudentExamRow(recentExams[1], student) : null;
+  const latestTotal = getRowTotal(latestRow);
+  const previousTotal = getRowTotal(previousRow);
+  const dormitory = dormitories.find(dorm => dorm.memberIds.includes(student.id));
+  return {
+    kind: "student",
+    title: `${student.name}明细`,
+    reason: "问题中提到具体学生，附带该生近期成绩、标签、记录和宿舍信息。",
+    items: [{
+      ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
+      previousTotal,
+      trend: latestTotal !== null && previousTotal !== null ? Math.round((latestTotal - previousTotal) * 10) / 10 : null,
+      exams: recentExams.map(exam => {
+        const row = findStudentExamRow(exam, student);
+        const total = getRowTotal(row);
+        const scores = formatRowScores(row, exam.subjects).join("、");
+        return `${exam.name}${exam.date ? `(${exam.date})` : ""}：总分${total ?? "无"}；${scores || "无各科"}`;
+      }),
+      dormitory: dormitory ? `${dormitory.name} 当前 ${dormitory.currentScore} 分` : "",
+    }],
+  };
+}
+
+function buildCandidatePack(title: string, reason: string, students: AppStudent[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>, category: string): AiContextPack | null {
+  const items = students.slice(0, 20).map(student => ({
+    ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
+    category,
+  }));
+  return items.length ? { kind: "candidate_students", title, reason, items } : null;
+}
+
+function buildDormitoryPack(dormitories: Dormitory[], students: AppStudent[]): AiContextPack | null {
+  const items = dormitories.slice(0, 8).map(dorm => ({
+    name: dorm.name,
+    summary: `当前 ${dorm.currentScore} 分，基础分 ${dorm.baseScore}，成员 ${dorm.memberIds.length} 人`,
+    members: dorm.memberIds.map(id => students.find(student => student.id === id)?.name || "").filter(Boolean).slice(0, 12),
+    events: [...dorm.events]
+      .sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`))
+      .slice(0, 8)
+      .map(event => `${event.date} ${event.type} ${event.score >= 0 ? "+" : ""}${event.score}：${event.reason || event.note}`),
+  }));
+  return items.length ? { kind: "dormitory", title: "宿舍明细", reason: "问题涉及宿舍，附带宿舍成员、分数和近期事件。", items } : null;
+}
+
+function buildExamPack(exams: GradeExam[], students: AppStudent[]): AiContextPack | null {
+  const items = exams.slice(0, 3).map(exam => {
+    const totals = getExamTotals(exam).sort((a, b) => a - b);
+    const subjectAverages = getSubjectAverages(exam);
+    return {
+      name: exam.name,
+      summary: `${exam.date || "未填日期"}，${exam.rows.length} 人，${exam.subjects.length} 科，总分均分 ${getExamTotalAverage(exam) ?? "无"}，最低 ${totals[0] ?? "无"}，最高 ${totals[totals.length - 1] ?? "无"}`,
+      latestScores: Object.entries(subjectAverages).map(([subject, value]) => `${subject}${value}`),
+      records: exam.rows
+        .filter(row => row.total === 0 || Object.values(row.scores).some(cell => cell.score === 0))
+        .slice(0, 10)
+        .map(row => `${row.name} 有 0 分/缺考风险`),
+      tags: students.length ? [`匹配学生库 ${students.length} 人`] : [],
+    };
+  });
+  return items.length ? { kind: "exam", title: "考试明细", reason: "问题涉及考试或成绩，附带考试统计和异常分数提示。", items } : null;
+}
+
+function buildRecordsPack(students: AppStudent[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>): AiContextPack | null {
+  const ranked = students
+    .filter(student => student.records.length)
+    .sort((a, b) => b.records.length - a.records.length)
+    .slice(0, 20);
+  return buildCandidatePack("近期记录较多学生", "问题涉及日常记录/表现，附带记录较多学生。", ranked, latestExam, latestSubjectAverages, "近期记录");
+}
+
+function buildTagPack(tags: string[], students: AppStudent[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>): AiContextPack | null {
+  const matched = students.filter(student => [...student.academicTags, ...student.tags].some(tag => tags.includes(tag))).slice(0, 20);
+  return buildCandidatePack(`标签匹配：${tags.join("、")}`, "问题命中学生标签，附带相关学生。", matched, latestExam, latestSubjectAverages, "标签匹配");
 }
 
 function summarizeCounts(values: string[], limit: number): string[] {
@@ -353,7 +474,7 @@ function dedupeFocusStudents(items: Array<{ student: AppStudent; category: strin
   });
 }
 
-export function buildAiAssistantContext(input: {
+export function buildAiAssistantBaseContext(input: {
   className: string;
   termLabel: string;
   students: AppStudent[];
@@ -362,7 +483,7 @@ export function buildAiAssistantContext(input: {
   fundTransactions: FundTransaction[];
   seatCount: number;
   occupiedSeatCount?: number;
-}): AiAssistantContext {
+}): AiAssistantBaseContext {
   const exams = [...input.exams].sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`));
   const latestExam = exams[exams.length - 1];
   const previousExam = exams[exams.length - 2];
@@ -386,12 +507,6 @@ export function buildAiAssistantContext(input: {
     }
   }
   const latestSubjectAverages = getSubjectAverages(latestExam);
-  const studentGradeProfiles = buildStudentGradeProfiles({
-    students: input.students,
-    latestExam,
-    previousExam,
-    latestSubjectAverages,
-  });
   const totals = getExamTotals(latestExam).sort((a, b) => a - b);
   const examInsights = [
     Object.keys(latestSubjectAverages).length ? `最近考试各科均分：${Object.entries(latestSubjectAverages).map(([subject, value]) => `${subject}${value}`).join("、")}` : "",
@@ -464,12 +579,85 @@ export function buildAiAssistantContext(input: {
     examInsights,
     gradeTrend,
     focusStudents,
-    studentGradeProfiles,
     tagSummary,
     recordSummary,
     seatSummary: `座位 ${input.seatCount} 个，已安排 ${input.occupiedSeatCount ?? 0} 人，未安排约 ${Math.max(input.students.length - (input.occupiedSeatCount ?? 0), 0)} 人`,
     dormitorySummary,
     fundSummary: `收入 ${Math.round(income * 100) / 100}，支出 ${Math.round(expense * 100) / 100}，余额 ${Math.round((income - expense) * 100) / 100}`,
+  };
+}
+
+export function buildAiAssistantContext(input: {
+  prompt: string;
+  baseContext: AiAssistantBaseContext;
+  students: AppStudent[];
+  exams: GradeExam[];
+  dormitories: Dormitory[];
+}): AiAssistantContext {
+  const prompt = input.prompt || "";
+  const normalized = normalizeQuery(prompt);
+  const exams = [...input.exams].sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`));
+  const latestExam = exams[exams.length - 1];
+  const latestSubjectAverages = getSubjectAverages(latestExam);
+  const packs: AiContextPack[] = [];
+  const mentionedStudents = findMentionedStudents(prompt, input.students);
+  mentionedStudents.forEach(student => packs.push(buildStudentPack(student, exams, latestExam, latestSubjectAverages, input.dormitories)));
+
+  const mentionedTags = findMentionedTags(prompt, input.students);
+  const tagPack = mentionedTags.length ? buildTagPack(mentionedTags, input.students, latestExam, latestSubjectAverages) : null;
+  if (tagPack) packs.push(tagPack);
+
+  const mentionedDormitories = findMentionedDormitories(prompt, input.dormitories);
+  const needsDormitory = mentionedDormitories.length > 0 || includesAny(normalized, ["宿舍", "寝室", "内务", "扣分", "加分"]);
+  const dormPack = needsDormitory ? buildDormitoryPack(mentionedDormitories.length ? mentionedDormitories : input.dormitories, input.students) : null;
+  if (dormPack) packs.push(dormPack);
+
+  const mentionedExams = findMentionedExams(prompt, exams);
+  const needsExam = mentionedExams.length > 0 || includesAny(normalized, ["考试", "成绩", "分数", "排名", "均分", "学科", "科目", "缺考"]);
+  const examPack = needsExam ? buildExamPack(mentionedExams.length ? mentionedExams : exams.slice(-2).reverse(), input.students) : null;
+  if (examPack) packs.push(examPack);
+
+  const scoredStudents = input.students.map(student => ({
+    student,
+    latestTotal: getStudentLatestTotal(student),
+    trend: getStudentTrend(student),
+    recordCount: student.records.length,
+  }));
+  if (includesAny(normalized, ["退步", "下降", "下滑", "掉"])) {
+    const candidates = scoredStudents
+      .filter(item => item.trend !== null && item.trend < 0)
+      .sort((a, b) => (a.trend ?? 0) - (b.trend ?? 0))
+      .map(item => item.student);
+    const pack = buildCandidatePack("退步候选学生", "问题询问退步/下降，附带退步幅度靠前的学生。", candidates, latestExam, latestSubjectAverages, "退步关注");
+    if (pack) packs.push(pack);
+  }
+  if (includesAny(normalized, ["进步", "提升", "上升", "经验"])) {
+    const candidates = scoredStudents
+      .filter(item => item.trend !== null && item.trend > 0)
+      .sort((a, b) => (b.trend ?? 0) - (a.trend ?? 0))
+      .map(item => item.student);
+    const pack = buildCandidatePack("进步候选学生", "问题询问进步/提升，附带提升幅度靠前的学生。", candidates, latestExam, latestSubjectAverages, "进步样本");
+    if (pack) packs.push(pack);
+  }
+  if (includesAny(normalized, ["低分", "薄弱", "弱项", "关注", "重点", "帮扶", "临界"])) {
+    const candidates = scoredStudents
+      .filter(item => item.latestTotal !== null)
+      .sort((a, b) => (a.latestTotal ?? 0) - (b.latestTotal ?? 0))
+      .map(item => item.student);
+    const pack = buildCandidatePack("低分/重点候选学生", "问题询问重点关注或薄弱学生，附带低分候选。", candidates, latestExam, latestSubjectAverages, "低分关注");
+    if (pack) packs.push(pack);
+  }
+  if (includesAny(normalized, ["日常", "记录", "表现", "纪律", "奖励", "提醒", "作业", "课堂"])) {
+    const pack = buildRecordsPack(input.students, latestExam, latestSubjectAverages);
+    if (pack) packs.push(pack);
+  }
+
+  const deduped = packs.filter((pack, index, array) => (
+    array.findIndex(item => item.kind === pack.kind && item.title === pack.title) === index
+  )).slice(0, 6);
+  return {
+    baseContext: input.baseContext,
+    contextPacks: deduped,
   };
 }
 

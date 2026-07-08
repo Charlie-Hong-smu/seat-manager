@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Copy, Loader2, Send, Sparkles, Trash2, UserRound } from "lucide-react";
 
 import {
+  buildAiAssistantBaseContext,
   buildAiAssistantContext,
   hasStoredAiAssistantAuth,
   sendAiAssistantChat,
+  type AiContextPack,
   type AiChatMessage,
 } from "../state/aiAssistantService";
 import { getCurrentSlice, sliceDisplayName } from "../state/workspaces";
@@ -98,6 +100,10 @@ function getAiErrorMessage(reason: string): string {
   }[reason] || (reason.startsWith("ai_failed:") ? `AI 助手暂时不可用：${reason.replace("ai_failed:", "")}` : "AI 助手暂时不可用，请稍后重试。");
 }
 
+function formatContextPackLabel(pack: AiContextPack): string {
+  return `${pack.title}${pack.items.length ? ` ${pack.items.length}项` : ""}`;
+}
+
 export function AiAssistantWorkspace({
   students,
   exams,
@@ -129,7 +135,7 @@ export function AiAssistantWorkspace({
       return null;
     }
   }, []);
-  const context = useMemo(() => buildAiAssistantContext({
+  const baseContext = useMemo(() => buildAiAssistantBaseContext({
     className: slice ? sliceDisplayName(slice) : "当前班级",
     termLabel: slice?.term.label || "当前学期",
     students,
@@ -139,6 +145,14 @@ export function AiAssistantWorkspace({
     seatCount: seatOrder.length,
     occupiedSeatCount: seatOrder.filter(Boolean).length,
   }), [dormitories, exams, fundTransactions, seatOrder, slice, students]);
+  const previewContext = useMemo(() => buildAiAssistantContext({
+    prompt: input,
+    baseContext,
+    students,
+    exams,
+    dormitories,
+  }), [baseContext, dormitories, exams, input, students]);
+  const contextPackLabels = previewContext.contextPacks.map(formatContextPackLabel);
 
   useEffect(() => {
     saveDraftInput(input);
@@ -165,11 +179,18 @@ export function AiAssistantWorkspace({
     setInput("");
     saveDraftInput("");
     setBusy(true);
-    setStatus("AI 正在分析当前班级摘要...");
+    const activeContext = buildAiAssistantContext({
+      prompt: text,
+      baseContext,
+      students,
+      exams,
+      dormitories,
+    });
+    setStatus(activeContext.contextPacks.length ? `AI 正在分析当前班级摘要，并附带：${activeContext.contextPacks.map(formatContextPackLabel).join("、")}` : "AI 正在分析当前班级摘要...");
     try {
       const result = await sendAiAssistantChat({
         messages: nextMessages,
-        context,
+        context: activeContext,
         accessCode,
         remember: rememberAuth,
       });
@@ -207,7 +228,7 @@ export function AiAssistantWorkspace({
               </span>
               <div>
                 <h1 className="text-xl text-gray-900" style={{ fontWeight: 900 }}>AI助手</h1>
-                <p className="mt-0.5 text-sm text-gray-400">{context.className} · {context.termLabel}</p>
+                <p className="mt-0.5 text-sm text-gray-400">{baseContext.className} · {baseContext.termLabel}</p>
               </div>
             </div>
           </div>
@@ -227,9 +248,9 @@ export function AiAssistantWorkspace({
           <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>可分析内容</div>
             <div className="mt-3 space-y-2 text-sm text-gray-600">
-              <div className="rounded-xl bg-gray-50 px-3 py-2">学生 {context.studentCount} 人 · 座位 {context.seatCount} 个</div>
-              <div className="rounded-xl bg-gray-50 px-3 py-2">{context.latestExam ? `最近考试：${context.latestExam.name}` : "暂无考试数据"}</div>
-              <div className="rounded-xl bg-gray-50 px-3 py-2">重点候选 {context.focusStudents.length} 人</div>
+              <div className="rounded-xl bg-gray-50 px-3 py-2">学生 {baseContext.studentCount} 人 · 座位 {baseContext.seatCount} 个</div>
+              <div className="rounded-xl bg-gray-50 px-3 py-2">{baseContext.latestExam ? `最近考试：${baseContext.latestExam.name}` : "暂无考试数据"}</div>
+              <div className="rounded-xl bg-gray-50 px-3 py-2">重点候选 {baseContext.focusStudents.length} 人</div>
             </div>
           </section>
 
@@ -311,6 +332,11 @@ export function AiAssistantWorkspace({
 
           <div className="shrink-0 border-t border-gray-100 p-4">
             <p className="mb-3 text-xs text-violet-600">{status}</p>
+            {contextPackLabels.length > 0 && (
+              <p className="mb-3 rounded-xl bg-violet-50 px-3 py-2 text-xs leading-5 text-violet-700">
+                本次将附带：{contextPackLabels.join("、")}
+              </p>
+            )}
             <form
               className="flex gap-2"
               onSubmit={event => {

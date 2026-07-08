@@ -638,7 +638,7 @@ async function handleChatAssistant(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎、务实的班主任 AI 助手。你只能根据用户提供的当前班级、当前学期摘要回答；不能声称看到了其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。可以给老师提供班级分析、重点学生跟进、沟通话术、评语素材方向和下一步行动建议。若用户询问单个学生，优先查找 studentGradeProfiles 中该学生的最近考试各科、总分和变化；只有确实没有该学生档案时才说明信息不足。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
+              "你是谨慎、务实的班主任 AI 助手。你只能根据用户提供的当前班级、当前学期摘要回答；不能声称看到了其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。baseContext 是全班基础摘要；contextPacks 是本次问题自动附带的相关学生、考试、宿舍、标签或记录明细。若用户询问具体对象，优先使用 contextPacks；只有确实没有相关明细时才说明信息不足。可以给老师提供班级分析、重点学生跟进、沟通话术、评语素材方向和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
           },
           {
             role: "user",
@@ -1108,6 +1108,8 @@ function isValidClassPayload(payload) {
 }
 
 function isValidAssistantPayload(payload) {
+  const context = payload?.context;
+  const baseContext = context?.baseContext && typeof context.baseContext === "object" ? context.baseContext : context;
   return (
     payload &&
     typeof payload === "object" &&
@@ -1121,10 +1123,10 @@ function isValidAssistantPayload(payload) {
       message.content.trim().length > 0 &&
       message.content.length <= 2000
     )) &&
-    payload.context &&
-    typeof payload.context === "object" &&
-    Number.isInteger(payload.context.studentCount) &&
-    payload.context.studentCount >= 0
+    context &&
+    typeof context === "object" &&
+    Number.isInteger(baseContext?.studentCount) &&
+    baseContext.studentCount >= 0
   );
 }
 
@@ -1412,45 +1414,62 @@ function toAssistantText(value, limit = 800) {
 }
 
 function trimAssistantContext(context) {
+  const base = context?.baseContext && typeof context.baseContext === "object" ? context.baseContext : context;
   return {
-    className: toAssistantText(context.className, 80),
-    termLabel: toAssistantText(context.termLabel, 80),
-    studentCount: Number(context.studentCount) || 0,
-    seatCount: Number(context.seatCount) || 0,
-    latestExam: context.latestExam && typeof context.latestExam === "object" ? {
-      name: toAssistantText(context.latestExam.name, 80),
-      date: toAssistantText(context.latestExam.date, 40),
-      studentCount: Number(context.latestExam.studentCount) || 0,
-      subjectCount: Number(context.latestExam.subjectCount) || 0,
-      averageTotal: Number.isFinite(Number(context.latestExam.averageTotal)) ? Number(context.latestExam.averageTotal) : null
-    } : null,
-    examInsights: Array.isArray(context.examInsights) ? context.examInsights.map((item) => toAssistantText(item, 180)).filter(Boolean).slice(0, 8) : [],
-    gradeTrend: Array.isArray(context.gradeTrend) ? context.gradeTrend.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
-    focusStudents: Array.isArray(context.focusStudents)
-      ? context.focusStudents.map((student) => ({
-          name: toAssistantText(student?.name, 40),
-          category: toAssistantText(student?.category, 40),
-          latestTotal: Number.isFinite(Number(student?.latestTotal)) ? Number(student.latestTotal) : null,
-          reasons: Array.isArray(student?.reasons) ? student.reasons.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 3) : [],
-          tags: Array.isArray(student?.tags) ? student.tags.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : []
-        })).filter((student) => student.name).slice(0, 14)
-      : [],
-    studentGradeProfiles: Array.isArray(context.studentGradeProfiles)
-      ? context.studentGradeProfiles.map((student) => ({
-          name: toAssistantText(student?.name, 40),
-          latestExam: toAssistantText(student?.latestExam, 80),
-          latestTotal: Number.isFinite(Number(student?.latestTotal)) ? Number(student.latestTotal) : null,
-          previousTotal: Number.isFinite(Number(student?.previousTotal)) ? Number(student.previousTotal) : null,
-          trend: Number.isFinite(Number(student?.trend)) ? Number(student.trend) : null,
-          latestScores: Array.isArray(student?.latestScores) ? student.latestScores.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 10) : [],
-          weakSubjects: Array.isArray(student?.weakSubjects) ? student.weakSubjects.map((item) => toAssistantText(item, 60)).filter(Boolean).slice(0, 3) : [],
-          tags: Array.isArray(student?.tags) ? student.tags.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 5) : []
-        })).filter((student) => student.name).slice(0, 80)
-      : [],
-    tagSummary: Array.isArray(context.tagSummary) ? context.tagSummary.map((item) => toAssistantText(item, 80)).filter(Boolean).slice(0, 10) : [],
-    recordSummary: Array.isArray(context.recordSummary) ? context.recordSummary.map((item) => toAssistantText(item, 140)).filter(Boolean).slice(0, 8) : [],
-    seatSummary: toAssistantText(context.seatSummary, 120),
-    dormitorySummary: Array.isArray(context.dormitorySummary) ? context.dormitorySummary.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
-    fundSummary: toAssistantText(context.fundSummary, 160)
+    baseContext: {
+      className: toAssistantText(base.className, 80),
+      termLabel: toAssistantText(base.termLabel, 80),
+      studentCount: Number(base.studentCount) || 0,
+      seatCount: Number(base.seatCount) || 0,
+      latestExam: base.latestExam && typeof base.latestExam === "object" ? {
+        name: toAssistantText(base.latestExam.name, 80),
+        date: toAssistantText(base.latestExam.date, 40),
+        studentCount: Number(base.latestExam.studentCount) || 0,
+        subjectCount: Number(base.latestExam.subjectCount) || 0,
+        averageTotal: Number.isFinite(Number(base.latestExam.averageTotal)) ? Number(base.latestExam.averageTotal) : null
+      } : null,
+      examInsights: Array.isArray(base.examInsights) ? base.examInsights.map((item) => toAssistantText(item, 180)).filter(Boolean).slice(0, 8) : [],
+      gradeTrend: Array.isArray(base.gradeTrend) ? base.gradeTrend.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
+      focusStudents: Array.isArray(base.focusStudents)
+        ? base.focusStudents.map((student) => ({
+            name: toAssistantText(student?.name, 40),
+            category: toAssistantText(student?.category, 40),
+            latestTotal: Number.isFinite(Number(student?.latestTotal)) ? Number(student.latestTotal) : null,
+            reasons: Array.isArray(student?.reasons) ? student.reasons.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 3) : [],
+            tags: Array.isArray(student?.tags) ? student.tags.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : []
+          })).filter((student) => student.name).slice(0, 14)
+        : [],
+      tagSummary: Array.isArray(base.tagSummary) ? base.tagSummary.map((item) => toAssistantText(item, 80)).filter(Boolean).slice(0, 10) : [],
+      recordSummary: Array.isArray(base.recordSummary) ? base.recordSummary.map((item) => toAssistantText(item, 140)).filter(Boolean).slice(0, 8) : [],
+      seatSummary: toAssistantText(base.seatSummary, 120),
+      dormitorySummary: Array.isArray(base.dormitorySummary) ? base.dormitorySummary.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
+      fundSummary: toAssistantText(base.fundSummary, 160)
+    },
+    contextPacks: Array.isArray(context?.contextPacks)
+      ? context.contextPacks.map((pack) => ({
+          kind: ["student", "candidate_students", "exam", "dormitory", "tag", "records"].includes(pack?.kind) ? pack.kind : "records",
+          title: toAssistantText(pack?.title, 80),
+          reason: toAssistantText(pack?.reason, 160),
+          items: Array.isArray(pack?.items)
+            ? pack.items.map((item) => ({
+                name: toAssistantText(item?.name, 40),
+                category: toAssistantText(item?.category, 40),
+                summary: toAssistantText(item?.summary, 180),
+                latestExam: toAssistantText(item?.latestExam, 80),
+                latestTotal: Number.isFinite(Number(item?.latestTotal)) ? Number(item.latestTotal) : null,
+                previousTotal: Number.isFinite(Number(item?.previousTotal)) ? Number(item.previousTotal) : null,
+                trend: Number.isFinite(Number(item?.trend)) ? Number(item.trend) : null,
+                latestScores: Array.isArray(item?.latestScores) ? item.latestScores.map((value) => toAssistantText(value, 40)).filter(Boolean).slice(0, 10) : [],
+                weakSubjects: Array.isArray(item?.weakSubjects) ? item.weakSubjects.map((value) => toAssistantText(value, 60)).filter(Boolean).slice(0, 3) : [],
+                exams: Array.isArray(item?.exams) ? item.exams.map((value) => toAssistantText(value, 160)).filter(Boolean).slice(0, 4) : [],
+                records: Array.isArray(item?.records) ? item.records.map((value) => toAssistantText(value, 140)).filter(Boolean).slice(0, 8) : [],
+                tags: Array.isArray(item?.tags) ? item.tags.map((value) => toAssistantText(value, 40)).filter(Boolean).slice(0, 8) : [],
+                dormitory: toAssistantText(item?.dormitory, 80),
+                members: Array.isArray(item?.members) ? item.members.map((value) => toAssistantText(value, 40)).filter(Boolean).slice(0, 12) : [],
+                events: Array.isArray(item?.events) ? item.events.map((value) => toAssistantText(value, 140)).filter(Boolean).slice(0, 8) : []
+              })).slice(0, 20)
+            : []
+        })).filter((pack) => pack.title && pack.items.length).slice(0, 6)
+      : []
   };
 }
