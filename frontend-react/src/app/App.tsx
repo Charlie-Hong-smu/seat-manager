@@ -928,6 +928,7 @@ export default function App() {
 
         <div className={sidebarTab === "ai" ? "h-full" : "hidden"}>
           <AiAssistantWorkspace
+            active={sidebarTab === "ai"}
             students={students}
             exams={appState.gradeExams}
             dormitories={dormitories}

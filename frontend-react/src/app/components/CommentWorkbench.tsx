@@ -31,6 +31,7 @@ interface CommentBatchState {
 }
 
 const COMMENT_BATCH_STATE_KEY = "seat-manager-ai-comment-batch-state-v1";
+type CommentFilterMode = "all" | "pending" | "needsInfo";
 
 function emptyBatchState(): CommentBatchState {
   return {
@@ -160,8 +161,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   );
   const [selectedId, setSelectedId] = useState<StudentId>(students[0]?.id || "");
   const [filterSearch, setFilterSearch] = useState("");
-  const [filterUngenerated, setFilterUngenerated] = useState(false);
-  const [filterNeedsInfo, setFilterNeedsInfo] = useState(false);
+  const [filterMode, setFilterMode] = useState<CommentFilterMode>("all");
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<StudentId>>(() => new Set());
   const [teacherNote, setTeacherNote] = useState("");
   const [batchRunning, setBatchRunning] = useState(false);
@@ -186,11 +186,11 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     return students.filter(s => {
       const state = comments.find(c => c.studentId === s.id)!;
       if (filterSearch && !s.name.includes(filterSearch)) return false;
-      if (filterUngenerated && state.generated) return false;
-      if (filterNeedsInfo && !state.needsInfo) return false;
+      if (filterMode === "pending" && state.generated) return false;
+      if (filterMode === "needsInfo" && !state.needsInfo) return false;
       return true;
     });
-  }, [comments, filterSearch, filterUngenerated, filterNeedsInfo, students]);
+  }, [comments, filterMode, filterSearch, students]);
   const filteredStudentIds = useMemo(() => filteredStudents.map(student => student.id), [filteredStudents]);
   const selectedBatchCount = selectedBatchIds.size;
   const allFilteredSelected = filteredStudentIds.length > 0 && filteredStudentIds.every(id => selectedBatchIds.has(id));
@@ -674,13 +674,11 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
 
   function exportCommentsCsv() {
     const rows = [
-      ["姓名", "状态", "字数", "评语"],
+      ["姓名", "字数", "评语"],
       ...students.map(student => {
         const state = comments.find(c => c.studentId === student.id);
-        const status = state?.failed ? "失败待重试" : state?.generated ? "已生成" : state?.needsInfo ? "需补充" : "待生成";
         return [
           student.name,
-          status,
           state?.text.length || 0,
           state?.text || "",
         ];
@@ -703,11 +701,10 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       downloadTextFile(`期末评语-${new Date().toISOString().slice(0, 10)}.txt`, text, "text/plain;charset=utf-8");
     } else {
       const rows = [
-        ["姓名", "状态", "字数", "评语"],
+        ["姓名", "字数", "评语"],
         ...chosen.map(s => {
           const state = comments.find(c => c.studentId === s.id);
-          const status = state?.failed ? "失败待重试" : state?.generated ? "已生成" : state?.needsInfo ? "需补充" : "待生成";
-          return [s.name, status, state?.text.length || 0, state?.text || ""];
+          return [s.name, state?.text.length || 0, state?.text || ""];
         }),
       ];
       const content = `\ufeff${rows.map(row => row.map(csvEscape).join(",")).join("\n")}`;
@@ -836,22 +833,22 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
             </div>
             <div className="grid grid-cols-3 rounded-xl bg-gray-100 p-1">
               <button
-                onClick={() => { setFilterUngenerated(false); setFilterNeedsInfo(false); }}
-                className={`h-7 rounded-lg text-xs transition-colors ${!filterUngenerated && !filterNeedsInfo ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}
+                onClick={() => setFilterMode("all")}
+                className={`h-7 rounded-lg text-xs transition-colors ${filterMode === "all" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}
                 style={{ fontWeight: 800 }}
               >
                 全部
               </button>
               <button
-                onClick={() => setFilterUngenerated(value => !value)}
-                className={`h-7 rounded-lg text-xs transition-colors ${filterUngenerated ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}
+                onClick={() => setFilterMode("pending")}
+                className={`h-7 rounded-lg text-xs transition-colors ${filterMode === "pending" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}
                 style={{ fontWeight: 700 }}
               >
                 待生成
               </button>
               <button
-                onClick={() => setFilterNeedsInfo(value => !value)}
-                className={`h-7 rounded-lg text-xs transition-colors ${filterNeedsInfo ? "bg-white text-amber-600 shadow-sm" : "text-gray-500"}`}
+                onClick={() => setFilterMode("needsInfo")}
+                className={`h-7 rounded-lg text-xs transition-colors ${filterMode === "needsInfo" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500"}`}
                 style={{ fontWeight: 700 }}
               >
                 需补充

@@ -15,6 +15,11 @@ interface AiAuth {
   expiresAt: number;
 }
 
+interface MentionedStudentMatch {
+  student: AppStudent;
+  matchNote?: string;
+}
+
 export interface AiChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -356,27 +361,37 @@ function getQueryWindows(text: string, length: number): string[] {
   return sizes.flatMap(size => Array.from({ length: text.length - size + 1 }, (_, index) => text.slice(index, index + size)));
 }
 
-function findMentionedStudents(prompt: string, students: AppStudent[]): AppStudent[] {
+function findMentionedStudents(prompt: string, students: AppStudent[]): MentionedStudentMatch[] {
   const normalized = normalizeQuery(prompt);
   const direct = students
     .filter(student => {
       const names = [student.name, ...student.aliases].map(normalizeQuery).filter(Boolean);
       return names.some(name => normalized.includes(name));
     })
-    .slice(0, 6);
+    .slice(0, 6)
+    .map(student => ({ student }));
   if (direct.length) {
     return direct;
   }
   return students
     .map(student => {
       const names = [student.name, ...student.aliases].map(normalizeQuery).filter(Boolean);
-      const best = Math.min(...names.flatMap(name => getQueryWindows(normalized, name.length).map(window => editDistance(name, window))));
+      const best = names
+        .flatMap(name => getQueryWindows(normalized, name.length).map(window => ({
+          name,
+          window,
+          distance: editDistance(name, window),
+        })))
+        .sort((a, b) => a.distance - b.distance)[0];
       return { student, best };
     })
-    .filter(item => Number.isFinite(item.best) && item.best <= 1)
-    .sort((a, b) => a.best - b.best)
+    .filter(item => item.best && Number.isFinite(item.best.distance) && item.best.distance <= (item.best.name.length >= 4 ? 2 : 1))
+    .sort((a, b) => (a.best?.distance ?? 99) - (b.best?.distance ?? 99))
     .slice(0, 3)
-    .map(item => item.student);
+    .map(item => ({
+      student: item.student,
+      matchNote: item.best ? `问题中疑似写作“${item.best.window}”，系统按“${item.student.name}”附带资料，请老师确认姓名。` : undefined,
+    }));
 }
 
 function findMentionedTags(prompt: string, students: AppStudent[]): string[] {
@@ -411,7 +426,7 @@ function formatStudentExamSummary(student: AppStudent, exam: GradeExam | undefin
   };
 }
 
-function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>, dormitories: Dormitory[]): AiContextPack {
+function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>, dormitories: Dormitory[], matchNote?: string): AiContextPack {
   const chronological = [...exams].sort((a, b) => `${b.date || ""}-${b.name}`.localeCompare(`${a.date || ""}-${a.name}`));
   const recentExams = chronological.slice(0, 5);
   const latestRow = findStudentExamRow(latestExam, student);
@@ -421,10 +436,11 @@ function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: G
   const dormitory = dormitories.find(dorm => dorm.memberIds.includes(student.id));
   return {
     kind: "student",
-    title: `${student.name}明细`,
-    reason: "问题中提到或疑似提到具体学生，附带该生近期成绩、标签、记录和宿舍信息。",
+    title: matchNote ? `疑似${student.name}明细` : `${student.name}明细`,
+    reason: matchNote || "问题中提到具体学生，附带该生近期成绩、标签、记录和宿舍信息。",
     items: [{
       ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
+      summary: matchNote || "",
       previousTotal,
       trend: latestTotal !== null && previousTotal !== null ? Math.round((latestTotal - previousTotal) * 10) / 10 : null,
       exams: recentExams.map(exam => {
@@ -637,7 +653,7 @@ export function buildAiAssistantContext(input: {
   const latestSubjectAverages = getSubjectAverages(latestExam);
   const packs: AiContextPack[] = [];
   const mentionedStudents = findMentionedStudents(prompt, input.students);
-  mentionedStudents.forEach(student => packs.push(buildStudentPack(student, exams, latestExam, latestSubjectAverages, input.dormitories)));
+  mentionedStudents.forEach(match => packs.push(buildStudentPack(match.student, exams, latestExam, latestSubjectAverages, input.dormitories, match.matchNote)));
 
   const mentionedTags = findMentionedTags(prompt, input.students);
   const tagPack = mentionedTags.length ? buildTagPack(mentionedTags, input.students, latestExam, latestSubjectAverages) : null;

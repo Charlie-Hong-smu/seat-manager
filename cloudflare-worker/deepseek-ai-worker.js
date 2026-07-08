@@ -1461,7 +1461,7 @@ function trimAssistantContext(context) {
                 trend: Number.isFinite(Number(item?.trend)) ? Number(item.trend) : null,
                 latestScores: Array.isArray(item?.latestScores) ? item.latestScores.map((value) => toAssistantText(value, 40)).filter(Boolean).slice(0, 10) : [],
                 weakSubjects: Array.isArray(item?.weakSubjects) ? item.weakSubjects.map((value) => toAssistantText(value, 60)).filter(Boolean).slice(0, 3) : [],
-                exams: Array.isArray(item?.exams) ? item.exams.map((value) => toAssistantText(value, 160)).filter(Boolean).slice(0, 4) : [],
+                exams: Array.isArray(item?.exams) ? item.exams.map((value) => toAssistantText(value, 160)).filter(Boolean).slice(0, 5) : [],
                 records: Array.isArray(item?.records) ? item.records.map((value) => toAssistantText(value, 140)).filter(Boolean).slice(0, 8) : [],
                 tags: Array.isArray(item?.tags) ? item.tags.map((value) => toAssistantText(value, 40)).filter(Boolean).slice(0, 8) : [],
                 dormitory: toAssistantText(item?.dormitory, 80),

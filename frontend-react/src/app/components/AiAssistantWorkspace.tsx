@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Copy, Loader2, RotateCcw, Send, Sparkles, Trash2, UserRound } from "lucide-react";
+import { Bot, Check, Copy, Loader2, RotateCcw, Send, Sparkles, Trash2, UserRound } from "lucide-react";
 
 import {
   buildAiAssistantBaseContext,
@@ -104,13 +104,31 @@ function formatContextPackLabel(pack: AiContextPack): string {
   return `${pack.title}${pack.items.length ? ` ${pack.items.length}项` : ""}`;
 }
 
+function buildInitialQuickPrompts(input: { exams: GradeExam[]; dormitories: Dormitory[]; focusCount: number }): string[] {
+  const prompts = [
+    input.focusCount > 0
+      ? "帮我分析这个班当前最需要关注的学生，并给出跟进建议。"
+      : "帮我快速梳理这个班目前的整体状态。",
+    input.exams.length >= 2
+      ? "本次退步较明显的学生有哪些？需要怎样的关注？"
+      : "根据最近考试，帮我总结班级整体变化和下一步教学重点。",
+    input.dormitories.length > 0
+      ? "宿舍情况怎么样？哪些学生或宿舍需要关注？"
+      : "帮我写一段适合和家长沟通的温和说明，重点讲学习状态和可执行建议。",
+    "帮我整理期末评语可以使用的素材方向，不要直接编造事实。",
+  ];
+  return prompts.slice(0, 4);
+}
+
 export function AiAssistantWorkspace({
+  active,
   students,
   exams,
   dormitories,
   fundTransactions,
   seatOrder,
 }: {
+  active: boolean;
   students: AppStudent[];
   exams: GradeExam[];
   dormitories: Dormitory[];
@@ -125,6 +143,7 @@ export function AiAssistantWorkspace({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("AI 只会读取当前班级、当前学期的摘要，不会自动修改数据。");
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>(QUICK_PROMPTS);
+  const [copiedMessageId, setCopiedMessageId] = useState<string>("");
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -153,18 +172,57 @@ export function AiAssistantWorkspace({
     dormitories,
   }), [baseContext, dormitories, exams, input, students]);
   const contextPackLabels = previewContext.contextPacks.map(formatContextPackLabel);
+  const initialQuickPrompts = useMemo(() => buildInitialQuickPrompts({
+    exams,
+    dormitories,
+    focusCount: baseContext.focusStudents.length,
+  }), [baseContext.focusStudents.length, dormitories, exams]);
 
   useEffect(() => {
     saveDraftInput(input);
   }, [input]);
 
   useEffect(() => {
+    if (!messages.length) {
+      setSuggestedPrompts(initialQuickPrompts);
+    }
+  }, [initialQuickPrompts, messages.length]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length, busy]);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    const scrollToBottom = () => {
+      messagesEndRef.current?.scrollIntoView({ block: "end" });
+      if (messagesScrollRef.current) {
+        messagesScrollRef.current.scrollTop = messagesScrollRef.current.scrollHeight;
+      }
+    };
+    scrollToBottom();
+    const frame = window.requestAnimationFrame(scrollToBottom);
+    const timer = window.setTimeout(scrollToBottom, 80);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [active, messages.length]);
 
   function handleInputChange(value: string) {
     setInput(value);
     saveDraftInput(value);
+  }
+
+  function copyMessage(message: AiChatMessage) {
+    navigator.clipboard.writeText(message.content).then(() => {
+      setCopiedMessageId(message.id);
+      window.setTimeout(() => {
+        setCopiedMessageId(current => (current === message.id ? "" : current));
+      }, 1400);
+    }).catch(() => {});
   }
 
   async function sendPrompt(prompt: string) {
@@ -200,7 +258,7 @@ export function AiAssistantWorkspace({
       saveChatHistory(saved);
       setAccessCode("");
       setHasAuth(true);
-      setSuggestedPrompts(result.suggestedPrompts.length ? result.suggestedPrompts : QUICK_PROMPTS);
+      setSuggestedPrompts(result.suggestedPrompts.length ? result.suggestedPrompts : initialQuickPrompts);
       setStatus(result.disclaimer);
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
@@ -246,16 +304,16 @@ export function AiAssistantWorkspace({
       <div className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] gap-4 p-4">
         <aside className="min-h-0 space-y-4 overflow-y-auto">
           <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>可分析内容</div>
+            <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>当前范围</div>
             <div className="mt-3 space-y-2 text-sm text-gray-600">
               <div className="rounded-xl bg-gray-50 px-3 py-2">学生 {baseContext.studentCount} 人 · 座位 {baseContext.seatCount} 个</div>
-              <div className="rounded-xl bg-gray-50 px-3 py-2">{baseContext.latestExam ? `最近考试：${baseContext.latestExam.name}` : "暂无考试数据"}</div>
+              <div className="rounded-xl bg-gray-50 px-3 py-2">考试 {exams.length} 次{baseContext.latestExam ? ` · 最近：${baseContext.latestExam.name}` : ""}</div>
               <div className="rounded-xl bg-gray-50 px-3 py-2">重点候选 {baseContext.focusStudents.length} 人</div>
             </div>
           </section>
 
           <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>快捷分析</div>
+            <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>快捷问题</div>
             <div className="mt-3 space-y-2">
               {suggestedPrompts.slice(0, 4).map(prompt => (
                 <button
@@ -314,16 +372,21 @@ export function AiAssistantWorkspace({
                   <div className={`mt-2 flex items-center gap-3 text-xs ${message.role === "user" ? "text-gray-400" : "text-gray-400"}`}>
                     <button
                       type="button"
-                      onClick={() => navigator.clipboard.writeText(message.content).catch(() => {})}
+                      onClick={() => copyMessage(message)}
+                      title={message.role === "user" ? "复制老师发送的问题" : "复制 AI 回复"}
+                      aria-label={message.role === "user" ? "复制老师发送的问题" : "复制 AI 回复"}
                       className={`inline-flex items-center gap-1 ${message.role === "user" ? "hover:text-white" : "hover:text-gray-600"}`}
                     >
-                      <Copy className="h-3.5 w-3.5" />复制
+                      {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copiedMessageId === message.id ? "已复制" : "复制"}
                     </button>
                     {message.role === "user" && (
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => void sendPrompt(message.content)}
+                        title="重试这条问题"
+                        aria-label="重试这条问题"
                         className="inline-flex items-center gap-1 hover:text-white disabled:opacity-50"
                       >
                         <RotateCcw className="h-3.5 w-3.5" />重试
