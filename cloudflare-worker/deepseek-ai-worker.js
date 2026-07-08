@@ -1,7 +1,7 @@
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 20 * 1024;
-const ASSISTANT_MAX_BODY_BYTES = 48 * 1024;
+const ASSISTANT_MAX_BODY_BYTES = 96 * 1024;
 const SCORE_MAPPING_MAX_BODY_BYTES = 120 * 1024;
 const SYNC_MAX_BODY_BYTES = 5 * 1024 * 1024;
 const DAILY_LIMIT = 100;
@@ -638,7 +638,7 @@ async function handleChatAssistant(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎、务实的班主任 AI 助手。你只能根据用户提供的当前班级、当前学期摘要回答；不能声称看到了其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。可以给老师提供班级分析、重点学生跟进、沟通话术、评语素材方向和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
+              "你是谨慎、务实的班主任 AI 助手。你只能根据用户提供的当前班级、当前学期摘要回答；不能声称看到了其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。可以给老师提供班级分析、重点学生跟进、沟通话术、评语素材方向和下一步行动建议。若用户询问单个学生，优先查找 studentGradeProfiles 中该学生的最近考试各科、总分和变化；只有确实没有该学生档案时才说明信息不足。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
           },
           {
             role: "user",
@@ -1434,6 +1434,18 @@ function trimAssistantContext(context) {
           reasons: Array.isArray(student?.reasons) ? student.reasons.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 3) : [],
           tags: Array.isArray(student?.tags) ? student.tags.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : []
         })).filter((student) => student.name).slice(0, 14)
+      : [],
+    studentGradeProfiles: Array.isArray(context.studentGradeProfiles)
+      ? context.studentGradeProfiles.map((student) => ({
+          name: toAssistantText(student?.name, 40),
+          latestExam: toAssistantText(student?.latestExam, 80),
+          latestTotal: Number.isFinite(Number(student?.latestTotal)) ? Number(student.latestTotal) : null,
+          previousTotal: Number.isFinite(Number(student?.previousTotal)) ? Number(student.previousTotal) : null,
+          trend: Number.isFinite(Number(student?.trend)) ? Number(student.trend) : null,
+          latestScores: Array.isArray(student?.latestScores) ? student.latestScores.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 10) : [],
+          weakSubjects: Array.isArray(student?.weakSubjects) ? student.weakSubjects.map((item) => toAssistantText(item, 60)).filter(Boolean).slice(0, 3) : [],
+          tags: Array.isArray(student?.tags) ? student.tags.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 5) : []
+        })).filter((student) => student.name).slice(0, 80)
       : [],
     tagSummary: Array.isArray(context.tagSummary) ? context.tagSummary.map((item) => toAssistantText(item, 80)).filter(Boolean).slice(0, 10) : [],
     recordSummary: Array.isArray(context.recordSummary) ? context.recordSummary.map((item) => toAssistantText(item, 140)).filter(Boolean).slice(0, 8) : [],

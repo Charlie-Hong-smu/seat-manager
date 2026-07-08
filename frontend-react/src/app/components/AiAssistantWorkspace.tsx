@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Copy, Loader2, Send, Sparkles, Trash2, UserRound } from "lucide-react";
 
 import {
@@ -41,6 +41,10 @@ function getStorageKey(): string {
   }
 }
 
+function getDraftStorageKey(): string {
+  return `${getStorageKey()}:draft`;
+}
+
 function loadChatHistory(): AiChatMessage[] {
   if (!hasBrowserStorage()) {
     return [];
@@ -61,11 +65,25 @@ function loadChatHistory(): AiChatMessage[] {
   }
 }
 
+function loadDraftInput(): string {
+  if (!hasBrowserStorage()) {
+    return "";
+  }
+  return (window.localStorage.getItem(getDraftStorageKey()) || "").slice(0, 1000);
+}
+
 function saveChatHistory(messages: AiChatMessage[]): void {
   if (!hasBrowserStorage()) {
     return;
   }
   window.localStorage.setItem(getStorageKey(), JSON.stringify(messages.slice(-CHAT_LIMIT)));
+}
+
+function saveDraftInput(value: string): void {
+  if (!hasBrowserStorage()) {
+    return;
+  }
+  window.localStorage.setItem(getDraftStorageKey(), value.slice(0, 1000));
 }
 
 function getAiErrorMessage(reason: string): string {
@@ -94,13 +112,15 @@ export function AiAssistantWorkspace({
   seatOrder: Array<StudentId | null>;
 }) {
   const [messages, setMessages] = useState<AiChatMessage[]>(() => loadChatHistory());
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => loadDraftInput());
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiAssistantAuth());
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("AI 只会读取当前班级、当前学期的摘要，不会自动修改数据。");
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>(QUICK_PROMPTS);
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const slice = useMemo(() => {
     try {
@@ -120,6 +140,19 @@ export function AiAssistantWorkspace({
     occupiedSeatCount: seatOrder.filter(Boolean).length,
   }), [dormitories, exams, fundTransactions, seatOrder, slice, students]);
 
+  useEffect(() => {
+    saveDraftInput(input);
+  }, [input]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages.length, busy]);
+
+  function handleInputChange(value: string) {
+    setInput(value);
+    saveDraftInput(value);
+  }
+
   async function sendPrompt(prompt: string) {
     const text = prompt.trim();
     if (!text || busy) {
@@ -130,6 +163,7 @@ export function AiAssistantWorkspace({
     setMessages(nextMessages);
     saveChatHistory(nextMessages);
     setInput("");
+    saveDraftInput("");
     setBusy(true);
     setStatus("AI 正在分析当前班级摘要...");
     try {
@@ -235,7 +269,7 @@ export function AiAssistantWorkspace({
         </aside>
 
         <main className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+          <div ref={messagesScrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
             {messages.length === 0 && (
               <div className="grid h-full place-items-center text-center">
                 <div className="max-w-md">
@@ -272,6 +306,7 @@ export function AiAssistantWorkspace({
                 )}
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
 
           <div className="shrink-0 border-t border-gray-100 p-4">
@@ -285,7 +320,7 @@ export function AiAssistantWorkspace({
             >
               <input
                 value={input}
-                onChange={event => setInput(event.target.value)}
+                onChange={event => handleInputChange(event.target.value)}
                 disabled={busy}
                 placeholder="输入你想问 AI 的问题..."
                 className="h-11 min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm outline-none transition-colors focus:border-violet-300 focus:bg-white disabled:opacity-60"

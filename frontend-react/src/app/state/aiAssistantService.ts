@@ -1,7 +1,7 @@
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
-import type { AppStudent, Dormitory, FundTransaction, GradeExam } from "./types";
+import type { AppStudent, Dormitory, FundTransaction, GradeExam, GradeRow } from "./types";
 
 const AI_AUTH_TOKEN_KEY = "seat-manager-ai-auth-token";
 const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
@@ -41,6 +41,16 @@ export interface AiAssistantContext {
     category: string;
     latestTotal: number | null;
     reasons: string[];
+    tags: string[];
+  }>;
+  studentGradeProfiles: Array<{
+    name: string;
+    latestExam: string;
+    latestTotal: number | null;
+    previousTotal: number | null;
+    trend: number | null;
+    latestScores: string[];
+    weakSubjects: string[];
     tags: string[];
   }>;
   tagSummary: string[];
@@ -164,7 +174,7 @@ function getExamTotalAverage(exam: GradeExam): number | null {
 }
 
 function getStudentLatestTotal(student: AppStudent): number | null {
-  const exam = student.exams[0];
+  const exam = [...student.exams].sort((a, b) => `${b.date || ""}-${b.name}`.localeCompare(`${a.date || ""}-${a.name}`))[0];
   if (!exam) {
     return null;
   }
@@ -243,6 +253,86 @@ function getExamTotals(exam: GradeExam | undefined): number[] {
     .filter((value): value is number => value !== null);
 }
 
+function findStudentExamRow(exam: GradeExam | undefined, student: AppStudent): GradeRow | null {
+  if (!exam) {
+    return null;
+  }
+  return exam.rows.find(row => row.studentId === student.id || row.name === student.name) || null;
+}
+
+function getRowTotal(row: GradeRow | null): number | null {
+  if (!row) {
+    return null;
+  }
+  if (typeof row.total === "number" && Number.isFinite(row.total)) {
+    return Math.round(row.total * 10) / 10;
+  }
+  const values = Object.values(row.scores)
+    .map(cell => cell.score)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10 : null;
+}
+
+function formatRowScores(row: GradeRow | null, subjects: string[]): string[] {
+  if (!row) {
+    return [];
+  }
+  return subjects
+    .map(subject => {
+      const score = row.scores[subject]?.score;
+      return typeof score === "number" && Number.isFinite(score) ? `${subject}${Math.round(score * 10) / 10}` : "";
+    })
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
+function getWeakSubjects(row: GradeRow | null, subjectAverages: Record<string, number>): string[] {
+  if (!row) {
+    return [];
+  }
+  return Object.entries(row.scores)
+    .map(([subject, cell]) => {
+      const score = cell.score;
+      const avg = subjectAverages[subject];
+      if (typeof score !== "number" || !Number.isFinite(score) || !avg) {
+        return null;
+      }
+      return { subject, score, gap: Math.round((score - avg) * 10) / 10 };
+    })
+    .filter((item): item is { subject: string; score: number; gap: number } => Boolean(item))
+    .sort((a, b) => a.gap - b.gap)
+    .slice(0, 3)
+    .map(item => `${item.subject}${item.score}（较均${item.gap >= 0 ? "+" : ""}${item.gap}）`);
+}
+
+function buildStudentGradeProfiles(input: {
+  students: AppStudent[];
+  latestExam?: GradeExam;
+  previousExam?: GradeExam;
+  latestSubjectAverages: Record<string, number>;
+}) {
+  return input.students
+    .map(student => {
+      const latestRow = findStudentExamRow(input.latestExam, student);
+      const previousRow = findStudentExamRow(input.previousExam, student);
+      const latestTotal = getRowTotal(latestRow);
+      const previousTotal = getRowTotal(previousRow);
+      const trend = latestTotal !== null && previousTotal !== null ? Math.round((latestTotal - previousTotal) * 10) / 10 : null;
+      return {
+        name: student.name,
+        latestExam: input.latestExam?.name || "",
+        latestTotal,
+        previousTotal,
+        trend,
+        latestScores: formatRowScores(latestRow, input.latestExam?.subjects || []),
+        weakSubjects: getWeakSubjects(latestRow, input.latestSubjectAverages),
+        tags: [...student.academicTags, ...student.tags].slice(0, 5),
+      };
+    })
+    .filter(profile => profile.latestScores.length || profile.latestTotal !== null || profile.previousTotal !== null || profile.tags.length)
+    .slice(0, 80);
+}
+
 function summarizeCounts(values: string[], limit: number): string[] {
   const counts = new Map<string, number>();
   values.filter(Boolean).forEach(value => counts.set(value, (counts.get(value) || 0) + 1));
@@ -296,6 +386,12 @@ export function buildAiAssistantContext(input: {
     }
   }
   const latestSubjectAverages = getSubjectAverages(latestExam);
+  const studentGradeProfiles = buildStudentGradeProfiles({
+    students: input.students,
+    latestExam,
+    previousExam,
+    latestSubjectAverages,
+  });
   const totals = getExamTotals(latestExam).sort((a, b) => a - b);
   const examInsights = [
     Object.keys(latestSubjectAverages).length ? `最近考试各科均分：${Object.entries(latestSubjectAverages).map(([subject, value]) => `${subject}${value}`).join("、")}` : "",
@@ -368,6 +464,7 @@ export function buildAiAssistantContext(input: {
     examInsights,
     gradeTrend,
     focusStudents,
+    studentGradeProfiles,
     tagSummary,
     recordSummary,
     seatSummary: `座位 ${input.seatCount} 个，已安排 ${input.occupiedSeatCount ?? 0} 人，未安排约 ${Math.max(input.students.length - (input.occupiedSeatCount ?? 0), 0)} 人`,
