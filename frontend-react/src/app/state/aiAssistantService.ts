@@ -220,7 +220,10 @@ async function getAuth(input?: { accessCode?: string; remember?: boolean }): Pro
   return requestAiAuth(accessCode, Boolean(input?.remember));
 }
 
-function getExamTotalAverage(exam: GradeExam): number | null {
+function getExamTotalAverage(exam: GradeExam | undefined): number | null {
+  if (!exam) {
+    return null;
+  }
   const totals = exam.rows
     .map(row => {
       if (typeof row.total === "number" && Number.isFinite(row.total)) {

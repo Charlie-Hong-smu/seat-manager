@@ -50,6 +50,7 @@ function TermForm({
   initialStage,
   initialGrade,
   initialClassNo,
+  initialTerm,
   onCancel,
   onConfirm,
 }: {
@@ -61,15 +62,17 @@ function TermForm({
   initialStage?: SchoolStage;
   initialGrade?: number;
   initialClassNo?: string;
+  initialTerm?: { year: number; season: TermSeason };
   onCancel: () => void;
   onConfirm: (input: TermFormResult) => void;
 }) {
   const guessed = guessCurrentTerm();
+  const defaultTerm = initialTerm || guessed;
   const initStage = initialStage || getLastSchoolStage();
   const initGradeLabel = initialGrade ? gradeNumberToLabel(initialGrade) : "";
   const [className, setClassName] = useState(defaultName || (initStage && initialGrade ? composeClassNameByNumber(initStage, initialGrade, initialClassNo || "") : ""));
-  const [year, setYear] = useState(guessed.year);
-  const [season, setSeason] = useState<TermSeason>(guessed.season);
+  const [year, setYear] = useState(defaultTerm.year);
+  const [season, setSeason] = useState<TermSeason>(defaultTerm.season);
   const [customLabel, setCustomLabel] = useState("");
   const [stage, setStage] = useState<SchoolStage>(initStage);
   const [grade, setGrade] = useState(initGradeLabel);
@@ -244,6 +247,16 @@ function TermForm({
       </div>
     </div>
   );
+}
+
+function getNextTermDefault(current: { term: { year: number; season: TermSeason } }): { year: number; season: TermSeason } {
+  if (current.term.season === "spring") {
+    return { year: current.term.year, season: "autumn" };
+  }
+  if (current.term.season === "autumn") {
+    return { year: current.term.year + 1, season: "spring" };
+  }
+  return guessCurrentTerm();
 }
 
 export function WorkspaceSwitcher({ onChanged }: Props) {
@@ -436,6 +449,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
                 title={`进入下一学期 · ${currentName}`}
                 confirmLabel="创建新学期"
                 showNameField={false}
+                initialTerm={getNextTermDefault(current)}
                 onCancel={() => setMode("menu")}
                 onConfirm={handleNextTerm}
               />
