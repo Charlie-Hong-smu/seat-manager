@@ -185,6 +185,9 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     () => new Set(comments.filter(comment => comment.generated).map(comment => comment.studentId)),
     [comments]
   );
+  const allGeneratedExportSelected = generatedExportIds.size > 0 &&
+    exportSelectedIds.size === generatedExportIds.size &&
+    [...generatedExportIds].every(id => exportSelectedIds.has(id));
 
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
@@ -1181,17 +1184,32 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
               </button>
             </div>
 
-            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
-              <button
-                onClick={() => setExportSelectedIds(prev => (prev.size === students.length ? new Set() : new Set(students.map(s => s.id))))}
-                className="flex items-center gap-2 text-sm text-gray-700"
-                style={{ fontWeight: 800 }}
-              >
-                <span className={`grid h-4 w-4 place-items-center rounded border ${exportSelectedIds.size === students.length ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300"}`}>
-                  {exportSelectedIds.size === students.length && <Check className="h-3 w-3" />}
-                </span>
-                全选
-              </button>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-4">
+                <button
+                  onClick={() => setExportSelectedIds(prev => (prev.size === students.length ? new Set() : new Set(students.map(s => s.id))))}
+                  className="flex shrink-0 items-center gap-2 text-sm text-gray-700"
+                  style={{ fontWeight: 800 }}
+                >
+                  <span className={`grid h-4 w-4 place-items-center rounded border ${exportSelectedIds.size === students.length ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300"}`}>
+                    {exportSelectedIds.size === students.length && <Check className="h-3 w-3" />}
+                  </span>
+                  全选
+                </button>
+                <button
+                  onClick={() => setExportSelectedIds(new Set(generatedExportIds))}
+                  disabled={generatedExportIds.size === 0}
+                  className="flex shrink-0 items-center gap-2 text-sm text-gray-700 disabled:text-gray-300"
+                  style={{ fontWeight: 800 }}
+                >
+                  <span className={`grid h-4 w-4 place-items-center rounded border ${
+                    allGeneratedExportSelected ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300"
+                  }`}>
+                    {allGeneratedExportSelected && <Check className="h-3 w-3" />}
+                  </span>
+                  已生成
+                </button>
+              </div>
               <span className="text-xs text-gray-400">已选 {exportSelectedIds.size} / {students.length} 人</span>
             </div>
 

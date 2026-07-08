@@ -121,6 +121,7 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
   }
 
   const selectedCount = summarizeCommentProfile(rubric, commentProfile).criteriaSummary.reduce((total, item) => total + item.values.length, 0);
+  const visibleTags = [...student.academicTags, ...student.tags].filter(tag => !tag.startsWith("comment_")).slice(0, 8);
   const lengthModes = [
     { value: "short", label: "80～100 字" },
     { value: "standard", label: "100～150 字" },
@@ -148,12 +149,12 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
         <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
           <div className="text-xs text-gray-500 mb-2" style={{ fontWeight: 700 }}>学生标签</div>
           <div className="flex flex-wrap gap-1.5">
-            {[...student.academicTags, ...student.tags].slice(0, 8).map(tag => (
+            {visibleTags.map(tag => (
               <span key={tag} className="text-xs px-2.5 py-1 rounded-full border border-gray-100 bg-white text-gray-600" style={{ fontWeight: 600 }}>
                 {tag}
               </span>
             ))}
-            {student.academicTags.length === 0 && student.tags.length === 0 && (
+            {visibleTags.length === 0 && (
               <span className="text-sm text-gray-400">暂无标签</span>
             )}
           </div>
