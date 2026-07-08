@@ -21,7 +21,9 @@ interface ParsedRoster {
   names: string[];
   placements: Array<string | null>;
   genders: string[];
+  studentNos: string[];
   genderList: string[];
+  studentNoList: string[];
   hasPlacement: boolean;
 }
 
@@ -62,20 +64,28 @@ function detectColumn(header: string[], keywords: string[]): number {
   return lower.findIndex(cell => keywords.some(keyword => cell.includes(keyword)));
 }
 
+function detectNameColumn(header: string[]): number {
+  const normalized = header.map(cell => String(cell || "").trim().toLowerCase().replace(/\s+/g, ""));
+  return normalized.findIndex(cell => /姓名|名字|学生姓名|studentname|^name$|^学生$/.test(cell));
+}
+
 function parseRosterRows(rows: string[][]): ParsedRoster {
   if (!rows.length) {
-    return { names: [], placements: [], genders: [], genderList: [], hasPlacement: false };
+    return { names: [], placements: [], genders: [], studentNos: [], genderList: [], studentNoList: [], hasPlacement: false };
   }
   const header = rows[0];
-  const nameCol = detectColumn(header, ["姓名", "名字", "name", "学生"]);
+  const nameCol = detectNameColumn(header);
+  const studentNoCol = detectColumn(header, ["学号", "学生编号", "学生号", "student id", "student no", "student number", "school id"]);
   const rowCol = detectColumn(header, ["行", "row"]);
   const colCol = detectColumn(header, ["列", "col"]);
   const genderCol = detectColumn(header, ["性别", "gender"]);
   const startIndex = nameCol !== -1 || rowCol !== -1 || colCol !== -1 ? 1 : 0;
   const placements: Array<string | null> = [];
   const genders: string[] = [];
+  const studentNos: string[] = [];
   const names: string[] = [];
   const genderList: string[] = [];
+  const studentNoList: string[] = [];
   let hasPlacement = false;
   let maxIndex = -1;
 
@@ -87,6 +97,7 @@ function parseRosterRows(rows: string[][]): ParsedRoster {
       continue;
     }
     const gender = String(genderCol !== -1 ? row[genderCol] || "" : "").trim();
+    const studentNo = String(studentNoCol !== -1 ? row[studentNoCol] || "" : "").trim();
     const rowIndex = Number.parseInt(String(rowCol !== -1 ? row[rowCol] : ""), 10);
     const colIndex = Number.parseInt(String(colCol !== -1 ? row[colCol] : ""), 10);
 
@@ -94,11 +105,13 @@ function parseRosterRows(rows: string[][]): ParsedRoster {
       const index = (rowIndex - 1) * COLS + (colIndex - 1);
       placements[index] = name;
       genders[index] = gender;
+      studentNos[index] = studentNo;
       hasPlacement = true;
       maxIndex = Math.max(maxIndex, index);
     } else {
       names.push(name);
       genderList.push(gender);
+      studentNoList.push(studentNo);
     }
   }
 
@@ -107,10 +120,11 @@ function parseRosterRows(rows: string[][]): ParsedRoster {
     for (let index = 0; index < seatCount; index += 1) {
       placements[index] ||= null;
       genders[index] ||= "";
+      studentNos[index] ||= "";
     }
   }
 
-  return { names, placements, genders, genderList, hasPlacement };
+  return { names, placements, genders, studentNos, genderList, studentNoList, hasPlacement };
 }
 
 function buildPreservedLookup(students: unknown[]): Map<string, Record<string, unknown>[]> {
@@ -137,11 +151,12 @@ function takePreserved(lookup: Map<string, Record<string, unknown>[]>, name: str
   return key ? lookup.get(key)?.shift() || null : null;
 }
 
-function makeStudent(name: string, gender: string, preserved?: Record<string, unknown> | null): Record<string, unknown> {
+function makeStudent(name: string, gender: string, studentNo: string, preserved?: Record<string, unknown> | null): Record<string, unknown> {
   return {
     ...(preserved || {}),
     id: preserved?.id || makeId(),
     name,
+    studentNo: studentNo || preserved?.studentNo || "",
     gender: gender || preserved?.gender || "",
     aliases: preserved ? cloneJson(preserved.aliases, []) : [],
     records: preserved ? cloneJson(preserved.records, []) : [],
@@ -178,12 +193,12 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
       if (!name) {
         return;
       }
-      const student = makeStudent(name, parsed.genders[index] || "", takePreserved(preservedLookup, name));
+      const student = makeStudent(name, parsed.genders[index] || "", parsed.studentNos[index] || "", takePreserved(preservedLookup, name));
       students.push(student);
       seatOrder[index] = String(student.id);
     });
     parsed.names.forEach((name, index) => {
-      const student = makeStudent(name, parsed.genderList[index] || "", takePreserved(preservedLookup, name));
+      const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "", takePreserved(preservedLookup, name));
       students.push(student);
       placeFirstEmpty(seatOrder, String(student.id));
     });
@@ -203,7 +218,7 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
   const students = previousStudents.filter(isRecord).map(student => ({ ...student }));
   const seatOrder = ensureSeatCapacity(Array.isArray(base.seatOrder) ? base.seatOrder.map(item => item ? String(item) : null) : [], students.length + parsed.names.length);
   parsed.names.forEach((name, index) => {
-    const student = makeStudent(name, parsed.genderList[index] || "");
+    const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "");
     students.push(student);
     placeFirstEmpty(seatOrder, String(student.id));
   });

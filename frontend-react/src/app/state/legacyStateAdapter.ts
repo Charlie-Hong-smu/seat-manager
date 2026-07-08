@@ -437,6 +437,7 @@ function normalizeStudent(value: unknown, index: number, extraTagLabels: Record<
   return {
     id,
     name,
+    studentNo: toStudentId(value.studentNo) || undefined,
     gender: normalizeGender(value.gender),
     aliases: toStringArray(value.aliases),
     tags: allLabels.filter(label => !isAcademicTagLabel(label)),
@@ -470,6 +471,7 @@ function createMockStudents(): AppStudent[] {
     return {
       id: String(student.id),
       name: student.name,
+      studentNo: undefined,
       gender: student.gender,
       aliases: student.alias ? [student.alias] : [],
       tags: student.tags,
@@ -562,6 +564,7 @@ function normalizeSavedExamRecord(record: unknown, index: number, students: AppS
     items.push({
       id: `${toStringValue(record.id, `exam-${index}`)}-${entryIndex}`,
       name,
+      studentNo: toStudentId(entry.studentNo) || undefined,
       studentId: matchedStudent?.id,
       scores,
       total: totalCell.score ?? sumScoreCells(scores),

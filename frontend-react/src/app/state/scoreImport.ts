@@ -26,6 +26,7 @@ declare global {
 export interface ScoreMapping {
   headers: string[];
   nameCol: number;
+  studentNoCol: number;
   subjectMappings: Array<{ subject: string; scoreCol: number; rankClassCol: number; rankSchoolCol: number }>;
   totalMapping: { scoreCol: number; rankClassCol: number; rankSchoolCol: number };
   warnings: string[];
@@ -56,6 +57,11 @@ function detectSubjectFromHeader(header: unknown): string {
     { subject: "生物", pattern: /生物|biology/ },
   ];
   return mapping.find(item => item.pattern.test(normalized))?.subject || "";
+}
+
+function isNameHeader(header: unknown): boolean {
+  const normalized = normalizeHeader(header);
+  return /姓名|名字|学生姓名|studentname|^name$|^学生$/.test(normalized);
 }
 
 function isScoreHeader(header: unknown): boolean {
@@ -207,7 +213,8 @@ export async function readRowsFromFile(file: File): Promise<string[][]> {
 export function detectScoreMapping(rows: string[][]): ScoreMapping {
   const headers = rows[0]?.map(cell => String(cell || "").trim()) || [];
   const normalizedHeaders = headers.map(normalizeHeader);
-  const nameCol = normalizedHeaders.findIndex(cell => /姓名|名字|学生/.test(cell));
+  const nameCol = headers.findIndex(isNameHeader);
+  const studentNoCol = normalizedHeaders.findIndex(cell => /学号|学生编号|学生号|考号|准考证号|准考证|studentid|studentno|studentnumber|schoolid/.test(cell));
   const warnings: string[] = [];
   const subjectMappingsMap = new Map(
     SUBJECT_ORDER.map(subject => [subject, { subject, scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }]),
@@ -216,7 +223,7 @@ export function detectScoreMapping(rows: string[][]): ScoreMapping {
   let currentScope = "";
 
   headers.forEach((header, index) => {
-    if (!header || index === nameCol) {
+    if (!header || index === nameCol || index === studentNoCol) {
       return;
     }
     if (/学号|考号|准考证|考场|座位|组别|年级|性别|备注|缺考|缺席/.test(normalizedHeaders[index])) {
@@ -268,7 +275,7 @@ export function detectScoreMapping(rows: string[][]): ScoreMapping {
   const subjectMappings = Array.from(subjectMappingsMap.values()).filter(item => item.scoreCol !== -1);
   if (nameCol === -1) warnings.push("未识别到姓名列。");
   if (!subjectMappings.length) warnings.push("未识别到可用科目列。");
-  return { headers, nameCol, subjectMappings, totalMapping, warnings };
+  return { headers, nameCol, studentNoCol, subjectMappings, totalMapping, warnings };
 }
 
 function readScoreCell(row: string[], scoreCol: number, rankClassCol: number, rankSchoolCol: number): GradeScoreCell {
@@ -289,6 +296,7 @@ export function parseRowsWithMapping(rows: string[][], mapping: ScoreMapping): S
     if (!name) {
       return [];
     }
+    const studentNo = mapping.studentNoCol >= 0 ? String(row[mapping.studentNoCol] || "").trim() : "";
     const scores = mapping.subjectMappings.reduce<Record<string, GradeScoreCell>>((map, item) => {
       map[item.subject] = readScoreCell(row, item.scoreCol, item.rankClassCol, item.rankSchoolCol);
       return map;
@@ -299,7 +307,7 @@ export function parseRowsWithMapping(rows: string[][], mapping: ScoreMapping): S
       mapping.totalMapping.rankClassCol,
       mapping.totalMapping.rankSchoolCol,
     );
-    return [{ name, scores, total }];
+    return [{ name, studentNo: studentNo || undefined, scores, total }];
   });
 
   if (!entries.length) {
@@ -341,6 +349,7 @@ export function createSavedGradeExamRecord(
   const date = input.date || new Date().toISOString().slice(0, 10);
   const entries = draft.entries.map(entry => ({
     name: entry.name,
+    studentNo: entry.studentNo,
     scores: Object.fromEntries(draft.subjects.map(subject => [subject, entry.scores[subject] || { score: null }])),
     total: entry.total || { score: null, rankClass: null, rankSchool: null },
   }));

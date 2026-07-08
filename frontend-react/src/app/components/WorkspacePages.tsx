@@ -879,6 +879,18 @@ export function ScoresWorkspace({
                     </select>
                   </div>
 
+                  <div className="space-y-3">
+                    <label className="block text-xs text-gray-500">学号列（可选）</label>
+                    <select
+                      value={manualMapping.studentNoCol}
+                      onChange={event => updateManualMapping(mapping => ({ ...mapping, studentNoCol: Number(event.target.value) }))}
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300"
+                    >
+                      <option value={-1}>未识别学号</option>
+                      {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>科目分数列</div>

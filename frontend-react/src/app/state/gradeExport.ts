@@ -156,12 +156,20 @@ function matchStudent(row: GradeRow, maps: ReturnType<typeof studentMaps>): AppS
   return (row.studentId ? maps.byId.get(row.studentId) : null) || maps.byName.get(normalizeName(row.name)) || null;
 }
 
+function getRowStudentNo(row: GradeRow, student?: AppStudent | null): string {
+  return row.studentNo || student?.studentNo || "";
+}
+
 function getStudentRows(exams: GradeExam[], student: AppStudent): Array<{ exam: GradeExam; row: GradeRow | null }> {
   const aliases = new Set([student.name, ...student.aliases].map(normalizeName));
   return exams.map(exam => ({
     exam,
     row: exam.rows.find(row => row.studentId === student.id || aliases.has(normalizeName(row.name))) || null,
   }));
+}
+
+function getStudentNoFromRows(student: AppStudent, examRows: Array<{ exam: GradeExam; row: GradeRow | null }>): string {
+  return student.studentNo || examRows.find(item => item.row?.studentNo)?.row?.studentNo || "";
 }
 
 function countBands(values: Array<number | null>, fullScore: number) {
@@ -214,7 +222,7 @@ function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects:
   const maps = studentMaps(students);
   const subjectHeaders = subjects.flatMap(subject => [`${subject}成绩`, `${subject}班排`, `${subject}校排`]);
   const rows: SheetRows = [[
-    "学生ID", "姓名", "性别", "考试ID", "考试名称", "考试日期", ...subjectHeaders,
+    "学号", "姓名", "性别", "考试ID", "考试名称", "考试日期", ...subjectHeaders,
     "总分", "总分班排", "总分校排", "平均分", "等级", "缺失科目数",
   ]];
   exams.forEach(exam => {
@@ -224,7 +232,7 @@ function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects:
       const average = getRowAverage(row, exam.subjects);
       const missingCount = subjects.filter(subject => getCellScore(row.scores[subject]) === null).length;
       rows.push([
-        student?.id || row.studentId || "",
+        getRowStudentNo(row, student),
         student?.name || row.name,
         student?.gender || "",
         exam.id,
@@ -248,14 +256,14 @@ function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects:
 
 function subjectDetailSheet(exams: GradeExam[], students: AppStudent[], subjects: string[]): SheetRows {
   const maps = studentMaps(students);
-  const rows: SheetRows = [["学生ID", "姓名", "性别", "考试ID", "考试名称", "考试日期", "科目", "分数", "班排", "校排", "是否缺考/无成绩"]];
+  const rows: SheetRows = [["学号", "姓名", "性别", "考试ID", "考试名称", "考试日期", "科目", "分数", "班排", "校排", "是否缺考/无成绩"]];
   exams.forEach(exam => {
     exam.rows.forEach(row => {
       const student = matchStudent(row, maps);
       subjects.forEach(subject => {
         const cell = row.scores[subject] || { score: null, rankClass: null, rankSchool: null };
         rows.push([
-          student?.id || row.studentId || "",
+          getRowStudentNo(row, student),
           student?.name || row.name,
           student?.gender || "",
           exam.id,
@@ -298,7 +306,7 @@ function classTrendSheet(exams: GradeExam[], subjects: string[]): SheetRows {
 }
 
 function rankChangesSheet(exams: GradeExam[], students: AppStudent[]): SheetRows {
-  const header = ["学生ID", "姓名", ...exams.flatMap(exam => [`${exam.name}总分`, `${exam.name}班级排名`]), "首次排名", "末次排名", "排名变化", "最好排名", "最差排名", "排名波动幅度"];
+  const header = ["学号", "姓名", ...exams.flatMap(exam => [`${exam.name}总分`, `${exam.name}班级排名`]), "首次排名", "末次排名", "排名变化", "最好排名", "最差排名", "排名波动幅度"];
   const rows: SheetRows = [header];
   students.forEach(student => {
     const examRows = getStudentRows(exams, student);
@@ -306,7 +314,7 @@ function rankChangesSheet(exams: GradeExam[], students: AppStudent[]): SheetRows
     const firstRank = ranks[0] ?? null;
     const lastRank = ranks.length ? ranks[ranks.length - 1] : null;
     rows.push([
-      student.id,
+      getStudentNoFromRows(student, examRows),
       student.name,
       ...examRows.flatMap(({ row }) => [row ? getRowTotal(row) : null, row?.rankClass ?? null]),
       firstRank,
@@ -384,11 +392,11 @@ function studentSummary(student: AppStudent, exams: GradeExam[], subjects: strin
 }
 
 function studentSummarySheet(exams: GradeExam[], students: AppStudent[], subjects: string[]): SheetRows {
-  const rows: SheetRows = [["学生ID", "姓名", "性别", "参加考试次数", "最近一次考试名称", "首次总分", "末次总分", "总分变化", "平均总分", "最好总分", "最低总分", "最好班排", "最差班排", "优势科目", "薄弱科目", "波动最大科目"]];
+  const rows: SheetRows = [["学号", "姓名", "性别", "参加考试次数", "最近一次考试名称", "首次总分", "末次总分", "总分变化", "平均总分", "最好总分", "最低总分", "最好班排", "最差班排", "优势科目", "薄弱科目", "波动最大科目"]];
   students.forEach(student => {
     const summary = studentSummary(student, exams, subjects);
     rows.push([
-      student.id,
+      getStudentNoFromRows(student, summary.examRows),
       student.name,
       student.gender,
       summary.attended,
@@ -411,11 +419,12 @@ function studentSummarySheet(exams: GradeExam[], students: AppStudent[], subject
 
 function studentPersonalSheet(student: AppStudent, exams: GradeExam[], subjects: string[]): SheetRows {
   const summary = studentSummary(student, exams, subjects);
+  const studentNo = getStudentNoFromRows(student, summary.examRows);
   const rows: SheetRows = [
     ["基本信息"],
     ["姓名", student.name],
     ["性别", student.gender],
-    ["学生ID", student.id],
+    ...(studentNo ? [["学号", studentNo] as SheetRows[number]] : []),
     ["导出时间", new Date().toLocaleString("zh-CN")],
     [],
     ["历次考试总览"],
@@ -726,6 +735,7 @@ function rankTrendChartHtml(examRows: Array<{ exam: GradeExam; row: GradeRow | n
 
 function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: string[], forcePageBreak: boolean): string {
   const summary = studentSummary(student, exams, subjects);
+  const studentNo = getStudentNoFromRows(student, summary.examRows);
   const overviewRows: SheetRows = [["考试", "日期", "总分", "平均分", "总分班排", "总分校排", "等级", "较上次总分"]];
   let previousTotal: number | null = null;
   summary.examRows.forEach(({ exam, row }) => {
@@ -758,7 +768,7 @@ function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: 
       <h2>${escapeHtml(student.name)} 个人成绩单</h2>
       <div class="meta-grid">
         <div><strong>性别</strong><span>${escapeHtml(student.gender || "—")}</span></div>
-        <div><strong>学生ID</strong><span>${escapeHtml(student.id)}</span></div>
+        ${studentNo ? `<div><strong>学号</strong><span>${escapeHtml(studentNo)}</span></div>` : ""}
         <div><strong>参加考试</strong><span>${summary.attended} 次</span></div>
         <div><strong>总分趋势</strong><span>${escapeHtml(getScoreTrend(summary.firstTotal, summary.lastTotal))}</span></div>
       </div>

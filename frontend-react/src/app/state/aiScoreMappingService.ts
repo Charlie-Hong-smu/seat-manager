@@ -118,6 +118,7 @@ function safeIndex(value: unknown, maxIndex: number): number {
 
 function normalizeMapping(headers: string[], result: {
   nameCol?: unknown;
+  studentNoCol?: unknown;
   subjectMappings?: Array<{ subject?: string; scoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown }>;
   totalMapping?: { scoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown };
 }): ScoreMapping {
@@ -126,6 +127,7 @@ function normalizeMapping(headers: string[], result: {
   return {
     headers,
     nameCol: safeIndex(result.nameCol, maxIndex),
+    studentNoCol: safeIndex(result.studentNoCol, maxIndex),
     subjectMappings: Array.isArray(result.subjectMappings)
       ? result.subjectMappings
           .map(item => ({

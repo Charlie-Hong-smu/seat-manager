@@ -83,6 +83,7 @@ function toLegacyStudent(student: AppStudent, previous?: Record<string, unknown>
     ...(previous || {}),
     id: student.id,
     name: student.name,
+    studentNo: student.studentNo || previous?.studentNo || "",
     gender: student.gender,
     aliases: student.aliases,
     records: student.records,
@@ -104,6 +105,7 @@ function normalizeExamEntry(value: unknown): SavedGradeExamEntry | null {
   }
   return {
     name,
+    studentNo: typeof value.studentNo === "string" || typeof value.studentNo === "number" ? String(value.studentNo).trim() : undefined,
     scores: isRecord(value.scores) ? value.scores as SavedGradeExamEntry["scores"] : {},
     total: isRecord(value.total)
       ? {
@@ -183,6 +185,9 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
       const student = lookup.get(normalizeNameForMatch(entry.name))?.shift();
       if (!student) {
         return;
+      }
+      if (entry.studentNo && !student.studentNo) {
+        student.studentNo = entry.studentNo;
       }
       const syncedExam = {
         id: record.id,

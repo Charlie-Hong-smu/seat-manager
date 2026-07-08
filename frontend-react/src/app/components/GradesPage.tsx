@@ -342,7 +342,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
             )}
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
             {activeTab === "single" ? (
               ["total", ...subjects].map(subject => (
                 <button
@@ -352,7 +352,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
                     setSortKey(subject);
                     setSortAsc(false);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${metricKey === subject ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                  className={`rounded-xl border px-3 py-1.5 text-xs whitespace-nowrap transition-all ${metricKey === subject ? "border-blue-100 bg-blue-50 text-blue-700 shadow-sm" : "border-gray-200 bg-white text-gray-500 hover:border-blue-100 hover:bg-blue-50/60 hover:text-blue-600"}`}
                   style={{ fontWeight: metricKey === subject ? 700 : 500 }}
                 >
                   {subject === "total" ? "全部" : subject}
@@ -360,11 +360,11 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
               ))
             ) : (
               <>
-                <span className="px-3 py-1.5 text-xs text-gray-400 whitespace-nowrap" style={{ fontWeight: 700 }}>展示科目</span>
+                <span className="px-1.5 py-1.5 text-xs text-gray-400 whitespace-nowrap" style={{ fontWeight: 700 }}>展示科目</span>
                 {trendSubjects.map(subject => (
                   <span
                     key={subject}
-                    className="px-3 py-1.5 rounded-lg bg-white text-xs text-gray-600 whitespace-nowrap shadow-sm"
+                    className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-1.5 text-xs text-gray-500 whitespace-nowrap"
                     style={{ fontWeight: 600 }}
                   >
                     {subject}

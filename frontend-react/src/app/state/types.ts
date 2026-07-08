@@ -95,6 +95,7 @@ export interface GradeScoreCell {
 export interface GradeRow {
   id: string;
   name: string;
+  studentNo?: string;
   studentId?: StudentId;
   scores: Record<string, GradeScoreCell>;
   total: number | null;
@@ -149,6 +150,7 @@ export interface SeatHistorySnapshot {
 
 export interface SavedGradeExamEntry {
   name: string;
+  studentNo?: string;
   scores: Record<string, GradeScoreCell>;
   total: GradeScoreCell;
 }
@@ -235,6 +237,7 @@ export interface StudentCommentProfile {
 export interface AppStudent {
   id: StudentId;
   name: string;
+  studentNo?: string;
   gender: Gender;
   aliases: string[];
   tags: string[];
