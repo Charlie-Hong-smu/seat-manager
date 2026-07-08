@@ -84,7 +84,7 @@ function SeatCard({
       <div
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        className={`rounded-xl border-2 border-dashed flex items-center justify-center text-gray-300 text-xs select-none transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/40"} ${cardMode === "compact" ? "h-12" : "h-20"}`}
+        className={`rounded-xl border-2 border-dashed flex items-center justify-center text-gray-300 text-xs select-none transition-colors duration-200 ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/40"} ${cardMode === "compact" ? "h-12" : "h-20"}`}
       >
         {cardMode === "detail" ? (
           <span className="text-gray-300">{row}-{col}</span>
@@ -107,9 +107,9 @@ function SeatCard({
       onDragEnd={() => onDragStateChange(null)}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={`relative w-full rounded-xl border bg-white hover:border-blue-300 hover:shadow-sm hover:bg-blue-50/30 text-left group transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] cursor-pointer ${
+      className={`relative w-full overflow-hidden rounded-xl border bg-white hover:border-blue-300 hover:shadow-sm hover:bg-blue-50/30 text-left group transition-[background-color,border-color,box-shadow,opacity] duration-200 cursor-pointer ${
         isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-      } ${isLocked ? "border-amber-300 bg-amber-50/30" : "border-gray-200"} ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""} ${cardMode === "compact" ? "h-12 px-2.5" : "h-20 px-2.5 pt-2 pb-2"}`}
+      } ${isLocked ? "border-amber-300 bg-amber-50/30" : "border-gray-200"} ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""} ${cardMode === "compact" ? "h-12" : "h-20"}`}
     >
       {/* Lock toggle */}
       <button
@@ -122,13 +122,13 @@ function SeatCard({
       </button>
 
       {/* 简洁模式：紧凑单行，只显示名字 */}
-      <div className={`flex items-center gap-1.5 h-full transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${cardMode === "compact" ? "opacity-100" : "opacity-0 h-0 overflow-hidden absolute"}`}>
+      <div className={`absolute inset-0 flex items-center gap-1.5 px-2.5 transition-[opacity,transform] duration-150 ease-out ${cardMode === "compact" ? "opacity-100 translate-y-0" : "pointer-events-none opacity-0 -translate-y-1"}`}>
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderDot}`} />
         <span className="min-w-0 flex-1 truncate text-sm text-gray-800" style={{ fontWeight: 600 }}>{student.name}</span>
       </div>
 
       {/* 详细模式：多行，名字 + 标签 + 座位号 */}
-      <div className={`flex flex-col gap-1 h-full transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${cardMode === "detail" ? "opacity-100" : "opacity-0 h-0 overflow-hidden absolute"}`}>
+      <div className={`absolute inset-0 flex flex-col gap-1 px-2.5 pb-2 pt-2 transition-[opacity,transform] duration-150 ease-out ${cardMode === "detail" ? "opacity-100 translate-y-0" : "pointer-events-none opacity-0 translate-y-1"}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderDot}`} title={student.gender || "未知"} />

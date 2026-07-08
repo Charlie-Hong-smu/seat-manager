@@ -617,7 +617,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                           <span className="flex items-center justify-center gap-1">全部 <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
                         <th className="text-center px-4 py-3">等级</th>
-                        <th className="text-right px-6 py-3">AI</th>
+                        <th className="w-24 whitespace-nowrap px-6 py-3 text-right">AI</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -652,7 +652,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             <td className="text-center px-4 py-3">
                               <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
                             </td>
-                            <td className="px-6 py-3 text-right">
+                            <td className="w-24 whitespace-nowrap px-6 py-3 text-right">
                               <button
                                 type="button"
                                 disabled={!matchedStudent}
@@ -662,7 +662,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                     onOpenStudentFollowup(matchedStudent);
                                   }
                                 }}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                                className="inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
                                 style={{ fontWeight: 800 }}
                                 title={matchedStudent ? "打开 AI 跟进建议" : "未匹配到学生档案"}
                               >
@@ -682,7 +682,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                         <th className="text-left px-4 py-3">姓名</th>
                         <th className="text-center px-4 py-3">{metricLabel} 成绩</th>
                         <th className="text-center px-4 py-3">等级</th>
-                        <th className="text-right px-6 py-3">AI</th>
+                        <th className="w-24 whitespace-nowrap px-6 py-3 text-right">AI</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -708,7 +708,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             <td className="text-center px-4 py-3">
                               <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
                             </td>
-                            <td className="px-6 py-3 text-right">
+                            <td className="w-24 whitespace-nowrap px-6 py-3 text-right">
                               <button
                                 type="button"
                                 disabled={!item.matchedStudent}
@@ -718,7 +718,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                     onOpenStudentFollowup(item.matchedStudent);
                                   }
                                 }}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                                className="inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
                                 style={{ fontWeight: 800 }}
                                 title={item.matchedStudent ? "打开 AI 跟进建议" : "未匹配到学生档案"}
                               >
