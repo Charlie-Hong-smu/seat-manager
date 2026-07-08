@@ -190,7 +190,9 @@ function normalizeSearchText(text: string): string {
 }
 
 function getActiveStudentQuery(input: string): string {
-  const tail = input.split(/[\s，。！？、,.!?;；:：()（）【】\[\]{}<>《》"'“”‘’]/).pop() || "";
+  const tail = input
+    .split(/(?:以及|还有|再看|再问|对比|比较|分析|看看|关于|[\s和与跟同及、，。！？,.!?;；:：()（）【】\[\]{}<>《》"'“”‘’])/)
+    .pop() || "";
   return tail.trim().slice(-12);
 }
 
