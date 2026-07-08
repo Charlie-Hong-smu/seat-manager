@@ -289,7 +289,7 @@ export async function generateStudentFollowup(
     }
   }
 
-  const send = async (token: string) => fetch(`${getWorkerBaseUrl()}/student-followup`, {
+  const send = async (baseUrl: string, token: string) => fetch(`${baseUrl}/student-followup`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -299,14 +299,20 @@ export async function generateStudentFollowup(
   });
 
   let auth = await getAuth(input);
-  let response = await send(auth.token);
+  let response = await send(getWorkerBaseUrl(), auth.token);
+  if (response.status === 404 || response.status === 405) {
+    response = await send(getDirectWorkerUrl(), auth.token);
+  }
   if (response.status === 401) {
     if (IS_COMMERCIAL && getProductAuthToken()) {
       throw new Error("ai_unauthorized");
     }
     clearAiAuth();
     auth = await getAuth(input);
-    response = await send(auth.token);
+    response = await send(getWorkerBaseUrl(), auth.token);
+    if (response.status === 404 || response.status === 405) {
+      response = await send(getDirectWorkerUrl(), auth.token);
+    }
   }
   if (response.status === 403) {
     throw new Error("ai_unauthorized");
