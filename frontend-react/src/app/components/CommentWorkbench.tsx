@@ -181,6 +181,10 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const generatedCount = comments.filter(c => c.generated).length;
   const pendingCount = comments.filter(c => !c.generated).length;
   const needsInfoCount = comments.filter(c => c.needsInfo).length;
+  const generatedExportIds = useMemo(
+    () => new Set(comments.filter(comment => comment.generated).map(comment => comment.studentId)),
+    [comments]
+  );
 
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
@@ -806,7 +810,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
               {batchButtonLabel}
             </button>
             <button
-              onClick={() => { setExportSelectedIds(new Set(students.map(s => s.id))); setShowExportModal(true); }}
+              onClick={() => { setExportSelectedIds(new Set(generatedExportIds)); setShowExportModal(true); }}
               className="flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
               style={{ fontWeight: 800 }}
             >
