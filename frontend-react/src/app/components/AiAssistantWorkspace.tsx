@@ -606,6 +606,20 @@ export function AiAssistantWorkspace({
                 )}
               </div>
             ))}
+            {busy && (
+              <div className="ai-message-enter flex gap-3 justify-start" aria-live="polite" aria-label="AI 正在思考">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-600">
+                  <Bot className="h-4 w-4" />
+                </span>
+                <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                  <div className="flex h-6 items-center gap-1.5">
+                    <span className="ai-thinking-dot h-2 w-2 rounded-full bg-violet-300" />
+                    <span className="ai-thinking-dot h-2 w-2 rounded-full bg-violet-300 [animation-delay:120ms]" />
+                    <span className="ai-thinking-dot h-2 w-2 rounded-full bg-violet-300 [animation-delay:240ms]" />
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 

@@ -84,6 +84,20 @@
   }
 }
 
+@keyframes ai-thinking-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
 .workspace-tab-enter {
   animation: workspace-tab-enter 260ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
 }
@@ -112,6 +126,10 @@
 .ai-suggestion-enter {
   animation: ai-suggestion-enter 180ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
   transform-origin: bottom center;
+}
+
+.ai-thinking-dot {
+  animation: ai-thinking-dot 900ms ease-in-out infinite;
 }
 
 :root {
