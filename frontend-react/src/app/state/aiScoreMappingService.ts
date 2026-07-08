@@ -66,11 +66,21 @@ export function hasStoredAiScoreMappingAuth(): boolean {
 }
 
 async function requestAiAuth(accessCode: string, remember: boolean): Promise<AiAuth> {
-  const response = await fetch(`${getWorkerBaseUrl()}/auth`, {
+  const requestBody = JSON.stringify({ accessCode, rememberDays: remember ? AI_REMEMBER_DAYS : 0 });
+  const send = (baseUrl: string) => fetch(`${baseUrl}/auth`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accessCode, rememberDays: remember ? AI_REMEMBER_DAYS : 0 }),
+    body: requestBody,
   });
+  let response: Response;
+  try {
+    response = await send(getWorkerBaseUrl());
+  } catch (error) {
+    response = await send(getDirectWorkerUrl());
+  }
+  if (response.status === 404 || response.status === 405) {
+    response = await send(getDirectWorkerUrl());
+  }
   if (response.status === 403) {
     throw new Error("ai_unauthorized");
   }
