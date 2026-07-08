@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -156,6 +156,10 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
 
   const selectedExam = exams.find(exam => exam.id === selectedExamId) || exams[0];
   const subjects = selectedExam?.subjects || [];
+  const trendSubjects = useMemo(
+    () => Array.from(new Set(exams.flatMap(exam => exam.subjects))),
+    [exams]
+  );
   const rows = selectedExam?.rows || [];
   const metricKey = selectedSubject === "total" || subjects.includes(selectedSubject) ? selectedSubject : "total";
   const studentById = new Map(students.map(student => [student.id, student]));
@@ -176,6 +180,13 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
       setSortKey("total");
     }
   }, [exams, selectedExamId]);
+
+  useEffect(() => {
+    if (activeTab === "trend") {
+      setExamOpen(false);
+      setThresholdOpen(false);
+    }
+  }, [activeTab]);
 
   const rowsWithMetrics = rows.map(row => ({
     ...row,
@@ -294,15 +305,24 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
       <div className="bg-white border-b border-gray-100 px-6 py-3 space-y-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative min-w-0 shrink basis-[280px]">
-            <button
-              onClick={() => setExamOpen(v => !v)}
-              className="flex w-full min-w-0 items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-              style={{ fontWeight: 600 }}
-            >
-              <span className="min-w-0 truncate">{selectedExam.name} · {selectedExam.date || "未填写日期"}</span>
-              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" />
-            </button>
-            {examOpen && (
+            {activeTab === "single" ? (
+              <button
+                onClick={() => setExamOpen(v => !v)}
+                className="flex w-full min-w-0 items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                style={{ fontWeight: 600 }}
+              >
+                <span className="min-w-0 truncate">{selectedExam.name} · {selectedExam.date || "未填写日期"}</span>
+                <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+              </button>
+            ) : (
+              <div
+                className="flex w-full min-w-0 items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700"
+                style={{ fontWeight: 600 }}
+              >
+                <span className="min-w-0 truncate">趋势范围 · 全部 {exams.length} 场考试</span>
+              </div>
+            )}
+            {activeTab === "single" && examOpen && (
               <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 overflow-hidden min-w-72 max-w-96">
                 {exams.map(exam => (
                   <button
@@ -323,34 +343,58 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
           </div>
 
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1">
-            {["total", ...subjects].map(subject => (
-              <button
-                key={subject}
-                onClick={() => {
-                  setSelectedSubject(subject);
-                  setSortKey(subject);
-                  setSortAsc(false);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${metricKey === subject ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                style={{ fontWeight: metricKey === subject ? 700 : 500 }}
-              >
-                {subject === "total" ? "全部" : subject}
-              </button>
-            ))}
+            {activeTab === "single" ? (
+              ["total", ...subjects].map(subject => (
+                <button
+                  key={subject}
+                  onClick={() => {
+                    setSelectedSubject(subject);
+                    setSortKey(subject);
+                    setSortAsc(false);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all ${metricKey === subject ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                  style={{ fontWeight: metricKey === subject ? 700 : 500 }}
+                >
+                  {subject === "total" ? "全部" : subject}
+                </button>
+              ))
+            ) : (
+              <>
+                <span className="px-3 py-1.5 text-xs text-gray-400 whitespace-nowrap" style={{ fontWeight: 700 }}>展示科目</span>
+                {trendSubjects.map(subject => (
+                  <span
+                    key={subject}
+                    className="px-3 py-1.5 rounded-lg bg-white text-xs text-gray-600 whitespace-nowrap shadow-sm"
+                    style={{ fontWeight: 600 }}
+                  >
+                    {subject}
+                  </span>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0">
-            <button
-              onClick={() => setThresholdOpen(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs border rounded-xl transition-colors ${thresholdOpen ? "bg-blue-50 text-blue-700 border-blue-200" : "text-gray-600 bg-gray-50 hover:bg-gray-100 border-gray-200"}`}
-              style={{ fontWeight: 700 }}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />阈值设置
-            </button>
+            {activeTab === "single" ? (
+              <button
+                onClick={() => setThresholdOpen(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs border rounded-xl transition-colors ${thresholdOpen ? "bg-blue-50 text-blue-700 border-blue-200" : "text-gray-600 bg-gray-50 hover:bg-gray-100 border-gray-200"}`}
+                style={{ fontWeight: 700 }}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />阈值设置
+              </button>
+            ) : (
+              <div
+                className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-xl"
+                style={{ fontWeight: 700 }}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />阈值仅用于单次分析
+              </div>
+            )}
 
-            {thresholdOpen && (
+            {activeTab === "single" && thresholdOpen && (
               <div className="surface-enter absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border border-gray-100 bg-white p-4 shadow-xl shadow-gray-200/70">
                 <div className="grid grid-cols-3 gap-3">
                   {(([
@@ -592,7 +636,7 @@ export function GradesPage({ exams, students, onSelectStudent }: GradesPageProps
             </div>
           </>
         ) : (
-          <TrendDashboard exams={exams} subjects={subjects} />
+          <TrendDashboard exams={exams} subjects={trendSubjects} />
         )}
       </div>
       {exportOpen && (
