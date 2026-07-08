@@ -20,6 +20,13 @@ const QUICK_PROMPTS = [
 ];
 
 const CHAT_LIMIT = 20;
+const STUDENT_SUGGESTION_LIMIT = 6;
+
+type StudentSuggestion = {
+  student: AppStudent;
+  reason: string;
+  score: number;
+};
 
 function makeMessage(role: AiChatMessage["role"], content: string): AiChatMessage {
   return {
@@ -120,6 +127,79 @@ function buildInitialQuickPrompts(input: { exams: GradeExam[]; dormitories: Dorm
   return prompts.slice(0, 4);
 }
 
+function normalizeSearchText(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, "").replace(/[，。！？、,.!?;；:：()（）【】\[\]{}<>《》"'“”‘’]/g, "");
+}
+
+function getActiveStudentQuery(input: string): string {
+  const tail = input.split(/[\s，。！？、,.!?;；:：()（）【】\[\]{}<>《》"'“”‘’]/).pop() || "";
+  return tail.trim().slice(-12);
+}
+
+function getAliasInitials(alias: string): string {
+  return alias
+    .split(/[\s\-_/]+/)
+    .map(part => part[0] || "")
+    .join("")
+    .toLowerCase();
+}
+
+function buildStudentSuggestions(input: string, students: AppStudent[]): StudentSuggestion[] {
+  const rawQuery = getActiveStudentQuery(input);
+  const query = normalizeSearchText(rawQuery);
+  if (!query) {
+    return [];
+  }
+  const isLatinQuery = /^[a-z]+$/i.test(query);
+  if (isLatinQuery && query.length < 1) {
+    return [];
+  }
+  return students
+    .map(student => {
+      const name = normalizeSearchText(student.name);
+      const aliases = student.aliases.map(normalizeSearchText).filter(Boolean);
+      const aliasInitials = student.aliases.map(getAliasInitials).filter(Boolean);
+      let reason = "";
+      let score = 0;
+      if (name === query) {
+        reason = "姓名完全匹配";
+        score = 100;
+      } else if (name.startsWith(query)) {
+        reason = query.length === 1 ? "首字匹配" : "姓名开头匹配";
+        score = 92 - Math.max(0, name.length - query.length);
+      } else if (name.includes(query) && query.length >= 2) {
+        reason = "姓名包含匹配";
+        score = 82 - name.indexOf(query);
+      } else {
+        const aliasMatch = aliases.find(alias => alias === query || alias.startsWith(query) || (query.length >= 2 && alias.includes(query)));
+        const initialsMatch = aliasInitials.find(initials => initials === query || initials.startsWith(query));
+        if (aliasMatch) {
+          reason = /^[a-z]+$/i.test(aliasMatch) ? "拼音匹配" : "别名匹配";
+          score = aliasMatch === query ? 88 : 78 - Math.max(0, aliasMatch.length - query.length);
+        } else if (initialsMatch) {
+          reason = "拼音首字母匹配";
+          score = initialsMatch === query ? 76 : 70 - Math.max(0, initialsMatch.length - query.length);
+        }
+      }
+      return reason ? { student, reason, score } : null;
+    })
+    .filter((item): item is StudentSuggestion => Boolean(item))
+    .sort((a, b) => b.score - a.score || a.student.name.localeCompare(b.student.name, "zh-CN"))
+    .slice(0, STUDENT_SUGGESTION_LIMIT);
+}
+
+function applyStudentSuggestion(input: string, studentName: string): string {
+  const query = getActiveStudentQuery(input);
+  if (!query) {
+    return input ? `${input}${studentName}` : studentName;
+  }
+  const index = input.lastIndexOf(query);
+  if (index < 0) {
+    return `${input}${studentName}`;
+  }
+  return `${input.slice(0, index)}${studentName}${input.slice(index + query.length)}`;
+}
+
 export function AiAssistantWorkspace({
   active,
   students,
@@ -144,8 +224,10 @@ export function AiAssistantWorkspace({
   const [status, setStatus] = useState("AI 只会读取当前班级、当前学期的摘要，不会自动修改数据。");
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>(QUICK_PROMPTS);
   const [copiedMessageId, setCopiedMessageId] = useState<string>("");
+  const [studentSuggestOpen, setStudentSuggestOpen] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const slice = useMemo(() => {
     try {
@@ -173,6 +255,8 @@ export function AiAssistantWorkspace({
     fundTransactions,
   }), [baseContext, dormitories, exams, fundTransactions, input, students]);
   const contextPackLabels = previewContext.contextPacks.map(formatContextPackLabel);
+  const studentSuggestions = useMemo(() => buildStudentSuggestions(input, students), [input, students]);
+  const showStudentSuggestions = studentSuggestOpen && studentSuggestions.length > 0 && !busy;
   const initialQuickPrompts = useMemo(() => buildInitialQuickPrompts({
     exams,
     dormitories,
@@ -190,7 +274,7 @@ export function AiAssistantWorkspace({
   }, [initialQuickPrompts, messages.length]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ block: "end" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, busy]);
 
   useEffect(() => {
@@ -215,6 +299,14 @@ export function AiAssistantWorkspace({
   function handleInputChange(value: string) {
     setInput(value);
     saveDraftInput(value);
+    setStudentSuggestOpen(true);
+  }
+
+  function chooseStudentSuggestion(student: AppStudent) {
+    const nextInput = applyStudentSuggestion(input, student.name);
+    handleInputChange(nextInput);
+    setStudentSuggestOpen(false);
+    window.requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   function copyMessage(message: AiChatMessage) {
@@ -363,7 +455,7 @@ export function AiAssistantWorkspace({
               </div>
             )}
             {messages.map(message => (
-              <div key={message.id} className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div key={message.id} className={`ai-message-enter flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 {message.role === "assistant" && (
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-600">
                     <Bot className="h-4 w-4" />
@@ -414,15 +506,47 @@ export function AiAssistantWorkspace({
               </p>
             )}
             <form
-              className="flex gap-2"
+              className="relative flex gap-2"
               onSubmit={event => {
                 event.preventDefault();
                 void sendPrompt(input);
               }}
             >
+              {showStudentSuggestions && (
+                <div className="ai-suggestion-enter absolute bottom-full left-0 right-20 z-10 mb-2 overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-xl shadow-violet-100/60">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+                    <span className="text-xs text-gray-500" style={{ fontWeight: 800 }}>可能想问的学生</span>
+                    <span className="text-xs text-violet-500">点击插入姓名</span>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto p-1.5">
+                    {studentSuggestions.map(item => (
+                      <button
+                        key={item.student.id}
+                        type="button"
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => chooseStudentSuggestion(item.student)}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-violet-50"
+                      >
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-violet-50 text-sm text-violet-700" style={{ fontWeight: 900 }}>
+                          {item.student.name.slice(0, 1)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm text-gray-900" style={{ fontWeight: 850 }}>{item.student.name}</span>
+                          <span className="block truncate text-xs text-gray-400">
+                            {item.reason}{item.student.aliases.length ? ` · ${item.student.aliases.slice(0, 2).join(" / ")}` : ""}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <input
+                ref={inputRef}
                 value={input}
                 onChange={event => handleInputChange(event.target.value)}
+                onFocus={() => setStudentSuggestOpen(true)}
+                onBlur={() => window.setTimeout(() => setStudentSuggestOpen(false), 140)}
                 disabled={busy}
                 placeholder="输入你想问 AI 的问题..."
                 className="h-11 min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm outline-none transition-colors focus:border-violet-300 focus:bg-white disabled:opacity-60"
