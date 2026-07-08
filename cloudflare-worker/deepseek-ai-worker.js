@@ -638,7 +638,7 @@ async function handleChatAssistant(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎、务实的班主任 AI 助手。默认只能根据用户提供的当前班级、当前学期摘要回答；若提供 comparisonContext，可基于其中显式选择的同一班级对比学期做跨学期回答。不能声称看到了未提供的其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。baseContext 是全班基础摘要；contextPacks 是本次问题自动附带的相关学生、考试、宿舍、标签、记录或班费明细；comparisonContext 是同班级跨学期摘要或不支持提示。若用户询问具体对象，优先使用 contextPacks 和 comparisonContext；只有确实没有相关明细时才说明信息不足。可以给老师提供班级分析、跨学期变化、重点学生跟进、沟通话术、评语素材方向、班费收支概览和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
+              "你是谨慎、务实的班主任 AI 助手。默认只能根据用户提供的当前班级、当前学期摘要回答；若提供 comparisonContext，可基于其中显式选择的同一班级对比学期做跨学期回答。不能声称看到了未提供的其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。baseContext 是全班基础摘要；contextPacks 是本次问题自动附带的相关学生、考试、宿舍、标签、记录或班费明细；comparisonContext 是同班级跨学期摘要或不支持提示。若用户询问具体对象，优先使用 contextPacks 和 comparisonContext；只有确实没有相关明细时才说明信息不足。可以给老师提供班级分析、跨学期变化、重点学生跟进、沟通话术、评语素材方向、班费收支概览和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；不要使用 Markdown 标记，不要输出 **粗体**、# 标题、代码块、反引号或表格，用普通中文、编号和自然换行即可；suggestedPrompts 给 2 到 4 个后续可问的问题。"
           },
           {
             role: "user",
@@ -1341,11 +1341,11 @@ function sanitizeClassAiResult(result) {
 
 function sanitizeAssistantResult(result) {
   const prompts = Array.isArray(result.suggestedPrompts)
-    ? result.suggestedPrompts.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 4)
+    ? result.suggestedPrompts.map((item) => toAssistantPlainText(item, 120)).filter(Boolean).slice(0, 4)
     : [];
   return {
-    message: toAssistantText(result.message || result.answer || result.content, 2400),
-    disclaimer: toAssistantText(result.disclaimer, 200) || "AI 内容仅供教师参考，请结合实际课堂观察判断。",
+    message: toAssistantPlainText(result.message || result.answer || result.content, 2400),
+    disclaimer: toAssistantPlainText(result.disclaimer, 200) || "AI 内容仅供教师参考，请结合实际课堂观察判断。",
     suggestedPrompts: prompts
   };
 }
@@ -1411,6 +1411,17 @@ function toText(value) {
 
 function toAssistantText(value, limit = 800) {
   return String(value || "").replace(/\r\n/g, "\n").trim().slice(0, limit);
+}
+
+function toAssistantPlainText(value, limit = 800) {
+  return toAssistantText(value, limit)
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}[-*]\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function trimAssistantComparisonContext(context) {

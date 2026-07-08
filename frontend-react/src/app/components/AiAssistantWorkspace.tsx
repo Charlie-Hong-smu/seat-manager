@@ -46,6 +46,21 @@ function makeMessage(role: AiChatMessage["role"], content: string, meta: Pick<Ai
   };
 }
 
+function formatChatDisplayText(message: AiChatMessage): string {
+  if (message.role !== "assistant") {
+    return message.content;
+  }
+  return message.content
+    .replace(/\r\n/g, "\n")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}[-*]\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function hasBrowserStorage(): boolean {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
@@ -402,7 +417,7 @@ export function AiAssistantWorkspace({
   }
 
   function copyMessage(message: AiChatMessage) {
-    navigator.clipboard.writeText(message.content).then(() => {
+    navigator.clipboard.writeText(formatChatDisplayText(message)).then(() => {
       setCopiedMessageId(message.id);
       window.setTimeout(() => {
         setCopiedMessageId(current => (current === message.id ? "" : current));
@@ -588,7 +603,7 @@ export function AiAssistantWorkspace({
                   </span>
                 )}
                 <div className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-700"}`}>
-                  <div className="whitespace-pre-wrap">{message.content}</div>
+                  <div className="whitespace-pre-wrap">{formatChatDisplayText(message)}</div>
                   {message.role === "assistant" && index === messages.length - 1 && message.suggestedPrompts?.length ? (
                     <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
                       {message.suggestedPrompts.slice(0, 3).map(prompt => (
