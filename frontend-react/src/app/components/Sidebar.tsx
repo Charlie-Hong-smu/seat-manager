@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Archive, BarChart2, History, Home, LayoutGrid, MessageSquareText, Sparkles, Upload, Wallet } from "lucide-react";
+import { BarChart2, History, Home, LayoutGrid, MessageSquareText, Sparkles, Upload, Wallet } from "lucide-react";
 
 import type { AppStudent, Dormitory, GradeExam, StudentId } from "../state/types";
 
@@ -79,16 +79,7 @@ export function Sidebar({
   onTabChange,
   onOpenCommentWorkbench,
 }: Props) {
-  const assignedDormCount = students.filter(student => student.dormitoryId).length;
-  const latestExam = gradeExams[0];
   const activeIndex = Math.max(0, NAV_ITEMS.findIndex(item => item.key === activeTab));
-  const quickPanel = activeTab === "daily"
-    ? { title: "摘要", lines: [`宿舍 ${assignedDormCount}/${students.length}`, `考试 ${latestExam?.name || "暂无"}`] }
-    : activeTab === "scores"
-      ? { title: "成绩", lines: [`${gradeExams.length} 次考试`, latestExam?.name || "暂无考试"] }
-      : activeTab === "data"
-        ? { title: "名单", lines: [`${students.length} 名学生`, `${seatOrder.length} 个座位`] }
-        : null;
 
   return (
     <aside className="flex h-full w-40 shrink-0 flex-col border-r border-gray-100 bg-white">
@@ -127,44 +118,7 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="space-y-3 border-t border-gray-100 px-2.5 py-4">
-        <div
-          className={`overflow-hidden rounded-xl border border-gray-100 bg-gray-50 transition-[max-height,opacity,transform] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${
-            quickPanel ? "max-h-64 translate-y-0 opacity-100" : "max-h-0 -translate-y-1 border-transparent opacity-0"
-          }`}
-        >
-          <div className="px-3 py-3">
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <Archive className="h-3.5 w-3.5" />
-              <span style={{ fontWeight: 800 }}>{quickPanel?.title}</span>
-            </div>
-            <div className="mt-2 space-y-1 text-xs">
-              {quickPanel?.lines.map(line => (
-                <div key={line} className="truncate text-gray-700" style={{ fontWeight: 800 }}>{line}</div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {!quickPanel && (
-          <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <Archive className="h-3.5 w-3.5" />
-            <span style={{ fontWeight: 800 }}>摘要</span>
-          </div>
-          <div className="mt-2 space-y-2 text-xs">
-            <div>
-              <div className="text-gray-400">宿舍归属</div>
-              <div className="mt-0.5 text-gray-800" style={{ fontWeight: 900 }}>{assignedDormCount}/{students.length}</div>
-            </div>
-            <div>
-              <div className="text-gray-400">最近考试</div>
-              <div className="mt-0.5 truncate text-gray-800" style={{ fontWeight: 900 }}>{latestExam?.name || "暂无"}</div>
-            </div>
-          </div>
-        </div>
-        )}
-
+      <div className="border-t border-gray-100 px-2.5 py-4">
         <button
           onClick={onOpenCommentWorkbench}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-violet-600 transition-colors hover:bg-violet-50"

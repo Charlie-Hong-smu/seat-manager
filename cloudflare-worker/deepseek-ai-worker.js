@@ -519,7 +519,7 @@ async function handleAnalyzeTrend(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的教师助手。只根据提供的匿名成绩摘要生成温和、可参考的趋势建议，不做绝对判断。recentExams 按考试先后从早到晚排列，最后一项是最新考试；所有升降必须用最新考试减最早考试判断，不要把顺序反过来。必须返回 JSON，字段为 overall、changes、suggestions、disclaimer。"
+              "你是谨慎的教师助手。只根据提供的匿名成绩摘要生成温和、可参考的趋势建议，不做绝对判断。recentExams 包含当前学期该学生全部考试，按考试先后从早到晚排列，最后一项是最新考试；所有升降必须用最新考试减最早考试判断，不要把顺序反过来。必须返回 JSON，字段为 overall、changes、suggestions、disclaimer。"
           },
           {
             role: "user",
@@ -579,7 +579,7 @@ async function handleAnalyzeClass(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的班主任成绩分析助手。只根据提供的全班成绩变化摘要，概括班级趋势，并指出需要教师重点关注的学生。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。focusStudents 必须逐行列出，格式为“姓名（简短原因）”，原因控制在 12 个字以内，例如“化学下降26”或“排名退步35”。"
+              "你是谨慎的班主任成绩分析助手。只根据提供的全班成绩变化摘要、考试统计和重点候选学生序列，概括班级趋势，并指出需要教师重点关注的学生。不要声称看到了完整全班逐科明细。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。focusStudents 必须逐行列出，格式为“姓名（简短原因）”，原因控制在 12 个字以内，例如“化学下降26”或“排名退步35”。"
           },
           {
             role: "user",
@@ -638,7 +638,7 @@ async function handleChatAssistant(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎、务实的班主任 AI 助手。你只能根据用户提供的当前班级、当前学期摘要回答；不能声称看到了其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。baseContext 是全班基础摘要；contextPacks 是本次问题自动附带的相关学生、考试、宿舍、标签或记录明细。若用户询问具体对象，优先使用 contextPacks；只有确实没有相关明细时才说明信息不足。可以给老师提供班级分析、重点学生跟进、沟通话术、评语素材方向和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
+              "你是谨慎、务实的班主任 AI 助手。你只能根据用户提供的当前班级、当前学期摘要回答；不能声称看到了其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。baseContext 是全班基础摘要；contextPacks 是本次问题自动附带的相关学生、考试、宿舍、标签、记录或班费明细。若用户询问具体对象，优先使用 contextPacks；只有确实没有相关明细时才说明信息不足。可以给老师提供班级分析、重点学生跟进、沟通话术、评语素材方向、班费收支概览和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
           },
           {
             role: "user",
@@ -761,7 +761,7 @@ async function handleGenerateStudentComment(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              `你是谨慎的班主任评语助手。只根据用户提供的单个学生信息、成绩摘要、标签、评语工作台素材 commentProfile 和教师补充评价写期末评语。禁止编造未提供事实，禁止夸大或做医学/心理诊断。语言自然，不模板化，适合作为期末评语，兼具鼓励和建设性提醒。可以综合标准选择和自定义素材，但不要机械罗列所有选项。必须返回 JSON，字段为 comment、needsMoreInfo、missingInfo。comment 必须是中文，目标长度为${commentLength.instruction}。若信息不足，needsMoreInfo 为 true，missingInfo 说明需要补充哪些信息，comment 可以为空。`
+              `你是谨慎的班主任评语助手。只根据用户提供的单个学生信息、当前学期全部成绩序列、标签、日常记录、评语工作台素材 commentProfile 和教师补充评价写期末评语。禁止编造未提供事实，禁止夸大或做医学/心理诊断。语言自然，不模板化，适合作为期末评语，兼具鼓励和建设性提醒。优先使用老师选择的评语素材和教师补充评价；成绩事实只能来自上下文。可以综合标准选择和自定义素材，但不要机械罗列所有选项。必须返回 JSON，字段为 comment、needsMoreInfo、missingInfo。comment 必须是中文，目标长度为${commentLength.instruction}。若信息不足，needsMoreInfo 为 true，missingInfo 说明需要补充哪些信息，comment 可以为空。`
           },
           {
             role: "user",
@@ -1091,7 +1091,7 @@ function isValidTrendPayload(payload) {
     payload.student === "学生A" &&
     Array.isArray(payload.recentExams) &&
     payload.recentExams.length > 0 &&
-    payload.recentExams.length <= 6
+    payload.recentExams.length <= 40
   );
 }
 
@@ -1447,7 +1447,7 @@ function trimAssistantContext(context) {
     },
     contextPacks: Array.isArray(context?.contextPacks)
       ? context.contextPacks.map((pack) => ({
-          kind: ["student", "candidate_students", "exam", "dormitory", "tag", "records"].includes(pack?.kind) ? pack.kind : "records",
+          kind: ["student", "candidate_students", "exam", "dormitory", "tag", "records", "fund"].includes(pack?.kind) ? pack.kind : "records",
           title: toAssistantText(pack?.title, 80),
           reason: toAssistantText(pack?.reason, 160),
           items: Array.isArray(pack?.items)
@@ -1461,7 +1461,7 @@ function trimAssistantContext(context) {
                 trend: Number.isFinite(Number(item?.trend)) ? Number(item.trend) : null,
                 latestScores: Array.isArray(item?.latestScores) ? item.latestScores.map((value) => toAssistantText(value, 40)).filter(Boolean).slice(0, 10) : [],
                 weakSubjects: Array.isArray(item?.weakSubjects) ? item.weakSubjects.map((value) => toAssistantText(value, 60)).filter(Boolean).slice(0, 3) : [],
-                exams: Array.isArray(item?.exams) ? item.exams.map((value) => toAssistantText(value, 160)).filter(Boolean).slice(0, 5) : [],
+                exams: Array.isArray(item?.exams) ? item.exams.map((value) => toAssistantText(value, 180)).filter(Boolean).slice(0, 40) : [],
                 records: Array.isArray(item?.records) ? item.records.map((value) => toAssistantText(value, 140)).filter(Boolean).slice(0, 8) : [],
                 tags: Array.isArray(item?.tags) ? item.tags.map((value) => toAssistantText(value, 40)).filter(Boolean).slice(0, 8) : [],
                 dormitory: toAssistantText(item?.dormitory, 80),

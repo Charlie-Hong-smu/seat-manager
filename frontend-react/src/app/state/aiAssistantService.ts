@@ -1,5 +1,6 @@
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
+import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, Dormitory, FundTransaction, GradeExam, GradeRow } from "./types";
 
@@ -74,7 +75,7 @@ export interface AiContextPackItem {
 }
 
 export interface AiContextPack {
-  kind: "student" | "candidate_students" | "exam" | "dormitory" | "tag" | "records";
+  kind: "student" | "candidate_students" | "exam" | "dormitory" | "tag" | "records" | "fund";
   title: string;
   reason: string;
   items: AiContextPackItem[];
@@ -427,13 +428,8 @@ function formatStudentExamSummary(student: AppStudent, exam: GradeExam | undefin
 }
 
 function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>, dormitories: Dormitory[], matchNote?: string): AiContextPack {
-  const chronological = [...exams].sort((a, b) => `${b.date || ""}-${b.name}`.localeCompare(`${a.date || ""}-${a.name}`));
-  const recentExams = chronological.slice(0, 5);
-  const latestRow = findStudentExamRow(latestExam, student);
-  const previousRow = recentExams[1] ? findStudentExamRow(recentExams[1], student) : null;
-  const latestTotal = getRowTotal(latestRow);
-  const previousTotal = getRowTotal(previousRow);
-  const dormitory = dormitories.find(dorm => dorm.memberIds.includes(student.id));
+  const studentContext = compactStudentContextForToken(buildStudentAiContext({ student, dormitories, maxRecords: 8, maxTags: 12 }), 12);
+  const previousTotal = studentContext.exams.length >= 2 ? studentContext.exams[studentContext.exams.length - 2].totalScore : null;
   return {
     kind: "student",
     title: matchNote ? `疑似${student.name}明细` : `${student.name}明细`,
@@ -442,23 +438,32 @@ function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: G
       ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
       summary: matchNote || "",
       previousTotal,
-      trend: latestTotal !== null && previousTotal !== null ? Math.round((latestTotal - previousTotal) * 10) / 10 : null,
-      exams: recentExams.map(exam => {
-        const row = findStudentExamRow(exam, student);
-        const total = getRowTotal(row);
-        const scores = formatRowScores(row, exam.subjects).join("、");
-        return `${exam.name}${exam.date ? `(${exam.date})` : ""}：总分${total ?? "无"}；${scores || "无各科"}`;
+      trend: studentContext.trend.totalScoreChange,
+      exams: studentContext.exams.map(exam => {
+        const scores = exam.subjects.map(item => `${item.subject}${item.score}`).join("、");
+        const rank = exam.classRank !== null ? `；班排${exam.classRank}` : "";
+        return `${exam.name}${exam.date ? `(${exam.date})` : ""}：总分${exam.totalScore ?? "无"}${rank}；${scores || "无各科"}`;
       }),
-      dormitory: dormitory ? `${dormitory.name} 当前 ${dormitory.currentScore} 分` : "",
+      records: studentContext.records,
+      tags: studentContext.tags,
+      weakSubjects: studentContext.weaknesses,
+      dormitory: studentContext.dormitory,
     }],
   };
 }
 
 function buildCandidatePack(title: string, reason: string, students: AppStudent[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>, category: string): AiContextPack | null {
-  const items = students.slice(0, 20).map(student => ({
-    ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
-    category,
-  }));
+  const items = students.slice(0, 20).map(student => {
+    const context = compactStudentContextForToken(buildStudentAiContext({ student, maxRecords: 3, maxTags: 8 }), 8);
+    return {
+      ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
+      category,
+      trend: context.trend.totalScoreChange,
+      exams: context.exams.map(exam => `${exam.name}${exam.date ? `(${exam.date})` : ""}：总分${exam.totalScore ?? "无"}${exam.classRank !== null ? `，班排${exam.classRank}` : ""}`),
+      records: context.records,
+      tags: context.tags,
+    };
+  });
   return items.length ? { kind: "candidate_students", title, reason, items } : null;
 }
 
@@ -504,6 +509,47 @@ function buildRecordsPack(students: AppStudent[], latestExam: GradeExam | undefi
 function buildTagPack(tags: string[], students: AppStudent[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>): AiContextPack | null {
   const matched = students.filter(student => [...student.academicTags, ...student.tags].some(tag => tags.includes(tag))).slice(0, 20);
   return buildCandidatePack(`标签匹配：${tags.join("、")}`, "问题命中学生标签，附带相关学生。", matched, latestExam, latestSubjectAverages, "标签匹配");
+}
+
+function summarizeFundCategories(transactions: FundTransaction[], type: FundTransaction["type"], limit: number): string[] {
+  const sums = new Map<string, number>();
+  transactions
+    .filter(tx => tx.type === type)
+    .forEach(tx => {
+      const label = tx.category || (type === "income" ? "未分类收入" : "未分类支出");
+      sums.set(label, (sums.get(label) || 0) + Math.abs(tx.amount || 0));
+    });
+  return Array.from(sums.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, amount]) => `${label} ${Math.round(amount * 100) / 100}`);
+}
+
+function buildFundPack(transactions: FundTransaction[]): AiContextPack {
+  const income = transactions.filter(tx => tx.type === "income").reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
+  const expense = transactions.filter(tx => tx.type === "expense").reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
+  const latest = [...transactions]
+    .sort((a, b) => `${b.date || ""}-${b.createdAt || ""}`.localeCompare(`${a.date || ""}-${a.createdAt || ""}`))
+    .slice(0, 12)
+    .map(tx => {
+      const sign = tx.type === "income" ? "+" : "-";
+      const names = tx.relatedStudentNames?.length ? `（关联：${tx.relatedStudentNames.slice(0, 4).join("、")}）` : "";
+      return `${tx.date || "未填日期"} ${sign}${Math.round(Math.abs(tx.amount || 0) * 100) / 100} ${tx.category || "未分类"}：${tx.note || "无备注"}${names}`;
+    });
+  return {
+    kind: "fund",
+    title: "班费流水",
+    reason: "问题涉及班费、花销、收支或余额，附带班费概览、分类汇总和最近流水。",
+    items: [{
+      name: "班费概览",
+      summary: `收入 ${Math.round(income * 100) / 100}，支出 ${Math.round(expense * 100) / 100}，余额 ${Math.round((income - expense) * 100) / 100}，流水 ${transactions.length} 笔`,
+      records: latest.length ? latest : ["暂无班费流水"],
+      tags: [
+        ...summarizeFundCategories(transactions, "income", 5).map(item => `收入：${item}`),
+        ...summarizeFundCategories(transactions, "expense", 5).map(item => `支出：${item}`),
+      ].slice(0, 10),
+    }],
+  };
 }
 
 function summarizeCounts(values: string[], limit: number): string[] {
@@ -645,6 +691,7 @@ export function buildAiAssistantContext(input: {
   students: AppStudent[];
   exams: GradeExam[];
   dormitories: Dormitory[];
+  fundTransactions: FundTransaction[];
 }): AiAssistantContext {
   const prompt = input.prompt || "";
   const normalized = normalizeQuery(prompt);
@@ -702,6 +749,9 @@ export function buildAiAssistantContext(input: {
   if (includesAny(normalized, ["日常", "记录", "表现", "纪律", "奖励", "提醒", "作业", "课堂"])) {
     const pack = buildRecordsPack(input.students, latestExam, latestSubjectAverages);
     if (pack) packs.push(pack);
+  }
+  if (includesAny(normalized, ["班费", "花销", "花费", "支出", "收入", "余额", "报销", "费用", "流水", "钱", "财务"])) {
+    packs.push(buildFundPack(input.fundTransactions));
   }
 
   const deduped = packs.filter((pack, index, array) => (

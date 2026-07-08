@@ -1,5 +1,6 @@
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
+import { buildLocalStudentTrendSummary, buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, GradeExam, StudentExamSummary } from "./types";
 
@@ -193,54 +194,32 @@ function getExamTotal(exam: StudentExamSummary): number | null {
 }
 
 export function buildLocalTrendSummary(exams: StudentExamSummary[]): string {
-  const chronological = [...exams].sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b)));
-  const totals = chronological.map(getExamTotal).filter((value): value is number => typeof value === "number");
-  const summary: string[] = [];
-  if (totals.length >= 2) {
-    const diff = Math.round((totals[totals.length - 1] - totals[0]) * 10) / 10;
-    summary.push(`总分较最早一次${diff >= 0 ? "上升" : "下降"} ${Math.abs(diff)} 分。`);
-  }
-  const subjects = new Set<string>();
-  chronological.forEach(exam => Object.keys(exam.scores).forEach(subject => subjects.add(subject)));
-  subjects.forEach(subject => {
-    const values = chronological
-      .map(exam => exam.scores[subject])
-      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-    if (values.length >= 2) {
-      const diff = Math.round((values[values.length - 1] - values[0]) * 10) / 10;
-      if (Math.abs(diff) >= 5) {
-        summary.push(`${subject}${diff >= 0 ? "上升" : "下降"} ${Math.abs(diff)} 分。`);
-      }
-    }
-  });
-  return summary.length ? summary.join(" ") : "可用考试次数或有效分数较少，主要参考单次成绩和排名。";
+  return buildLocalStudentTrendSummary(exams);
 }
 
 function buildPayload(student: AppStudent) {
-  const chronological = [...student.exams].sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b)));
-  const recentSource = chronological.slice(-6);
-  const recentExams = recentSource.map((exam, index) => {
-    const subjects: Record<string, { score: number; rankClass: null; rankSchool: null }> = {};
-    getScoreEntries(exam).forEach(([subject, score]) => {
-      subjects[subject] = { score, rankClass: null, rankSchool: null };
-    });
-    return {
-      order: index + 1,
-      name: exam.name || "考试",
-      date: exam.date || "",
-      period: index === 0 ? "oldest" : index === recentSource.length - 1 ? "latest" : "middle",
-      totalScore: getExamTotal(exam),
-      classRank: exam.rank ? Number.parseInt(exam.rank, 10) || null : null,
-      schoolRank: null,
-      subjects,
-    };
-  });
+  const context = compactStudentContextForToken(buildStudentAiContext({ student, maxRecords: 0, maxTags: 12 }));
+  const recentExams = context.exams.map(exam => ({
+    ...exam,
+    subjects: Object.fromEntries(exam.subjects.map(item => [
+      item.subject,
+      {
+        score: item.score,
+        rankClass: item.rankClass,
+        rankSchool: item.rankSchool,
+      },
+    ])),
+  }));
   return {
     student: "学生A",
-    orderInstruction: "recentExams 已按考试先后从早到晚排列；最后一项是最新考试。所有升降变化都必须用最新考试减最早考试来判断。",
+    orderInstruction: "recentExams 包含当前学期该生全部考试，已按考试先后从早到晚排列；最后一项是最新考试。所有升降变化都必须用最新考试减最早考试来判断。",
     recentExams,
     localAnalysis: {
-      summary: buildLocalTrendSummary(student.exams),
+      summary: context.trend.summary,
+      totalScoreChange: context.trend.totalScoreChange,
+      classRankChange: context.trend.classRankChange,
+      changedSubjects: context.trend.changedSubjects,
+      zeroSubjectHints: context.exams.flatMap(exam => exam.zeroSubjects.map(subject => `${exam.name} ${subject}为0`)).slice(0, 8),
     },
   };
 }
@@ -270,6 +249,53 @@ function normalizeClassResult(data: Partial<AiClassTrendResult> & { changes?: st
 
 function getLatestExamTotal(exam: StudentExamSummary): number | null {
   return getExamTotal(exam);
+}
+
+function getGradeRowTotal(row: GradeExam["rows"][number]): number | null {
+  if (typeof row.total === "number" && Number.isFinite(row.total)) {
+    return Math.round(row.total * 10) / 10;
+  }
+  const values = Object.values(row.scores)
+    .map(cell => cell.score)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10 : null;
+}
+
+function average(values: number[]): number | null {
+  return values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10 : null;
+}
+
+function buildExamStats(exams: GradeExam[]) {
+  return [...exams]
+    .sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`))
+    .map(exam => {
+      const totals = exam.rows.map(getGradeRowTotal).filter((value): value is number => value !== null);
+      const sortedTotals = [...totals].sort((a, b) => a - b);
+      const subjectAverages = Object.fromEntries(exam.subjects.map(subject => {
+        const values = exam.rows
+          .map(row => row.scores[subject]?.score)
+          .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+        return [subject, average(values)];
+      }).filter(([, value]) => value !== null));
+      const zeroRows = exam.rows
+        .filter(row => row.total === 0 || Object.values(row.scores).some(cell => cell.score === 0))
+        .slice(0, 12)
+        .map(row => row.name);
+      const avgTotal = average(totals);
+      return {
+        name: exam.name,
+        date: exam.date,
+        studentCount: exam.rows.length,
+        subjectCount: exam.subjects.length,
+        averageTotal: avgTotal,
+        minTotal: sortedTotals[0] ?? null,
+        medianTotal: sortedTotals.length ? sortedTotals[Math.floor(sortedTotals.length / 2)] : null,
+        maxTotal: sortedTotals[sortedTotals.length - 1] ?? null,
+        belowAverageCount: avgTotal === null ? 0 : totals.filter(value => value < avgTotal).length,
+        subjectAverages,
+        zeroScoreHints: zeroRows,
+      };
+    });
 }
 
 function buildFocusReason(item: {
@@ -336,6 +362,12 @@ function buildClassPayload(students: AppStudent[], exams: GradeExam[]) {
         rankDiff: previousRank !== null && latestRank !== null ? latestRank - previousRank : null,
         latestRank,
         subjectChanges,
+        examSeries: chronological.map(exam => ({
+          name: exam.name || "考试",
+          date: exam.date || "",
+          totalScore: getLatestExamTotal(exam),
+          classRank: exam.rank ? Number.parseInt(exam.rank, 10) || null : null,
+        })),
       };
     })
     .filter((item): item is {
@@ -347,6 +379,7 @@ function buildClassPayload(students: AppStudent[], exams: GradeExam[]) {
       rankDiff: number | null;
       latestRank: number | null;
       subjectChanges: Array<{ subject: string; diff: number }>;
+      examSeries: Array<{ name: string; date: string; totalScore: number | null; classRank: number | null }>;
     } => Boolean(item));
 
   const focusCandidates = compared
@@ -366,6 +399,7 @@ function buildClassPayload(students: AppStudent[], exams: GradeExam[]) {
       examCount: exams.length,
       studentCount: students.length,
       comparedStudentCount: compared.length,
+      examStats: buildExamStats(exams),
       focusCandidates: focusCandidates.map(({ concernScore, ...item }) => item),
       localAnalysis: {
         totalImproved: compared.filter(item => item.totalDiff > 0).length,

@@ -1,6 +1,7 @@
 import { saveStudentCommentDraft } from "./commentStorage";
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
+import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, StudentCommentDraft } from "./types";
 
@@ -146,25 +147,8 @@ function lengthInstruction(draft: StudentCommentDraft): string {
   return "100 到 150 字";
 }
 
-function getScoreEntries(student: AppStudent): Array<{ subject: string; score: number }> {
-  const latest = student.exams[0];
-  if (!latest) {
-    return [];
-  }
-  return Object.entries(latest.scores)
-    .map(([subject, score]) => ({ subject, score }))
-    .filter(item => Number.isFinite(item.score))
-    .sort((a, b) => b.score - a.score);
-}
-
 function buildPayload(student: AppStudent, draft: StudentCommentDraft) {
-  const latest = student.exams[0];
-  const first = student.exams[student.exams.length - 1];
-  const scores = getScoreEntries(student);
-  const totalChange = latest && first && typeof latest.total === "number" && typeof first.total === "number"
-    ? Math.round((latest.total - first.total) * 10) / 10
-    : null;
-  const tags = [...student.academicTags, ...student.tags].slice(0, 20);
+  const context = compactStudentContextForToken(buildStudentAiContext({ student, draft, maxRecords: 8, maxTags: 12 }));
 
   return {
     studentId: student.id,
@@ -174,40 +158,7 @@ function buildPayload(student: AppStudent, draft: StudentCommentDraft) {
     targetWordCount: draft.targetWordCount,
     lengthRange: draft.lengthMode === "custom" ? `${draft.targetWordCount} 字左右` : undefined,
     lengthInstruction: lengthInstruction(draft),
-    context: {
-      student: {
-        id: student.id,
-        name: student.name,
-        className: "",
-        seat: "",
-      },
-      latestExam: latest ? {
-        name: latest.name,
-        date: latest.date,
-        totalScore: latest.total ?? null,
-        scoreRate: null,
-        classRank: latest.rank ? Number.parseInt(latest.rank, 10) || null : null,
-        schoolRank: null,
-        subjects: scores.map(item => ({ subject: item.subject, score: item.score, rankClass: null })),
-      } : null,
-      trend: {
-        examCount: student.exams.length,
-        totalScoreChange: totalChange,
-        scoreRateChange: null,
-        classRankChange: null,
-        schoolRankChange: null,
-        changedSubjects: [],
-      },
-      strengths: scores.slice(0, 2).map(item => item.subject),
-      weaknesses: scores.slice(-2).reverse().map(item => item.subject),
-      tags,
-      commentProfile: {
-        criteriaSummary: draft.criteriaSummary || [],
-        customOptions: draft.customOptions || [],
-        teacherNote: draft.teacherNote,
-      },
-      teacherNote: draft.teacherNote,
-    },
+    context,
     commentProfile: {
       criteriaSummary: draft.criteriaSummary || [],
       customOptions: draft.customOptions || [],

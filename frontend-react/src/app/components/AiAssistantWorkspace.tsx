@@ -170,7 +170,8 @@ export function AiAssistantWorkspace({
     students,
     exams,
     dormitories,
-  }), [baseContext, dormitories, exams, input, students]);
+    fundTransactions,
+  }), [baseContext, dormitories, exams, fundTransactions, input, students]);
   const contextPackLabels = previewContext.contextPacks.map(formatContextPackLabel);
   const initialQuickPrompts = useMemo(() => buildInitialQuickPrompts({
     exams,
@@ -243,6 +244,7 @@ export function AiAssistantWorkspace({
       students,
       exams,
       dormitories,
+      fundTransactions,
     });
     setStatus(activeContext.contextPacks.length ? `AI 正在分析当前班级摘要，并附带：${activeContext.contextPacks.map(formatContextPackLabel).join("、")}` : "AI 正在分析当前班级摘要...");
     try {
