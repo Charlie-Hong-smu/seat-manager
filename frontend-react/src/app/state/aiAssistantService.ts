@@ -26,6 +26,9 @@ export interface AiChatMessage {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  contextLabels?: string[];
+  contextEvidence?: Array<{ title: string; detail: string }>;
+  suggestedPrompts?: string[];
 }
 
 export interface AiAssistantBaseContext {

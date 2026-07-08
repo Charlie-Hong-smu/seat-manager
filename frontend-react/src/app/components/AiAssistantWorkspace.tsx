@@ -28,12 +28,20 @@ type StudentSuggestion = {
   score: number;
 };
 
-function makeMessage(role: AiChatMessage["role"], content: string): AiChatMessage {
+type EvidenceSummary = {
+  title: string;
+  detail: string;
+};
+
+function makeMessage(role: AiChatMessage["role"], content: string, meta: Pick<AiChatMessage, "contextLabels" | "contextEvidence" | "suggestedPrompts"> = {}): AiChatMessage {
   return {
     id: `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     role,
     content,
     createdAt: new Date().toISOString(),
+    contextLabels: meta.contextLabels,
+    contextEvidence: meta.contextEvidence,
+    suggestedPrompts: meta.suggestedPrompts,
   };
 }
 
@@ -67,6 +75,17 @@ function loadChatHistory(): AiChatMessage[] {
         role: item.role as AiChatMessage["role"],
         content: String(item.content || "").slice(0, 4000),
         createdAt: item.createdAt || new Date().toISOString(),
+        contextLabels: Array.isArray(item.contextLabels) ? item.contextLabels.map(String).filter(Boolean).slice(0, 6) : undefined,
+        contextEvidence: Array.isArray(item.contextEvidence)
+          ? item.contextEvidence
+            .map(evidence => ({
+              title: String(evidence?.title || "").slice(0, 60),
+              detail: String(evidence?.detail || "").slice(0, 160),
+            }))
+            .filter(evidence => evidence.title)
+            .slice(0, 4)
+          : undefined,
+        suggestedPrompts: Array.isArray(item.suggestedPrompts) ? item.suggestedPrompts.map(String).filter(Boolean).slice(0, 4) : undefined,
       }))
       .slice(-CHAT_LIMIT);
   } catch {
@@ -109,6 +128,45 @@ function getAiErrorMessage(reason: string): string {
 
 function formatContextPackLabel(pack: AiContextPack): string {
   return `${pack.title}${pack.items.length ? ` ${pack.items.length}项` : ""}`;
+}
+
+function formatSignedNumber(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "";
+  }
+  return `${value >= 0 ? "+" : ""}${Math.round(value * 10) / 10}`;
+}
+
+function summarizeEvidencePack(pack: AiContextPack): EvidenceSummary {
+  const first = pack.items[0];
+  if (pack.kind === "student") {
+    const trend = formatSignedNumber(first?.trend);
+    const parts = [
+      typeof first?.latestTotal === "number" ? `总分 ${first.latestTotal}` : "",
+      trend ? `趋势 ${trend}` : "",
+      first?.tags?.length ? `标签 ${first.tags.length}` : "",
+      first?.records?.length ? `记录 ${first.records.length}` : "",
+    ].filter(Boolean);
+    return { title: pack.title.replace(/明细$/, "档案"), detail: parts.join(" · ") || "学生成绩、标签与记录" };
+  }
+  if (pack.kind === "candidate_students" || pack.kind === "tag" || pack.kind === "records") {
+    return { title: pack.title, detail: `${pack.items.length} 名学生 · ${pack.reason}` };
+  }
+  if (pack.kind === "dormitory") {
+    const detail = first?.summary || `${pack.items.length} 间宿舍`;
+    return { title: "宿舍明细", detail };
+  }
+  if (pack.kind === "fund") {
+    return { title: "班费流水", detail: first?.summary || "班费收支与最近流水" };
+  }
+  if (pack.kind === "exam") {
+    return { title: pack.title, detail: first?.summary || `${pack.items.length} 次考试` };
+  }
+  return { title: pack.title, detail: pack.reason };
+}
+
+function buildEvidenceSummaries(packs: AiContextPack[]): EvidenceSummary[] {
+  return packs.map(summarizeEvidencePack).slice(0, 4);
 }
 
 function buildInitialQuickPrompts(input: { exams: GradeExam[]; dormitories: Dormitory[]; focusCount: number }): string[] {
@@ -255,6 +313,15 @@ export function AiAssistantWorkspace({
     fundTransactions,
   }), [baseContext, dormitories, exams, fundTransactions, input, students]);
   const contextPackLabels = previewContext.contextPacks.map(formatContextPackLabel);
+  const previewEvidence = useMemo(() => buildEvidenceSummaries(previewContext.contextPacks), [previewContext.contextPacks]);
+  const lastAssistantWithEvidence = useMemo(() => [...messages].reverse().find(message => message.role === "assistant" && (message.contextEvidence?.length || message.contextLabels?.length)), [messages]);
+  const lockedEvidence = useMemo<EvidenceSummary[]>(() => (
+    lastAssistantWithEvidence?.contextEvidence?.length
+      ? lastAssistantWithEvidence.contextEvidence
+      : (lastAssistantWithEvidence?.contextLabels?.map(label => ({ title: label, detail: "已用于最近一轮回答" })) || [])
+  ), [lastAssistantWithEvidence]);
+  const activeEvidence = previewEvidence.length ? previewEvidence : lockedEvidence;
+  const evidenceMode = previewEvidence.length ? "将附带" : (lockedEvidence.length ? "本轮已使用" : "");
   const studentSuggestions = useMemo(() => buildStudentSuggestions(input, students), [input, students]);
   const showStudentSuggestions = studentSuggestOpen && studentSuggestions.length > 0 && !busy;
   const initialQuickPrompts = useMemo(() => buildInitialQuickPrompts({
@@ -323,13 +390,6 @@ export function AiAssistantWorkspace({
     if (!text || busy) {
       return;
     }
-    const userMessage = makeMessage("user", text);
-    const nextMessages = [...messages, userMessage].slice(-CHAT_LIMIT);
-    setMessages(nextMessages);
-    saveChatHistory(nextMessages);
-    setInput("");
-    saveDraftInput("");
-    setBusy(true);
     const activeContext = buildAiAssistantContext({
       prompt: text,
       baseContext,
@@ -338,6 +398,15 @@ export function AiAssistantWorkspace({
       dormitories,
       fundTransactions,
     });
+    const activeEvidenceSummaries = buildEvidenceSummaries(activeContext.contextPacks);
+    const activeLabels = activeEvidenceSummaries.map(item => item.title).slice(0, 6);
+    const userMessage = makeMessage("user", text, { contextLabels: activeLabels, contextEvidence: activeEvidenceSummaries });
+    const nextMessages = [...messages, userMessage].slice(-CHAT_LIMIT);
+    setMessages(nextMessages);
+    saveChatHistory(nextMessages);
+    setInput("");
+    saveDraftInput("");
+    setBusy(true);
     setStatus(activeContext.contextPacks.length ? `AI 正在分析当前班级摘要，并附带：${activeContext.contextPacks.map(formatContextPackLabel).join("、")}` : "AI 正在分析当前班级摘要...");
     try {
       const result = await sendAiAssistantChat({
@@ -346,7 +415,11 @@ export function AiAssistantWorkspace({
         accessCode,
         remember: rememberAuth,
       });
-      const assistantMessage = makeMessage("assistant", result.message);
+      const assistantMessage = makeMessage("assistant", result.message, {
+        contextLabels: activeLabels,
+        contextEvidence: activeEvidenceSummaries,
+        suggestedPrompts: result.suggestedPrompts.slice(0, 3),
+      });
       const saved = [...nextMessages, assistantMessage].slice(-CHAT_LIMIT);
       setMessages(saved);
       saveChatHistory(saved);
@@ -406,6 +479,26 @@ export function AiAssistantWorkspace({
             </div>
           </section>
 
+          {activeEvidence.length > 0 && (
+            <section className="surface-enter rounded-2xl border border-violet-100 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>本次依据</div>
+                <span className="rounded-full bg-violet-50 px-2 py-1 text-xs text-violet-600" style={{ fontWeight: 800 }}>{evidenceMode}</span>
+              </div>
+              <div className="mt-3 space-y-2">
+                {activeEvidence.slice(0, 3).map(item => (
+                  <div key={`${item.title}-${item.detail}`} className="rounded-xl bg-gray-50 px-3 py-2">
+                    <div className="truncate text-sm text-gray-800" style={{ fontWeight: 800 }}>{item.title}</div>
+                    <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-gray-400">{item.detail}</div>
+                  </div>
+                ))}
+                {activeEvidence.length > 3 && (
+                  <div className="px-1 text-xs text-gray-400">另有 {activeEvidence.length - 3} 项依据</div>
+                )}
+              </div>
+            </section>
+          )}
+
           <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>快捷问题</div>
             <div className="mt-3 space-y-2">
@@ -454,7 +547,7 @@ export function AiAssistantWorkspace({
                 </div>
               </div>
             )}
-            {messages.map(message => (
+            {messages.map((message, index) => (
               <div key={message.id} className={`ai-message-enter flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 {message.role === "assistant" && (
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-600">
@@ -463,6 +556,22 @@ export function AiAssistantWorkspace({
                 )}
                 <div className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-700"}`}>
                   <div className="whitespace-pre-wrap">{message.content}</div>
+                  {message.role === "assistant" && index === messages.length - 1 && message.suggestedPrompts?.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+                      {message.suggestedPrompts.slice(0, 3).map(prompt => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void sendPrompt(prompt)}
+                          className="rounded-full border border-violet-100 bg-white px-3 py-1.5 text-left text-xs leading-5 text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50"
+                          style={{ fontWeight: 750 }}
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className={`mt-2 flex items-center gap-3 text-xs ${message.role === "user" ? "text-gray-400" : "text-gray-400"}`}>
                     <button
                       type="button"
