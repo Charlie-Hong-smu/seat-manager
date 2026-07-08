@@ -333,14 +333,50 @@ function includesAny(text: string, words: string[]): boolean {
   return words.some(word => text.includes(word));
 }
 
+function editDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
+  for (let i = 0; i < rows; i += 1) dp[i][0] = i;
+  for (let j = 0; j < cols; j += 1) dp[0][j] = j;
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function getQueryWindows(text: string, length: number): string[] {
+  if (!text || length <= 0 || text.length < Math.max(2, length - 1)) {
+    return [];
+  }
+  const sizes = Array.from(new Set([length - 1, length, length + 1].filter(size => size >= 2 && size <= text.length)));
+  return sizes.flatMap(size => Array.from({ length: text.length - size + 1 }, (_, index) => text.slice(index, index + size)));
+}
+
 function findMentionedStudents(prompt: string, students: AppStudent[]): AppStudent[] {
   const normalized = normalizeQuery(prompt);
-  return students
+  const direct = students
     .filter(student => {
       const names = [student.name, ...student.aliases].map(normalizeQuery).filter(Boolean);
       return names.some(name => normalized.includes(name));
     })
     .slice(0, 6);
+  if (direct.length) {
+    return direct;
+  }
+  return students
+    .map(student => {
+      const names = [student.name, ...student.aliases].map(normalizeQuery).filter(Boolean);
+      const best = Math.min(...names.flatMap(name => getQueryWindows(normalized, name.length).map(window => editDistance(name, window))));
+      return { student, best };
+    })
+    .filter(item => Number.isFinite(item.best) && item.best <= 1)
+    .sort((a, b) => a.best - b.best)
+    .slice(0, 3)
+    .map(item => item.student);
 }
 
 function findMentionedTags(prompt: string, students: AppStudent[]): string[] {
@@ -377,7 +413,7 @@ function formatStudentExamSummary(student: AppStudent, exam: GradeExam | undefin
 
 function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: GradeExam | undefined, latestSubjectAverages: Record<string, number>, dormitories: Dormitory[]): AiContextPack {
   const chronological = [...exams].sort((a, b) => `${b.date || ""}-${b.name}`.localeCompare(`${a.date || ""}-${a.name}`));
-  const recentExams = chronological.slice(0, 4);
+  const recentExams = chronological.slice(0, 5);
   const latestRow = findStudentExamRow(latestExam, student);
   const previousRow = recentExams[1] ? findStudentExamRow(recentExams[1], student) : null;
   const latestTotal = getRowTotal(latestRow);
@@ -386,7 +422,7 @@ function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: G
   return {
     kind: "student",
     title: `${student.name}明细`,
-    reason: "问题中提到具体学生，附带该生近期成绩、标签、记录和宿舍信息。",
+    reason: "问题中提到或疑似提到具体学生，附带该生近期成绩、标签、记录和宿舍信息。",
     items: [{
       ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
       previousTotal,
@@ -424,7 +460,7 @@ function buildDormitoryPack(dormitories: Dormitory[], students: AppStudent[]): A
 }
 
 function buildExamPack(exams: GradeExam[], students: AppStudent[]): AiContextPack | null {
-  const items = exams.slice(0, 3).map(exam => {
+  const items = exams.slice(0, 5).map(exam => {
     const totals = getExamTotals(exam).sort((a, b) => a - b);
     const subjectAverages = getSubjectAverages(exam);
     return {

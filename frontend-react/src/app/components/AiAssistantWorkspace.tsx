@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Copy, Loader2, Send, Sparkles, Trash2, UserRound } from "lucide-react";
+import { Bot, Copy, Loader2, RotateCcw, Send, Sparkles, Trash2, UserRound } from "lucide-react";
 
 import {
   buildAiAssistantBaseContext,
@@ -311,14 +311,25 @@ export function AiAssistantWorkspace({
                 )}
                 <div className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-700"}`}>
                   <div className="whitespace-pre-wrap">{message.content}</div>
-                  {message.role === "assistant" && (
+                  <div className={`mt-2 flex items-center gap-3 text-xs ${message.role === "user" ? "text-gray-400" : "text-gray-400"}`}>
                     <button
+                      type="button"
                       onClick={() => navigator.clipboard.writeText(message.content).catch(() => {})}
-                      className="mt-2 inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                      className={`inline-flex items-center gap-1 ${message.role === "user" ? "hover:text-white" : "hover:text-gray-600"}`}
                     >
                       <Copy className="h-3.5 w-3.5" />复制
                     </button>
-                  )}
+                    {message.role === "user" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void sendPrompt(message.content)}
+                        className="inline-flex items-center gap-1 hover:text-white disabled:opacity-50"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />重试
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {message.role === "user" && (
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gray-900 text-white">
