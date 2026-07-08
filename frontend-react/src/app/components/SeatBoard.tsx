@@ -84,7 +84,7 @@ function SeatCard({
       <div
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        className={`rounded-xl border-2 border-dashed flex items-center justify-center text-gray-300 text-xs select-none transition-colors duration-200 ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/40"} ${cardMode === "compact" ? "h-12" : "h-20"}`}
+        className={`rounded-xl border-2 border-dashed flex items-center justify-center text-gray-300 text-xs select-none transition-[height,background-color,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:border-blue-200 hover:bg-blue-50/40"} ${cardMode === "compact" ? "h-12" : "h-20"}`}
       >
         {cardMode === "detail" ? (
           <span className="text-gray-300">{row}-{col}</span>
@@ -107,7 +107,7 @@ function SeatCard({
       onDragEnd={() => onDragStateChange(null)}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={`relative w-full overflow-hidden rounded-xl border bg-white hover:border-blue-300 hover:shadow-sm hover:bg-blue-50/30 text-left group transition-[background-color,border-color,box-shadow,opacity] duration-200 cursor-pointer ${
+      className={`relative w-full overflow-hidden rounded-xl border bg-white hover:border-blue-300 hover:shadow-sm hover:bg-blue-50/30 text-left group transition-[height,background-color,border-color,box-shadow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer ${
         isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
       } ${isLocked ? "border-amber-300 bg-amber-50/30" : "border-gray-200"} ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""} ${cardMode === "compact" ? "h-12" : "h-20"}`}
     >
