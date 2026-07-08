@@ -9,6 +9,7 @@ const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
 const AI_AUTH_SESSION_TOKEN_KEY = "seat-manager-ai-session-token";
 const AI_AUTH_SESSION_EXPIRES_KEY = "seat-manager-ai-session-expires";
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
+const AI_STUDENT_FOLLOWUP_LAST_KEY = "seat-manager-ai-student-followup-last-v1";
 const AI_FOLLOWUP_CACHE_SCOPE = "student-followup";
 const AI_REMEMBER_DAYS = 30;
 const AI_REQUEST_LIMIT_BYTES = 24 * 1024;
@@ -170,6 +171,36 @@ function storeCachedFollowup(signature: string, result: AiStudentFollowupResult)
   }
 }
 
+function hasUsefulFollowup(result: AiStudentFollowupResult | null): result is AiStudentFollowupResult {
+  return Boolean(result && (result.summary || result.actions.length || result.parentMessageDraft));
+}
+
+export function readLastStudentFollowup(studentId: string): AiStudentFollowupResult | null {
+  if (!hasBrowserStorage()) {
+    return null;
+  }
+  try {
+    const cache = JSON.parse(window.localStorage.getItem(AI_STUDENT_FOLLOWUP_LAST_KEY) || "{}") as Record<string, AiStudentFollowupResult>;
+    const cached = cache[studentId] ? normalizeResult(cache[studentId]) : null;
+    return hasUsefulFollowup(cached) ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeLastStudentFollowup(studentId: string, result: AiStudentFollowupResult): void {
+  if (!hasBrowserStorage()) {
+    return;
+  }
+  try {
+    const cache = JSON.parse(window.localStorage.getItem(AI_STUDENT_FOLLOWUP_LAST_KEY) || "{}") as Record<string, AiStudentFollowupResult>;
+    const next = Object.fromEntries(Object.entries({ ...cache, [studentId]: result }).slice(-120));
+    window.localStorage.setItem(AI_STUDENT_FOLLOWUP_LAST_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore page-cache write failures.
+  }
+}
+
 function normalizeResult(data: Partial<AiStudentFollowupResult>): AiStudentFollowupResult {
   const toList = (value: unknown, limit: number) => (
     Array.isArray(value) ? value : typeof value === "string" ? value.split(/\n|；|;/) : []
@@ -252,7 +283,8 @@ export async function generateStudentFollowup(
   const signature = getCacheSignature({ studentId: student.id, payload });
   if (!input?.force) {
     const cached = getCachedFollowup(signature);
-    if (cached?.summary || cached?.actions.length) {
+    if (hasUsefulFollowup(cached)) {
+      storeLastStudentFollowup(student.id, cached);
       return cached;
     }
   }
@@ -291,5 +323,6 @@ export async function generateStudentFollowup(
     throw new Error("ai_failed");
   }
   storeCachedFollowup(signature, normalized);
+  storeLastStudentFollowup(student.id, normalized);
   return normalized;
 }

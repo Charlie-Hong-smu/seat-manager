@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Clipboard, Loader2, MessageSquareText, PlusCircle, Save, Sparkles, Star, Target } from "lucide-react";
 
 import {
   generateStudentFollowup,
   hasStoredAiFollowupAuth,
+  readLastStudentFollowup,
   type AiStudentFollowupContext,
   type AiStudentFollowupResult,
 } from "../state/aiStudentFollowupService";
@@ -49,15 +50,23 @@ export function AiStudentFollowupPanel({
   onSaveRecord,
   onAppendCommentMaterial,
 }: Props) {
-  const [result, setResult] = useState<AiStudentFollowupResult | null>(null);
+  const [result, setResult] = useState<AiStudentFollowupResult | null>(() => readLastStudentFollowup(student.id));
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("AI 会结合成绩、标签、记录、宿舍和座位信息生成跟进建议。");
+  const [status, setStatus] = useState(() => readLastStudentFollowup(student.id) ? "已恢复上次生成的 AI 跟进建议。" : "AI 会结合成绩、标签、记录、宿舍和座位信息生成跟进建议。");
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiFollowupAuth());
   const [savedRecord, setSavedRecord] = useState(false);
   const [savedMaterial, setSavedMaterial] = useState(false);
   const hasResult = Boolean(result);
+
+  useEffect(() => {
+    const cached = readLastStudentFollowup(student.id);
+    setResult(cached);
+    setSavedRecord(false);
+    setSavedMaterial(false);
+    setStatus(cached ? "已恢复上次生成的 AI 跟进建议。" : "AI 会结合成绩、标签、记录、宿舍和座位信息生成跟进建议。");
+  }, [student.id]);
   const materialText = useMemo(() => {
     if (!result) {
       return "";
