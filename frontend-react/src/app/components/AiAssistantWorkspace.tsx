@@ -6,6 +6,7 @@ import {
   buildAiAssistantContext,
   hasStoredAiAssistantAuth,
   sendAiAssistantChat,
+  type AiComparisonContext,
   type AiContextPack,
   type AiChatMessage,
 } from "../state/aiAssistantService";
@@ -169,6 +170,22 @@ function buildEvidenceSummaries(packs: AiContextPack[]): EvidenceSummary[] {
   return packs.map(summarizeEvidencePack).slice(0, 4);
 }
 
+function buildComparisonEvidence(comparisonContext?: AiComparisonContext): EvidenceSummary[] {
+  if (!comparisonContext) {
+    return [];
+  }
+  const scope = comparisonContext.compareScope
+    ? `${comparisonContext.currentScope.termLabel} vs ${comparisonContext.compareScope.termLabel}`
+    : comparisonContext.currentScope.termLabel;
+  const detail = comparisonContext.notice
+    || comparisonContext.comparisonPacks[0]?.items[0]?.summary
+    || "同一班级跨学期摘要";
+  return [{
+    title: comparisonContext.compareScope ? `跨学期对比 ${scope}` : "跨学期对比",
+    detail,
+  }];
+}
+
 function buildInitialQuickPrompts(input: { exams: GradeExam[]; dormitories: Dormitory[]; focusCount: number }): string[] {
   const prompts = [
     input.focusCount > 0
@@ -314,8 +331,14 @@ export function AiAssistantWorkspace({
     dormitories,
     fundTransactions,
   }), [baseContext, dormitories, exams, fundTransactions, input, students]);
-  const contextPackLabels = previewContext.contextPacks.map(formatContextPackLabel);
-  const previewEvidence = useMemo(() => buildEvidenceSummaries(previewContext.contextPacks), [previewContext.contextPacks]);
+  const comparisonLabels = previewContext.comparisonContext?.compareScope
+    ? [`跨学期对比 ${previewContext.comparisonContext.currentScope.termLabel} vs ${previewContext.comparisonContext.compareScope.termLabel}`]
+    : previewContext.comparisonContext?.notice ? [previewContext.comparisonContext.notice] : [];
+  const contextPackLabels = [...previewContext.contextPacks.map(formatContextPackLabel), ...comparisonLabels];
+  const previewEvidence = useMemo(() => [
+    ...buildComparisonEvidence(previewContext.comparisonContext),
+    ...buildEvidenceSummaries(previewContext.contextPacks),
+  ], [previewContext.contextPacks, previewContext.comparisonContext]);
   const lastAssistantWithEvidence = useMemo(() => [...messages].reverse().find(message => message.role === "assistant" && (message.contextEvidence?.length || message.contextLabels?.length)), [messages]);
   const lockedEvidence = useMemo<EvidenceSummary[]>(() => (
     lastAssistantWithEvidence?.contextEvidence?.length
@@ -400,7 +423,10 @@ export function AiAssistantWorkspace({
       dormitories,
       fundTransactions,
     });
-    const activeEvidenceSummaries = buildEvidenceSummaries(activeContext.contextPacks);
+    const activeEvidenceSummaries = [
+      ...buildComparisonEvidence(activeContext.comparisonContext),
+      ...buildEvidenceSummaries(activeContext.contextPacks),
+    ];
     const activeLabels = activeEvidenceSummaries.map(item => item.title).slice(0, 6);
     const userMessage = makeMessage("user", text, { contextLabels: activeLabels, contextEvidence: activeEvidenceSummaries });
     const nextMessages = [...messages, userMessage].slice(-CHAT_LIMIT);
@@ -409,7 +435,12 @@ export function AiAssistantWorkspace({
     setInput("");
     saveDraftInput("");
     setBusy(true);
-    setStatus(activeContext.contextPacks.length ? `AI 正在分析当前班级摘要，并附带：${activeContext.contextPacks.map(formatContextPackLabel).join("、")}` : "AI 正在分析当前班级摘要...");
+    const activeLabelsText = [
+      ...activeContext.contextPacks.map(formatContextPackLabel),
+      ...(activeContext.comparisonContext?.compareScope ? [`跨学期对比 ${activeContext.comparisonContext.currentScope.termLabel} vs ${activeContext.comparisonContext.compareScope.termLabel}`] : []),
+      ...(activeContext.comparisonContext?.notice ? [activeContext.comparisonContext.notice] : []),
+    ];
+    setStatus(activeLabelsText.length ? `AI 正在分析当前班级摘要，并附带：${activeLabelsText.join("、")}` : "AI 正在分析当前班级摘要...");
     try {
       const result = await sendAiAssistantChat({
         messages: nextMessages,

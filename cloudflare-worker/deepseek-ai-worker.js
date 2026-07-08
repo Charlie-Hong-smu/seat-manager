@@ -638,7 +638,7 @@ async function handleChatAssistant(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎、务实的班主任 AI 助手。你只能根据用户提供的当前班级、当前学期摘要回答；不能声称看到了其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。baseContext 是全班基础摘要；contextPacks 是本次问题自动附带的相关学生、考试、宿舍、标签、记录或班费明细。若用户询问具体对象，优先使用 contextPacks；只有确实没有相关明细时才说明信息不足。可以给老师提供班级分析、重点学生跟进、沟通话术、评语素材方向、班费收支概览和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
+              "你是谨慎、务实的班主任 AI 助手。默认只能根据用户提供的当前班级、当前学期摘要回答；若提供 comparisonContext，可基于其中显式选择的同一班级对比学期做跨学期回答。不能声称看到了未提供的其他班级、其他学期或完整本地数据库。不要编造学生事实、成绩、家庭情况、心理/医学判断。不要输出会自动修改系统数据的指令。baseContext 是全班基础摘要；contextPacks 是本次问题自动附带的相关学生、考试、宿舍、标签、记录或班费明细；comparisonContext 是同班级跨学期摘要或不支持提示。若用户询问具体对象，优先使用 contextPacks 和 comparisonContext；只有确实没有相关明细时才说明信息不足。可以给老师提供班级分析、跨学期变化、重点学生跟进、沟通话术、评语素材方向、班费收支概览和下一步行动建议。必须返回 JSON，字段为 message、disclaimer、suggestedPrompts。message 用中文，结构清晰但不要太长；suggestedPrompts 给 2 到 4 个后续可问的问题。"
           },
           {
             role: "user",
@@ -1413,6 +1413,42 @@ function toAssistantText(value, limit = 800) {
   return String(value || "").replace(/\r\n/g, "\n").trim().slice(0, limit);
 }
 
+function trimAssistantComparisonContext(context) {
+  if (!context || typeof context !== "object") {
+    return null;
+  }
+  const packs = Array.isArray(context.comparisonPacks)
+    ? context.comparisonPacks.map((pack) => ({
+        kind: ["class_term", "subject_term", "student_term", "candidate_students", "notice"].includes(pack?.kind) ? pack.kind : "notice",
+        title: toAssistantText(pack?.title, 80),
+        reason: toAssistantText(pack?.reason, 160),
+        items: Array.isArray(pack?.items)
+          ? pack.items.map((item) => ({
+              name: toAssistantText(item?.name, 40),
+              summary: toAssistantText(item?.summary, 220),
+              current: toAssistantText(item?.current, 220),
+              compare: toAssistantText(item?.compare, 220),
+              trend: Number.isFinite(Number(item?.trend)) ? Number(item.trend) : null,
+              subjects: Array.isArray(item?.subjects) ? item.subjects.map((value) => toAssistantText(value, 60)).filter(Boolean).slice(0, 10) : [],
+              exams: Array.isArray(item?.exams) ? item.exams.map((value) => toAssistantText(value, 160)).filter(Boolean).slice(0, 12) : []
+            })).slice(0, pack?.kind === "candidate_students" ? 30 : 8)
+          : []
+      })).filter((pack) => pack.title && pack.items.length).slice(0, 4)
+    : [];
+  return {
+    currentScope: {
+      className: toAssistantText(context.currentScope?.className, 80),
+      termLabel: toAssistantText(context.currentScope?.termLabel, 80)
+    },
+    compareScope: context.compareScope && typeof context.compareScope === "object" ? {
+      className: toAssistantText(context.compareScope.className, 80),
+      termLabel: toAssistantText(context.compareScope.termLabel, 80)
+    } : null,
+    notice: toAssistantText(context.notice, 180),
+    comparisonPacks: packs
+  };
+}
+
 function trimAssistantContext(context) {
   const base = context?.baseContext && typeof context.baseContext === "object" ? context.baseContext : context;
   return {
@@ -1470,6 +1506,7 @@ function trimAssistantContext(context) {
               })).slice(0, 20)
             : []
         })).filter((pack) => pack.title && pack.items.length).slice(0, 6)
-      : []
+      : [],
+    comparisonContext: trimAssistantComparisonContext(context?.comparisonContext)
   };
 }

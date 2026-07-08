@@ -1,8 +1,10 @@
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
+import { createSeatManagerState } from "./legacyStateAdapter";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
-import type { AppStudent, Dormitory, FundTransaction, GradeExam, GradeRow } from "./types";
+import { exportWholeBook, getCurrentSlice, sliceDisplayName } from "./workspaces";
+import type { AppStudent, Dormitory, FundTransaction, GradeExam, GradeRow, SeatManagerState, WorkspaceSlice } from "./types";
 
 const AI_AUTH_TOKEN_KEY = "seat-manager-ai-auth-token";
 const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
@@ -84,9 +86,40 @@ export interface AiContextPack {
   items: AiContextPackItem[];
 }
 
+export interface AiComparisonPackItem {
+  name?: string;
+  summary: string;
+  current?: string;
+  compare?: string;
+  trend?: number | null;
+  subjects?: string[];
+  exams?: string[];
+}
+
+export interface AiComparisonPack {
+  kind: "class_term" | "subject_term" | "student_term" | "candidate_students" | "notice";
+  title: string;
+  reason: string;
+  items: AiComparisonPackItem[];
+}
+
+export interface AiComparisonContext {
+  currentScope: {
+    className: string;
+    termLabel: string;
+  };
+  compareScope?: {
+    className: string;
+    termLabel: string;
+  };
+  notice?: string;
+  comparisonPacks: AiComparisonPack[];
+}
+
 export interface AiAssistantContext {
   baseContext: AiAssistantBaseContext;
   contextPacks: AiContextPack[];
+  comparisonContext?: AiComparisonContext;
 }
 
 export interface AiAssistantResponse {
@@ -575,6 +608,214 @@ function dedupeFocusStudents(items: Array<{ student: AppStudent; category: strin
   });
 }
 
+function normalizeTermText(text: string): string {
+  return normalizeQuery(text).replace(/季/g, "");
+}
+
+function getTermOrder(slice: Pick<WorkspaceSlice, "term" | "createdAt">): number {
+  const seasonWeight = slice.term.season === "autumn" ? 2 : slice.term.season === "spring" ? 1 : 0;
+  if (slice.term.year > 0 && seasonWeight > 0) {
+    return slice.term.year * 10 + seasonWeight;
+  }
+  return Date.parse(slice.createdAt || "") || 0;
+}
+
+function getLatestExam(exams: GradeExam[]): GradeExam | undefined {
+  const sorted = [...exams].sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`));
+  return sorted[sorted.length - 1];
+}
+
+function formatMaybeNumber(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value * 10) / 10) : "无";
+}
+
+function findStudentByName(student: AppStudent, candidates: AppStudent[]): AppStudent | null {
+  const names = new Set([student.name, ...student.aliases].map(normalizeQuery).filter(Boolean));
+  return candidates.find(candidate => [candidate.name, ...candidate.aliases].some(name => names.has(normalizeQuery(name)))) || null;
+}
+
+function getStudentExamSeries(student: AppStudent): string[] {
+  return [...student.exams]
+    .sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`))
+    .map(exam => {
+      const rank = typeof exam.rankClass === "number" ? `，班排${exam.rankClass}` : "";
+      return `${exam.name}${exam.date ? `(${exam.date})` : ""}：总分${formatMaybeNumber(exam.total)}${rank}`;
+    })
+    .slice(-8);
+}
+
+function getLatestStudentTotal(student: AppStudent | null): number | null {
+  return student ? getStudentLatestTotal(student) : null;
+}
+
+function hasTermComparisonIntent(normalizedPrompt: string): boolean {
+  return includesAny(normalizedPrompt, ["上学期", "上一学期", "上个学期", "跨学期", "学期对比", "比上学期", "和上学期", "这学期比"])
+    || /20\d{2}(春|秋)/.test(normalizedPrompt)
+    || (normalizedPrompt.includes("学期") && includesAny(normalizedPrompt, ["对比", "比较", "相比", "变化"]));
+}
+
+function mentionsOtherClass(normalizedPrompt: string, currentClassName: string): boolean {
+  const current = normalizeQuery(currentClassName);
+  const withoutCurrent = current ? normalizedPrompt.replace(current, "") : normalizedPrompt;
+  return /(?:高|初)?[一二三四五六七八九十0-9]{1,3}班/.test(withoutCurrent);
+}
+
+function findExplicitCompareSlice(prompt: string, slices: WorkspaceSlice[], currentSlice: WorkspaceSlice): WorkspaceSlice | null {
+  const normalized = normalizeTermText(prompt);
+  const currentTerm = normalizeTermText(currentSlice.term.label);
+  return slices.find(slice => slice.id !== currentSlice.id && normalizeTermText(slice.term.label) !== currentTerm && normalized.includes(normalizeTermText(slice.term.label))) || null;
+}
+
+function findDefaultCompareSlice(slices: WorkspaceSlice[], currentSlice: WorkspaceSlice): WorkspaceSlice | null {
+  const currentOrder = getTermOrder(currentSlice);
+  const sorted = slices
+    .filter(slice => slice.id !== currentSlice.id)
+    .sort((a, b) => getTermOrder(b) - getTermOrder(a));
+  return sorted.find(slice => getTermOrder(slice) < currentOrder) || sorted[0] || null;
+}
+
+function buildClassComparisonPack(currentState: Pick<SeatManagerState, "gradeExams">, compareState: Pick<SeatManagerState, "gradeExams">, currentTerm: string, compareTerm: string): AiComparisonPack {
+  const currentExam = getLatestExam(currentState.gradeExams);
+  const compareExam = getLatestExam(compareState.gradeExams);
+  const currentAvg = currentExam ? getExamTotalAverage(currentExam) : null;
+  const compareAvg = compareExam ? getExamTotalAverage(compareExam) : null;
+  const avgDiff = currentAvg !== null && compareAvg !== null ? Math.round((currentAvg - compareAvg) * 10) / 10 : null;
+  const currentSubjects = getSubjectAverages(currentExam);
+  const compareSubjects = getSubjectAverages(compareExam);
+  const subjectDiffs = Object.keys(currentSubjects)
+    .map(subject => {
+      const previous = compareSubjects[subject];
+      if (!previous) return "";
+      const diff = Math.round((currentSubjects[subject] - previous) * 10) / 10;
+      return `${subject}${diff >= 0 ? "+" : ""}${diff}`;
+    })
+    .filter(Boolean)
+    .slice(0, 10);
+  return {
+    kind: "class_term",
+    title: "班级跨学期变化",
+    reason: "问题涉及同班级跨学期整体对比。",
+    items: [{
+      summary: `${currentTerm} 最近考试均分 ${formatMaybeNumber(currentAvg)}，${compareTerm} 最近考试均分 ${formatMaybeNumber(compareAvg)}${avgDiff !== null ? `，变化 ${avgDiff >= 0 ? "+" : ""}${avgDiff}` : ""}`,
+      current: currentExam ? `${currentExam.name}，${currentExam.rows.length} 人，${currentExam.subjects.length} 科` : "当前学期暂无考试",
+      compare: compareExam ? `${compareExam.name}，${compareExam.rows.length} 人，${compareExam.subjects.length} 科` : "对比学期暂无考试",
+      trend: avgDiff,
+      subjects: subjectDiffs,
+    }],
+  };
+}
+
+function buildStudentTermPack(students: AppStudent[], compareStudents: AppStudent[], mentioned: MentionedStudentMatch[], currentTerm: string, compareTerm: string): AiComparisonPack | null {
+  const items = mentioned
+    .map(match => {
+      const compareStudent = findStudentByName(match.student, compareStudents);
+      const currentTotal = getLatestStudentTotal(match.student);
+      const compareTotal = getLatestStudentTotal(compareStudent);
+      const diff = currentTotal !== null && compareTotal !== null ? Math.round((currentTotal - compareTotal) * 10) / 10 : null;
+      return {
+        name: match.student.name,
+        summary: compareStudent
+          ? `${match.student.name} ${currentTerm} 最新总分 ${formatMaybeNumber(currentTotal)}，${compareTerm} 最新总分 ${formatMaybeNumber(compareTotal)}${diff !== null ? `，变化 ${diff >= 0 ? "+" : ""}${diff}` : ""}`
+          : `${match.student.name} 在对比学期未匹配到同名学生`,
+        current: getStudentExamSeries(match.student).join("；") || "当前学期暂无成绩",
+        compare: compareStudent ? (getStudentExamSeries(compareStudent).join("；") || "对比学期暂无成绩") : "未匹配",
+        trend: diff,
+        subjects: [],
+        exams: [...getStudentExamSeries(compareStudent || match.student), ...getStudentExamSeries(match.student)].slice(0, 12),
+      };
+    })
+    .slice(0, 6);
+  return items.length ? {
+    kind: "student_term",
+    title: "学生跨学期档案",
+    reason: "问题提到具体学生，附带该生两个学期的成绩序列摘要。",
+    items,
+  } : null;
+}
+
+function buildCandidateTermPack(currentStudents: AppStudent[], compareStudents: AppStudent[]): AiComparisonPack | null {
+  const items = currentStudents
+    .map(student => {
+      const compareStudent = findStudentByName(student, compareStudents);
+      const currentTotal = getLatestStudentTotal(student);
+      const compareTotal = getLatestStudentTotal(compareStudent);
+      if (!compareStudent || currentTotal === null || compareTotal === null) {
+        return null;
+      }
+      const diff = Math.round((currentTotal - compareTotal) * 10) / 10;
+      return {
+        name: student.name,
+        summary: `${student.name} 总分变化 ${diff >= 0 ? "+" : ""}${diff}`,
+        current: `当前最新总分 ${currentTotal}`,
+        compare: `对比最新总分 ${compareTotal}`,
+        trend: diff,
+        subjects: [],
+        exams: [],
+      };
+    })
+    .filter((item): item is AiComparisonPackItem => Boolean(item))
+    .sort((a, b) => Math.abs(b.trend || 0) - Math.abs(a.trend || 0))
+    .slice(0, 30);
+  return items.length ? {
+    kind: "candidate_students",
+    title: "变化明显学生",
+    reason: "附带两个学期总分变化幅度较明显的学生。",
+    items,
+  } : null;
+}
+
+function buildAiAssistantComparisonContext(input: {
+  prompt: string;
+  currentState: Pick<SeatManagerState, "students" | "gradeExams">;
+}): AiComparisonContext | undefined {
+  const normalized = normalizeTermText(input.prompt);
+  const currentSlice = getCurrentSlice();
+  const currentClassName = sliceDisplayName(currentSlice);
+  if (mentionsOtherClass(normalized, currentClassName) && includesAny(normalized, ["比", "对比", "比较", "相比"])) {
+    return {
+      currentScope: { className: currentClassName, termLabel: currentSlice.term.label },
+      notice: "第一版暂不支持跨班级对比；请先使用同一班级的跨学期对比。",
+      comparisonPacks: [{
+        kind: "notice",
+        title: "暂不支持跨班级对比",
+        reason: "问题提到另一个班级，但第一版只支持同一班级跨学期对比。",
+        items: [{ summary: "跨班级对比将在后续版本支持。" }],
+      }],
+    };
+  }
+  if (!hasTermComparisonIntent(normalized)) {
+    return undefined;
+  }
+  const sameClassSlices = exportWholeBook().slices.filter(slice => slice.classId === currentSlice.classId);
+  const compareSlice = findExplicitCompareSlice(input.prompt, sameClassSlices, currentSlice) || findDefaultCompareSlice(sameClassSlices, currentSlice);
+  if (!compareSlice) {
+    return {
+      currentScope: { className: currentClassName, termLabel: currentSlice.term.label },
+      notice: "当前班级没有可用于对比的其他学期。",
+      comparisonPacks: [{
+        kind: "notice",
+        title: "没有可对比学期",
+        reason: "文件柜中未找到同一班级的其他学期。",
+        items: [{ summary: "请先在文件柜中建立或导入同一班级的其他学期数据。" }],
+      }],
+    };
+  }
+  const compareState = createSeatManagerState(compareSlice.data);
+  const mentionedStudents = findMentionedStudents(input.prompt, input.currentState.students);
+  const studentPack = buildStudentTermPack(input.currentState.students, compareState.students, mentionedStudents, currentSlice.term.label, compareSlice.term.label);
+  const candidatePack = buildCandidateTermPack(input.currentState.students, compareState.students);
+  const packs = [
+    buildClassComparisonPack(input.currentState, compareState, currentSlice.term.label, compareSlice.term.label),
+    studentPack,
+    candidatePack,
+  ].filter((pack): pack is AiComparisonPack => Boolean(pack));
+  return {
+    currentScope: { className: currentClassName, termLabel: currentSlice.term.label },
+    compareScope: { className: sliceDisplayName(compareSlice), termLabel: compareSlice.term.label },
+    comparisonPacks: packs,
+  };
+}
+
 export function buildAiAssistantBaseContext(input: {
   className: string;
   termLabel: string;
@@ -757,12 +998,20 @@ export function buildAiAssistantContext(input: {
     packs.push(buildFundPack(input.fundTransactions));
   }
 
+  const comparisonContext = buildAiAssistantComparisonContext({
+    prompt,
+    currentState: {
+      students: input.students,
+      gradeExams: input.exams,
+    },
+  });
   const deduped = packs.filter((pack, index, array) => (
     array.findIndex(item => item.kind === pack.kind && item.title === pack.title) === index
   )).slice(0, 6);
   return {
     baseContext: input.baseContext,
     contextPacks: deduped,
+    comparisonContext,
   };
 }
 
