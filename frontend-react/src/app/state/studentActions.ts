@@ -11,6 +11,10 @@ export interface StudentProfileInput {
   name: string;
   gender: Gender;
   aliases: string[];
+  parentPhone?: string;
+  address?: string;
+  emergencyContact?: string;
+  isBoarding?: boolean;
   manualTagIds: string[];
 }
 
@@ -34,6 +38,10 @@ export function createStudent(input: NewStudentInput): AppStudent {
     name: input.name.trim(),
     gender: input.gender,
     aliases: alias ? [alias] : [],
+    parentPhone: "",
+    address: "",
+    emergencyContact: "",
+    isBoarding: false,
     tags: [],
     academicTags: [],
     manualTagIds: [],
@@ -55,6 +63,10 @@ export function updateStudentProfile(student: AppStudent, input: StudentProfileI
     name: input.name.trim() || student.name,
     gender: input.gender,
     aliases,
+    parentPhone: input.parentPhone?.trim() || undefined,
+    address: input.address?.trim() || undefined,
+    emergencyContact: input.emergencyContact?.trim() || undefined,
+    isBoarding: input.isBoarding === true,
     manualTagIds,
     tags: hasStoredTagIds ? derivedTags.tags : student.tags,
     academicTags: student.autoTagIds.length > 0 ? derivedTags.academicTags : student.academicTags,

@@ -41,13 +41,12 @@ interface LocalRecord {
   date: string;
 }
 
-const WEEKS = [
-  "2026-06-14（本周）",
-  "2026-06-07",
-  "2026-05-31",
-  "2026-05-24",
-  "2026-05-17",
-];
+interface WeekOption {
+  key: string;
+  label: string;
+  start: Date;
+  end: Date;
+}
 
 function getScoreEntries(scores: Record<string, number>): Array<[string, number]> {
   return Object.entries(scores).filter(([, score]) => Number.isFinite(score));
@@ -71,6 +70,75 @@ function getExamSortValue(exam: StudentExamSummary): string {
 
 function formatScore(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value * 10) / 10) : "—";
+}
+
+function toLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) {
+    return null;
+  }
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getWeekStart(date: Date): Date {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = start.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + mondayOffset);
+  return start;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function buildWeekOption(start: Date, currentWeekKey: string): WeekOption {
+  const end = addDays(start, 6);
+  const key = toLocalDateKey(start);
+  return {
+    key,
+    start,
+    end,
+    label: `${key} - ${toLocalDateKey(end)}${key === currentWeekKey ? "（本周）" : ""}`,
+  };
+}
+
+function buildWeekOptions(records: LocalRecord[]): WeekOption[] {
+  const currentWeekStart = getWeekStart(new Date());
+  const currentWeekKey = toLocalDateKey(currentWeekStart);
+  const weekKeys = new Set<string>();
+
+  for (let index = 0; index < 12; index += 1) {
+    weekKeys.add(toLocalDateKey(addDays(currentWeekStart, index * -7)));
+  }
+  records.forEach(record => {
+    const recordDate = parseLocalDate(record.date);
+    if (recordDate) {
+      weekKeys.add(toLocalDateKey(getWeekStart(recordDate)));
+    }
+  });
+
+  return [...weekKeys]
+    .sort((a, b) => b.localeCompare(a))
+    .map(key => buildWeekOption(parseLocalDate(key) || currentWeekStart, currentWeekKey));
+}
+
+function isRecordInWeek(record: LocalRecord, week: WeekOption): boolean {
+  const recordDate = parseLocalDate(record.date);
+  if (!recordDate) {
+    return false;
+  }
+  return recordDate >= week.start && recordDate <= week.end;
 }
 
 function parseAliases(value: string): string[] {
@@ -102,6 +170,10 @@ export function StudentModal({
   const [nameInput, setNameInput] = useState(student.name);
   const [genderInput, setGenderInput] = useState<Gender>(student.gender);
   const [aliasesInput, setAliasesInput] = useState(student.aliases.join("、"));
+  const [parentPhoneInput, setParentPhoneInput] = useState(student.parentPhone || "");
+  const [addressInput, setAddressInput] = useState(student.address || "");
+  const [emergencyContactInput, setEmergencyContactInput] = useState(student.emergencyContact || "");
+  const [isBoardingInput, setIsBoardingInput] = useState(student.isBoarding === true);
   const [selectedBehaviorTags, setSelectedBehaviorTags] = useState<Set<string>>(
     () => new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id)))
   );
@@ -114,7 +186,7 @@ export function StudentModal({
       date: r.date,
     }))
   );
-  const [selectedWeek, setSelectedWeek] = useState(WEEKS[0]);
+  const [selectedWeek, setSelectedWeek] = useState(() => toLocalDateKey(getWeekStart(new Date())));
   const [syncSearch, setSyncSearch] = useState("");
   const [syncSelected, setSyncSelected] = useState<Set<StudentId>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -187,7 +259,20 @@ export function StudentModal({
     nameInput.trim() !== student.name ||
     genderInput !== student.gender ||
     parseAliases(aliasesInput).join("|") !== student.aliases.join("|") ||
+    parentPhoneInput.trim() !== (student.parentPhone || "") ||
+    addressInput.trim() !== (student.address || "") ||
+    emergencyContactInput.trim() !== (student.emergencyContact || "") ||
+    isBoardingInput !== (student.isBoarding === true) ||
     selectedBehaviorTagKey !== initialBehaviorTagKey;
+  const weekOptions = useMemo(() => buildWeekOptions(localRecords), [localRecords]);
+  const activeWeek = weekOptions.find(week => week.key === selectedWeek) || weekOptions[0];
+  const filteredRecords = activeWeek ? localRecords.filter(record => isRecordInWeek(record, activeWeek)) : localRecords;
+
+  useEffect(() => {
+    if (weekOptions.length > 0 && !weekOptions.some(week => week.key === selectedWeek)) {
+      setSelectedWeek(weekOptions[0].key);
+    }
+  }, [selectedWeek, weekOptions]);
 
   function toggleBehaviorTag(id: string) {
     setSelectedBehaviorTags(prev => {
@@ -212,6 +297,10 @@ export function StudentModal({
       name: nameInput,
       gender: genderInput,
       aliases: parseAliases(aliasesInput),
+      parentPhone: parentPhoneInput,
+      address: addressInput,
+      emergencyContact: emergencyContactInput,
+      isBoarding: isBoardingInput,
       manualTagIds: [...preservedManualTagIds, ...selectedBehaviorTags],
     });
     onUpdateStudent(nextStudent);
@@ -357,7 +446,7 @@ export function StudentModal({
             <div className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生</div>
             <h3 className="text-gray-900" style={{ fontSize: "1.25rem" }}>
               {student.name}
-              <span className="text-gray-400 ml-2" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 周起始 2026-06-14</span>
+              <span className="text-gray-400 ml-2" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
             </h3>
           </div>
           <div className="flex items-center gap-2">
@@ -459,6 +548,74 @@ export function StudentModal({
                   className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-300"
                 />
               </label>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="text-xs text-blue-700" style={{ fontWeight: 800 }}>联系与住宿信息</span>
+                  <span className="text-xs text-blue-500/70">仅保存在本机/同步备份中</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>家长电话</span>
+                    <input
+                      value={parentPhoneInput}
+                      onChange={e => {
+                        setParentPhoneInput(e.target.value);
+                        setProfileStatus("");
+                      }}
+                      type="tel"
+                      placeholder="例如：13800000000"
+                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>紧急联系人</span>
+                    <input
+                      value={emergencyContactInput}
+                      onChange={e => {
+                        setEmergencyContactInput(e.target.value);
+                        setProfileStatus("");
+                      }}
+                      placeholder="姓名 / 关系 / 电话"
+                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <label className="space-y-1.5 sm:col-span-2">
+                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>住址</span>
+                    <input
+                      value={addressInput}
+                      onChange={e => {
+                        setAddressInput(e.target.value);
+                        setProfileStatus("");
+                      }}
+                      placeholder="家庭住址（可选）"
+                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300"
+                    />
+                  </label>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>是否住宿</span>
+                    <div className="grid max-w-xs grid-cols-2 gap-1 rounded-xl bg-white p-1 ring-1 ring-blue-100">
+                      {[
+                        { label: "走读", value: false },
+                        { label: "住宿", value: true },
+                      ].map(option => (
+                        <button
+                          key={option.label}
+                          type="button"
+                          onClick={() => {
+                            setIsBoardingInput(option.value);
+                            setProfileStatus("");
+                          }}
+                          className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${isBoardingInput === option.value ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:bg-blue-50"}`}
+                          style={{ fontWeight: 800 }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
                 <div className="flex items-center justify-between gap-3">
@@ -592,13 +749,13 @@ export function StudentModal({
               onChange={e => setSelectedWeek(e.target.value)}
               className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 cursor-pointer"
             >
-              {WEEKS.map(w => <option key={w} value={w}>{w}</option>)}
+              {weekOptions.map(week => <option key={week.key} value={week.key}>{week.label}</option>)}
             </select>
           </div>
 
-          {localRecords.length > 0 ? (
+          {filteredRecords.length > 0 ? (
             <div className="space-y-2">
-              {localRecords.map(record => (
+              {filteredRecords.map(record => (
                 <div key={record.id} className={`flex items-center gap-3 px-4 py-3 border rounded-xl ${recordTypeStyle[record.type].bg}`}>
                   <span className={`text-xs px-2 py-0.5 rounded-full border ${recordTypeStyle[record.type].bg} ${recordTypeStyle[record.type].text}`} style={{ fontWeight: 700 }}>
                     {recordTypeStyle[record.type].label}
@@ -612,7 +769,7 @@ export function StudentModal({
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400 text-center py-3">本周暂无记录，可以先来添加奖罚。</p>
+            <p className="text-sm text-gray-400 text-center py-3">该周暂无记录，可以先来添加奖罚。</p>
           )}
           </div>
           )}

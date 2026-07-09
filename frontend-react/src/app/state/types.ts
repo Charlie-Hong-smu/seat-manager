@@ -255,6 +255,10 @@ export interface AppStudent {
   studentNo?: string;
   gender: Gender;
   aliases: string[];
+  parentPhone?: string;
+  address?: string;
+  emergencyContact?: string;
+  isBoarding?: boolean;
   tags: string[];
   academicTags: string[];
   manualTagIds: string[];
