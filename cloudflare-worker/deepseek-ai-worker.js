@@ -63,6 +63,9 @@ export default {
     if (url.pathname === "/suggest-score-mapping") {
       return handleSuggestScoreMapping(request, env, corsHeaders);
     }
+    if (url.pathname === "/suggest-roster-mapping") {
+      return handleSuggestRosterMapping(request, env, corsHeaders);
+    }
     return jsonResponse({ error: "not_found" }, 404, corsHeaders);
   }
 };
@@ -724,6 +727,60 @@ async function handleSuggestScoreMapping(request, env, corsHeaders) {
   }
 }
 
+async function handleSuggestRosterMapping(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  const token = getBearerToken(request);
+  const verified = await verifyAiRequest(token, env);
+  if (!verified.ok) {
+    return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  }
+  if (isOverDailyLimit(token, verified.dailyLimit)) {
+    return jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
+  }
+
+  const body = await readJsonBody(request, SCORE_MAPPING_MAX_BODY_BYTES);
+  if (!body.ok || !isValidRosterMappingPayload(body.value)) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是班级名单表列映射助手。根据表头和少量样例，返回 JSON。列索引必须使用用户提供的 index，无法判断填 -1。字段：nameCol、studentNoCol、genderCol、rowCol、colCol、hasHeader、note。姓名列必须尽量识别；座位行列可选。不要编造不存在的列。"
+          },
+          { role: "user", content: JSON.stringify(body.value) }
+        ]
+      })
+    });
+    if (!response.ok) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    const data = await response.json();
+    const parsed = parseModelJson(data?.choices?.[0]?.message?.content || "");
+    if (!parsed) {
+      return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    }
+    return jsonResponse(sanitizeRosterMappingResult(parsed, body.value), 200, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
 async function handleStudentFollowup(request, env, corsHeaders) {
   if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
     return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
@@ -1203,6 +1260,17 @@ function isValidScoreMappingPayload(payload) {
   );
 }
 
+function isValidRosterMappingPayload(payload) {
+  return (
+    payload &&
+    Array.isArray(payload.headers) &&
+    payload.headers.length > 0 &&
+    payload.headers.length <= 80 &&
+    Array.isArray(payload.sampleRows) &&
+    payload.sampleRows.length <= 80
+  );
+}
+
 function isValidStudentCommentPayload(payload) {
   const context = payload?.context;
   const student = context?.student;
@@ -1482,6 +1550,23 @@ function sanitizeScoreMappingResult(result, payload) {
       rankSchoolCol: safeIndex(result.totalMapping?.rankSchoolCol)
     },
     note: toText(result.note || result.reason || "AI 已生成映射建议")
+  };
+}
+
+function sanitizeRosterMappingResult(result, payload) {
+  const maxIndex = payload.headers.length - 1;
+  const safeIndex = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isInteger(parsed) && parsed >= 0 && parsed <= maxIndex ? parsed : -1;
+  };
+  return {
+    nameCol: safeIndex(result.nameCol),
+    studentNoCol: safeIndex(result.studentNoCol),
+    genderCol: safeIndex(result.genderCol),
+    rowCol: safeIndex(result.rowCol),
+    colCol: safeIndex(result.colCol),
+    hasHeader: result.hasHeader !== false,
+    note: toText(result.note || result.reason || "AI 已生成名单映射建议")
   };
 }
 

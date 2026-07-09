@@ -166,6 +166,17 @@ function toStringRows(rows: XlsxRows): string[][] {
     .filter(row => row.some(Boolean));
 }
 
+function looksLikeScoreHeader(row: string[]): boolean {
+  const hasName = row.findIndex(isNameHeader) !== -1;
+  const hasScore = row.some(header => isScoreHeader(header));
+  return hasName && hasScore;
+}
+
+export function prepareScoreRows(rows: string[][]): string[][] {
+  const headerIndex = rows.slice(0, 20).findIndex(looksLikeScoreHeader);
+  return headerIndex > 0 ? rows.slice(headerIndex) : rows;
+}
+
 function getXlsxScriptUrl(): string {
   const baseUrl = typeof document === "undefined" ? "/" : document.baseURI || window.location.href;
   return new URL("vendor/xlsx.full.min.js", baseUrl).toString();
@@ -198,7 +209,7 @@ export async function readRowsFromFile(file: File): Promise<string[][]> {
     const text = await file.text();
     return parseDelimitedText(text, filename.endsWith(".tsv") ? "\t" : pickDelimiter(text));
   }
-  if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
+  if (filename.endsWith(".xlsx") || filename.endsWith(".xls") || filename.endsWith(".xlsm")) {
     const xlsx = await loadXlsx();
     const workbook = xlsx.read(await file.arrayBuffer(), { type: "array" });
     const firstSheet = workbook.SheetNames[0];
@@ -333,7 +344,7 @@ function makeId(): string {
 }
 
 export async function parseScoreFile(file: File): Promise<ScoreImportDraft> {
-  const rows = await readRowsFromFile(file);
+  const rows = prepareScoreRows(await readRowsFromFile(file));
   if (!rows.length) {
     throw new Error("empty_file");
   }

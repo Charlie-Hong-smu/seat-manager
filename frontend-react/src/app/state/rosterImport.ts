@@ -8,6 +8,7 @@ const COLS = 8;
 export interface RosterImportOptions {
   replaceExisting: boolean;
   keepHistory: boolean;
+  mapping?: RosterMapping;
 }
 
 export interface RosterImportResult {
@@ -17,7 +18,7 @@ export interface RosterImportResult {
   hasPlacement: boolean;
 }
 
-interface ParsedRoster {
+export interface ParsedRoster {
   names: string[];
   placements: Array<string | null>;
   genders: string[];
@@ -25,6 +26,17 @@ interface ParsedRoster {
   genderList: string[];
   studentNoList: string[];
   hasPlacement: boolean;
+}
+
+export interface RosterMapping {
+  headers: string[];
+  nameCol: number;
+  studentNoCol: number;
+  genderCol: number;
+  rowCol: number;
+  colCol: number;
+  hasHeader: boolean;
+  warnings: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,17 +81,42 @@ function detectNameColumn(header: string[]): number {
   return normalized.findIndex(cell => /姓名|名字|学生姓名|studentname|^name$|^学生$/.test(cell));
 }
 
-function parseRosterRows(rows: string[][]): ParsedRoster {
+function looksLikeRosterHeader(row: string[]): boolean {
+  return detectNameColumn(row) !== -1
+    || detectColumn(row, ["学号", "学生编号", "学生号", "student id", "student no", "student number", "school id"]) !== -1
+    || detectColumn(row, ["行", "row"]) !== -1
+    || detectColumn(row, ["列", "col"]) !== -1;
+}
+
+export function prepareRosterRows(rows: string[][]): string[][] {
+  const headerIndex = rows.slice(0, 20).findIndex(looksLikeRosterHeader);
+  return headerIndex > 0 ? rows.slice(headerIndex) : rows;
+}
+
+export function detectRosterMapping(rows: string[][]): RosterMapping {
+  const header = rows[0]?.map(cell => String(cell || "").trim()) || [];
+  const hasHeader = looksLikeRosterHeader(header);
+  const nameCol = hasHeader ? detectNameColumn(header) : 0;
+  const studentNoCol = hasHeader ? detectColumn(header, ["学号", "学生编号", "学生号", "student id", "student no", "student number", "school id"]) : -1;
+  const rowCol = hasHeader ? detectColumn(header, ["行", "row"]) : -1;
+  const colCol = hasHeader ? detectColumn(header, ["列", "col"]) : -1;
+  const genderCol = hasHeader ? detectColumn(header, ["性别", "gender"]) : -1;
+  const warnings: string[] = [];
+  if (nameCol === -1) {
+    warnings.push("未识别到姓名列。");
+  }
+  if (!hasHeader) {
+    warnings.push("未识别表头，默认第一列为姓名。");
+  }
+  return { headers: header, nameCol, studentNoCol, genderCol, rowCol, colCol, hasHeader, warnings };
+}
+
+export function parseRosterRows(rows: string[][], mapping = detectRosterMapping(rows)): ParsedRoster {
   if (!rows.length) {
     return { names: [], placements: [], genders: [], studentNos: [], genderList: [], studentNoList: [], hasPlacement: false };
   }
-  const header = rows[0];
-  const nameCol = detectNameColumn(header);
-  const studentNoCol = detectColumn(header, ["学号", "学生编号", "学生号", "student id", "student no", "student number", "school id"]);
-  const rowCol = detectColumn(header, ["行", "row"]);
-  const colCol = detectColumn(header, ["列", "col"]);
-  const genderCol = detectColumn(header, ["性别", "gender"]);
-  const startIndex = nameCol !== -1 || rowCol !== -1 || colCol !== -1 ? 1 : 0;
+  const { nameCol, studentNoCol, rowCol, colCol, genderCol } = mapping;
+  const startIndex = mapping.hasHeader ? 1 : 0;
   const placements: Array<string | null> = [];
   const genders: string[] = [];
   const studentNos: string[] = [];
@@ -231,7 +268,8 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
 }
 
 export async function importRosterFile(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
-  const parsed = parseRosterRows(await readRowsFromFile(file));
+  const rows = prepareRosterRows(await readRowsFromFile(file));
+  const parsed = parseRosterRows(rows, options.mapping);
   if (!parsed.names.length && !parsed.hasPlacement) {
     throw new Error("empty_roster");
   }
