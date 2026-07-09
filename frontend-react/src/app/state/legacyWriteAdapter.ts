@@ -1,6 +1,6 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
-import type { AppStudent, Dormitory, FundTransaction, SavedGradeExamEntry, SavedGradeExamRecord, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
+import type { AppStudent, Dormitory, FundTransaction, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 interface PersistSnapshotInput {
   students: AppStudent[];
@@ -117,6 +117,46 @@ function normalizeExamEntry(value: unknown): SavedGradeExamEntry | null {
   };
 }
 
+function normalizeImportSource(value: unknown): ScoreImportSource | undefined {
+  if (!isRecord(value) || !Array.isArray(value.rows) || !isRecord(value.mapping)) {
+    return undefined;
+  }
+  const rows = value.rows
+    .filter(Array.isArray)
+    .map(row => row.map(cell => String(cell ?? "")));
+  if (!rows.length) {
+    return undefined;
+  }
+  const mapping = value.mapping;
+  const totalMapping = isRecord(mapping.totalMapping) ? mapping.totalMapping : {};
+  return {
+    filename: String(value.filename || ""),
+    rows,
+    mapping: {
+      headers: Array.isArray(mapping.headers) ? mapping.headers.map(String) : rows[0] || [],
+      nameCol: Number.isInteger(mapping.nameCol) ? mapping.nameCol as number : -1,
+      studentNoCol: Number.isInteger(mapping.studentNoCol) ? mapping.studentNoCol as number : -1,
+      subjectMappings: Array.isArray(mapping.subjectMappings)
+        ? mapping.subjectMappings
+            .filter(isRecord)
+            .map(item => ({
+              subject: String(item.subject || ""),
+              scoreCol: Number.isInteger(item.scoreCol) ? item.scoreCol as number : -1,
+              rankClassCol: Number.isInteger(item.rankClassCol) ? item.rankClassCol as number : -1,
+              rankSchoolCol: Number.isInteger(item.rankSchoolCol) ? item.rankSchoolCol as number : -1,
+            }))
+            .filter(item => item.subject && item.scoreCol >= 0)
+        : [],
+      totalMapping: {
+        scoreCol: Number.isInteger(totalMapping.scoreCol) ? totalMapping.scoreCol as number : -1,
+        rankClassCol: Number.isInteger(totalMapping.rankClassCol) ? totalMapping.rankClassCol as number : -1,
+        rankSchoolCol: Number.isInteger(totalMapping.rankSchoolCol) ? totalMapping.rankSchoolCol as number : -1,
+      },
+      warnings: Array.isArray(mapping.warnings) ? mapping.warnings.map(String).filter(Boolean) : [],
+    },
+  };
+}
+
 function normalizeSavedGradeExamRecord(value: unknown): SavedGradeExamRecord | null {
   if (!isRecord(value)) {
     return null;
@@ -137,6 +177,7 @@ function normalizeSavedGradeExamRecord(value: unknown): SavedGradeExamRecord | n
     subjectCount: Number.isInteger(value.subjectCount) ? value.subjectCount as number : subjects.length,
     subjects,
     entries,
+    importSource: normalizeImportSource(value.importSource),
   };
 }
 

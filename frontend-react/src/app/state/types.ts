@@ -110,6 +110,7 @@ export interface GradeExam {
   savedAt?: string;
   subjects: string[];
   rows: GradeRow[];
+  importSource?: ScoreImportSource;
 }
 
 export interface SeatPairRule {
@@ -164,6 +165,7 @@ export interface SavedGradeExamRecord {
   subjectCount: number;
   subjects: string[];
   entries: SavedGradeExamEntry[];
+  importSource?: ScoreImportSource;
 }
 
 export interface ScoreImportDraft {
@@ -172,6 +174,19 @@ export interface ScoreImportDraft {
   entries: SavedGradeExamEntry[];
   rowCount: number;
   warnings: string[];
+}
+
+export interface ScoreImportSource {
+  filename: string;
+  rows: string[][];
+  mapping: {
+    headers: string[];
+    nameCol: number;
+    studentNoCol: number;
+    subjectMappings: Array<{ subject: string; scoreCol: number; rankClassCol: number; rankSchoolCol: number }>;
+    totalMapping: { scoreCol: number; rankClassCol: number; rankSchoolCol: number };
+    warnings: string[];
+  };
 }
 
 export type CommentStyle = "warm" | "formal" | "brief";

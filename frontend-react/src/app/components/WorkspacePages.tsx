@@ -525,6 +525,7 @@ export function ScoresWorkspace({
   const [scoreStatus, setScoreStatus] = useState("");
   const [examName, setExamName] = useState("");
   const [examDate, setExamDate] = useState(new Date().toISOString().slice(0, 10));
+  const [remappingExamId, setRemappingExamId] = useState("");
   const [aiMappingBusy, setAiMappingBusy] = useState(false);
   const [aiMappingSuggestion, setAiMappingSuggestion] = useState<AiScoreMappingSuggestion | null>(null);
   const [aiMappingAccessCode, setAiMappingAccessCode] = useState("");
@@ -553,6 +554,7 @@ export function ScoresWorkspace({
       setScoreRows(rows);
       setScoreFilename(file.name);
       setDraft(nextDraft);
+      setRemappingExamId("");
       setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
       setExamDate(new Date().toISOString().slice(0, 10));
       setScoreStatus(`已解析 ${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。${nextDraft.warnings.length ? " 可打开映射设置进一步确认。" : ""}`);
@@ -562,6 +564,7 @@ export function ScoresWorkspace({
         setManualMapping(detectScoreMapping(rows));
         setScoreRows(rows);
         setScoreFilename(file.name);
+        setRemappingExamId("");
         setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
         setExamDate(new Date().toISOString().slice(0, 10));
       } catch {
@@ -645,14 +648,65 @@ export function ScoresWorkspace({
       setScoreStatus("请先上传成绩表并填写考试名称。");
       return;
     }
-    const saved = onSaveScoreImport(createSavedGradeExamRecord(draft, { name: examName, date: examDate }));
+    const saved = onSaveScoreImport(createSavedGradeExamRecord(draft, {
+      id: remappingExamId || undefined,
+      name: examName,
+      date: examDate,
+      rows: scoreRows,
+      mapping: manualMapping || undefined,
+    }));
     setDraft(null);
     setScoreRows([]);
     setScoreFilename("");
     setManualMapping(null);
+    setRemappingExamId("");
     setMappingModalOpen(false);
     setAiMappingSuggestion(null);
     setScoreStatus(saved ? `已保存「${saved.name}」。` : "保存失败。");
+  }
+
+  function editExam(exam: GradeExam) {
+    if (!exam.importSource) {
+      setEditingExamId(exam.id);
+      setEditExamName(exam.name);
+      setEditExamDate(exam.date || new Date().toISOString().slice(0, 10));
+      return;
+    }
+    const rows = exam.importSource.rows;
+    const mapping = {
+      ...exam.importSource.mapping,
+      headers: rows[0] || exam.importSource.mapping.headers,
+      subjectMappings: exam.importSource.mapping.subjectMappings.map(item => ({ ...item })),
+      totalMapping: { ...exam.importSource.mapping.totalMapping },
+      warnings: [...exam.importSource.mapping.warnings],
+    };
+    try {
+      const nextDraft = buildScoreImportDraftFromRows(rows, exam.importSource.filename || `${exam.name}.csv`, mapping);
+      setDraft(nextDraft);
+      setScoreRows(rows);
+      setScoreFilename(exam.importSource.filename || nextDraft.filename);
+      setManualMapping(mapping);
+      setExamName(exam.name);
+      setExamDate(exam.date || new Date().toISOString().slice(0, 10));
+      setRemappingExamId(exam.id);
+      setMappingModalOpen(true);
+      setAiMappingSuggestion(null);
+      setScoreStatus(`正在重新映射「${exam.name}」，应用映射后可覆盖保存。`);
+    } catch {
+      setScoreStatus("这场考试的原始表格无法重新映射，只能编辑考试名称和日期。");
+      setEditingExamId(exam.id);
+      setEditExamName(exam.name);
+      setEditExamDate(exam.date || new Date().toISOString().slice(0, 10));
+    }
+  }
+
+  function deleteExam(exam: GradeExam) {
+    if (!window.confirm(`确定要删除「${exam.name}」这场考试及对应学生成绩记录吗？\n删除后无法恢复。`)) {
+      return;
+    }
+    if (onDeleteGradeExam(exam.id)) {
+      setScoreStatus(`已删除「${exam.name}」。`);
+    }
   }
 
   async function generateClassAnalysis() {
@@ -691,13 +745,18 @@ export function ScoresWorkspace({
             <div className="space-y-3">
               <FileDropZone accept=".xlsx,.xls,.csv,.tsv" onChange={file => { if (file) void readScoreFile(file); }}>
                 <FileUp className="h-4 w-4 text-gray-400" />
-                <span className="text-sm text-gray-500">{draft ? draft.filename : "拖拽或选择成绩文件"}</span>
+                  <span className="text-sm text-gray-500">{draft ? draft.filename : "拖拽或选择成绩文件"}</span>
               </FileDropZone>
               {draft && (
                 <div className="space-y-2">
+                  {remappingExamId && (
+                    <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                      正在重新映射已保存考试，保存后会覆盖原考试。
+                    </div>
+                  )}
                   <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
                   <input type="date" value={examDate} onChange={event => setExamDate(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" />
-                  <Button onClick={saveDraft} className="w-full">保存考试</Button>
+                  <Button onClick={saveDraft} className="w-full">{remappingExamId ? "保存修改" : "保存考试"}</Button>
                 </div>
               )}
               {scoreRows.length > 0 && manualMapping && (
@@ -747,8 +806,8 @@ export function ScoresWorkspace({
                       <div className="mt-1 text-xs text-gray-400">{exam.date || "未填写日期"} · {exam.rows.length} 人 · {exam.subjects.length} 科</div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
                         <Button size="sm" variant="secondary" onClick={() => setExamTable(exam)}>表格</Button>
-                        <Button size="sm" variant="secondary" onClick={() => { setEditingExamId(exam.id); setEditExamName(exam.name); setEditExamDate(exam.date || new Date().toISOString().slice(0, 10)); }}>编辑</Button>
-                        <Button size="sm" variant="danger" onClick={() => { if (window.confirm(`确认删除「${exam.name}」？该操作不可撤销。`)) onDeleteGradeExam(exam.id); }}>删除</Button>
+                        <Button size="sm" variant="secondary" onClick={() => editExam(exam)}>编辑</Button>
+                        <Button size="sm" variant="danger" onClick={() => deleteExam(exam)}>删除</Button>
                       </div>
                     </>
                   )}

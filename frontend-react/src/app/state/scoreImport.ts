@@ -343,7 +343,7 @@ export async function parseScoreFile(file: File): Promise<ScoreImportDraft> {
 
 export function createSavedGradeExamRecord(
   draft: ScoreImportDraft,
-  input: { name: string; date: string },
+  input: { id?: string; name: string; date: string; rows?: string[][]; mapping?: ScoreMapping },
 ): SavedGradeExamRecord {
   const name = input.name.trim() || draft.filename.replace(/\.[^.]+$/, "") || "考试";
   const date = input.date || new Date().toISOString().slice(0, 10);
@@ -354,7 +354,7 @@ export function createSavedGradeExamRecord(
     total: entry.total || { score: null, rankClass: null, rankSchool: null },
   }));
   return {
-    id: makeId(),
+    id: input.id || makeId(),
     name,
     date,
     savedAt: new Date().toISOString(),
@@ -362,5 +362,16 @@ export function createSavedGradeExamRecord(
     subjectCount: draft.subjects.length,
     subjects: [...draft.subjects],
     entries,
+    importSource: input.rows?.length && input.mapping ? {
+      filename: draft.filename,
+      rows: input.rows.map(row => row.map(cell => String(cell ?? ""))),
+      mapping: {
+        ...input.mapping,
+        headers: [...input.mapping.headers],
+        subjectMappings: input.mapping.subjectMappings.map(item => ({ ...item })),
+        totalMapping: { ...input.mapping.totalMapping },
+        warnings: [...input.mapping.warnings],
+      },
+    } : undefined,
   };
 }
