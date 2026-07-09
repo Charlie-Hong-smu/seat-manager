@@ -554,9 +554,10 @@ export function ScoresWorkspace({
       setScoreRows(rows);
       setScoreFilename(file.name);
       setDraft(nextDraft);
-      setRemappingExamId("");
-      setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
-      setExamDate(new Date().toISOString().slice(0, 10));
+      if (!remappingExamId) {
+        setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
+        setExamDate(new Date().toISOString().slice(0, 10));
+      }
       setScoreStatus(`已解析 ${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。${nextDraft.warnings.length ? " 可打开映射设置进一步确认。" : ""}`);
     } catch (error) {
       try {
@@ -564,9 +565,10 @@ export function ScoresWorkspace({
         setManualMapping(detectScoreMapping(rows));
         setScoreRows(rows);
         setScoreFilename(file.name);
-        setRemappingExamId("");
-        setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
-        setExamDate(new Date().toISOString().slice(0, 10));
+        if (!remappingExamId) {
+          setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
+          setExamDate(new Date().toISOString().slice(0, 10));
+        }
       } catch {
         setScoreRows([]);
         setScoreFilename("");
@@ -667,9 +669,17 @@ export function ScoresWorkspace({
 
   function editExam(exam: GradeExam) {
     if (!exam.importSource) {
-      setEditingExamId(exam.id);
-      setEditExamName(exam.name);
-      setEditExamDate(exam.date || new Date().toISOString().slice(0, 10));
+      setDraft(null);
+      setScoreRows([]);
+      setScoreFilename("");
+      setManualMapping(null);
+      setExamName(exam.name);
+      setExamDate(exam.date || new Date().toISOString().slice(0, 10));
+      setRemappingExamId(exam.id);
+      setMappingModalOpen(false);
+      setAiMappingSuggestion(null);
+      setEditingExamId("");
+      setScoreStatus(`「${exam.name}」没有保存原始表格，请重新选择原成绩文件，确认映射后会覆盖原考试。`);
       return;
     }
     const rows = exam.importSource.rows;
@@ -750,8 +760,24 @@ export function ScoresWorkspace({
               {draft && (
                 <div className="space-y-2">
                   {remappingExamId && (
-                    <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                      正在重新映射已保存考试，保存后会覆盖原考试。
+                    <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                      <span className="min-w-0 flex-1">
+                        正在重新映射已保存考试，保存后会覆盖原考试。
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraft(null);
+                          setScoreRows([]);
+                          setScoreFilename("");
+                          setManualMapping(null);
+                          setRemappingExamId("");
+                          setScoreStatus("");
+                        }}
+                        className="shrink-0 font-semibold text-blue-500 hover:text-blue-700"
+                      >
+                        取消
+                      </button>
                     </div>
                   )}
                   <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
