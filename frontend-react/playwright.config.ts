@@ -9,7 +9,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "chromium", use: { ...devices["Desktop Chrome"], channel: "chrome" } },
   ],
   webServer: {
     command: "pnpm build:zhang && pnpm preview --host 127.0.0.1 --port 4173",

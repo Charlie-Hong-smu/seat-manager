@@ -29,6 +29,7 @@ export function InstallHelpModal({ message, onClose }: InstallHelpModalProps) {
           <p className="text-blue-600" style={{ fontWeight: 700 }}>{message}</p>
           <p><span style={{ fontWeight: 700 }}>Chrome / Edge：</span>点击地址栏右侧的安装图标。</p>
           <p><span style={{ fontWeight: 700 }}>Mac Safari：</span>点击分享按钮，再选择添加到 Dock。</p>
+          <p><span style={{ fontWeight: 700 }}>iPhone / iPad Safari：</span>点击分享按钮，再选择添加到主屏幕。</p>
         </div>
       </div>
     </div>

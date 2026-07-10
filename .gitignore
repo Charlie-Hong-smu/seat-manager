@@ -13,3 +13,5 @@ dist/
 /promo-video/
 *.log
 .dev.vars
+playwright-report/
+test-results/

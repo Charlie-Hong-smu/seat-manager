@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./app/App";
+import { PwaLifecycle } from "./app/components/PwaLifecycle";
 import { APP_NAME } from "./app/config";
 import "./styles/index.css";
 
@@ -42,4 +43,9 @@ function clearLocalDevOfflineCache() {
 
 clearLocalDevOfflineCache();
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <>
+    <App />
+    <PwaLifecycle />
+  </>,
+);
