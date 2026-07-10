@@ -21,6 +21,7 @@
 - React PWA 支持 Zhang `/seat-manager/` 和 Commercial `/`，更新由用户确认。
 - Worker 公共路由在 `cloudflare-worker/worker-routes.js`，Netlify 代理复用并有契约测试。
 - 工作区页面位于 `components/workspaces/`；Scores、AI Assistant、Comment Workbench 为可重试的非首屏异步模块。
+- App 的学生、宿舍、班费更新分别在 `hooks/use*Actions.ts`；宿舍列表/成员区已是独立组件，AI Assistant payload/result 已从 facade 分离。
 - Worker 入口只装配 CORS、异常和路由；鉴权、usage 与领域路由分别在 `worker-auth.js`、`worker-usage.js`、`routes/`。
 - GitHub Pages、Commercial Pages 和 Worker workflow 发布前都会运行自动检查。
 
@@ -47,5 +48,5 @@ npm run check
 
 - 多班级云同步仍是整个 workspace book 手动覆盖，上限 5 MiB。
 - 订阅计费、自动续费和实时同步没有实现，也不应在普通维护中顺带引入。
-- 宿舍、学生弹窗和评语工作台仍可沿已有 selector/storage 边界逐步提取；必须先补对应测试，禁止一次性重写。
+- 宿舍事件编辑、学生弹窗和评语工作台仍可沿已有 action/selector/storage 边界逐步提取；必须先补对应测试，禁止一次性重写。
 - `promo-video/` 是为独立宣传工程保留的忽略路径；当前主仓库不依赖该目录。

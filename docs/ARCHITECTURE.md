@@ -19,12 +19,15 @@
 - `components/RetryableLazy.tsx`：非首屏模块统一骨架、错误边界和原地重试；重试不刷新页面或重建持久状态控制器。
 - `components/studentModalSelectors.ts`：学生弹窗的日期周、成绩和别名纯派生逻辑。
 - `components/commentBatchStorage.ts`：评语批量队列的兼容存储边界，键保持 `seat-manager-ai-comment-batch-state-v1`。
+- `hooks/useStudentActions.ts`、`useDormitoryActions.ts`、`useClassFundActions.ts`：App 使用的三个领域 action 组；不得合并成万能 action hook。
+- `components/DormitoryListPanel.tsx`、`DormitoryMembersPanel.tsx`：宿舍周期/列表与成员交互区；事件账本仍由工作区顶层协调。
+- `state/aiAssistantPayload.ts`、`aiAssistantResult.ts`：AI 助手请求裁剪和上游结果清洗；`aiAssistantService.ts` 保持对外 facade。
 - `state/aiApiClient.ts`：AI token、商用授权复用、代理/直连 fallback 和公共错误语义。
 - `cloudflare-worker/`：授权、手动同步、AI 和授权管理接口。
 - `cloudflare-worker/worker-routes.js`：浏览器可调用的公共路由契约；Netlify 代理直接复用。
 - `license-admin/`：仅管理员使用的静态授权管理页。
 
-`DormitoryWorkspace.tsx`、`CommentWorkbench.tsx` 和 `StudentModal.tsx` 仍包含较多紧密相连的交互状态。新增工作应从现有纯逻辑/存储边界继续局部提取，不得为了缩短文件一次性改写业务流程，也不得创建无业务意义的一行转发组件。
+`DormitoryWorkspace.tsx` 继续协调事件编辑，`CommentWorkbench.tsx` 和 `StudentModal.tsx` 仍包含较多紧密相连的交互状态。新增工作应从现有 action/selector/storage 边界继续局部提取，不得为了缩短文件一次性改写业务流程，也不得创建无业务意义的一行转发组件。
 
 ## 持久数据流
 
