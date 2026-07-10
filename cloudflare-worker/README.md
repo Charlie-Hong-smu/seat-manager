@@ -1,135 +1,78 @@
 # Seat Manager Cloudflare Worker
 
-这个 Worker 用于给静态网页中转 DeepSeek API 请求，并提供第一版手动云同步。不要把 DeepSeek API Key、同步码、KV 管理 token 写进前端或提交到 GitHub。
+本 Worker 负责产品授权、设备名额、手动云同步、AI 请求和授权管理接口。架构链路见 `../docs/ARCHITECTURE.md`，发布与排障见 `../docs/OPERATIONS.md`。
 
-公共路由定义在 `worker-routes.js`，调度和 CORS/JSON 响应分别在 `worker-router.js`、`worker-response.js`。Netlify 代理直接复用公共路由契约。整体链路与发布顺序见 `../docs/ARCHITECTURE.md` 和 `../docs/OPERATIONS.md`。
+## 代码边界
 
-## Secrets
+- `deepseek-ai-worker.js`：业务 handler 与 Worker 入口。
+- `worker-router.js`：统一路由调度。
+- `worker-response.js`：CORS、JSON 和异常响应。
+- `worker-routes.js`：浏览器可调用的公共路由契约。
+- `test/routes.test.js`：Worker 与 Netlify 代理路由一致性。
+- `test/worker.test.js`：鉴权边界、请求限制和异常响应。
 
-在 Cloudflare Workers 中配置这些变量：
+新增或删除公共接口时，必须同时更新 handler 与 `worker-routes.js`，并让路由契约测试通过。不要在 README 中维护另一份容易过期的完整路由清单。
 
-- `DEEPSEEK_API_KEY`: DeepSeek 平台创建的 API Key。
-- `PRODUCT_ACCESS_CODE_HASH`: 单码 fallback，产品授权码的 SHA-256 hex，用于进入应用前验证。
-- `PRODUCT_ACCESS_CODE`: 产品授权码明文。更推荐使用 `PRODUCT_ACCESS_CODE_HASH`。
-- `PRODUCT_TOKEN_SECRET`: 用于签发产品授权 token 的随机长字符串。未配置时会回退使用 `TOKEN_SECRET`。
-- `PRODUCT_LICENSE_ID`: 单码 fallback 对应的空间 ID，默认 `single`。
-- `PRODUCT_MAX_DEVICES`: 单码 fallback 最多绑定设备数，默认 `3`。
-- `AI_ACCESS_CODE_HASH`: AI 使用码的 SHA-256 hex。
-- `TOKEN_SECRET`: 用于签发临时 token 的随机长字符串。
-- `SYNC_ACCESS_CODE`: 云同步码，给老师手动输入。也可以改用 `SYNC_ACCESS_CODE_HASH`。
-- `SYNC_ACCESS_CODE_HASH`: 可选，云同步码的 SHA-256 hex。配置后优先使用 hash 校验。
-- `SYNC_TOKEN_SECRET`: 用于签发同步 token 的随机长字符串，建议和 `TOKEN_SECRET` 不同。
-- `ALLOWED_ORIGIN`: 可选，前端网页来源，默认 `https://charlie-hong-smu.github.io`。多个来源可用英文逗号分隔。
+## 本地命令
 
-生成 `PRODUCT_ACCESS_CODE_HASH` 或 `AI_ACCESS_CODE_HASH` 的一种方式：
+本目录统一使用 npm：
 
 ```bash
-printf '你的授权码' | shasum -a 256
-```
-
-`TOKEN_SECRET` 可以使用一段 32 位以上的随机字符串。
-
-生成 `SYNC_ACCESS_CODE_HASH` 的方式相同：
-
-```bash
-printf '你的云同步码' | shasum -a 256
-```
-
-## Wrangler 本地部署
-
-本目录已配置 Wrangler，用于以后从本地部署 Worker，避免每次到 Cloudflare 网页后台手动粘贴代码。
-
-首次使用：
-
-```bash
-cd cloudflare-worker
 npm ci
-npm exec wrangler -- login
+npm run dev
+npm run check
+npx wrangler deploy --dry-run
 ```
 
-常用命令：
+获得用户明确部署授权后才运行：
 
 ```bash
-npm run deploy      # 部署 deepseek-ai-worker.js 到 seat-manager-ai
-npm run dev         # 本地开发预览
-npm run tail        # 查看线上实时日志
-npm run check       # 语法、Worker 行为和代理路由契约
+npm run deploy
 ```
 
-`wrangler.toml` 只记录 Worker 名称、入口文件和 KV 绑定，不保存任何密钥。`DEEPSEEK_API_KEY`、`TOKEN_SECRET`、`AI_ACCESS_CODE_HASH`、`PRODUCT_TOKEN_SECRET` 等仍应保存在 Cloudflare Worker 的 Secrets / Variables 中。
-
-如果要通过命令设置 secret，可用：
+常用辅助命令：
 
 ```bash
-npm exec wrangler -- secret put SECRET_NAME
+npm run tail
+npx wrangler secret put SECRET_NAME
 ```
 
-不要把 `.dev.vars`、API Key、授权码明文或同步码提交进 Git。
+`wrangler.toml` 只保存非敏感配置和 KV binding。不要提交 `.dev.vars`、API key、授权码、同步码或 token secret。
 
-## Cloudflare Pages 商用试用站
+## Secrets 与变量
 
-商用试用站项目：
+- `DEEPSEEK_API_KEY`：DeepSeek API key。
+- `PRODUCT_ACCESS_CODE_HASH`：单码 fallback 的产品码 SHA-256。
+- `PRODUCT_ACCESS_CODE`：产品码明文 fallback；优先使用 hash。
+- `PRODUCT_TOKEN_SECRET`：产品授权 token 签名 secret。
+- `PRODUCT_LICENSE_ID`：单码 fallback 空间 ID，默认 `single`。
+- `PRODUCT_MAX_DEVICES`：单码 fallback 设备上限，默认 `3`。
+- `AI_ACCESS_CODE_HASH`：Zhang/旧路径独立 AI 使用码 hash。
+- `TOKEN_SECRET`：独立 AI token 签名 secret。
+- `SYNC_ACCESS_CODE` / `SYNC_ACCESS_CODE_HASH`：旧同步码路径。
+- `SYNC_TOKEN_SECRET`：同步 token 签名 secret，应与其他 secret 不同。
+- `LICENSE_ADMIN_TOKEN`：授权管理页管理员 token。
+- `ALLOWED_ORIGIN`：允许的前端 origin，多个值用英文逗号分隔。
 
-- Project name: `seat-manager-commercial`
-- Stable URL: `https://seat-manager-commercial.pages.dev/`
-
-重新部署商用前端：
+计算访问码 hash：
 
 ```bash
-cd ../frontend-react
-pnpm build:commercial
-../cloudflare-worker/node_modules/.bin/wrangler pages deploy dist --project-name seat-manager-commercial --branch main --commit-dirty true
+printf '你的访问码' | shasum -a 256
 ```
 
-如果用户网络无法直连 `workers.dev`，仓库根目录提供了一个 Netlify 中转函数：
+随机 secret 应至少 32 位，并保存在 Cloudflare Secrets 或密码管理器中。
 
-- 函数文件：`netlify/functions/worker-proxy.mjs`
-- 入口路径：`https://你的-netlify-站点.netlify.app/api/*`
-- 目标 Worker：默认 `https://seat-manager-ai.hongchenglin03.workers.dev`，可用 Netlify 环境变量 `WORKER_ORIGIN` 覆盖。
+## KV 数据
 
-商用前端可通过构建变量改用该中转：
+Worker 绑定的 KV 名称固定为 `SEAT_MANAGER_KV`。
 
-```bash
-cd ../frontend-react
-VITE_WORKER_URL=https://你的-netlify-站点.netlify.app/api pnpm build:commercial
-```
-
-GitHub Actions 商用部署也支持仓库变量 `COMMERCIAL_WORKER_URL`。未设置时仍直连 Worker。
-
-仓库已新增 `.github/workflows/cloudflare-commercial.yml` 自动部署：
-
-- `frontend-react/**` 变化时自动部署商用前端。
-- `cloudflare-worker/**` 变化时自动部署 Worker。
-- `license-admin/**` 变化时自动部署授权管理页。
-
-GitHub Actions 需要仓库 Secrets：
+产品授权记录 key：
 
 ```text
-CLOUDFLARE_ACCOUNT_ID=432f0f0483c3f9cc87179a96ecd00102
-CLOUDFLARE_API_TOKEN=<Cloudflare API Token>
+seat-manager:license:<产品码 SHA-256>
 ```
 
-Worker 的 `ALLOWED_ORIGIN` 已在 `wrangler.toml` 中保留小张 GitHub Pages，并追加商用 Pages 域名。后续如果换商用域名，需要把新域名追加到 `ALLOWED_ORIGIN` 后重新 `npm run deploy`。
-
-## Cloudflare KV
-
-需要创建一个 KV namespace，并在 Worker 中绑定为：
-
-- `SEAT_MANAGER_KV`
-
-小范围试用时，每个授权码对应一条 KV 授权记录。先计算授权码 hash：
-
-```bash
-printf '给某位老师的授权码' | shasum -a 256
-```
-
-然后在 `SEAT_MANAGER_KV` 里新增 key：
-
-```text
-seat-manager:license:<上一步得到的hash>
-```
-
-value 示例：
+value 的兼容形状：
 
 ```json
 {
@@ -144,107 +87,43 @@ value 示例：
 }
 ```
 
-- `licenseId` 只能使用英文字母、数字、`_`、`-`，它决定这位老师的云端空间。
-- `status` 设为 `disabled` 可停用这个授权码。
-- `expiresAt` 可留空；如果要限时，填 ISO 时间，例如 `2026-08-01T00:00:00.000Z`。
-- `maxDevices` 默认 `3`。
-- `aiEnabled` 控制这个授权码是否包含 AI 权益。
-- `aiExpiresAt` 控制 AI 到期时间，可和 `expiresAt` 不同；留空表示 AI 不单独到期。
-- `aiDailyLimit` 控制该授权码每天最多 AI 请求次数，默认 `30`。
-- `devices` 会在老师登录时自动写入，超过上限会拒绝新设备；商用版账号菜单里的“解绑本机”会释放当前设备名额。
+- `licenseId` 只使用字母、数字、`_` 和 `-`。
+- 空 `expiresAt` / `aiExpiresAt` 表示不单独到期。
+- `status: "disabled"` 停用授权。
+- `devices` 由产品登录和解绑接口维护。
 
-产品授权登录成功后，云同步数据会按授权空间保存：
+授权空间同步数据：
 
-- `seat-manager:license:<licenseId>:state`
-
-旧版单人同步 fallback 仍保存到固定 key：
-
-- `seat-manager:single-teacher:state`
-
-它只用于旧同步码路径。给外部试用者使用时，应使用产品授权码路径。
-
-## License Admin
-
-仓库里的 `license-admin/index.html` 是轻量授权管理页，用于你自己管理人员和授权记录。它不会打包进老师使用的前端；已部署的固定地址是 `https://seat-manager-license-admin.pages.dev/`。
-
-首次使用前，先给 Worker 设置管理员密钥：
-
-```bash
-cd cloudflare-worker
-openssl rand -base64 24
-npm exec wrangler -- secret put LICENSE_ADMIN_TOKEN
-npm run deploy
+```text
+seat-manager:license:<licenseId>:state
 ```
 
-把 `openssl rand` 生成的密钥保存到自己的密码管理器；`wrangler secret put` 提示输入时粘贴这串密钥。管理页打开后填写 Worker 地址和管理员密钥即可操作。
+旧同步码 fallback 仍使用：
 
-管理页支持：
+```text
+seat-manager:single-teacher:state
+```
 
-- 新增授权码：生成随机授权码，自动写入对应 KV 记录。
-- 修改授权：调整 `status`、软件到期日、AI 是否开通、AI 到期日、AI 每日次数、设备上限。
-- 查看授权码：管理页会用管理员密钥在浏览器本地加密新增/补录的授权码，再把密文保存到 KV；历史记录如果之前没保存，需要手动补录一次。
-- 清空设备：释放某个授权码当前绑定的所有设备。
-- 删除授权：删除授权记录；默认不删除该老师的云端业务数据。
+这些 key 和 value 形状属于兼容接口，不得随意重命名。
 
-## Endpoints
+## 授权管理页
 
-- `POST /license/auth`
-  - body: `{ "productCode": "...", "rememberDays": 30, "deviceId": "...", "deviceName": "..." }`
-  - response: `{ "token": "...", "expiresAt": 1780000000000, "licenseId": "...", "maxDevices": 3, "aiEnabled": true }`
-  - 用途：进入应用前校验产品授权码、绑定当前设备；商用版 AI 可复用同一个产品授权 token。
+`../license-admin/index.html` 是独立的管理员页面，固定入口为 <https://seat-manager-license-admin.pages.dev/>。它使用 `LICENSE_ADMIN_TOKEN` 管理授权记录、AI 权益、到期时间和设备绑定，不进入教师前端构建。
 
-- `POST /license/unbind-device`
-  - header: `Authorization: Bearer <product_token>`
-  - response: `{ "ok": true, "removed": true, "licenseId": "...", "maxDevices": 3 }`
-  - 用途：商用版账号菜单“解绑本机”，从当前授权码的 `devices` 中移除本机并释放设备名额。
+管理员 token 只在 Cloudflare Secret 和管理员本人浏览器中使用。删除授权记录默认不删除对应老师的云端业务数据。
 
-- `POST /admin/licenses/list`
-- `POST /admin/licenses/upsert`
-- `POST /admin/licenses/clear-devices`
-- `POST /admin/licenses/delete`
-  - header: `Authorization: Bearer <LICENSE_ADMIN_TOKEN>`
-  - 用途：仅供 `license-admin/index.html` 管理页使用。
+## 网络与发布面
 
-- `POST /auth`
-  - body: `{ "accessCode": "...", "rememberDays": 30 }`
-  - response: `{ "token": "...", "expiresAt": 1780000000000 }`
+- Worker：`seat-manager-ai`。
+- Commercial 前端：<https://seat-manager-commercial.pages.dev/>。
+- Netlify 代理：`../netlify/functions/worker-proxy.mjs`，生产入口为 <https://seat-manager-worker-proxy.netlify.app/api>。
+- Commercial 构建可通过 `VITE_WORKER_URL` 或仓库变量 `COMMERCIAL_WORKER_URL` 指向代理；客户端保留 direct Worker fallback。
 
-- `POST /analyze-trend`
-  - header: `Authorization: Bearer <token>`
-  - body: 当前学生的匿名成绩摘要
-  - response: `{ "overall": "...", "changes": "...", "suggestions": "...", "disclaimer": "..." }`
+Netlify 只代理 `worker-routes.js` 声明的公共应用路由，不代理 `/admin/licenses/*`。公共路由变化后，除了 Worker 和 Commercial 部署，还必须按 `../docs/OPERATIONS.md` 独立发布 Netlify。
 
-- `POST /analyze-class`
-  - header: `Authorization: Bearer <token>`
-  - body: 全班成绩变化摘要，包含学生姓名，方便直接生成可读的关注名单
-  - response: `{ "overall": "...", "classChanges": "...", "focusStudents": "...", "suggestions": "...", "disclaimer": "..." }`
+## 安全与行为约束
 
-- `POST /suggest-score-mapping`
-  - header: `Authorization: Bearer <token>`
-  - body: 成绩表表头和少量样例行
-  - response: `{ "nameCol": 0, "subjectMappings": [...], "totalMapping": {...}, "note": "..." }`
-
-- `POST /sync/auth`
-  - body: `{ "syncCode": "...", "rememberDays": 30 }`
-  - response: `{ "token": "...", "expiresAt": 1780000000000 }`
-
-- `GET /sync/status`
-  - header: `Authorization: Bearer <sync_token>`
-  - response: `{ "exists": true, "updatedAt": "...", "deviceName": "...", "version": 1, "sizeBytes": 123456 }`
-
-- `POST /sync/save`
-  - header: `Authorization: Bearer <sync_token>`
-  - body: `{ "version": 1, "updatedAt": "...", "deviceName": "...", "data": { ...完整 state... } }`
-  - 行为：用本机完整业务 state 覆盖 KV 中的云端备份。
-
-- `GET /sync/load`
-  - header: `Authorization: Bearer <sync_token>`
-  - response: `{ "version": 1, "updatedAt": "...", "deviceName": "...", "data": { ...完整 state... } }`
-
-## Frontend Setup
-
-进入页面时，前端会要求老师输入产品授权码。商用版如果 license 记录包含 `aiEnabled: true` 且 AI 未到期，AI 分析和 AI 评语会直接复用产品授权码；小张版和旧路径仍可使用独立 AI 使用码。Worker 地址已经内置在前端，DeepSeek API Key 只保存在 Cloudflare Worker Secret 中。
-
-账户菜单中的“云同步”用于手动上传和从云端恢复。首次同步操作会要求输入云同步码，前端只保存临时同步 token，不保存 Worker Secret、KV token 或 Cloudflare 管理 token。
-
-恢复云端数据前，前端会自动导出一份本机 JSON 备份。上传到云端会覆盖 KV 中的云端备份；从云端恢复会覆盖当前浏览器里的业务 state，但不会清除本机登录密码、AI 授权 token、同步授权 token 或 PWA 安装信息。
+- 顶层异常只返回带 CORS 的结构化错误，不向客户端泄露 secret、token 或堆栈。
+- AI 只返回建议；教师确认写入由前端业务流程负责。
+- 云同步是完整 workspace book 的手动覆盖，不做实时同步或自动冲突合并。
+- 请求体、设备数、授权到期和 AI 权益限制必须继续由 Worker 校验。

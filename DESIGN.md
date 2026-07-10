@@ -1,125 +1,46 @@
-# Figma and React Design Workflow
+# Figma 与 React 设计规则
 
-This project uses Figma Make as a design reference and `frontend-react/` as the real implementation source.
+本文件只负责 UI 设计协作。项目执行规则先读 `AGENTS.md`，真实前端源码始终是 `frontend-react/`。
 
-Do not directly overwrite the React app with Figma Make exports. Treat Figma Make code as design context: page structure, visual hierarchy, spacing, colors, card styles, table density, and component intent should be translated into the existing React architecture while preserving business logic.
+Figma Make 只提供页面结构、视觉层级、间距、颜色、卡片、表格密度和组件意图。不得用 Make 导出覆盖 React 应用，也不得把 mock data 复制成生产数据。
 
-## Current Source Roles
+## 设计参考
 
-- Real app source: `frontend-react/`
-- Repository launcher: root `index.html`（只链接线上站点，不加载构建产物）
-- Removed legacy app files: root `style.css`, `app.js`, `sw.js`, `manifest.webmanifest`, `avatar.jpg`, and `vendor/`
-- AI and cloud logic: `cloudflare-worker/`
-- Design workflow note: this file
+- 成绩页主要参考：<https://www.figma.com/make/1QpH5tRbV2oVGkSKN8tDph/%E4%BC%98%E5%8C%96%E6%88%90%E7%BB%A9%E9%A1%B5%E9%9D%A2%E8%AE%BE%E8%AE%A1>
+- 整体应用视觉参考：<https://www.figma.com/make/T89q98PawNHmuhwiEPbBHY/Redesign-Seat-Management-System>
 
-## Figma References
+前者用于成绩看板的信息架构；后者用于座位、成绩和评语工作台的整体浅色仪表盘风格。需要读取 Make 上下文时使用 URL 中 `/make/` 后的 file key，并从节点 `0:1` 开始。
 
-Use these Figma Make files with different responsibilities:
+## 实现边界
 
-- Grades page primary reference:
-  `https://www.figma.com/make/1QpH5tRbV2oVGkSKN8tDph/%E4%BC%98%E5%8C%96%E6%88%90%E7%BB%A9%E9%A1%B5%E9%9D%A2%E8%AE%BE%E8%AE%A1`
+1. 在现有 React 组件和状态边界内实现设计，不创建包裹旧页面的新壳。
+2. 优先复用现有组件、设计 token 和交互模式；只在明确边界内提取新组件。
+3. 保留座位操作、学生管理、成绩导入与统计、AI 评语、备份同步、登录和 PWA 行为。
+4. AI 建议必须由教师确认后才能写入业务数据。
+5. 不修改根 `index.html` 来实现产品页面；CI 只发布 `frontend-react/` 构建产物。
+6. 不把 API key、产品码、管理员 token 或 Worker-only 配置放进前端。
 
-- Full app visual reference:
-  `https://www.figma.com/make/T89q98PawNHmuhwiEPbBHY/Redesign-Seat-Management-System`
+## 视觉系统
 
-The first file is better for the grades dashboard information architecture. The second file is better for the overall light dashboard style across seat layout, grades, and comment workbench.
+- 浅灰白页面背景，白色或近白卡片。
+- 轻边框、柔和阴影和统一圆角。
+- 按钮高度、表格行高和页面间距保持一致。
+- 字体紧凑但可读，主要操作与次要操作层级清楚。
+- 不重新混入旧 glassmorphism 风格。
 
-## How To Read Figma Make Context
+## 成绩页目标
 
-For Figma Make URLs, use the Figma design context tool with:
+- 左侧轻量导航负责考试、科目、导入、历史和评语工作台入口。
+- 右侧看板包含标题、趋势切换、指标卡、图表、分布卡和学生成绩表。
+- 不把考试选择、指标选择和完整表格操作全部挤在同一标题行。
 
-- `fileKey`: the key after `/make/`
-- `nodeId`: `0:1`
-
-For the grades page file, important readable resources include:
-
-- `src/app/App.tsx`
-- `src/app/components/GradesPage.tsx`
-- `src/app/components/CommentWorkbench.tsx`
-- `src/app/components/SeatBoard.tsx`
-- `src/app/components/Sidebar.tsx`
-- `src/app/components/StudentModal.tsx`
-- `src/app/components/mockData.ts`
-- `src/styles/theme.css`
-- `src/styles/index.css`
-
-These files are enough to reproduce the layout and visual style, but they should not replace the app directly.
-
-## Implementation Rules
-
-1. Keep `frontend-react/` as the single source of truth for the new app.
-2. Do not route product work through root `index.html`; GitHub Actions publishes `frontend-react/dist` directly. The removed legacy files `style.css` and `app.js` must stay out of new product work.
-3. Keep `cloudflare-worker/` independent; do not move API keys or Worker-only secrets into frontend code.
-4. Preserve existing business logic when applying Figma designs:
-   - seat data and seat operations
-   - student management
-   - grade import, saved exams, statistics, and dashboard data
-   - AI comment drafts, cache, rubric, single generation, and batch generation
-   - local backup, cloud backup/restore, login, and PWA behavior
-5. Do not create a new shell around an old page. Rebuild the page structure inside the current React component.
-6. Do not copy Figma Make mock data into production behavior except as empty-state or fallback examples.
-7. Prefer adapting existing React components over importing a whole Figma Make export.
-
-## Grades Page Target
-
-When improving the grades page, use the `1QpH5tRbV2oVGkSKN8tDph` Figma Make file as the primary reference.
-
-The target structure is:
-
-- Left lightweight grades navigation:
-  - choose exam
-  - view subjects
-  - import grades
-  - secondary links for history, complete table, and comment workbench
-- Right dashboard area:
-  - header with title and subtitle
-  - single exam / subject trend segmented switch
-  - 4 metric cards
-  - main chart area with subject average comparison on the left
-  - grade distribution card on the right
-  - student grades table below with search in the table header area
-
-Avoid putting exam selectors, metric selectors, and complete-table controls all in one title row.
-
-## Visual System
-
-The React app should use a quiet dashboard style:
-
-- light gray-white page background
-- white or near-white cards
-- light borders
-- soft shadows
-- consistent radius
-- consistent button height
-- clear table row height
-- compact but readable typography
-
-Avoid mixing the old glassmorphism style with the new dashboard style.
-
-## Recommended New-Chat Prompt
-
-When starting a new Codex conversation about this project, paste this:
-
-```text
-Project: /Users/charlie/Documents/座位管理系统
-
-Please read README.md, frontend-react/README.md, and DESIGN.md first.
-
-Important design workflow:
-- frontend-react/ is the real React implementation source.
-- Figma Make is design reference only; do not overwrite the project with Make exports.
-- For grades page work, use Figma Make file 1QpH5tRbV2oVGkSKN8tDph as the primary reference.
-- For overall app style, use Figma Make file T89q98PawNHmuhwiEPbBHY as secondary visual reference.
-- Preserve existing business logic: seat management, grade import/save/statistics, AI comments, comment workbench, local/cloud backup, login, and PWA.
-- Do not create a new shell around old pages; rebuild the current React component structure to match the design.
-```
-
-## Build Check
-
-After UI changes, run:
+## UI 修改验收
 
 ```bash
 cd frontend-react
 pnpm check
 pnpm build:zhang
+pnpm build:commercial
 ```
+
+涉及登录、持久数据、响应式交互或 PWA 时，再运行 `pnpm test:e2e`。
