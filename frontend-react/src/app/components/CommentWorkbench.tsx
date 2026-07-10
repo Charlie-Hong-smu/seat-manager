@@ -29,6 +29,7 @@ import {
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
+import { SegmentedControl } from "./ui";
 
 interface CommentState {
   studentId: StudentId;
@@ -1204,16 +1205,12 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                   <div className="space-y-3 pt-3">
                     <div>
                       <div className="mb-1.5 text-xs font-semibold text-gray-500">字数目标</div>
-                      <div className="grid grid-cols-4 gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1">
-                        {LENGTH_MODES.map(mode => <button key={mode.value} type="button" onClick={() => updateComment(selectedId, { lengthMode: mode.value })} className={`h-8 rounded-lg text-[11px] font-semibold transition-colors ${selectedComment.lengthMode === mode.value ? "bg-white text-blue-700 shadow-sm" : "text-gray-500"}`}>{mode.label}</button>)}
-                      </div>
+                      <SegmentedControl value={selectedComment.lengthMode} ariaLabel="评语字数目标" onChange={value => updateComment(selectedId, { lengthMode: value })} options={[...LENGTH_MODES]} className="flex w-full" />
                       {selectedComment.lengthMode === "custom" && <input type="number" value={customWordCount} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value > 0) setCustomWordCount(value); }} min={10} max={999} placeholder="自定义字数" className="mt-2 h-9 w-full rounded-[var(--app-radius-sm)] border border-gray-200 px-3 text-sm outline-none focus:border-blue-300" />}
                     </div>
                     <div>
                       <div className="mb-1.5 text-xs font-semibold text-gray-500">评语风格</div>
-                      <div className="grid grid-cols-3 gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1">
-                        {STYLES.map(style => <button key={style.value} type="button" onClick={() => updateComment(selectedId, { style: style.value })} className={`h-8 rounded-lg text-[11px] font-semibold transition-colors ${selectedComment.style === style.value ? "bg-white text-blue-700 shadow-sm" : "text-gray-500"}`}>{style.label}</button>)}
-                      </div>
+                      <SegmentedControl value={selectedComment.style} ariaLabel="评语风格" onChange={value => updateComment(selectedId, { style: value })} options={[...STYLES]} className="flex w-full" />
                     </div>
                   </div>
                 </div>

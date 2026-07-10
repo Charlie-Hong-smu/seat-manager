@@ -10,6 +10,8 @@ import {
   LayoutGrid,
   Maximize2,
   Minimize2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   Save,
@@ -839,6 +841,7 @@ export function ScoresWorkspace({
   const [classAnalysis, setClassAnalysis] = useState<AiClassTrendResult | null>(null);
   const [classAnalysisStatus, setClassAnalysisStatus] = useState("");
   const [classAnalysisBusy, setClassAnalysisBusy] = useState(false);
+  const [managementOpen, setManagementOpen] = useState(true);
 
   async function readScoreFile(file?: File) {
     if (!file) return;
@@ -1056,8 +1059,23 @@ export function ScoresWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)] gap-4 overflow-hidden p-4">
-        <aside className="min-h-0 space-y-4 overflow-y-auto">
+      <div className="score-workspace-grid relative grid min-h-0 flex-1 overflow-hidden p-4" data-management-open={managementOpen}>
+        <button
+          type="button"
+          onClick={() => setManagementOpen(open => !open)}
+          className="score-management-toggle absolute z-20 grid h-9 w-9 place-items-center rounded-xl border border-gray-200 bg-white text-gray-500 shadow-sm transition-[color,background-color,border-color,box-shadow] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+          aria-label={managementOpen ? "收起成绩管理" : "展开成绩管理"}
+          aria-expanded={managementOpen}
+          title={managementOpen ? "收起成绩管理" : "展开成绩管理"}
+        >
+          {managementOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+        </button>
+
+        <aside
+          aria-hidden={!managementOpen}
+          inert={!managementOpen}
+          className="score-management-panel min-h-0 w-[320px] space-y-4 overflow-y-auto"
+        >
           <Panel title="成绩导入">
             <div className="space-y-3">
               <FileDropZone accept=".xlsx,.xls,.xlsm,.csv,.tsv" onChange={file => { if (file) void readScoreFile(file); }}>
@@ -1168,7 +1186,7 @@ export function ScoresWorkspace({
           </Panel>
         </aside>
 
-        <main className="min-h-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
           <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} />
         </main>
       </div>

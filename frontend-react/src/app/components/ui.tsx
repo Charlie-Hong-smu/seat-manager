@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 /**
@@ -115,17 +115,50 @@ export function SegmentedControl({
   ariaLabel: string;
   className?: string;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const selectedButton = buttonRefs.current.get(value);
+    if (!root || !selectedButton) return;
+
+    const updateIndicator = () => {
+      setIndicator({
+        left: selectedButton.offsetLeft,
+        width: selectedButton.offsetWidth,
+        ready: true,
+      });
+    };
+    updateIndicator();
+
+    const observer = new ResizeObserver(updateIndicator);
+    observer.observe(root);
+    buttonRefs.current.forEach(button => observer.observe(button));
+    return () => observer.disconnect();
+  }, [value, options.length]);
+
   return (
-    <div role="group" aria-label={ariaLabel} className={`inline-flex items-center gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1 ${className}`}>
+    <div ref={rootRef} role="group" aria-label={ariaLabel} className={`relative inline-flex items-center gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1 ${className}`}>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-1 top-1 rounded-lg bg-white shadow-sm transition-[left,width,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+        style={{ left: indicator.left, width: indicator.width, opacity: indicator.ready ? 1 : 0 }}
+      />
       {options.map(option => {
         const selected = value === option.value;
         return (
           <button
             key={option.value}
+            ref={node => {
+              if (node) buttonRefs.current.set(option.value, node);
+              else buttonRefs.current.delete(option.value);
+            }}
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(option.value)}
-            className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${selected ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+            className={`relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-[color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${selected ? "text-blue-700" : "text-gray-500 hover:text-gray-800"}`}
           >
             {option.icon}{option.label}
           </button>

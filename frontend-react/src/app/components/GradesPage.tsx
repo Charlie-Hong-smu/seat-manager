@@ -24,6 +24,7 @@ import {
 
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
+import { SegmentedControl } from "./ui";
 import type { AppStudent, GradeExam, GradeRow } from "../state/types";
 
 const DEFAULT_THRESHOLDS = { pass: 60, good: 75, excellent: 90 };
@@ -493,22 +494,17 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
             <Download className="w-3.5 h-3.5" />导出成绩
           </button>
 
-          <div className="ml-auto flex shrink-0 items-center gap-1 p-1 bg-gray-100 rounded-xl">
-            {(["single", "trend"] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-1.5 rounded-lg text-sm transition-all ${activeTab === tab ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                style={{ fontWeight: activeTab === tab ? 700 : 500 }}
-              >
-                {tab === "single" ? "单次分析" : "多次趋势"}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={activeTab}
+            ariaLabel="成绩分析方式"
+            onChange={value => setActiveTab(value as "single" | "trend")}
+            options={[{ value: "single", label: "单次分析" }, { value: "trend", label: "多次趋势" }]}
+            className="ml-auto shrink-0"
+          />
         </div>
       </div>
 
-      <div className="p-6 flex flex-col gap-5">
+      <div key={activeTab} className="view-switch-enter p-6 flex flex-col gap-5">
         {activeTab === "single" ? (
           <>
             <div className="grade-stat-grid grid grid-cols-4 gap-4">
@@ -601,7 +597,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
               <div className="overflow-x-auto">
                 {metricKey === "total" ? (
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[940px] table-fixed text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
                         <th className="text-left px-6 py-3 w-10">#</th>
@@ -616,8 +612,8 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                         <th className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("total")}>
                           <span className="flex items-center justify-center gap-1">全部 <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
-                        <th className="text-center px-4 py-3">等级</th>
-                        <th className="w-24 whitespace-nowrap px-6 py-3 text-right">AI</th>
+                        <th className="w-[78px] whitespace-nowrap px-2 py-3 text-center">等级</th>
+                        <th className="w-[84px] whitespace-nowrap px-2 py-3 text-center"><span className="block w-full text-center">AI</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -649,10 +645,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                               );
                             })}
                             <td className="text-center px-4 py-3 tabular-nums text-gray-800 bg-blue-50/50" style={{ fontWeight: 700 }}>{formatScore(row.totalScore)}</td>
-                            <td className="text-center px-4 py-3">
-                              <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
+                            <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
+                              <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs ${gradeColor}`}>{grade}</span>
                             </td>
-                            <td className="w-24 whitespace-nowrap px-6 py-3 text-right">
+                            <td className="w-[84px] whitespace-nowrap px-2 py-3 text-center">
                               <button
                                 type="button"
                                 disabled={!matchedStudent}
@@ -662,7 +658,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                     onOpenStudentFollowup(matchedStudent);
                                   }
                                 }}
-                                className="inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
                                 style={{ fontWeight: 800 }}
                                 title={matchedStudent ? "打开 AI 跟进建议" : "未匹配到学生档案"}
                               >
@@ -675,14 +671,14 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                     </tbody>
                   </table>
                 ) : (
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[640px] table-fixed text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
                         <th className="text-left px-6 py-3 w-16">排名</th>
                         <th className="text-left px-4 py-3">姓名</th>
                         <th className="text-center px-4 py-3">{metricLabel} 成绩</th>
-                        <th className="text-center px-4 py-3">等级</th>
-                        <th className="w-24 whitespace-nowrap px-6 py-3 text-right">AI</th>
+                        <th className="w-[78px] whitespace-nowrap px-2 py-3 text-center">等级</th>
+                        <th className="w-[84px] whitespace-nowrap px-2 py-3 text-center"><span className="block w-full text-center">AI</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -705,10 +701,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             <td className="px-6 py-3 text-gray-400 tabular-nums">{index + 1}</td>
                             <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{item.row.name}</td>
                             <td className="text-center px-4 py-3 tabular-nums text-blue-700" style={{ fontWeight: 700 }}>{formatScore(item.value)}</td>
-                            <td className="text-center px-4 py-3">
-                              <span className={`text-xs px-2.5 py-0.5 rounded-full ${gradeColor}`}>{grade}</span>
+                            <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
+                              <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs ${gradeColor}`}>{grade}</span>
                             </td>
-                            <td className="w-24 whitespace-nowrap px-6 py-3 text-right">
+                            <td className="w-[84px] whitespace-nowrap px-2 py-3 text-center">
                               <button
                                 type="button"
                                 disabled={!item.matchedStudent}
@@ -718,7 +714,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                     onOpenStudentFollowup(item.matchedStudent);
                                   }
                                 }}
-                                className="inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
                                 style={{ fontWeight: 800 }}
                                 title={item.matchedStudent ? "打开 AI 跟进建议" : "未匹配到学生档案"}
                               >

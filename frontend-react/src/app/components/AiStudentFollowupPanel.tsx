@@ -225,7 +225,7 @@ export function AiStudentFollowupPanel({
           </div>
         )}
 
-        <div aria-hidden={!result || busy || !resultVisible} inert={!result || busy || !resultVisible} className={`grid transition-[grid-template-rows,opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${result && !busy && resultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-2 opacity-0"}`}>
+        <div aria-hidden={!result || busy || !resultVisible} inert={!result || busy || !resultVisible} className={`grid transition-[grid-template-rows,opacity,transform] duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${result && !busy && resultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
           <div className="overflow-hidden">
           {result && <div className="ai-followup-result-enter space-y-3 pb-0.5">
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">

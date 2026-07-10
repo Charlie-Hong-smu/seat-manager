@@ -10,6 +10,7 @@ import {
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, StudentCommentProfile } from "../state/types";
+import { SegmentedControl } from "./ui";
 
 interface AiCommentDrawerProps {
   open: boolean;
@@ -209,33 +210,11 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
         <div className="rounded-2xl border border-gray-100 bg-white p-4 space-y-3">
           <div>
             <span className="block text-xs text-gray-500 mb-2" style={{ fontWeight: 700 }}>字数目标</span>
-            <div className="flex flex-wrap gap-2">
-              {lengthModes.map(mode => (
-                <button
-                  key={mode.value}
-                  onClick={() => updateProfile({ lengthMode: mode.value, targetWordCount: mode.value === "short" ? 90 : mode.value === "long" ? 180 : 120 })}
-                  className={`h-8 rounded-full border px-3 text-xs ${commentProfile.lengthMode === mode.value ? "border-violet-200 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
-                  style={{ fontWeight: 700 }}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl value={commentProfile.lengthMode} ariaLabel="评语字数目标" onChange={value => updateProfile({ lengthMode: value, targetWordCount: value === "short" ? 90 : value === "long" ? 180 : 120 })} options={[...lengthModes]} className="flex w-full" />
           </div>
           <div>
             <span className="block text-xs text-gray-500 mb-2" style={{ fontWeight: 700 }}>评语风格</span>
-            <div className="flex flex-wrap gap-2">
-              {styles.map(style => (
-                <button
-                  key={style.value}
-                  onClick={() => updateProfile({ style: style.value })}
-                  className={`h-8 rounded-full border px-3 text-xs ${commentProfile.style === style.value ? "border-violet-200 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
-                  style={{ fontWeight: 700 }}
-                >
-                  {style.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl value={commentProfile.style} ariaLabel="评语风格" onChange={value => updateProfile({ style: value })} options={[...styles]} className="flex w-full" />
           </div>
         </div>
 

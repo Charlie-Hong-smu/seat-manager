@@ -17,6 +17,7 @@ import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
 import type { AppStudent, Dormitory, Gender, RecordType, StudentExamSummary, StudentId, StudentRecord } from "../state/types";
+import { SegmentedControl } from "./ui";
 
 interface Props {
   student: AppStudent;
@@ -519,21 +520,7 @@ export function StudentModal({
                 </label>
                 <div className="space-y-1.5">
                   <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>性别</span>
-                  <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 rounded-xl">
-                    {(["男", "女"] as Gender[]).map(gender => (
-                      <button
-                        key={gender}
-                        onClick={() => {
-                          setGenderInput(gender);
-                          setProfileStatus("");
-                        }}
-                        className={`px-4 py-1.5 text-sm rounded-lg transition-colors ${genderInput === gender ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-                        style={{ fontWeight: 700 }}
-                      >
-                        {gender}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedControl value={genderInput} ariaLabel="学生性别" onChange={value => { setGenderInput(value as Gender); setProfileStatus(""); }} options={[{ value: "男", label: "男" }, { value: "女", label: "女" }]} className="flex min-w-28" />
                 </div>
               </div>
               <label className="space-y-1.5 block">
@@ -799,17 +786,8 @@ export function StudentModal({
                 <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>成绩趋势</span>
                 <p className="text-xs text-gray-400 mt-0.5">{chronologicalExams.length} 次考试 · 趋势按时间先后展示</p>
               </div>
-              <div className="flex flex-nowrap justify-end gap-1 overflow-x-auto">
-                {trendMetricOptions.slice(0, 7).map(metric => (
-                  <button
-                    key={metric}
-                    onClick={() => setTrendMetric(metric)}
-                    className={`shrink-0 px-2.5 py-1 rounded-lg text-xs transition-colors ${effectiveTrendMetric === metric ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:bg-white"}`}
-                    style={{ fontWeight: 700 }}
-                  >
-                    {metric === "total" ? "总分" : metric}
-                  </button>
-                ))}
+              <div className="max-w-[60%] overflow-x-auto">
+                <SegmentedControl value={effectiveTrendMetric} ariaLabel="成绩趋势科目" onChange={setTrendMetric} options={trendMetricOptions.slice(0, 7).map(metric => ({ value: metric, label: metric === "total" ? "总分" : metric }))} className="shrink-0" />
               </div>
             </div>
             <div className="p-4 space-y-4">
