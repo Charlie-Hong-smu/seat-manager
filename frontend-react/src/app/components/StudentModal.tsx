@@ -16,8 +16,23 @@ import { createStudentRecord, updateStudentProfile } from "../state/studentActio
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
-import type { AppStudent, Dormitory, Gender, RecordType, StudentExamSummary, StudentId, StudentRecord } from "../state/types";
+import type { AppStudent, Dormitory, Gender, RecordType, StudentId, StudentRecord } from "../state/types";
 import { SegmentedControl } from "./ui";
+import {
+  buildWeekOptions,
+  formatScore,
+  getBestSubject,
+  getExamSortValue,
+  getExamTotal,
+  getScoreEntries,
+  getWeakSubject,
+  getWeekStart,
+  isRecordInWeek,
+  parseAliases,
+  sortTagIds,
+  toLocalDateKey,
+  type StudentModalRecord,
+} from "./studentModalSelectors";
 
 interface Props {
   student: AppStudent;
@@ -33,124 +48,6 @@ interface Props {
   onOpenAiComment?: () => void;
   seatOrder?: Array<StudentId | null>;
   initialActiveTab?: "records" | "profile" | "trend" | "followup";
-}
-
-interface LocalRecord {
-  id: string;
-  type: RecordType;
-  note: string;
-  date: string;
-}
-
-interface WeekOption {
-  key: string;
-  label: string;
-  start: Date;
-  end: Date;
-}
-
-function getScoreEntries(scores: Record<string, number>): Array<[string, number]> {
-  return Object.entries(scores).filter(([, score]) => Number.isFinite(score));
-}
-
-function getBestSubject(scores: Record<string, number>): string {
-  return getScoreEntries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
-}
-
-function getWeakSubject(scores: Record<string, number>): string {
-  return getScoreEntries(scores).sort((a, b) => a[1] - b[1])[0]?.[0] ?? "";
-}
-
-function getExamTotal(exam: StudentExamSummary): number {
-  return exam.total ?? getScoreEntries(exam.scores).reduce((sum, [, score]) => sum + score, 0);
-}
-
-function getExamSortValue(exam: StudentExamSummary): string {
-  return `${exam.date || "9999-12-31"}-${exam.name}-${exam.id}`;
-}
-
-function formatScore(value: number | null | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value * 10) / 10) : "—";
-}
-
-function toLocalDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function parseLocalDate(value: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (!match) {
-    return null;
-  }
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function getWeekStart(date: Date): Date {
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const day = start.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  start.setDate(start.getDate() + mondayOffset);
-  return start;
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function buildWeekOption(start: Date, currentWeekKey: string): WeekOption {
-  const end = addDays(start, 6);
-  const key = toLocalDateKey(start);
-  return {
-    key,
-    start,
-    end,
-    label: `${key} - ${toLocalDateKey(end)}${key === currentWeekKey ? "（本周）" : ""}`,
-  };
-}
-
-function buildWeekOptions(records: LocalRecord[]): WeekOption[] {
-  const currentWeekStart = getWeekStart(new Date());
-  const currentWeekKey = toLocalDateKey(currentWeekStart);
-  const weekKeys = new Set<string>();
-
-  for (let index = 0; index < 12; index += 1) {
-    weekKeys.add(toLocalDateKey(addDays(currentWeekStart, index * -7)));
-  }
-  records.forEach(record => {
-    const recordDate = parseLocalDate(record.date);
-    if (recordDate) {
-      weekKeys.add(toLocalDateKey(getWeekStart(recordDate)));
-    }
-  });
-
-  return [...weekKeys]
-    .sort((a, b) => b.localeCompare(a))
-    .map(key => buildWeekOption(parseLocalDate(key) || currentWeekStart, currentWeekKey));
-}
-
-function isRecordInWeek(record: LocalRecord, week: WeekOption): boolean {
-  const recordDate = parseLocalDate(record.date);
-  if (!recordDate) {
-    return false;
-  }
-  return recordDate >= week.start && recordDate <= week.end;
-}
-
-function parseAliases(value: string): string[] {
-  return value
-    .split(/[、,，\n]/)
-    .map(item => item.trim())
-    .filter(Boolean);
-}
-
-function sortTagIds(ids: Iterable<string>): string {
-  return [...ids].sort().join("|");
 }
 
 export function StudentModal({
@@ -179,7 +76,7 @@ export function StudentModal({
     () => new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id)))
   );
   const [noteInput, setNoteInput] = useState("");
-  const [localRecords, setLocalRecords] = useState<LocalRecord[]>(() =>
+  const [localRecords, setLocalRecords] = useState<StudentModalRecord[]>(() =>
     student.records.map(r => ({
       id: r.id,
       type: r.type,

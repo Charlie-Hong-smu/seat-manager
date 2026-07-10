@@ -4,7 +4,7 @@ export {
   ClassFundWorkspace,
   DailyWorkspace,
   DataWorkspace,
-  HistoryWorkspace,
   ScoresWorkspace,
 } from "../WorkspacePages";
 export { DormitoryWorkspace } from "../DormitoryWorkspace";
+export { HistoryWorkspace } from "./HistoryWorkspace";
