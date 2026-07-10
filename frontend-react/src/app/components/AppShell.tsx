@@ -11,17 +11,15 @@ interface AppShellProps {
 
 export function AppShell({ header, sidebar, mainTabs, children, overlays, sidebarCollapsed }: AppShellProps) {
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
+    <div className="h-screen flex flex-col overflow-hidden bg-[var(--app-bg)]">
       {header}
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
         <div
-          className="min-h-0 shrink-0 overflow-hidden transition-[width,opacity] duration-[320ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]"
+          className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-[320ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width]"
           style={{
-            width: sidebarCollapsed ? 0 : 160,
-            opacity: sidebarCollapsed ? 0 : 1,
+            width: sidebarCollapsed ? 64 : 200,
           }}
-          aria-hidden={sidebarCollapsed}
         >
           {sidebar}
         </div>

@@ -360,7 +360,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={closeAll} />
-          <div className="absolute left-0 top-full mt-1.5 bg-white border border-gray-100 rounded-2xl shadow-lg overflow-hidden z-30 w-80">
+          <div className="popover-enter absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
             {mode === "menu" && (
               <div className="max-h-[70vh] overflow-y-auto">
                 <div className="p-2">

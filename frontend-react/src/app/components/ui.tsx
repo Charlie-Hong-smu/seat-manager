@@ -1,4 +1,5 @@
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 
 /**
  * 统一按钮组件
@@ -23,22 +24,50 @@ export function Button({
   children: ReactNode;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const sizeClasses = {
-    sm: "px-3 py-1.5 text-xs",
-    md: "px-4 py-2.5 text-sm",
-    lg: "px-5 py-3 text-base",
+    sm: "h-8 px-3 text-xs",
+    md: "h-10 px-4 text-sm",
+    lg: "h-11 px-5 text-base",
   };
 
   const variantClasses = {
     primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",
     secondary: "bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400",
     danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
-    ghost: "bg-transparent border-2 border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50 disabled:border-gray-200 disabled:text-gray-400",
+    ghost: "bg-transparent border border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50 disabled:border-gray-100 disabled:text-gray-300",
   };
 
   return (
     <button
       disabled={disabled}
-      className={`rounded-xl font-semibold transition-colors ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-[var(--app-radius-sm)] font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-200 hover:-translate-y-px active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 disabled:translate-y-0 ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function IconButton({
+  label,
+  size = "md",
+  active = false,
+  className = "",
+  children,
+  ...props
+}: {
+  label: string;
+  size?: "sm" | "md" | "lg";
+  active?: boolean;
+  className?: string;
+  children: ReactNode;
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const sizeClass = { sm: "h-8 w-8", md: "h-10 w-10", lg: "h-11 w-11" }[size];
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className={`inline-grid shrink-0 place-items-center rounded-[var(--app-radius-sm)] border transition-[background-color,border-color,color,box-shadow,transform] duration-200 hover:-translate-y-px active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 ${sizeClass} ${active ? "border-blue-100 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800"} ${className}`}
       {...props}
     >
       {children}
@@ -61,7 +90,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section className={`overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm ${className}`}>
+    <section className={`overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-[var(--app-surface)] shadow-[var(--app-shadow-card)] ${className}`}>
       {title && (
         <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
           <h2 className="text-base font-bold text-gray-900">{title}</h2>
@@ -70,6 +99,97 @@ export function Card({
       )}
       <div className="p-5">{children}</div>
     </section>
+  );
+}
+
+export function SegmentedControl({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  className = "",
+}: {
+  value: string;
+  options: Array<{ value: string; label: string; icon?: ReactNode }>;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  className?: string;
+}) {
+  return (
+    <div role="group" aria-label={ariaLabel} className={`inline-flex items-center gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1 ${className}`}>
+      {options.map(option => {
+        const selected = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(option.value)}
+            className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${selected ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+          >
+            {option.icon}{option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ToolDrawer({
+  open,
+  title,
+  onClose,
+  returnFocusId,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  returnFocusId?: string;
+  children: ReactNode;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!open) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onCloseRef.current();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      const explicitTarget = returnFocusId ? document.getElementById(returnFocusId) : null;
+      if (explicitTarget instanceof HTMLElement) explicitTarget.focus();
+      else previousFocusRef.current?.focus();
+    };
+  }, [open, returnFocusId]);
+
+  if (!open) return null;
+  return (
+    <>
+      <button type="button" aria-label="关闭工具面板" className="soft-backdrop-enter absolute inset-0 z-20 bg-gray-950/10 backdrop-blur-[1px]" onClick={onClose} />
+      <aside className="tool-drawer-enter absolute inset-y-0 right-0 z-30 flex w-[340px] max-w-[calc(100%-16px)] flex-col border-l border-[var(--app-border)] bg-white shadow-[var(--app-shadow-float)]" aria-label={title}>
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--app-border)] px-4">
+          <h2 className="text-base font-bold text-[var(--app-text)]">{title}</h2>
+          <button
+            ref={closeRef}
+            type="button"
+            aria-label="关闭工具面板"
+            title="关闭工具面板"
+            onClick={onClose}
+            className="grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+      </aside>
+    </>
   );
 }
 

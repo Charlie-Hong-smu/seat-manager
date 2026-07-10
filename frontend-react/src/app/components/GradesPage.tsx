@@ -184,7 +184,7 @@ function StatCard({ icon, label, value, sub, accent }: {
   accent: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col gap-2">
+    <div className="surface-enter flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-gray-200 hover:shadow-md">
       <div className="flex items-center gap-2">
         <div className={`p-1.5 rounded-lg shrink-0 ${accent}`}>{icon}</div>
         <span className="text-xs text-gray-400" style={{ fontWeight: 600 }}>{label}</span>
@@ -364,7 +364,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   }
 
   return (
-    <div className="flex flex-col bg-gray-50 min-h-full">
+    <div className="grade-dashboard flex min-h-full flex-col bg-gray-50">
       <div className="bg-white border-b border-gray-100 px-6 py-3 space-y-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative min-w-0 shrink basis-[280px]">
@@ -511,7 +511,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
       <div className="p-6 flex flex-col gap-5">
         {activeTab === "single" ? (
           <>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grade-stat-grid grid grid-cols-4 gap-4">
               <StatCard
                 icon={<Users className="w-4 h-4 text-blue-600" />}
                 label="参考人数"
@@ -542,8 +542,8 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               />
             </div>
 
-            <div className={metricKey === "total" ? "grid grid-cols-5 gap-4" : "grid grid-cols-1 gap-4"}>
-              <div className={`${metricKey === "total" ? "col-span-3" : ""} bg-white rounded-2xl p-5 border border-gray-100 shadow-sm`}>
+            <div className={`grade-chart-grid ${metricKey === "total" ? "grid grid-cols-5 gap-4" : "grid grid-cols-1 gap-4"}`}>
+              <div className={`grade-main-chart surface-enter ${metricKey === "total" ? "col-span-3" : ""} rounded-2xl border border-gray-100 bg-white p-5 shadow-sm`}>
                 <h3 className="text-gray-700 mb-1">{metricKey === "total" ? "各科平均分对比" : `${metricLabel}分数分布`}</h3>
                 <p className="text-xs text-gray-400 mb-4">
                   {metricKey === "total" ? "不同科目的班级平均表现" : `共 ${rows.length} 名学生的成绩区间分布`}
@@ -564,7 +564,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               </div>
 
               {metricKey === "total" && (
-                <div className="col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                <div className="grade-distribution-chart surface-enter col-span-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
                   <h3 className="text-gray-700 mb-1">全部分布</h3>
                   <p className="text-xs text-gray-400 mb-4">{totalThresholdHint}</p>
                   <ResponsiveContainer width="100%" height={200}>

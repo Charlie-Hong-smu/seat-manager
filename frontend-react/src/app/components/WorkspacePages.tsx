@@ -7,6 +7,9 @@ import {
   FileDown,
   FileUp,
   History,
+  LayoutGrid,
+  Maximize2,
+  Minimize2,
   Pencil,
   Plus,
   Save,
@@ -16,6 +19,9 @@ import {
   Trash2,
   TrendingDown,
   TrendingUp,
+  Undo2,
+  UserPlus,
+  Users,
   X,
 } from "lucide-react";
 
@@ -33,7 +39,7 @@ import { calcBalance, calcExpenseTotal, calcIncomeTotal, type NewFundTxInput } f
 import { DormEventForm } from "./DormEventForm";
 import { FundTransactionForm } from "./FundTransactionForm";
 import { SeatSettingsModal } from "./SeatSettingsModal";
-import { Button, FileDropZone } from "./ui";
+import { Button, FileDropZone, SegmentedControl, ToolDrawer } from "./ui";
 import { hasStoredAiScoreMappingAuth, suggestRosterMappingWithAi, suggestScoreMappingWithAi, type AiRosterMappingSuggestion, type AiScoreMappingSuggestion } from "../state/aiScoreMappingService";
 import {
   buildScoreImportDraftFromRows,
@@ -125,16 +131,26 @@ export function DailyWorkspace({
   onToggleLock: (idx: number) => void;
 }) {
   const [showSeatSettings, setShowSeatSettings] = useState(false);
+  const [activeTool, setActiveTool] = useState<"student" | "draw" | null>(null);
+  const [cardMode, setCardMode] = useState<"compact" | "detail">("compact");
   const [name, setName] = useState("");
   const [gender, setGender] = useState<Gender>("");
   const [alias, setAlias] = useState("");
   const [search, setSearch] = useState("");
+  const [drawerSearch, setDrawerSearch] = useState("");
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
   const [drawHistory, setDrawHistory] = useState<Array<{ id: string; time: string; names: string[] }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const filteredStudents = students.filter(student => !search || student.name.includes(search) || student.aliases.some(item => item.includes(search))).slice(0, 8);
+  const drawerStudents = students.filter(student => !drawerSearch || student.name.includes(drawerSearch) || student.aliases.some(item => item.includes(drawerSearch))).slice(0, 8);
+  const constraints = seatSettings.constraints;
+  const activeConstraintCount = constraints.lockedDeskmatePairs.length
+    + constraints.noDeskmatePairs.length
+    + constraints.frontRowStudentIds.length
+    + seatSettings.complementRuleIds.length
+    + (seatSettings.pairByGender ? 1 : 0);
 
   function addStudent() {
     if (!name.trim()) return;
@@ -168,110 +184,146 @@ export function DailyWorkspace({
   }
 
   return (
-    <div className="flex h-full flex-col bg-gray-50">
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_320px] gap-4 overflow-hidden p-4">
-        <div className="min-h-0 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-          <SeatBoard students={students} seatOrder={seatOrder} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+    <div className="relative flex h-full flex-col overflow-hidden bg-[var(--app-bg)]">
+      <div className="daily-toolbar flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--app-border)] bg-white px-4 py-3">
+        <div className="daily-toolbar-primary flex flex-1 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-blue-50 px-2.5 text-xs font-bold text-blue-700">
+              <Users className="h-3.5 w-3.5" />{students.length} 人
+            </span>
+            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-violet-50 px-2.5 text-xs font-bold text-violet-700">
+              <LayoutGrid className="h-3.5 w-3.5" />{seatOrder.length} 座
+            </span>
+          </div>
+
+          <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              className="h-10 w-full rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-200 placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/10"
+              placeholder="在座位表中查找学生"
+            />
+            {search && (
+              <div className="popover-enter absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-1.5 shadow-[var(--app-shadow-float)]">
+                {filteredStudents.map(student => (
+                  <button
+                    key={student.id}
+                    type="button"
+                    onClick={() => { setSearch(""); onSelectStudent(student); }}
+                    className="flex h-10 w-full items-center justify-between rounded-[var(--app-radius-sm)] px-3 text-left text-sm transition-[background-color,transform] duration-150 hover:translate-x-px hover:bg-blue-50"
+                  >
+                    <span className="min-w-0 truncate font-semibold text-gray-700">{student.name}</span>
+                    <span className="ml-3 shrink-0 text-xs text-gray-400">{student.gender || "未知"}</span>
+                  </button>
+                ))}
+                {filteredStudents.length === 0 && <div className="px-3 py-5 text-center text-sm text-gray-400">无匹配结果</div>}
+              </div>
+            )}
+          </div>
         </div>
-        <aside className="min-h-0 space-y-4 overflow-y-auto">
-          <Panel title="排座">
-            <div className="flex gap-2">
-              {(() => {
-                const c = seatSettings.constraints;
-                const activeCount = c.lockedDeskmatePairs.length + c.noDeskmatePairs.length + c.frontRowStudentIds.length + seatSettings.complementRuleIds.length + (seatSettings.pairByGender ? 1 : 0);
-                return (
-                  <button onClick={() => setShowSeatSettings(true)} className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>
-                    <Shuffle className="mr-1.5 inline h-4 w-4 -mt-0.5" />排座
-                    {activeCount > 0 && <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-xs">{activeCount}</span>}
-                  </button>
-                );
-              })()}
-              <button
-                onClick={onUndoSeatOrder}
-                disabled={!canUndoSeatOrder}
-                className="flex-1 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
-              >
-                撤销
-              </button>
-            </div>
-          </Panel>
 
-          <Panel title="学生">
-            <div className="space-y-3">
-              <div className="grid grid-cols-[1fr_5rem_auto] gap-2">
-                <input value={name} onChange={event => setName(event.target.value)} className="min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" placeholder="姓名" />
-                <select value={gender} onChange={event => setGender(event.target.value as Gender)} className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-2 text-sm outline-none focus:border-blue-300">
-                  <option value="">未知</option>
-                  <option value="男">男</option>
-                  <option value="女">女</option>
-                </select>
-                <button disabled={!name.trim()} onClick={addStudent} className="rounded-xl bg-blue-600 px-3 py-2 text-white disabled:bg-gray-100 disabled:text-gray-300">
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-              <input value={alias} onChange={event => setAlias(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" placeholder="别名/拼音（可选）" />
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                <input value={search} onChange={event => setSearch(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2 pl-8 pr-3 text-sm outline-none focus:border-blue-300" placeholder="搜索学生" />
-              </div>
-              {search && (
-                <div className="overflow-hidden rounded-xl border border-gray-100">
-                  {filteredStudents.map(student => (
-                    <button key={student.id} onClick={() => onSelectStudent(student)} className="flex w-full items-center justify-between border-b border-gray-50 px-3 py-2 text-left text-sm last:border-0 hover:bg-blue-50">
-                      <span className="text-gray-700">{student.name}</span>
-                      <span className="text-xs text-gray-400">{student.gender || "未知"}</span>
-                    </button>
-                  ))}
-                  {filteredStudents.length === 0 && <div className="px-3 py-3 text-center text-sm text-gray-400">无匹配结果</div>}
-                </div>
-              )}
-            </div>
-          </Panel>
-
-          <Panel title="抽签">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm text-gray-600">
-                  人数
-                  <input type="number" min={1} max={Math.max(1, students.length)} value={drawCount} onChange={event => setDrawCount(Number(event.target.value) || 1)} className="w-16 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-center outline-none" />
-                </label>
-                <label className="ml-auto flex items-center gap-1.5 text-sm text-gray-600">
-                  <input type="checkbox" checked={noRepeat} onChange={event => setNoRepeat(event.target.checked)} className="accent-blue-600" />
-                  去重
-                </label>
-              </div>
-              <button onClick={draw} className="w-full rounded-xl bg-blue-600 py-2.5 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>
-                <Dices className="mr-1.5 inline h-4 w-4 -mt-0.5" />开始抽签
-              </button>
-              {drawResult.length > 0 && (
-                <div className="flex flex-wrap gap-2 rounded-xl border border-blue-100 bg-blue-50 p-2">
-                  {drawResult.map(name => <span key={name} className="rounded-full bg-blue-600 px-2.5 py-1 text-sm text-white" style={{ fontWeight: 800 }}>{name}</span>)}
-                </div>
-              )}
-              {drawHistory.length > 0 && (
-                <div className="overflow-hidden rounded-xl border border-gray-100">
-                  <button onClick={() => setHistoryOpen(value => !value)} className="flex w-full items-center justify-between px-3 py-2 text-xs text-gray-600 hover:bg-gray-50" style={{ fontWeight: 800 }}>
-                    最近 {drawHistory.length} 次
-                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  {historyOpen && (
-                    <div className="divide-y divide-gray-50 border-t border-gray-50">
-                      {drawHistory.map(item => (
-                        <div key={item.id} className="px-3 py-2">
-                          <div className="text-xs text-gray-400">{item.time}</div>
-                          <div className="mt-1 flex flex-wrap gap-1.5">
-                            {item.names.map(name => <span key={`${item.id}-${name}`} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{name}</span>)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </Panel>
-        </aside>
+        <div className="daily-toolbar-actions ml-auto flex shrink-0 items-center justify-end gap-2 whitespace-nowrap">
+          <SegmentedControl
+            value={cardMode}
+            ariaLabel="座位卡显示方式"
+            onChange={value => setCardMode(value as "compact" | "detail")}
+            options={[
+              { value: "compact", label: "简洁", icon: <Minimize2 className="h-3.5 w-3.5" /> },
+              { value: "detail", label: "详细", icon: <Maximize2 className="h-3.5 w-3.5" /> },
+            ]}
+          />
+          <Button size="sm" onClick={() => setShowSeatSettings(true)}>
+            <Shuffle className="h-4 w-4" />排座
+            {activeConstraintCount > 0 && <span className="rounded-full bg-white/20 px-1.5 text-[10px]">{activeConstraintCount}</span>}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}>
+            <Undo2 className="h-4 w-4" />撤销
+          </Button>
+          <Button id="daily-student-tool-trigger" size="sm" variant={activeTool === "student" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "student" ? null : "student")}>
+            <UserPlus className="h-4 w-4" />新增学生
+          </Button>
+          <Button id="daily-draw-tool-trigger" size="sm" variant={activeTool === "draw" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
+            <Dices className="h-4 w-4" />抽签
+          </Button>
+        </div>
       </div>
+
+      <div className="min-h-0 flex-1 p-4">
+        <div className="h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-4 shadow-[var(--app-shadow-card)]">
+          <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+        </div>
+      </div>
+
+      <ToolDrawer open={activeTool === "student"} title="学生工具" returnFocusId="daily-student-tool-trigger" onClose={() => setActiveTool(null)}>
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-sm font-bold text-gray-800">新增学生</h3>
+            <p className="mt-1 text-xs leading-5 text-gray-400">新学生会自动安排到第一个空座位。</p>
+          </div>
+          <div className="space-y-3 rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-gray-50 p-3">
+            <input value={name} onChange={event => setName(event.target.value)} className="h-10 w-full rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-300" placeholder="姓名" />
+            <div className="grid grid-cols-[1fr_6rem] gap-2">
+              <input value={alias} onChange={event => setAlias(event.target.value)} className="h-10 min-w-0 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-300" placeholder="别名 / 拼音（可选）" />
+              <select value={gender} onChange={event => setGender(event.target.value as Gender)} className="h-10 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-2 text-sm outline-none focus:border-blue-300">
+                <option value="">未知</option><option value="男">男</option><option value="女">女</option>
+              </select>
+            </div>
+            <Button className="w-full" disabled={!name.trim()} onClick={addStudent}><Plus className="h-4 w-4" />添加到班级</Button>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-gray-800">查找已有学生</h3>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input value={drawerSearch} onChange={event => setDrawerSearch(event.target.value)} className="h-10 w-full rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:bg-white" placeholder="姓名或别名" />
+            </div>
+            {drawerSearch && (
+              <div className="mt-2 divide-y divide-gray-50 overflow-hidden rounded-[var(--app-radius-sm)] border border-[var(--app-border)]">
+                {drawerStudents.map(student => (
+                  <button key={student.id} type="button" onClick={() => onSelectStudent(student)} className="flex w-full items-center justify-between px-3 py-2.5 text-sm hover:bg-blue-50">
+                    <span className="font-semibold text-gray-700">{student.name}</span><span className="text-xs text-gray-400">{student.gender || "未知"}</span>
+                  </button>
+                ))}
+                {drawerStudents.length === 0 && <div className="px-3 py-5 text-center text-sm text-gray-400">无匹配结果</div>}
+              </div>
+            )}
+          </div>
+        </div>
+      </ToolDrawer>
+
+      <ToolDrawer open={activeTool === "draw"} title="课堂抽签" returnFocusId="daily-draw-tool-trigger" onClose={() => setActiveTool(null)}>
+        <div className="space-y-4">
+          <div className="rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-gray-50 p-4">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                人数
+                <input type="number" min={1} max={Math.max(1, students.length)} value={drawCount} onChange={event => setDrawCount(Number(event.target.value) || 1)} className="h-9 w-16 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-2 text-center outline-none focus:border-blue-300" />
+              </label>
+              <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+                <input type="checkbox" checked={noRepeat} onChange={event => setNoRepeat(event.target.checked)} className="h-4 w-4 accent-blue-600" />去重
+              </label>
+            </div>
+            <Button className="mt-4 w-full" onClick={draw}><Dices className="h-4 w-4" />开始抽签</Button>
+          </div>
+          {drawResult.length > 0 && (
+            <div className="surface-enter rounded-[var(--app-radius-md)] border border-blue-100 bg-blue-50 p-4">
+              <div className="mb-2 text-xs font-bold text-blue-500">本次结果</div>
+              <div className="flex flex-wrap gap-2">{drawResult.map(resultName => <span key={resultName} className="rounded-full bg-blue-600 px-3 py-1.5 text-sm font-bold text-white">{resultName}</span>)}</div>
+            </div>
+          )}
+          {drawHistory.length > 0 && (
+            <div className="overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white">
+              <button type="button" onClick={() => setHistoryOpen(value => !value)} className="flex h-11 w-full items-center justify-between px-3 text-sm font-bold text-gray-600 hover:bg-gray-50">
+                最近 {drawHistory.length} 次<ChevronDown className={`h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
+              </button>
+              {historyOpen && <div className="divide-y divide-gray-50 border-t border-[var(--app-border)]">{drawHistory.map(item => (
+                <div key={item.id} className="px-3 py-3"><div className="text-xs text-gray-400">{item.time}</div><div className="mt-1.5 flex flex-wrap gap-1.5">{item.names.map(resultName => <span key={`${item.id}-${resultName}`} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{resultName}</span>)}</div></div>
+              ))}</div>}
+            </div>
+          )}
+        </div>
+      </ToolDrawer>
 
       <SeatSettingsModal
         open={showSeatSettings}
@@ -517,8 +569,8 @@ export function DataWorkspace({
         </div>
       </div>
       {rosterMappingOpen && rosterMapping && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-5">
-          <div className="flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-5">
+          <div className="modal-panel-enter flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
               <div>
                 <h3 className="text-lg text-gray-900" style={{ fontWeight: 900 }}>名单列映射</h3>
@@ -1004,7 +1056,7 @@ export function ScoresWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      <div className="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)] gap-4 overflow-hidden p-4">
+      <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)] gap-4 overflow-hidden p-4">
         <aside className="min-h-0 space-y-4 overflow-y-auto">
           <Panel title="成绩导入">
             <div className="space-y-3">
@@ -1121,8 +1173,8 @@ export function ScoresWorkspace({
         </main>
       </div>
       {mappingModalOpen && manualMapping && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-5">
-          <div className="flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-5">
+          <div className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
               <div>
                 <h3 className="text-lg text-gray-900" style={{ fontWeight: 900 }}>成绩列映射</h3>

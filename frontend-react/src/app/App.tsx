@@ -53,7 +53,7 @@ export default function App() {
   const [appState, setAppState] = useState(() => initialState);
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [sidebarTab, setSidebarTab] = useState<AppTab>("daily");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1199px)").matches);
   const [students, setStudents] = useState<AppStudent[]>(() => initialState.students);
   const [dormitories, setDormitories] = useState<Dormitory[]>(() => initialState.dormitories);
   const [fundTransactions, setFundTransactions] = useState<FundTransaction[]>(() => initialState.fundTransactions ?? []);
@@ -791,9 +791,6 @@ export default function App() {
     }
   }
 
-  const studentCount = students.length;
-  const seatCount = seatOrder.length;
-
   async function handleUnbindDevice() {
     if (!window.confirm("解绑后，本机将退出登录并释放一个设备名额。下次使用需要重新输入授权码，确定继续吗？")) {
       return;
@@ -816,8 +813,7 @@ export default function App() {
       sidebarCollapsed={sidebarCollapsed}
       header={
         <TopHeader
-          studentCount={studentCount}
-          seatCount={seatCount}
+          students={students}
           sidebarCollapsed={sidebarCollapsed}
           accountOpen={accountOpen}
           onToggleSidebar={() => setSidebarCollapsed(v => !v)}
@@ -826,6 +822,7 @@ export default function App() {
           onInstallApp={handleInstallApp}
           onChangePassword={IS_COMMERCIAL ? undefined : () => setShowChangePassword(true)}
           onOpenCloudSync={() => setShowCloudSync(true)}
+          onSelectStudent={student => openStudentDetail(student)}
           onUnbindDevice={IS_COMMERCIAL ? handleUnbindDevice : undefined}
           onWorkspaceChanged={reloadFromLegacyState}
           onLogout={() => {
@@ -837,6 +834,7 @@ export default function App() {
       sidebar={
         <Sidebar
           activeTab={sidebarTab}
+          collapsed={sidebarCollapsed}
           students={students}
           dormitories={dormitories}
           seatOrder={seatOrder}
@@ -924,60 +922,66 @@ export default function App() {
         </>
       }
     >
-      <div className="h-full workspace-tab-enter">
+      <div className="h-full">
         {sidebarTab === "daily" && (
-          <DailyWorkspace
-            students={students}
-            seatOrder={seatOrder}
-            lockedSeats={lockedSeats}
-            seatSettings={seatSettings}
-            canUndoSeatOrder={seatHistory.length > 0}
-            onRandomizeSeats={handleRandomizeSeats}
-            onOrderSeatsByList={handleOrderSeatsByList}
-            onUndoSeatOrder={handleUndoSeatOrder}
-            onUpdateSeatSettings={updateSeatSettings}
-            onAddStudent={handleAddStudent}
-            onSelectStudent={student => openStudentDetail(student)}
-            onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
-            onMoveSeat={handleMoveSeat}
-            onToggleLock={toggleLock}
-          />
+          <div className="h-full workspace-tab-enter">
+            <DailyWorkspace
+              students={students}
+              seatOrder={seatOrder}
+              lockedSeats={lockedSeats}
+              seatSettings={seatSettings}
+              canUndoSeatOrder={seatHistory.length > 0}
+              onRandomizeSeats={handleRandomizeSeats}
+              onOrderSeatsByList={handleOrderSeatsByList}
+              onUndoSeatOrder={handleUndoSeatOrder}
+              onUpdateSeatSettings={updateSeatSettings}
+              onAddStudent={handleAddStudent}
+              onSelectStudent={student => openStudentDetail(student)}
+              onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
+              onMoveSeat={handleMoveSeat}
+              onToggleLock={toggleLock}
+            />
+          </div>
         )}
 
         {sidebarTab === "dormitories" && (
-          <DormitoryWorkspace
-            students={students}
-            dormitories={dormitories}
-            onCreateDormitory={handleCreateDormitory}
-            onUpdateDormitory={handleUpdateDormitory}
-            onDeleteDormitory={handleDeleteDormitory}
-            onAssignStudentDormitory={handleAssignStudentDormitory}
-            onAddDormitoryEvent={handleAddDormitoryEvent}
-            onUpdateDormitoryEvent={handleUpdateDormEvent}
-            onDeleteDormitoryEvent={handleDeleteDormEvent}
-            onCloseDormitoryPeriod={handleCloseDormitoryPeriod}
-            onCloseAllDormitoryPeriods={handleCloseAllDormitoryPeriods}
-            onSelectStudent={student => openStudentDetail(student)}
-          />
+          <div className="h-full workspace-tab-enter">
+            <DormitoryWorkspace
+              students={students}
+              dormitories={dormitories}
+              onCreateDormitory={handleCreateDormitory}
+              onUpdateDormitory={handleUpdateDormitory}
+              onDeleteDormitory={handleDeleteDormitory}
+              onAssignStudentDormitory={handleAssignStudentDormitory}
+              onAddDormitoryEvent={handleAddDormitoryEvent}
+              onUpdateDormitoryEvent={handleUpdateDormEvent}
+              onDeleteDormitoryEvent={handleDeleteDormEvent}
+              onCloseDormitoryPeriod={handleCloseDormitoryPeriod}
+              onCloseAllDormitoryPeriods={handleCloseAllDormitoryPeriods}
+              onSelectStudent={student => openStudentDetail(student)}
+            />
+          </div>
         )}
 
         {sidebarTab === "scores" && (
-          <ScoresWorkspace
-            exams={appState.gradeExams}
-            students={students}
-            onSelectStudent={student => openStudentDetail(student)}
-            onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
-            onSaveScoreImport={handleSaveScoreImport}
-            onUpdateGradeExam={handleUpdateGradeExam}
-            onDeleteGradeExam={handleDeleteGradeExam}
-            onGenerateClassAnalysis={handleGenerateClassAnalysis}
-            onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
-            onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
-            studentAdviceProgress={studentAdviceProgress}
-          />
+          <div className="h-full workspace-tab-enter">
+            <ScoresWorkspace
+              exams={appState.gradeExams}
+              students={students}
+              onSelectStudent={student => openStudentDetail(student)}
+              onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
+              onSaveScoreImport={handleSaveScoreImport}
+              onUpdateGradeExam={handleUpdateGradeExam}
+              onDeleteGradeExam={handleDeleteGradeExam}
+              onGenerateClassAnalysis={handleGenerateClassAnalysis}
+              onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
+              onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
+              studentAdviceProgress={studentAdviceProgress}
+            />
+          </div>
         )}
 
-        <div className={sidebarTab === "ai" ? "h-full" : "hidden"}>
+        <div className={sidebarTab === "ai" ? "h-full workspace-tab-enter" : "hidden"}>
           <AiAssistantWorkspace
             active={sidebarTab === "ai"}
             students={students}
@@ -991,35 +995,41 @@ export default function App() {
         </div>
 
         {sidebarTab === "data" && (
-          <DataWorkspace
-            students={students}
-            seatOrder={seatOrder}
-            onImportRoster={handleImportRoster}
-            onBeforeBackupExport={saveCurrentLegacySnapshot}
-            onBackupImported={reloadFromLegacyState}
-          />
+          <div className="h-full workspace-tab-enter">
+            <DataWorkspace
+              students={students}
+              seatOrder={seatOrder}
+              onImportRoster={handleImportRoster}
+              onBeforeBackupExport={saveCurrentLegacySnapshot}
+              onBackupImported={reloadFromLegacyState}
+            />
+          </div>
         )}
 
         {sidebarTab === "history" && (
-          <HistoryWorkspace
-            history={savedSeatHistory}
-            onSave={handleSaveSeatHistory}
-            onRename={handleUpdateSeatHistoryNote}
-            onView={setSelectedHistorySnapshot}
-            onApply={handleApplySeatHistory}
-            onDelete={handleDeleteSeatHistory}
-          />
+          <div className="h-full workspace-tab-enter">
+            <HistoryWorkspace
+              history={savedSeatHistory}
+              onSave={handleSaveSeatHistory}
+              onRename={handleUpdateSeatHistoryNote}
+              onView={setSelectedHistorySnapshot}
+              onApply={handleApplySeatHistory}
+              onDelete={handleDeleteSeatHistory}
+            />
+          </div>
         )}
 
         {sidebarTab === "funds" && (
-          <ClassFundWorkspace
-            transactions={fundTransactions}
-            students={students}
-            onAdd={handleAddFundTransaction}
-            onUpdate={handleUpdateFundTransaction}
-            onDelete={handleDeleteFundTransaction}
-            onClearAll={handleClearFundTransactions}
-          />
+          <div className="h-full workspace-tab-enter">
+            <ClassFundWorkspace
+              transactions={fundTransactions}
+              students={students}
+              onAdd={handleAddFundTransaction}
+              onUpdate={handleUpdateFundTransaction}
+              onDelete={handleDeleteFundTransaction}
+              onClearAll={handleClearFundTransactions}
+            />
+          </div>
         )}
       </div>
     </AppShell>

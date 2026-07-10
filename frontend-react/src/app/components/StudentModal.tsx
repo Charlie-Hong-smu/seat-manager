@@ -438,8 +438,8 @@ export function StudentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-12 bg-black/40 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mb-8 overflow-hidden">
+    <div className="soft-backdrop-enter fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-12 backdrop-blur-sm">
+      <div className="modal-panel-enter mb-8 w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4 border-b border-gray-100">
           <div>

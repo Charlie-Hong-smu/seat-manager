@@ -173,8 +173,8 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 backdrop-blur-sm p-4">
-      <div className="w-full max-w-6xl max-h-[92vh] bg-white rounded-3xl shadow-2xl border border-white overflow-hidden flex flex-col">
+    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm">
+      <div className="modal-panel-enter flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white bg-white shadow-2xl">
         <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100">
           <div>
             <div className="text-xs text-blue-500 mb-1" style={{ fontWeight: 800 }}>座位调整</div>

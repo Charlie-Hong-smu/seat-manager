@@ -31,8 +31,8 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
   }, [exam.rows, query]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-950/35 backdrop-blur-sm flex items-center justify-center p-6">
-      <div className="w-full max-w-6xl max-h-[86vh] bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
+    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-gray-950/35 p-6 backdrop-blur-sm">
+      <div className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl">
         <div className="shrink-0 px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs text-gray-400 mb-1">考试表格</div>

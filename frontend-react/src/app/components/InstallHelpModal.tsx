@@ -7,9 +7,9 @@ interface InstallHelpModalProps {
 
 export function InstallHelpModal({ message, onClose }: InstallHelpModalProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
+        className="modal-panel-enter w-full max-w-md overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl"
         onClick={event => event.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between">

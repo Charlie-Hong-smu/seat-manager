@@ -25,8 +25,8 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
   const occupied = snapshot.seats.filter(Boolean).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 backdrop-blur-sm p-4 pt-10 overflow-y-auto">
-      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden mb-8">
+    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/35 p-4 pt-10 backdrop-blur-sm">
+      <div className="modal-panel-enter mb-8 w-full max-w-5xl overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-gray-100">
           <div>
             <div className="flex items-center gap-2 text-xs text-gray-400 mb-1" style={{ fontWeight: 700 }}>

@@ -137,8 +137,8 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30 px-4">
-      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl">
+    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30 px-4">
+      <div className="modal-panel-enter flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div className="flex items-center gap-2">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600">
@@ -299,8 +299,8 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
       </div>
 
       {printHtml && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/40 px-4">
-          <div className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+        <div className="soft-backdrop-enter fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/40 px-4">
+          <div className="modal-panel-enter flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
               <h3 className="text-base text-gray-900" style={{ fontWeight: 900 }}>PDF/打印预览</h3>
               <div className="flex items-center gap-2">
