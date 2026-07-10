@@ -408,20 +408,20 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
             {activeTab === "single" ? (
-              ["total", ...subjects].map(subject => (
-                <button
-                  key={subject}
-                  onClick={() => {
-                    setSelectedSubject(subject);
-                    setSortKey(subject);
-                    setSortAsc(false);
-                  }}
-                  className={`rounded-xl border px-3 py-1.5 text-xs whitespace-nowrap transition-all ${metricKey === subject ? "border-blue-100 bg-blue-50 text-blue-700 shadow-sm" : "border-gray-200 bg-white text-gray-500 hover:border-blue-100 hover:bg-blue-50/60 hover:text-blue-600"}`}
-                  style={{ fontWeight: metricKey === subject ? 700 : 500 }}
-                >
-                  {subject === "total" ? "全部" : subject}
-                </button>
-              ))
+              <SegmentedControl
+                value={metricKey}
+                ariaLabel="成绩学科切换"
+                onChange={subject => {
+                  setSelectedSubject(subject);
+                  setSortKey(subject);
+                  setSortAsc(false);
+                }}
+                options={["total", ...subjects].map(subject => ({
+                  value: subject,
+                  label: subject === "total" ? "全部" : subject,
+                }))}
+                className="shrink-0"
+              />
             ) : (
               <>
                 <span className="px-1.5 py-1.5 text-xs text-gray-400 whitespace-nowrap" style={{ fontWeight: 700 }}>展示科目</span>

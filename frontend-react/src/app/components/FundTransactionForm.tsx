@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 
 import { FUND_EXPENSE_PRESETS, FUND_INCOME_PRESETS, type NewFundTxInput } from "../state/classFundActions";
 import type { AppStudent, FundTxType } from "../state/types";
+import { animateSelectionTransfer } from "./selectionMotion";
 
 interface FundTransactionFormProps {
   students: AppStudent[];
@@ -18,6 +19,8 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
   const [showRelated, setShowRelated] = useState(false);
   const [relatedIds, setRelatedIds] = useState<string[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
+  const selectedStudentsRef = useRef<HTMLDivElement>(null);
+  const studentCandidatesRef = useRef<HTMLDivElement>(null);
 
   const presets = type === "income" ? FUND_INCOME_PRESETS : FUND_EXPENSE_PRESETS;
   const activeClass = type === "income"
@@ -43,6 +46,32 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
         ? prev.filter(id => id !== studentId)
         : [...prev, studentId]
     );
+  }
+
+  function toggleRelatedWithAnimation(event: ReactMouseEvent<HTMLButtonElement>, student: AppStudent, selected: boolean) {
+    const selectedElement = selectedStudentsRef.current
+      ? Array.from(selectedStudentsRef.current.querySelectorAll<HTMLElement>("[data-selection-motion-id]")).find(element => element.dataset.selectionMotionId === student.id)
+      : null;
+    animateSelectionTransfer({
+      itemId: student.id,
+      itemName: student.name,
+      sourceElement: selected ? selectedElement || event.currentTarget : event.currentTarget,
+      sourceContainer: selected ? selectedStudentsRef.current : studentCandidatesRef.current,
+      targetContainer: selected ? studentCandidatesRef.current : selectedStudentsRef.current,
+      commit: () => toggleRelated(student.id),
+    });
+  }
+
+  function removeRelatedWithAnimation(event: ReactMouseEvent<HTMLButtonElement>, student: AppStudent) {
+    const chip = event.currentTarget.closest<HTMLElement>("[data-selection-motion-id]") || event.currentTarget;
+    animateSelectionTransfer({
+      itemId: student.id,
+      itemName: student.name,
+      sourceElement: chip,
+      sourceContainer: selectedStudentsRef.current,
+      targetContainer: studentCandidatesRef.current,
+      commit: () => toggleRelated(student.id),
+    });
   }
 
   function submit() {
@@ -160,26 +189,28 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
             showRelated ? "max-h-96 mt-3 opacity-100" : "max-h-0 mt-0 opacity-0"
           }`}
         >
-          {/* 已选学生药丸 */}
-          {selectedRelatedStudents.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {selectedRelatedStudents.map(student => (
-                <span
-                  key={student.id}
-                  className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 py-0.5 pl-2.5 pr-1 text-xs font-semibold text-blue-700"
+          {/* 已选学生：精确飞入落点，删除时反向返回候选列表 */}
+          <div ref={selectedStudentsRef} className="mb-2 flex min-h-9 flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-blue-100 bg-blue-50/40 px-2 py-1.5">
+            {selectedRelatedStudents.length > 0 ? selectedRelatedStudents.map(student => (
+              <span
+                key={student.id}
+                data-selection-motion-id={student.id}
+                className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-blue-200 bg-white py-1 pl-2.5 pr-1 text-xs font-semibold text-blue-700 shadow-sm"
+              >
+                {student.name}
+                <button
+                  type="button"
+                  onClick={event => removeRelatedWithAnimation(event, student)}
+                  className="grid h-4 w-4 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"
+                  title={`取消关联 ${student.name}`}
                 >
-                  {student.name}
-                  <button
-                    type="button"
-                    onClick={() => toggleRelated(student.id)}
-                    className="grid h-3.5 w-3.5 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"
-                  >
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            )) : (
+              <span className="text-[11px] text-blue-300">点击下方学生添加关联</span>
+            )}
+          </div>
           {/* 搜索 */}
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -191,7 +222,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
             />
           </div>
           {/* 学生列表（多选切换） */}
-          <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-white py-1">
+          <div ref={studentCandidatesRef} className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-white py-1">
             {filteredStudents.length === 0 ? (
               <div className="py-3 text-center text-xs text-gray-400">无匹配学生</div>
             ) : (
@@ -200,14 +231,20 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
                 return (
                   <button
                     key={student.id}
+                    data-selection-motion-id={student.id}
                     type="button"
-                    onClick={() => toggleRelated(student.id)}
-                    className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
+                    onClick={event => toggleRelatedWithAnimation(event, student, selected)}
+                    className={`group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-[background-color,color,transform] duration-200 hover:bg-blue-50 active:scale-[.99] ${
                       selected ? "bg-blue-50 text-blue-600" : "text-gray-700"
                     }`}
                   >
-                    {student.name}
-                    {selected && <Check className="h-3.5 w-3.5" />}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${student.gender === "男" ? "bg-blue-50 text-blue-500" : student.gender === "女" ? "bg-pink-50 text-pink-500" : "bg-gray-100 text-gray-500"}`}>
+                        {student.name.slice(0, 1)}
+                      </span>
+                      <span className="truncate font-semibold">{student.name}</span>
+                    </span>
+                    {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : <span className="text-[10px] font-semibold text-blue-300 group-hover:text-blue-500">加入</span>}
                   </button>
                 );
               })

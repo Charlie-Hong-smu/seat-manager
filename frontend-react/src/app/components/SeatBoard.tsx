@@ -1,4 +1,5 @@
-import { type DragEvent, type KeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Lock, Star } from "lucide-react";
 import type { AppStudent, StudentId } from "../state/types";
 
@@ -15,16 +16,40 @@ interface Props {
 
 const COLS = 8;
 
+interface SeatRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface DragVisualState {
+  fromIndex: number;
+  targetIndex: number | null;
+  pointerX: number;
+  pointerY: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  proximity: number;
+  phase: "dragging" | "settling";
+  settleLeft?: number;
+  settleTop?: number;
+}
+
 function SeatCard({
   studentId,
   studentById,
   seatIndex,
   isLocked,
   isDragging,
+  isDropTarget,
+  dragActive,
+  visualTransform,
   cardMode,
   onSelect,
-  onMoveSeat,
-  onDragStateChange,
+  onPointerDragStart,
   onToggleLock,
 }: {
   studentId: StudentId | null;
@@ -32,39 +57,15 @@ function SeatCard({
   seatIndex: number;
   isLocked: boolean;
   isDragging: boolean;
+  isDropTarget: boolean;
+  dragActive: boolean;
+  visualTransform?: string;
   cardMode: "compact" | "detail";
   onSelect: (s: AppStudent) => void;
-  onMoveSeat: (fromIndex: number, toIndex: number) => void;
-  onDragStateChange: (seatIndex: number | null) => void;
+  onPointerDragStart: (event: ReactPointerEvent<HTMLElement>, seatIndex: number) => void;
   onToggleLock: (idx: number) => void;
 }) {
   const student = studentId ? studentById.get(studentId) : null;
-
-  function handleDragStart(event: DragEvent<HTMLElement>) {
-    if (isLocked || !studentId) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.setData("text/plain", String(seatIndex));
-    event.dataTransfer.effectAllowed = "move";
-    onDragStateChange(seatIndex);
-  }
-
-  function handleDragOver(event: DragEvent<HTMLElement>) {
-    if (!isLocked) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-    }
-  }
-
-  function handleDrop(event: DragEvent<HTMLElement>) {
-    event.preventDefault();
-    const fromIndex = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
-    if (Number.isInteger(fromIndex) && !isLocked) {
-      onMoveSeat(fromIndex, seatIndex);
-    }
-    onDragStateChange(null);
-  }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Enter" || event.key === " ") {
@@ -81,10 +82,10 @@ function SeatCard({
   if (!studentId || !student) {
     return (
       <div
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        className={`seat-card-enter relative h-full min-h-0 overflow-hidden rounded-xl border-2 border-dashed text-xs text-gray-300 select-none transition-[background-color,border-color,transform] duration-200 ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:-translate-y-px hover:border-blue-200 hover:bg-blue-50/40"}`}
-        style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms` }}
+        data-seat-index={seatIndex}
+        data-seat-locked={isLocked ? "true" : "false"}
+        className={`seat-card-enter relative h-full min-h-0 overflow-hidden rounded-xl border-2 border-dashed text-xs text-gray-300 select-none transition-[background-color,border-color,box-shadow,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:-translate-y-px hover:border-blue-200 hover:bg-blue-50/40"} ${isDropTarget ? "border-blue-400 bg-blue-50/80 shadow-[0_0_0_4px_rgba(59,130,246,0.14)]" : ""}`}
+        style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms`, transform: visualTransform }}
       >
         <span className={`absolute inset-0 grid place-items-center transition-[opacity,transform] duration-200 ease-out ${cardMode === "compact" ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"}`}>空</span>
         <span className={`absolute inset-0 grid place-items-center text-gray-300 transition-[opacity,transform] duration-200 ease-out ${cardMode === "detail" ? "scale-100 opacity-100 delay-100" : "pointer-events-none scale-105 opacity-0 delay-0"}`}>{row}-{col}</span>
@@ -101,21 +102,29 @@ function SeatCard({
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onSelect(student)}
+      data-seat-index={seatIndex}
+      data-seat-locked={isLocked ? "true" : "false"}
+      data-student-id={student.id}
+      onClick={event => {
+        if (dragActive || isDragging) {
+          event.preventDefault();
+          return;
+        }
+        onSelect(student);
+      }}
       onKeyDown={handleKeyDown}
-      draggable={!isLocked}
-      onDragStart={handleDragStart}
-      onDragEnd={() => onDragStateChange(null)}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-      className={`seat-card-enter relative h-full min-h-0 w-full overflow-hidden rounded-xl border bg-white text-left group transition-[background-color,border-color,box-shadow,opacity,transform] duration-200 hover:-translate-y-px hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-sm cursor-pointer ${
+      onPointerDown={event => {
+        if (!isLocked) onPointerDragStart(event, seatIndex);
+      }}
+      className={`seat-card-enter relative h-full min-h-0 w-full overflow-hidden rounded-xl border bg-white text-left group transition-[background-color,border-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-sm cursor-pointer ${
         isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-      } ${isLocked ? "border-amber-300 bg-amber-50/30" : "border-gray-200"} ${isDragging ? "opacity-50 ring-2 ring-blue-200" : ""}`}
-      style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms` }}
+      } ${isLocked ? "border-amber-300 bg-amber-50/30" : "border-gray-200"} ${isDragging ? "opacity-25 ring-2 ring-blue-200" : ""} ${isDropTarget ? "border-blue-400 bg-blue-50/90 shadow-[0_0_0_4px_rgba(59,130,246,0.16),0_12px_28px_rgba(37,99,235,0.14)]" : ""}`}
+      style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms`, transform: visualTransform, touchAction: "manipulation" }}
     >
       {/* Lock toggle */}
       <button
         onClick={e => { e.stopPropagation(); onToggleLock(seatIndex); }}
+        onPointerDown={e => e.stopPropagation()}
         onMouseDown={e => e.stopPropagation()}
         title={isLocked ? "解锁座位" : "锁定座位"}
         className={`absolute top-0.5 right-0.5 z-10 grid h-5 w-5 place-items-center rounded-md transition-opacity hover:bg-gray-100 ${isLocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
@@ -131,7 +140,7 @@ function SeatCard({
       </div>
 
       {/* 次要信息在卡片接近展开后再淡入，避免高度动画中途反复裁切。 */}
-      <div aria-hidden={cardMode !== "detail"} inert={cardMode !== "detail"} className={`absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none ${cardMode === "detail" ? "translate-y-0 opacity-100 delay-100" : "pointer-events-none translate-y-1 opacity-0 delay-0"}`}>
+      <div aria-hidden={cardMode !== "detail"} {...(cardMode !== "detail" ? { inert: "" } : {})} className={`absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none ${cardMode === "detail" ? "translate-y-0 opacity-100 delay-100" : "pointer-events-none translate-y-1 opacity-0 delay-0"}`}>
           {hasTags ? (
             <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap">
               {visibleTags.map(tag => {
@@ -158,6 +167,11 @@ function SeatCard({
 
 export function SeatBoard({ cardMode, students, seatOrder, onSelectStudent, onMoveSeat, lockedSeats, onToggleLock }: Props) {
   const [draggingSeat, setDraggingSeat] = useState<number | null>(null);
+  const [dragVisual, setDragVisual] = useState<DragVisualState | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const seatRectsRef = useRef(new Map<number, SeatRect>());
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  const settleTimerRef = useRef<number | null>(null);
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const rowCount = Math.ceil(seatOrder.length / COLS);
 
@@ -173,8 +187,199 @@ export function SeatBoard({ cardMode, students, seatOrder, onSelectStudent, onMo
     [0, 1], [2, 3], [4, 5], [6, 7],
   ];
 
+  useEffect(() => () => {
+    dragCleanupRef.current?.();
+    if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+  }, []);
+
+  function readSeatRects(): Map<number, SeatRect> {
+    const next = new Map<number, SeatRect>();
+    boardRef.current?.querySelectorAll<HTMLElement>("[data-seat-index]").forEach(element => {
+      const seatIndex = Number(element.dataset.seatIndex);
+      if (!Number.isInteger(seatIndex) || next.has(seatIndex)) return;
+      const rect = element.getBoundingClientRect();
+      next.set(seatIndex, { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+    });
+    return next;
+  }
+
+  function targetAtPoint(clientX: number, clientY: number, fromIndex: number) {
+    let nearest: { targetIndex: number; proximity: number; distance: number } | null = null;
+    for (const [targetIndex, rect] of seatRectsRef.current) {
+      if (targetIndex === fromIndex || lockedSeats.has(targetIndex)) continue;
+      // 边缘多给几个像素的感应区，让推开从“靠近”开始，而不是进入卡片后突然发生。
+      const influencePadding = 48;
+      const outsideX = Math.max(rect.left - influencePadding - clientX, 0, clientX - (rect.left + rect.width + influencePadding));
+      const outsideY = Math.max(rect.top - influencePadding - clientY, 0, clientY - (rect.top + rect.height + influencePadding));
+      if (outsideX > 0 || outsideY > 0) continue;
+      const dx = clientX - (rect.left + rect.width / 2);
+      const dy = clientY - (rect.top + rect.height / 2);
+      const normalizedDistance = Math.hypot(dx / (rect.width / 2 + influencePadding), dy / (rect.height / 2 + influencePadding));
+      if (normalizedDistance > 1) continue;
+      const proximity = Math.max(0.08, Math.min(1, 1 - normalizedDistance));
+      const distance = Math.hypot(dx, dy);
+      if (!nearest || distance < nearest.distance) nearest = { targetIndex, proximity, distance };
+    }
+    return nearest ? { targetIndex: nearest.targetIndex, proximity: nearest.proximity } : { targetIndex: null, proximity: 0 };
+  }
+
+  function getTargetPush(fromIndex: number, targetIndex: number, proximity: number) {
+    const sourceRect = seatRectsRef.current.get(fromIndex);
+    const targetRect = seatRectsRef.current.get(targetIndex);
+    if (!sourceRect || !targetRect) return { x: 0, y: 0 };
+    const dx = targetRect.left + targetRect.width / 2 - (sourceRect.left + sourceRect.width / 2);
+    const dy = targetRect.top + targetRect.height / 2 - (sourceRect.top + sourceRect.height / 2);
+    const length = Math.hypot(dx, dy) || 1;
+    const horizontalMove = Math.abs(dx) >= Math.abs(dy);
+    const availableExtent = horizontalMove ? targetRect.width : targetRect.height;
+    const pushRatio = horizontalMove ? 0.74 : 1;
+    const amount = Math.min(horizontalMove ? 84 : 62, availableExtent * pushRatio) * proximity;
+    return { x: dx / length * amount, y: dy / length * amount };
+  }
+
+  function animateCompletedSwap(fromIndex: number, targetIndex: number, sourceStudentId: StudentId, targetStudentId: StudentId | null) {
+    const sourceRect = seatRectsRef.current.get(fromIndex);
+    const targetRect = seatRectsRef.current.get(targetIndex);
+    const targetPush = getTargetPush(fromIndex, targetIndex, 1);
+    setDragVisual(null);
+    setDraggingSeat(null);
+    onMoveSeat(fromIndex, targetIndex);
+    if (!sourceRect || !targetRect || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const cards = Array.from(boardRef.current?.querySelectorAll<HTMLElement>("[data-student-id]") || []);
+      const sourceCard = cards.find(card => card.dataset.studentId === sourceStudentId);
+      sourceCard?.animate([
+        { opacity: 0.35, transform: "scale(0.96)" },
+        { opacity: 1, transform: "scale(1)" },
+      ], { duration: 680, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+
+      if (targetStudentId) {
+        const targetCard = cards.find(card => card.dataset.studentId === targetStudentId);
+        const startX = targetRect.left + targetPush.x - sourceRect.left;
+        const startY = targetRect.top + targetPush.y - sourceRect.top;
+        const arcX = Math.abs(startY) > Math.abs(startX) ? 7 : 0;
+        const arcY = Math.abs(startX) >= Math.abs(startY) ? -6 : 0;
+        targetCard?.animate([
+          { offset: 0, opacity: 0.86, transform: `translate3d(${startX}px, ${startY}px, 0) scale(0.945)` },
+          { offset: 0.2, opacity: 1, transform: `translate3d(${startX * 0.92 + arcX * 0.35}px, ${startY * 0.92 + arcY * 0.35}px, 0) scale(0.965)` },
+          { offset: 0.72, opacity: 1, transform: `translate3d(${startX * 0.2 + arcX}px, ${startY * 0.2 + arcY}px, 0) scale(1.008)` },
+          { offset: 1, opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+        ], { duration: 1180, easing: "cubic-bezier(0.45, 0, 0.15, 1)" });
+      }
+    }));
+  }
+
+  function beginPointerDrag(event: ReactPointerEvent<HTMLElement>, fromIndex: number) {
+    if (event.button !== 0 || lockedSeats.has(fromIndex) || !seatOrder[fromIndex]) return;
+    dragCleanupRef.current?.();
+    if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const sourceElement = event.currentTarget;
+    const sourceRect = sourceElement.getBoundingClientRect();
+    const offsetX = startX - sourceRect.left;
+    const offsetY = startY - sourceRect.top;
+    seatRectsRef.current = readSeatRects();
+    let active = false;
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      dragCleanupRef.current = null;
+    };
+
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      if (!active && Math.hypot(pointerEvent.clientX - startX, pointerEvent.clientY - startY) < 6) return;
+      if (!active) {
+        active = true;
+        setDraggingSeat(fromIndex);
+      }
+      pointerEvent.preventDefault();
+      const { targetIndex, proximity } = targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, fromIndex);
+      setDragVisual({
+        fromIndex,
+        targetIndex,
+        pointerX: pointerEvent.clientX,
+        pointerY: pointerEvent.clientY,
+        offsetX,
+        offsetY,
+        width: sourceRect.width,
+        height: sourceRect.height,
+        proximity,
+        phase: "dragging",
+      });
+    };
+
+    const finishDrag = (pointerEvent: PointerEvent, cancelled: boolean) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      cleanup();
+      if (!active) return;
+      pointerEvent.preventDefault();
+      const { targetIndex } = cancelled ? { targetIndex: null } : targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, fromIndex);
+      const destinationRect = targetIndex === null ? seatRectsRef.current.get(fromIndex) : seatRectsRef.current.get(targetIndex);
+      setDragVisual(current => current ? {
+        ...current,
+        targetIndex,
+        proximity: targetIndex === null ? 0 : 1,
+        phase: "settling",
+        settleLeft: destinationRect?.left,
+        settleTop: destinationRect?.top,
+      } : current);
+
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      settleTimerRef.current = window.setTimeout(() => {
+        settleTimerRef.current = null;
+        if (targetIndex === null) {
+          setDragVisual(null);
+          setDraggingSeat(null);
+          return;
+        }
+        const sourceStudentId = seatOrder[fromIndex];
+        if (!sourceStudentId) return;
+        animateCompletedSwap(fromIndex, targetIndex, sourceStudentId, seatOrder[targetIndex] || null);
+      }, reducedMotion ? 0 : targetIndex === null ? 420 : 440);
+    };
+
+    const handlePointerUp = (pointerEvent: PointerEvent) => finishDrag(pointerEvent, false);
+    const handlePointerCancel = (pointerEvent: PointerEvent) => finishDrag(pointerEvent, true);
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp, { passive: false });
+    window.addEventListener("pointercancel", handlePointerCancel, { passive: false });
+    dragCleanupRef.current = cleanup;
+  }
+
+  function seatVisualTransform(seatIndex: number): string | undefined {
+    if (!dragVisual || dragVisual.targetIndex === null || seatIndex === dragVisual.fromIndex) return undefined;
+    const proximity = dragVisual.phase === "settling" ? 1 : dragVisual.proximity;
+    if (seatIndex === dragVisual.targetIndex) {
+      const push = getTargetPush(dragVisual.fromIndex, dragVisual.targetIndex, proximity);
+      return `translate3d(${push.x}px, ${push.y}px, 0) scale(${1 - proximity * 0.055})`;
+    }
+    const rowDistance = Math.abs(Math.floor(seatIndex / COLS) - Math.floor(dragVisual.targetIndex / COLS));
+    const colDistance = Math.abs(seatIndex % COLS - dragVisual.targetIndex % COLS);
+    const neighborDistance = rowDistance + colDistance;
+    if (neighborDistance < 1 || neighborDistance > 2) return undefined;
+    const targetRect = seatRectsRef.current.get(dragVisual.targetIndex);
+    const seatRect = seatRectsRef.current.get(seatIndex);
+    if (!targetRect || !seatRect) return undefined;
+    const dx = seatRect.left + seatRect.width / 2 - (targetRect.left + targetRect.width / 2);
+    const dy = seatRect.top + seatRect.height / 2 - (targetRect.top + targetRect.height / 2);
+    const length = Math.hypot(dx, dy) || 1;
+    const amount = (neighborDistance === 1 ? 18 : 7) * proximity;
+    return `translate3d(${dx / length * amount}px, ${dy / length * amount}px, 0)`;
+  }
+
+  const draggedStudentId = draggingSeat === null ? null : seatOrder[draggingSeat];
+  const draggedStudent = draggedStudentId ? studentById.get(draggedStudentId) : null;
+  const overlayLeft = dragVisual?.phase === "settling" ? dragVisual.settleLeft : dragVisual ? dragVisual.pointerX - dragVisual.offsetX : 0;
+  const overlayTop = dragVisual?.phase === "settling" ? dragVisual.settleTop : dragVisual ? dragVisual.pointerY - dragVisual.offsetY : 0;
+
   return (
-    <div className="h-full min-h-0 overflow-auto">
+    <div ref={boardRef} className={`h-full min-h-0 overflow-auto ${dragVisual ? "select-none" : ""}`}>
       <div className="flex min-h-full min-w-[760px] flex-col">
         {/* Column group headers */}
         <div className="mb-2 flex shrink-0 gap-3 pl-12">
@@ -217,10 +422,12 @@ export function SeatBoard({ cardMode, students, seatOrder, onSelectStudent, onMo
                         seatIndex={cell.seatIndex}
                         isLocked={lockedSeats.has(cell.seatIndex)}
                         isDragging={draggingSeat === cell.seatIndex}
+                        isDropTarget={dragVisual?.targetIndex === cell.seatIndex}
+                        dragActive={Boolean(dragVisual)}
+                        visualTransform={seatVisualTransform(cell.seatIndex)}
                         cardMode={cardMode}
                         onSelect={onSelectStudent}
-                        onMoveSeat={onMoveSeat}
-                        onDragStateChange={setDraggingSeat}
+                        onPointerDragStart={beginPointerDrag}
                         onToggleLock={onToggleLock}
                       />
                     );
@@ -255,6 +462,28 @@ export function SeatBoard({ cardMode, students, seatOrder, onSelectStudent, onMo
           </div>
         </div>
       </div>
+      {dragVisual && draggedStudent && createPortal(
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none fixed z-[100] overflow-hidden rounded-xl border border-blue-300 bg-white/95 shadow-[0_18px_45px_rgba(37,99,235,0.24)] backdrop-blur-sm transition-[transform,opacity,box-shadow] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${dragVisual.phase === "settling" ? "duration-[440ms]" : "duration-150"}`}
+          style={{
+            left: 0,
+            top: 0,
+            width: dragVisual.width,
+            height: dragVisual.height,
+            opacity: dragVisual.phase === "settling" ? 0.92 : 1,
+            transform: `translate3d(${overlayLeft || 0}px, ${overlayTop || 0}px, 0) scale(${dragVisual.phase === "settling" ? 0.985 : 1.025})`,
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white to-violet-50/60" />
+          <div className="relative flex h-full min-w-0 items-center gap-2 px-3">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${draggedStudent.gender === "男" ? "bg-blue-400" : draggedStudent.gender === "女" ? "bg-pink-400" : "bg-gray-300"}`} />
+            <span className="min-w-0 flex-1 truncate text-sm font-bold text-gray-900">{draggedStudent.name}</span>
+            <span className="text-[10px] font-semibold text-blue-500">换座</span>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

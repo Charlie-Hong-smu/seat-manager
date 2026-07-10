@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
+import { useState, useMemo, useEffect, useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
   CalendarClock,
   Check,
@@ -7,6 +7,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Settings2,
   Trash2,
   X,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import {
 import { DORM_EVENT_PRESETS } from "../state/dormitoryActions";
 import type { NewDormEventInput } from "../state/dormitoryActions";
 import type { AppStudent, Dormitory, StudentId } from "../state/types";
+import { animateSelectionTransfer } from "./selectionMotion";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-emerald-600" : value < 0 ? "text-red-500" : "text-gray-500";
@@ -28,6 +30,12 @@ const DORM_ITEM_GAP = 4;
 
 interface PresetEvent {
   label: string;
+}
+
+interface PresetDraft {
+  originalLabel: string;
+  label: string;
+  score: number;
 }
 
 interface Props {
@@ -90,6 +98,9 @@ export function DormitoryWorkspace({
     return DORM_EVENT_PRESETS.map(p => ({ label: p.label }));
   });
   const [customLabel, setCustomLabel] = useState("");
+  const [presetManagerOpen, setPresetManagerOpen] = useState(false);
+  const [presetDrafts, setPresetDrafts] = useState<PresetDraft[]>([]);
+  const [pendingDeletePreset, setPendingDeletePreset] = useState("");
 
   // 分数记忆：记录每个事件标签上次设定的分数
   const [scoreMemory, setScoreMemory] = useState<Record<string, number>>(() => {
@@ -103,6 +114,10 @@ export function DormitoryWorkspace({
   // 切换动画 key
   const [animKey, setAnimKey] = useState(0);
   const mainRef = useRef<HTMLDivElement>(null);
+  const memberListRef = useRef<HTMLDivElement>(null);
+  const memberCandidatesRef = useRef<HTMLDivElement>(null);
+  const responsibleSelectedRef = useRef<HTMLDivElement>(null);
+  const responsibleCandidatesRef = useRef<HTMLDivElement>(null);
 
   const sortedDormitories = [...dormitories].sort((a, b) => b.currentScore - a.currentScore || a.name.localeCompare(b.name, "zh-Hans-CN"));
   const selectedDormitory = dormitories.find(dormitory => dormitory.id === selectedDormId) || sortedDormitories[0] || null;
@@ -160,21 +175,51 @@ export function DormitoryWorkspace({
   }
 
   function selectPreset(label: string) {
+    if (reason === label) {
+      setReason("");
+      return;
+    }
     setReason(label);
-    // 用记忆的分数，没有则 0
-    setScore(scoreMemory[label] ?? 0);
+    const defaultScore = DORM_EVENT_PRESETS.find(preset => preset.label === label)?.score ?? 0;
+    setScore(scoreMemory[label] ?? defaultScore);
   }
 
-  function addCustomPreset() {
+  function addCustomPresetDraft() {
     const label = customLabel.trim();
     if (!label) return;
-    if (presets.some(p => p.label === label)) return;
-    setPresets(prev => [...prev, { label }]);
+    if (presetDrafts.some(preset => preset.label.trim() === label)) return;
+    setPresetDrafts(previous => [...previous, { originalLabel: label, label, score: 0 }]);
     setCustomLabel("");
   }
 
-  function deletePreset(label: string) {
-    setPresets(prev => prev.filter(p => p.label !== label));
+  function openPresetManager() {
+    setPresetDrafts(presets.map(preset => ({
+      originalLabel: preset.label,
+      label: preset.label,
+      score: scoreMemory[preset.label] ?? DORM_EVENT_PRESETS.find(item => item.label === preset.label)?.score ?? 0,
+    })));
+    setCustomLabel("");
+    setPendingDeletePreset("");
+    setPresetManagerOpen(true);
+  }
+
+  function savePresetManager() {
+    const normalized = presetDrafts
+      .map(preset => ({ ...preset, label: preset.label.trim() }))
+      .filter((preset, index, list) => preset.label && list.findIndex(item => item.label === preset.label) === index);
+    const nextMemory: Record<string, number> = {};
+    normalized.forEach(preset => { nextMemory[preset.label] = preset.score; });
+    setPresets(normalized.map(preset => ({ label: preset.label })));
+    setScoreMemory(nextMemory);
+    const selectedDraft = normalized.find(preset => preset.originalLabel === reason);
+    if (reason && !selectedDraft) {
+      setReason("");
+    } else if (selectedDraft) {
+      setReason(selectedDraft.label);
+      setScore(selectedDraft.score);
+    }
+    setPresetManagerOpen(false);
+    setPendingDeletePreset("");
   }
 
   function startEditEvent(eventId: string, reason: string, score: number, note: string, punishment: string) {
@@ -197,6 +242,57 @@ export function DormitoryWorkspace({
         ? prev.filter(id => id !== studentId)
         : [...prev, studentId]
     );
+  }
+
+  function addMemberWithAnimation(event: ReactMouseEvent<HTMLButtonElement>, student: AppStudent) {
+    animateSelectionTransfer({
+      itemId: student.id,
+      itemName: student.name,
+      sourceElement: event.currentTarget,
+      sourceContainer: memberCandidatesRef.current,
+      targetContainer: memberListRef.current,
+      commit: () => onAssignStudentDormitory(student.id, selectedDormitory?.id),
+    });
+  }
+
+  function selectResponsibleWithAnimation(event: ReactMouseEvent<HTMLButtonElement>, student: AppStudent, selected: boolean) {
+    const selectedElement = responsibleSelectedRef.current
+      ? Array.from(responsibleSelectedRef.current.querySelectorAll<HTMLElement>("[data-selection-motion-id]")).find(element => element.dataset.selectionMotionId === student.id)
+      : null;
+    animateSelectionTransfer({
+      itemId: student.id,
+      itemName: student.name,
+      sourceElement: selected ? selectedElement || event.currentTarget : event.currentTarget,
+      sourceContainer: selected ? responsibleSelectedRef.current : responsibleCandidatesRef.current,
+      targetContainer: selected ? responsibleCandidatesRef.current : responsibleSelectedRef.current,
+      commit: () => toggleResponsible(student.id),
+      tone: "indigo",
+    });
+  }
+
+  function removeMemberWithAnimation(event: ReactMouseEvent<HTMLButtonElement>, student: AppStudent) {
+    const card = event.currentTarget.closest<HTMLElement>("[data-selection-motion-id]") || event.currentTarget;
+    animateSelectionTransfer({
+      itemId: student.id,
+      itemName: student.name,
+      sourceElement: card,
+      sourceContainer: memberListRef.current,
+      targetContainer: memberCandidatesRef.current,
+      commit: () => onAssignStudentDormitory(student.id, undefined),
+    });
+  }
+
+  function removeResponsibleWithAnimation(event: ReactMouseEvent<HTMLButtonElement>, student: AppStudent) {
+    const chip = event.currentTarget.closest<HTMLElement>("[data-selection-motion-id]") || event.currentTarget;
+    animateSelectionTransfer({
+      itemId: student.id,
+      itemName: student.name,
+      sourceElement: chip,
+      sourceContainer: responsibleSelectedRef.current,
+      targetContainer: responsibleCandidatesRef.current,
+      commit: () => toggleResponsible(student.id),
+      tone: "indigo",
+    });
   }
 
   function submitEvent() {
@@ -338,7 +434,17 @@ export function DormitoryWorkspace({
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-bold text-gray-900">{selectedDormitory.name}</h2>
                     <button
-                      onClick={() => onDeleteDormitory(selectedDormitory.id)}
+                      onClick={() => {
+                        const memberText = selectedDormitory.memberIds.length
+                          ? `\n当前 ${selectedDormitory.memberIds.length} 名成员将变为未分配宿舍。`
+                          : "";
+                        const eventText = selectedDormitory.events.length
+                          ? `\n本周的 ${selectedDormitory.events.length} 条事件记录也会一并删除。`
+                          : "";
+                        if (window.confirm(`确定删除宿舍「${selectedDormitory.name}」吗？${memberText}${eventText}\n此操作无法撤销。`)) {
+                          onDeleteDormitory(selectedDormitory.id);
+                        }
+                      }}
                       className="text-gray-300 hover:text-red-500 transition-colors"
                       title="删除宿舍"
                     >
@@ -382,62 +488,62 @@ export function DormitoryWorkspace({
               <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
                 {/* 事件录入 */}
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                  <div className="text-xs text-gray-400 font-semibold mb-3">选择事件类型</div>
-                  {/* 预设事件药丸（可删除） */}
-                  <div className="flex flex-wrap gap-2 mb-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-gray-800">记录宿舍事件</div>
+                      <div className="mt-0.5 text-[11px] text-gray-400">先选择事件类型，再补充得分与相关信息</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openPresetManager}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                    >
+                      <Settings2 className="h-3.5 w-3.5" />
+                      管理类型
+                    </button>
+                  </div>
+                  {/* 预设事件卡片：删除与改名统一放到管理窗口，避免误触。 */}
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {presets.map(preset => {
                       const active = reason === preset.label;
-                      const memScore = scoreMemory[preset.label];
+                      const memScore = scoreMemory[preset.label] ?? DORM_EVENT_PRESETS.find(item => item.label === preset.label)?.score ?? 0;
                       return (
-                        <div key={preset.label} className="group relative">
-                          <button
-                            type="button"
-                            onClick={() => selectPreset(preset.label)}
-                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              active
-                                ? "border-blue-300 bg-blue-500 text-white"
-                                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                            }`}
-                          >
-                            {preset.label}
-                            {memScore !== undefined && (
-                              <span className={`ml-1 ${active ? "text-white/70" : "text-gray-400"}`}>
-                                {memScore > 0 ? "+" : ""}{memScore}
-                              </span>
-                            )}
-                          </button>
-                          <button
-                            onClick={() => deletePreset(preset.label)}
-                            className="absolute -top-1.5 -right-1.5 grid h-4 w-4 place-items-center rounded-full bg-gray-200 text-gray-400 opacity-0 transition-opacity hover:bg-red-100 hover:text-red-500 group-hover:opacity-100"
-                            title="删除预设"
-                          >
-                            <X className="h-2.5 w-2.5" />
-                          </button>
-                        </div>
+                        <button
+                          key={preset.label}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => selectPreset(preset.label)}
+                          className={`group flex min-h-14 items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 active:scale-[.98] ${
+                            active
+                              ? "border-blue-300 bg-blue-50 shadow-[0_6px_18px_rgba(37,99,235,0.10)]"
+                              : "border-gray-200 bg-white hover:-translate-y-px hover:border-blue-200 hover:bg-blue-50/40"
+                          }`}
+                        >
+                          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold transition-colors ${
+                            active
+                              ? "bg-blue-600 text-white"
+                              : memScore > 0
+                                ? "bg-emerald-50 text-emerald-600"
+                                : memScore < 0
+                                  ? "bg-amber-50 text-amber-600"
+                                  : "bg-gray-100 text-gray-500"
+                          }`}>
+                            {memScore > 0 ? `+${memScore}` : memScore}
+                          </span>
+                          <span className="min-w-0">
+                            <span className={`block truncate text-xs font-bold ${active ? "text-blue-700" : "text-gray-700"}`}>{preset.label}</span>
+                            <span className={`mt-0.5 block text-[10px] ${active ? "text-blue-500" : "text-gray-400"}`}>{active ? "已选择，再点可收起" : "点击记录"}</span>
+                          </span>
+                          {active && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-blue-600" />}
+                        </button>
                       );
                     })}
                   </div>
-                  {/* 添加自定义事件 */}
-                  <div className="flex gap-2 mb-4">
-                    <input
-                      value={customLabel}
-                      onChange={e => setCustomLabel(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") addCustomPreset(); }}
-                      className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm outline-none focus:border-blue-300"
-                      placeholder="添加自定义事件类型…"
-                    />
-                    <button
-                      onClick={addCustomPreset}
-                      disabled={!customLabel.trim()}
-                      className="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
 
-                  {/* 分数 + 责任人 + 备注 + 处罚 */}
-                  {reason && (
-                    <div className="space-y-4 pt-2">
+                  {/* 分数 + 责任人 + 备注 + 处罚：保留 DOM，利用 grid rows 平滑展开与收起。 */}
+                  <div className="dorm-event-form-reveal" data-open={Boolean(reason)} aria-hidden={!reason}>
+                    <div className="dorm-event-form-reveal__inner">
+                    <div className="space-y-4 pt-4">
                       {/* 当前事件标签 + 分数 */}
                       <div className="flex items-center gap-3">
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-600">
@@ -493,26 +599,28 @@ export function DormitoryWorkspace({
                             showResponsible ? "max-h-96 mt-3 opacity-100" : "max-h-0 mt-0 opacity-0"
                           }`}
                         >
-                          {/* 已选责任人药丸 */}
-                          {selectedResponsibleStudents.length > 0 && (
-                            <div className="mb-2 flex flex-wrap gap-1.5">
-                              {selectedResponsibleStudents.map(student => (
-                                <span
-                                  key={student.id}
-                                  className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 py-0.5 pl-2.5 pr-1 text-xs font-semibold text-blue-700"
+                          {/* 已选责任人：同时作为名字飞入的落点 */}
+                          <div ref={responsibleSelectedRef} className="mb-2 flex min-h-8 flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-indigo-100 bg-indigo-50/40 px-2 py-1.5">
+                            {selectedResponsibleStudents.length > 0 ? selectedResponsibleStudents.map(student => (
+                              <span
+                                key={student.id}
+                                data-selection-motion-id={student.id}
+                                className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-white py-1 pl-2.5 pr-1 text-xs font-semibold text-indigo-700 shadow-sm"
+                              >
+                                {student.name}
+                                <button
+                                  type="button"
+                                  onClick={event => removeResponsibleWithAnimation(event, student)}
+                                  className="grid h-4 w-4 place-items-center rounded-full text-indigo-300 hover:bg-red-100 hover:text-red-500"
+                                  title={`取消选择 ${student.name}`}
                                 >
-                                  {student.name}
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleResponsible(student.id)}
-                                    className="grid h-3.5 w-3.5 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"
-                                  >
-                                    <X className="h-2.5 w-2.5" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              </span>
+                            )) : (
+                              <span className="text-[11px] text-indigo-300">点击下方成员，添加责任人</span>
+                            )}
+                          </div>
                           {/* 搜索 */}
                           <div className="relative">
                             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -524,7 +632,7 @@ export function DormitoryWorkspace({
                             />
                           </div>
                           {/* 成员列表（多选切换） */}
-                          <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-white py-1">
+                          <div ref={responsibleCandidatesRef} className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-white py-1">
                             {filteredMembers.length === 0 ? (
                               <div className="py-3 text-center text-xs text-gray-400">无匹配成员</div>
                             ) : (
@@ -533,14 +641,20 @@ export function DormitoryWorkspace({
                                 return (
                                   <button
                                     key={student.id}
+                                    data-selection-motion-id={student.id}
                                     type="button"
-                                    onClick={() => toggleResponsible(student.id)}
-                                    className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
+                                    onClick={event => selectResponsibleWithAnimation(event, student, selected)}
+                                    className={`group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-[background-color,color,transform] duration-200 hover:bg-indigo-50 active:scale-[.99] ${
                                       selected ? "bg-blue-50 text-blue-600" : "text-gray-700"
                                     }`}
                                   >
-                                    {student.name}
-                                    {selected && <Check className="h-3.5 w-3.5" />}
+                                    <span className="flex min-w-0 items-center gap-2">
+                                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${student.gender === "男" ? "bg-blue-50 text-blue-500" : student.gender === "女" ? "bg-pink-50 text-pink-500" : "bg-gray-100 text-gray-500"}`}>
+                                        {student.name.slice(0, 1)}
+                                      </span>
+                                      <span className="truncate font-semibold">{student.name}</span>
+                                    </span>
+                                    {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : <Plus className="h-3.5 w-3.5 shrink-0 text-indigo-300 transition-transform group-hover:scale-110" />}
                                   </button>
                                 );
                               })
@@ -577,7 +691,8 @@ export function DormitoryWorkspace({
                         </button>
                       </div>
                     </div>
-                  )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* 事件列表 */}
@@ -770,30 +885,41 @@ export function DormitoryWorkspace({
 
         {/* 右侧：成员 */}
         <aside className="flex flex-col min-h-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-700">成员</h3>
-            <span className="text-xs text-gray-400">{memberStudents.length} 人</span>
+          <div className="border-b border-gray-100 bg-gradient-to-r from-white to-blue-50/50 px-4 py-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">宿舍成员</h3>
+              <p className="mt-0.5 text-[10px] text-gray-400">点击姓名查看学生资料</p>
+            </div>
+            <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">{memberStudents.length} 人</span>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-            <div className="flex flex-wrap gap-1.5">
+            <div ref={memberListRef} className="grid min-h-10 gap-2 rounded-xl border border-dashed border-blue-100 bg-blue-50/30 p-2">
               {memberStudents.map(student => (
-                <span
+                <div
                   key={student.id}
-                  className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 py-0.5 pl-2.5 pr-1 text-xs font-semibold text-blue-700"
+                  data-selection-motion-id={student.id}
+                  className="dorm-member-enter group flex items-center gap-2 rounded-xl border border-blue-100 bg-white p-2 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-blue-200 hover:shadow-md"
                 >
-                  <button onClick={() => onSelectStudent(student)} className="hover:underline">
-                    {student.name}
+                  <button onClick={() => onSelectStudent(student)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold ${student.gender === "男" ? "bg-blue-50 text-blue-500" : student.gender === "女" ? "bg-pink-50 text-pink-500" : "bg-gray-100 text-gray-500"}`}>
+                      {student.name.slice(0, 1)}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-bold text-gray-800">{student.name}</span>
+                      <span className="block text-[10px] text-gray-400">{student.gender || "性别未填"} · 宿舍成员</span>
+                    </span>
                   </button>
                   <button
-                    onClick={() => onAssignStudentDormitory(student.id, undefined)}
-                    className="grid h-3.5 w-3.5 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"
+                    onClick={event => removeMemberWithAnimation(event, student)}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-gray-300 opacity-60 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                    title={`将 ${student.name} 移出宿舍`}
                   >
-                    <X className="h-2.5 w-2.5" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
-                </span>
+                </div>
               ))}
               {memberStudents.length === 0 && (
-                <span className="text-xs text-gray-400">暂无成员</span>
+                <div className="grid min-h-12 place-items-center text-center text-[11px] text-blue-300">从下方选择学生加入</div>
               )}
             </div>
             <div className="relative">
@@ -805,15 +931,20 @@ export function DormitoryWorkspace({
                 placeholder="搜索并加入学生"
               />
             </div>
-            <div className="max-h-48 overflow-y-auto rounded-xl border border-gray-100">
+            <div ref={memberCandidatesRef} className="max-h-52 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50/40 p-1">
               {assignableStudents.map(student => (
                 <button
                   key={student.id}
-                  onClick={() => onAssignStudentDormitory(student.id, selectedDormitory?.id)}
-                  className="flex w-full items-center justify-between border-b border-gray-50 px-3 py-2 text-left text-sm last:border-0 hover:bg-blue-50"
+                  data-selection-motion-id={student.id}
+                  onClick={event => addMemberWithAnimation(event, student)}
+                  className="group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-[background-color,transform] duration-200 hover:bg-white hover:shadow-sm active:scale-[.99]"
                 >
-                  <span className="text-gray-700">{student.name}</span>
-                  <span className="text-xs text-gray-400">
+                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold ${student.gender === "男" ? "bg-blue-50 text-blue-500" : student.gender === "女" ? "bg-pink-50 text-pink-500" : "bg-gray-100 text-gray-500"}`}>
+                    {student.name.slice(0, 1)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-700">{student.name}</span>
+                  <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-blue-100 bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-500 transition-colors group-hover:border-blue-200 group-hover:bg-blue-50">
+                    <Plus className="h-2.5 w-2.5" />
                     {student.dormitoryId ? "转入" : "加入"}
                   </span>
                 </button>
@@ -825,6 +956,136 @@ export function DormitoryWorkspace({
           </div>
         </aside>
       </div>
+
+      {presetManagerOpen && (
+        <div
+          className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="管理宿舍事件类型"
+          onMouseDown={event => {
+            if (event.currentTarget === event.target) {
+              setPresetManagerOpen(false);
+              setPendingDeletePreset("");
+            }
+          }}
+        >
+          <div className="modal-panel-enter flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">管理事件类型</h3>
+                <p className="mt-1 text-xs text-gray-400">在这里统一改名、设置默认分数或删除，避免在记录时误触。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPresetManagerOpen(false);
+                  setPendingDeletePreset("");
+                }}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                aria-label="关闭管理事件类型窗口"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-gray-50/60 p-4">
+              {presetDrafts.map((preset, index) => {
+                const deletePending = pendingDeletePreset === preset.originalLabel;
+                return (
+                  <div key={`${preset.originalLabel}-${index}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-2 p-3">
+                      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold ${preset.score > 0 ? "bg-emerald-50 text-emerald-600" : preset.score < 0 ? "bg-amber-50 text-amber-600" : "bg-gray-100 text-gray-500"}`}>
+                        {preset.score > 0 ? `+${preset.score}` : preset.score}
+                      </span>
+                      <label className="min-w-0 flex-1">
+                        <span className="sr-only">事件类型名称</span>
+                        <input
+                          value={preset.label}
+                          onChange={event => setPresetDrafts(previous => previous.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))}
+                          className="w-full rounded-lg border border-transparent bg-gray-50 px-2.5 py-1.5 text-sm font-semibold text-gray-700 outline-none transition-colors focus:border-blue-200 focus:bg-white"
+                        />
+                      </label>
+                      <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-gray-400">
+                        默认分
+                        <input
+                          type="number"
+                          value={preset.score}
+                          onChange={event => setPresetDrafts(previous => previous.map((item, itemIndex) => itemIndex === index ? { ...item, score: Number(event.target.value) || 0 } : item))}
+                          className="w-14 rounded-lg border border-gray-200 bg-white px-1.5 py-1.5 text-center text-sm font-semibold text-gray-700 outline-none focus:border-blue-300"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeletePreset(deletePending ? "" : preset.originalLabel)}
+                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors ${deletePending ? "bg-red-50 text-red-500" : "text-gray-300 hover:bg-red-50 hover:text-red-500"}`}
+                        aria-label={`删除事件类型 ${preset.label}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="dorm-preset-delete-confirm" data-open={deletePending}>
+                      <div className="dorm-preset-delete-confirm__inner">
+                        <div className="flex items-center justify-between gap-3 border-t border-red-100 bg-red-50 px-3 py-2">
+                          <span className="text-xs font-medium text-red-600">确定移除“{preset.label || "未命名类型"}”？保存后生效。</span>
+                          <div className="flex shrink-0 gap-1.5">
+                            <button type="button" onClick={() => setPendingDeletePreset("")} className="rounded-md px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-white">保留</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPresetDrafts(previous => previous.filter((_, itemIndex) => itemIndex !== index));
+                                setPendingDeletePreset("");
+                              }}
+                              className="rounded-md bg-red-500 px-2 py-1 text-xs font-semibold text-white hover:bg-red-600"
+                            >
+                              确认删除
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {presetDrafts.length === 0 && (
+                <div className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-xs text-gray-400">暂无事件类型，可在下方新增</div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 bg-white p-4">
+              <div className="mb-3 flex gap-2">
+                <input
+                  value={customLabel}
+                  onChange={event => setCustomLabel(event.target.value)}
+                  onKeyDown={event => { if (event.key === "Enter") addCustomPresetDraft(); }}
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none transition-colors focus:border-blue-300 focus:bg-white"
+                  placeholder="新增事件类型名称"
+                />
+                <button
+                  type="button"
+                  onClick={addCustomPresetDraft}
+                  disabled={!customLabel.trim() || presetDrafts.some(preset => preset.label.trim() === customLabel.trim())}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-600 hover:bg-blue-100 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  新增
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setPresetManagerOpen(false)} className="flex-1 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-500 hover:bg-gray-50">取消</button>
+                <button
+                  type="button"
+                  onClick={savePresetManager}
+                  disabled={presetDrafts.some((preset, index, list) => !preset.label.trim() || list.findIndex(item => item.label.trim() === preset.label.trim()) !== index)}
+                  className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400"
+                >
+                  保存类型设置
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

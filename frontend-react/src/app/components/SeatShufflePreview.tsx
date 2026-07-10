@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { RefreshCw, X } from "lucide-react";
 
 import {
@@ -25,6 +26,28 @@ interface Props {
 }
 
 type DetailTab = "changed" | "required" | "gender" | "complement" | "front";
+
+interface PreviewSeatRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface PreviewDragVisual {
+  fromIndex: number;
+  targetIndex: number | null;
+  pointerX: number;
+  pointerY: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  proximity: number;
+  phase: "dragging" | "settling";
+  settleLeft?: number;
+  settleTop?: number;
+}
 
 function PreviewStat({ active, label, value, onClick }: { active: boolean; label: string; value: string; onClick: () => void }) {
   return (
@@ -147,22 +170,183 @@ function renderFrontDetails(evaluation: SeatEvaluation) {
 export function SeatShufflePreview({ students, currentOrder, candidate, seatSettings, onOrderChange, onRegenerate, onApply, onClose, onSelectStudent }: Props) {
   const [activeDetail, setActiveDetail] = useState<DetailTab>("required");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragVisual, setDragVisual] = useState<PreviewDragVisual | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const seatRectsRef = useRef(new Map<number, PreviewSeatRect>());
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  const settleTimerRef = useRef<number | null>(null);
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const stats = getSeatPreviewStats(students, currentOrder, candidate.order, candidate.evaluation, seatSettings);
   const rows = Math.ceil(candidate.order.length / COLS);
   const changedSet = new Set(getChangedSeatIndices(currentOrder, candidate.order));
 
-  function swapSeats(targetIndex: number) {
-    if (dragIndex === null || dragIndex === targetIndex) {
-      return;
+  useEffect(() => () => {
+    dragCleanupRef.current?.();
+    if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+  }, []);
+
+  function readSeatRects() {
+    const next = new Map<number, PreviewSeatRect>();
+    boardRef.current?.querySelectorAll<HTMLElement>("[data-preview-seat-index]").forEach(element => {
+      const index = Number(element.dataset.previewSeatIndex);
+      if (!Number.isInteger(index) || next.has(index)) return;
+      const rect = element.getBoundingClientRect();
+      next.set(index, { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+    });
+    return next;
+  }
+
+  function targetAtPoint(clientX: number, clientY: number, fromIndex: number) {
+    let nearest: { targetIndex: number; proximity: number; distance: number } | null = null;
+    for (const [targetIndex, rect] of seatRectsRef.current) {
+      if (targetIndex === fromIndex) continue;
+      const influencePadding = 40;
+      const outsideX = Math.max(rect.left - influencePadding - clientX, 0, clientX - (rect.left + rect.width + influencePadding));
+      const outsideY = Math.max(rect.top - influencePadding - clientY, 0, clientY - (rect.top + rect.height + influencePadding));
+      if (outsideX > 0 || outsideY > 0) continue;
+      const dx = clientX - (rect.left + rect.width / 2);
+      const dy = clientY - (rect.top + rect.height / 2);
+      const normalizedDistance = Math.hypot(dx / (rect.width / 2 + influencePadding), dy / (rect.height / 2 + influencePadding));
+      if (normalizedDistance > 1) continue;
+      const proximity = Math.max(0.08, Math.min(1, 1 - normalizedDistance));
+      const distance = Math.hypot(dx, dy);
+      if (!nearest || distance < nearest.distance) nearest = { targetIndex, proximity, distance };
     }
+    return nearest ? { targetIndex: nearest.targetIndex, proximity: nearest.proximity } : { targetIndex: null, proximity: 0 };
+  }
+
+  function getTargetPush(fromIndex: number, targetIndex: number, proximity: number) {
+    const sourceRect = seatRectsRef.current.get(fromIndex);
+    const targetRect = seatRectsRef.current.get(targetIndex);
+    if (!sourceRect || !targetRect) return { x: 0, y: 0 };
+    const dx = targetRect.left + targetRect.width / 2 - (sourceRect.left + sourceRect.width / 2);
+    const dy = targetRect.top + targetRect.height / 2 - (sourceRect.top + sourceRect.height / 2);
+    const length = Math.hypot(dx, dy) || 1;
+    const horizontalMove = Math.abs(dx) >= Math.abs(dy);
+    const extent = horizontalMove ? targetRect.width : targetRect.height;
+    const amount = Math.min(horizontalMove ? 72 : 56, extent * (horizontalMove ? 0.78 : 1)) * proximity;
+    return { x: dx / length * amount, y: dy / length * amount };
+  }
+
+  function finishSwap(fromIndex: number, targetIndex: number) {
+    const sourceRect = seatRectsRef.current.get(fromIndex);
+    const targetRect = seatRectsRef.current.get(targetIndex);
+    const targetPush = getTargetPush(fromIndex, targetIndex, 1);
+    const sourceStudentId = candidate.order[fromIndex] ?? null;
+    const targetStudentId = candidate.order[targetIndex] ?? null;
     const next = [...candidate.order];
-    const source = next[dragIndex] ?? null;
-    next[dragIndex] = next[targetIndex] ?? null;
-    next[targetIndex] = source;
+    next[fromIndex] = targetStudentId;
+    next[targetIndex] = sourceStudentId;
+    setDragVisual(null);
     setDragIndex(null);
     onOrderChange(next);
+    if (!sourceRect || !targetRect || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const cards = Array.from(boardRef.current?.querySelectorAll<HTMLElement>("[data-preview-student-id]") || []);
+      if (sourceStudentId) {
+        cards.find(card => card.dataset.previewStudentId === sourceStudentId)?.animate([
+          { opacity: 0.35, transform: "scale(0.96)" },
+          { opacity: 1, transform: "scale(1)" },
+        ], { duration: 680, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+      }
+      if (targetStudentId) {
+        const startX = targetRect.left + targetPush.x - sourceRect.left;
+        const startY = targetRect.top + targetPush.y - sourceRect.top;
+        const arcX = Math.abs(startY) > Math.abs(startX) ? 7 : 0;
+        const arcY = Math.abs(startX) >= Math.abs(startY) ? -6 : 0;
+        cards.find(card => card.dataset.previewStudentId === targetStudentId)?.animate([
+          { offset: 0, opacity: 0.86, transform: `translate3d(${startX}px, ${startY}px, 0) scale(0.945)` },
+          { offset: 0.2, opacity: 1, transform: `translate3d(${startX * 0.92 + arcX * 0.35}px, ${startY * 0.92 + arcY * 0.35}px, 0) scale(0.965)` },
+          { offset: 0.72, opacity: 1, transform: `translate3d(${startX * 0.2 + arcX}px, ${startY * 0.2 + arcY}px, 0) scale(1.008)` },
+          { offset: 1, opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+        ], { duration: 1180, easing: "cubic-bezier(0.45, 0, 0.15, 1)" });
+      }
+    }));
   }
+
+  function beginPointerDrag(event: ReactPointerEvent<HTMLButtonElement>, fromIndex: number) {
+    if (event.button !== 0) return;
+    dragCleanupRef.current?.();
+    if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const sourceRect = event.currentTarget.getBoundingClientRect();
+    const offsetX = startX - sourceRect.left;
+    const offsetY = startY - sourceRect.top;
+    seatRectsRef.current = readSeatRects();
+    let active = false;
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+      dragCleanupRef.current = null;
+    };
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      if (!active && Math.hypot(pointerEvent.clientX - startX, pointerEvent.clientY - startY) < 6) return;
+      if (!active) {
+        active = true;
+        setDragIndex(fromIndex);
+      }
+      pointerEvent.preventDefault();
+      const { targetIndex, proximity } = targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, fromIndex);
+      setDragVisual({ fromIndex, targetIndex, pointerX: pointerEvent.clientX, pointerY: pointerEvent.clientY, offsetX, offsetY, width: sourceRect.width, height: sourceRect.height, proximity, phase: "dragging" });
+    };
+    const finishDrag = (pointerEvent: PointerEvent, cancelled: boolean) => {
+      if (pointerEvent.pointerId !== pointerId) return;
+      cleanup();
+      if (!active) return;
+      pointerEvent.preventDefault();
+      const { targetIndex } = cancelled ? { targetIndex: null } : targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, fromIndex);
+      const destination = targetIndex === null ? seatRectsRef.current.get(fromIndex) : seatRectsRef.current.get(targetIndex);
+      setDragVisual(current => current ? { ...current, targetIndex, proximity: targetIndex === null ? 0 : 1, phase: "settling", settleLeft: destination?.left, settleTop: destination?.top } : current);
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      settleTimerRef.current = window.setTimeout(() => {
+        settleTimerRef.current = null;
+        if (targetIndex === null) {
+          setDragVisual(null);
+          setDragIndex(null);
+        } else {
+          finishSwap(fromIndex, targetIndex);
+        }
+      }, reducedMotion ? 0 : targetIndex === null ? 420 : 440);
+    };
+    const handlePointerUp = (pointerEvent: PointerEvent) => finishDrag(pointerEvent, false);
+    const handlePointerCancel = (pointerEvent: PointerEvent) => finishDrag(pointerEvent, true);
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp, { passive: false });
+    window.addEventListener("pointercancel", handlePointerCancel, { passive: false });
+    dragCleanupRef.current = cleanup;
+  }
+
+  function seatVisualTransform(index: number) {
+    if (!dragVisual || dragVisual.targetIndex === null || index === dragVisual.fromIndex) return undefined;
+    const proximity = dragVisual.phase === "settling" ? 1 : dragVisual.proximity;
+    if (index === dragVisual.targetIndex) {
+      const push = getTargetPush(dragVisual.fromIndex, dragVisual.targetIndex, proximity);
+      return `translate3d(${push.x}px, ${push.y}px, 0) scale(${1 - proximity * 0.055})`;
+    }
+    const rowDistance = Math.abs(Math.floor(index / COLS) - Math.floor(dragVisual.targetIndex / COLS));
+    const colDistance = Math.abs(index % COLS - dragVisual.targetIndex % COLS);
+    const neighborDistance = rowDistance + colDistance;
+    if (neighborDistance < 1 || neighborDistance > 2) return undefined;
+    const targetRect = seatRectsRef.current.get(dragVisual.targetIndex);
+    const seatRect = seatRectsRef.current.get(index);
+    if (!targetRect || !seatRect) return undefined;
+    const dx = seatRect.left + seatRect.width / 2 - (targetRect.left + targetRect.width / 2);
+    const dy = seatRect.top + seatRect.height / 2 - (targetRect.top + targetRect.height / 2);
+    const length = Math.hypot(dx, dy) || 1;
+    const amount = (neighborDistance === 1 ? 14 : 6) * proximity;
+    return `translate3d(${dx / length * amount}px, ${dy / length * amount}px, 0)`;
+  }
+
+  const draggedStudentId = dragIndex === null ? null : candidate.order[dragIndex] ?? null;
+  const draggedStudent = draggedStudentId ? studentById.get(draggedStudentId) : null;
+  const overlayLeft = dragVisual?.phase === "settling" ? dragVisual.settleLeft : dragVisual ? dragVisual.pointerX - dragVisual.offsetX : 0;
+  const overlayTop = dragVisual?.phase === "settling" ? dragVisual.settleTop : dragVisual ? dragVisual.pointerY - dragVisual.offsetY : 0;
 
   const statCards: Array<[DetailTab, string, string]> = [
     ["changed", "变动座位", `${stats.changedCount} 个`],
@@ -187,7 +371,7 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
         </div>
 
         <div className="grid grid-cols-[1fr_19rem] gap-4 p-5 overflow-auto bg-gray-50">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 overflow-x-auto">
+          <div ref={boardRef} className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 overflow-x-auto ${dragVisual ? "select-none" : ""}`}>
             <div className="grid gap-2 min-w-[760px]" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}>
               {Array.from({ length: rows }).map((_, row) => (
                 <div key={`row-${row}`} className="col-span-8 grid gap-2 items-center" style={{ gridTemplateColumns: `3.25rem repeat(${COLS}, minmax(0, 1fr))` }}>
@@ -201,19 +385,22 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
                       <button
                         key={index}
                         type="button"
-                        draggable
-                        onDragStart={() => setDragIndex(index)}
-                        onDragOver={event => event.preventDefault()}
-                        onDrop={() => swapSeats(index)}
-                        onDragEnd={() => setDragIndex(null)}
-                        onClick={() => {
+                        data-preview-seat-index={index}
+                        data-preview-student-id={student?.id}
+                        onPointerDown={event => beginPointerDrag(event, index)}
+                        onClick={event => {
+                          if (dragVisual || dragIndex !== null) {
+                            event.preventDefault();
+                            return;
+                          }
                           if (student && onSelectStudent) {
                             onSelectStudent(student);
                           }
                         }}
-                        className={`h-12 rounded-xl border px-2 text-left transition-colors ${
+                        className={`h-12 rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
                           student ? "bg-white border-gray-200 hover:border-blue-200" : "bg-gray-50 border-dashed border-gray-200 text-gray-300"
-                        } ${changedSet.has(index) ? "ring-2 ring-blue-100" : ""} ${dragIndex === index ? "opacity-50" : ""}`}
+                        } ${changedSet.has(index) ? "ring-2 ring-blue-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-blue-400 bg-blue-50/90 shadow-[0_0_0_4px_rgba(59,130,246,0.16),0_12px_28px_rgba(37,99,235,0.14)]" : ""}`}
+                        style={{ transform: seatVisualTransform(index), touchAction: "manipulation" }}
                         title={getSeatPositionLabel(index)}
                       >
                         <span className="flex items-center gap-1.5 min-w-0">
@@ -261,6 +448,28 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
           <button onClick={onApply} className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm" style={{ fontWeight: 800 }}>采用方案</button>
         </div>
       </div>
+      {dragVisual && createPortal(
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none fixed z-[100] overflow-hidden rounded-xl border border-blue-300 bg-white/95 shadow-[0_18px_45px_rgba(37,99,235,0.24)] backdrop-blur-sm transition-[transform,opacity,box-shadow] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${dragVisual.phase === "settling" ? "duration-[440ms]" : "duration-150"}`}
+          style={{
+            left: 0,
+            top: 0,
+            width: dragVisual.width,
+            height: dragVisual.height,
+            opacity: dragVisual.phase === "settling" ? 0.92 : 1,
+            transform: `translate3d(${overlayLeft || 0}px, ${overlayTop || 0}px, 0) scale(${dragVisual.phase === "settling" ? 0.985 : 1.025})`,
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white to-violet-50/60" />
+          <div className="relative flex h-full min-w-0 items-center gap-2 px-2">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${draggedStudent?.gender === "男" ? "bg-blue-400" : draggedStudent?.gender === "女" ? "bg-pink-400" : "bg-gray-300"}`} />
+            <span className="min-w-0 flex-1 truncate text-sm font-bold text-gray-900">{draggedStudent?.name || "空"}</span>
+            <span className="text-[10px] font-semibold text-blue-500">换座</span>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
