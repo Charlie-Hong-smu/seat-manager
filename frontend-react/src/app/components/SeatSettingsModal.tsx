@@ -1,8 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Plus, RotateCcw, Search, Shuffle, Undo2, X } from "lucide-react";
 
 import { COMPLEMENT_RULES } from "../state/seatPlanner";
 import type { AppStudent, ComplementRuleId, SeatSettings, StudentId } from "../state/types";
+import { animateSelectionTransfer } from "./selectionMotion";
+import { AnimatedPopover } from "./ui";
 
 interface SeatSettingsModalProps {
   open: boolean;
@@ -17,15 +20,20 @@ interface SeatSettingsModalProps {
 }
 
 /** 可搜索的单选学生下拉。 */
-function StudentPicker({ students, value, onChange, placeholder, excludeIds }: {
+function StudentPicker({ students, value, onChange, placeholder, excludeIds, buttonRef }: {
   students: AppStudent[];
   value: string;
   onChange: (id: string) => void;
   placeholder: string;
   excludeIds?: string[];
+  buttonRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const localTriggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = buttonRef || localTriggerRef;
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [popoverLayout, setPopoverLayout] = useState({ left: 0, top: 0, width: 240, maxHeight: 176, openUp: false });
   const selected = students.find(student => student.id === value);
   const exclude = new Set(excludeIds || []);
   const filtered = students
@@ -33,31 +41,75 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds }: {
     .filter(student => !query || student.name.includes(query) || student.aliases.some(alias => alias.includes(query)))
     .slice(0, 60);
 
+  useEffect(() => {
+    if (open) window.requestAnimationFrame(() => searchRef.current?.focus());
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const margin = 12;
+      const gap = 5;
+      const below = window.innerHeight - rect.bottom - margin;
+      const above = rect.top - margin;
+      const openUp = below < 220 && above > below;
+      const available = openUp ? above : below;
+      const width = Math.min(Math.max(rect.width, 200), window.innerWidth - margin * 2);
+      const left = Math.min(Math.max(rect.left, margin), window.innerWidth - width - margin);
+      const panelHeight = Math.min(256, Math.max(120, available - gap));
+
+      setPopoverLayout({
+        left,
+        top: openUp ? rect.top - panelHeight - gap : rect.bottom + gap,
+        width,
+        maxHeight: Math.max(72, panelHeight - 41),
+        openUp,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
   return (
     <div className="relative min-w-0">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(value => !value)}
         className="flex w-full items-center justify-between gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-left text-sm outline-none focus:border-blue-300"
       >
         <span className={`truncate ${selected ? "text-gray-800" : "text-gray-400"}`}>{selected?.name || placeholder}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && (
+      {typeof document !== "undefined" && createPortal(
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-gray-100 bg-white shadow-lg">
+          {open && <button type="button" aria-label="关闭学生选择" className="fixed inset-0 z-[80] cursor-default" onClick={() => setOpen(false)} />}
+          <AnimatedPopover
+            open={open}
+            className={`fixed z-[90] overflow-hidden rounded-xl border border-gray-100 bg-white shadow-xl ${popoverLayout.openUp ? "origin-bottom" : "origin-top"}`}
+            style={{ left: popoverLayout.left, top: popoverLayout.top, width: popoverLayout.width }}
+          >
             <div className="relative border-b border-gray-100">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
               <input
-                autoFocus
+                ref={searchRef}
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 placeholder="搜索学生"
                 className="w-full py-2 pl-8 pr-2 text-sm outline-none"
               />
             </div>
-            <div className="max-h-44 overflow-y-auto">
+            <div className="overflow-y-auto" style={{ maxHeight: popoverLayout.maxHeight }}>
               {filtered.map(student => (
                 <button
                   key={student.id}
@@ -71,8 +123,9 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds }: {
               ))}
               {filtered.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400">无匹配学生</div>}
             </div>
-          </div>
-        </>
+          </AnimatedPopover>
+        </>,
+        document.body,
       )}
     </div>
   );
@@ -96,6 +149,12 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
   const [noPairA, setNoPairA] = useState("");
   const [noPairB, setNoPairB] = useState("");
   const [frontStudentId, setFrontStudentId] = useState("");
+  const frontPickerRef = useRef<HTMLButtonElement>(null);
+  const frontSelectedRef = useRef<HTMLDivElement>(null);
+  const lockedInputsRef = useRef<HTMLDivElement>(null);
+  const lockedSelectedRef = useRef<HTMLDivElement>(null);
+  const noInputsRef = useRef<HTMLDivElement>(null);
+  const noSelectedRef = useRef<HTMLDivElement>(null);
   const nameById = useMemo(() => new Map(students.map(student => [student.id, student.name])), [students]);
 
   if (!open) {
@@ -122,33 +181,75 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
     const a = kind === "locked" ? pairA : noPairA;
     const b = kind === "locked" ? pairB : noPairB;
     if (!a || !b || a === b) return;
-    onUpdate(current => {
-      const key = kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs";
-      const exists = current.constraints[key].some(pair => (pair.a === a && pair.b === b) || (pair.a === b && pair.b === a));
-      if (exists) return current;
-      return { ...current, constraints: { ...current.constraints, [key]: [...current.constraints[key], { a, b }] } };
+    const source = kind === "locked" ? lockedInputsRef.current : noInputsRef.current;
+    if (!source) return;
+    const itemId = `${kind}-${a}-${b}`;
+    animateSelectionTransfer({
+      itemId,
+      itemName: `${nameById.get(a) || "未知"} ${kind === "locked" ? "＋" : "✕"} ${nameById.get(b) || "未知"}`,
+      sourceElement: source,
+      sourceContainer: source,
+      targetContainer: kind === "locked" ? lockedSelectedRef.current : noSelectedRef.current,
+      tone: "indigo",
+      commit: () => {
+        onUpdate(current => {
+          const key = kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs";
+          const exists = current.constraints[key].some(pair => (pair.a === a && pair.b === b) || (pair.a === b && pair.b === a));
+          if (exists) return current;
+          return { ...current, constraints: { ...current.constraints, [key]: [...current.constraints[key], { a, b }] } };
+        });
+        if (kind === "locked") { setPairA(""); setPairB(""); } else { setNoPairA(""); setNoPairB(""); }
+      },
     });
-    if (kind === "locked") { setPairA(""); setPairB(""); } else { setNoPairA(""); setNoPairB(""); }
   }
 
-  function removePair(kind: "locked" | "no", a: StudentId, b: StudentId) {
-    onUpdate(current => {
-      const key = kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs";
-      return { ...current, constraints: { ...current.constraints, [key]: current.constraints[key].filter(pair => !(pair.a === a && pair.b === b)) } };
+  function removePair(kind: "locked" | "no", a: StudentId, b: StudentId, sourceElement: HTMLElement) {
+    animateSelectionTransfer({
+      itemId: `${kind}-${a}-${b}`,
+      itemName: `${nameById.get(a) || "未知"} ${kind === "locked" ? "＋" : "✕"} ${nameById.get(b) || "未知"}`,
+      sourceElement,
+      sourceContainer: kind === "locked" ? lockedSelectedRef.current : noSelectedRef.current,
+      targetContainer: kind === "locked" ? lockedInputsRef.current : noInputsRef.current,
+      tone: "indigo",
+      commit: () => onUpdate(current => {
+        const key = kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs";
+        return { ...current, constraints: { ...current.constraints, [key]: current.constraints[key].filter(pair => !(pair.a === a && pair.b === b)) } };
+      }),
     });
   }
 
   function addFrontStudent() {
     if (!frontStudentId) return;
-    onUpdate(current => {
-      if (current.constraints.frontRowStudentIds.includes(frontStudentId)) return current;
-      return { ...current, constraints: { ...current.constraints, frontRowStudentIds: [...current.constraints.frontRowStudentIds, frontStudentId] } };
+    const source = frontPickerRef.current;
+    if (!source) return;
+    const id = frontStudentId;
+    animateSelectionTransfer({
+      itemId: id,
+      itemName: nameById.get(id) || "未知",
+      sourceElement: source,
+      sourceContainer: source,
+      targetContainer: frontSelectedRef.current,
+      tone: "blue",
+      commit: () => {
+        onUpdate(current => {
+          if (current.constraints.frontRowStudentIds.includes(id)) return current;
+          return { ...current, constraints: { ...current.constraints, frontRowStudentIds: [...current.constraints.frontRowStudentIds, id] } };
+        });
+        setFrontStudentId("");
+      },
     });
-    setFrontStudentId("");
   }
 
-  function removeFrontStudent(id: StudentId) {
-    updateConstraints({ frontRowStudentIds: constraints.frontRowStudentIds.filter(item => item !== id) });
+  function removeFrontStudent(id: StudentId, sourceElement: HTMLElement) {
+    animateSelectionTransfer({
+      itemId: id,
+      itemName: nameById.get(id) || "未知",
+      sourceElement,
+      sourceContainer: frontSelectedRef.current,
+      targetContainer: frontPickerRef.current,
+      tone: "blue",
+      commit: () => updateConstraints({ frontRowStudentIds: constraints.frontRowStudentIds.filter(item => item !== id) }),
+    });
   }
 
   return (
@@ -194,15 +295,15 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
 
           <Section title="必须坐前排" hint={`前 ${constraints.frontRows} 排`}>
             <div className="flex gap-2">
-              <StudentPicker students={students} value={frontStudentId} onChange={setFrontStudentId} placeholder="搜索并选择学生" excludeIds={constraints.frontRowStudentIds} />
+              <StudentPicker students={students} value={frontStudentId} onChange={setFrontStudentId} placeholder="搜索并选择学生" excludeIds={constraints.frontRowStudentIds} buttonRef={frontPickerRef} />
               <button onClick={addFrontStudent} disabled={!frontStudentId} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" /></button>
             </div>
             {constraints.frontRowStudentIds.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div ref={frontSelectedRef} className="mt-2 flex flex-wrap gap-2">
                 {constraints.frontRowStudentIds.map(id => (
-                  <span key={id} className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 py-1 pl-3 pr-1.5 text-sm font-semibold text-blue-700">
+                  <span key={id} data-selection-motion-id={id} className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 py-1 pl-3 pr-1.5 text-sm font-semibold text-blue-700">
                     {nameById.get(id) || "未知"}
-                    <button onClick={() => removeFrontStudent(id)} className="grid h-4 w-4 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"><X className="h-3 w-3" /></button>
+                    <button onClick={event => removeFrontStudent(id, event.currentTarget.parentElement || event.currentTarget)} className="grid h-4 w-4 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"><X className="h-3 w-3" /></button>
                   </span>
                 ))}
               </div>
@@ -210,32 +311,32 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
           </Section>
 
           <Section title="固定同桌">
-            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            <div ref={lockedInputsRef} className="grid grid-cols-[1fr_1fr_auto] gap-2">
               <StudentPicker students={students} value={pairA} onChange={setPairA} placeholder="学生 A" excludeIds={pairB ? [pairB] : []} />
               <StudentPicker students={students} value={pairB} onChange={setPairB} placeholder="学生 B" excludeIds={pairA ? [pairA] : []} />
               <button onClick={() => addPair("locked")} disabled={!pairA || !pairB || pairA === pairB} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" /></button>
             </div>
-            <div className="mt-2 space-y-1.5">
+            <div ref={lockedSelectedRef} className="mt-2 space-y-1.5">
               {constraints.lockedDeskmatePairs.map(pair => (
-                <div key={`${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-sm">
+                <div key={`${pair.a}-${pair.b}`} data-selection-motion-id={`locked-${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-sm">
                   <span className="text-gray-700">{nameById.get(pair.a) || "未知"} <span className="text-emerald-500">＋</span> {nameById.get(pair.b) || "未知"}</span>
-                  <button onClick={() => removePair("locked", pair.a, pair.b)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+                  <button onClick={event => removePair("locked", pair.a, pair.b, event.currentTarget.parentElement || event.currentTarget)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}
             </div>
           </Section>
 
           <Section title="不能同桌">
-            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            <div ref={noInputsRef} className="grid grid-cols-[1fr_1fr_auto] gap-2">
               <StudentPicker students={students} value={noPairA} onChange={setNoPairA} placeholder="学生 A" excludeIds={noPairB ? [noPairB] : []} />
               <StudentPicker students={students} value={noPairB} onChange={setNoPairB} placeholder="学生 B" excludeIds={noPairA ? [noPairA] : []} />
               <button onClick={() => addPair("no")} disabled={!noPairA || !noPairB || noPairA === noPairB} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" /></button>
             </div>
-            <div className="mt-2 space-y-1.5">
+            <div ref={noSelectedRef} className="mt-2 space-y-1.5">
               {constraints.noDeskmatePairs.map(pair => (
-                <div key={`${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-sm">
+                <div key={`${pair.a}-${pair.b}`} data-selection-motion-id={`no-${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-sm">
                   <span className="text-gray-700">{nameById.get(pair.a) || "未知"} <span className="text-red-400">✕</span> {nameById.get(pair.b) || "未知"}</span>
-                  <button onClick={() => removePair("no", pair.a, pair.b)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+                  <button onClick={event => removePair("no", pair.a, pair.b, event.currentTarget.parentElement || event.currentTarget)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}
             </div>

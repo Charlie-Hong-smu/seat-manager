@@ -23,6 +23,7 @@ import {
   type SchoolStage,
 } from "../state/workspaces";
 import type { TermSeason } from "../state/types";
+import { AnimatedPopover } from "./ui";
 
 interface Props {
   /** 切换 / 新建 / 升学期成功后回调,让上层重新加载当前班级数据。 */
@@ -357,10 +358,11 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
         <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
       </button>
 
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={closeAll} />
-          <div className="popover-enter absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg">
+      {open && <div className="fixed inset-0 z-10" onClick={closeAll} />}
+      <AnimatedPopover
+        open={open}
+        className="absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg"
+      >
             {mode === "menu" && (
               <div className="max-h-[70vh] overflow-y-auto">
                 <div className="p-2">
@@ -473,9 +475,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
                 />
               );
             })()}
-          </div>
-        </>
-      )}
+      </AnimatedPopover>
     </div>
   );
 }

@@ -15,7 +15,7 @@ import {
 
 import { APP_NAME } from "../config";
 import type { AppStudent } from "../state/types";
-import { IconButton } from "./ui";
+import { AnimatedPopover, IconButton } from "./ui";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 interface TopHeaderProps {
@@ -132,8 +132,10 @@ export function TopHeader({
               <span className="hidden sm:inline">账户</span>
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${accountOpen ? "rotate-180" : ""}`} />
             </button>
-            {accountOpen && (
-              <div className="popover-enter absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-1.5 shadow-[var(--app-shadow-float)]">
+            <AnimatedPopover
+              open={accountOpen}
+              className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-1.5 shadow-[var(--app-shadow-float)]"
+            >
                 {accountItems.map(item => (
                   <button
                     key={item.key}
@@ -150,8 +152,7 @@ export function TopHeader({
                     {item.icon}{item.label}
                   </button>
                 ))}
-              </div>
-            )}
+            </AnimatedPopover>
           </div>
         </div>
       </header>

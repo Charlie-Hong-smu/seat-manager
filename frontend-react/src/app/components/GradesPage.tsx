@@ -24,7 +24,7 @@ import {
 
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
-import { SegmentedControl } from "./ui";
+import { AnimatedPopover, SegmentedControl } from "./ui";
 import type { AppStudent, GradeExam, GradeRow } from "../state/types";
 
 const DEFAULT_THRESHOLDS = { pass: 60, good: 75, excellent: 90 };
@@ -203,6 +203,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const [selectedSubject, setSelectedSubject] = useState("total");
   const [examOpen, setExamOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"single" | "trend">("single");
+  const [trendSubject, setTrendSubject] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortKey, setSortKey] = useState("total");
   const [sortAsc, setSortAsc] = useState(false);
@@ -216,6 +217,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     () => Array.from(new Set(exams.flatMap(exam => exam.subjects))),
     [exams]
   );
+  const visibleTrendSubjects = trendSubject === "all" || !trendSubjects.includes(trendSubject)
+    ? trendSubjects
+    : [trendSubject];
   const rows = selectedExam?.rows || [];
   const metricKey = selectedSubject === "total" || subjects.includes(selectedSubject) ? selectedSubject : "total";
   const studentById = new Map(students.map(student => [student.id, student]));
@@ -243,6 +247,12 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
       setThresholdOpen(false);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (trendSubject !== "all" && !trendSubjects.includes(trendSubject)) {
+      setTrendSubject("all");
+    }
+  }, [trendSubject, trendSubjects]);
 
   const rowsWithMetrics = rows.map(row => ({
     ...row,
@@ -366,28 +376,33 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
   return (
     <div className="grade-dashboard flex min-h-full flex-col bg-gray-50">
-      <div className="bg-white border-b border-gray-100 px-6 py-3 space-y-3">
+      <div className="grade-toolbar bg-white border-b border-gray-100 px-6 py-3 space-y-3" data-mode={activeTab}>
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative min-w-0 shrink basis-[280px]">
-            {activeTab === "single" ? (
-              <button
-                onClick={() => setExamOpen(v => !v)}
-                className="flex w-full min-w-0 items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                style={{ fontWeight: 600 }}
-              >
-                <span className="min-w-0 truncate">{selectedExam.name} · {selectedExam.date || "未填写日期"}</span>
-                <ChevronDown className="w-3.5 h-3.5 shrink-0 text-gray-400" />
-              </button>
-            ) : (
-              <div
-                className="flex w-full min-w-0 items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700"
-                style={{ fontWeight: 600 }}
-              >
-                <span className="min-w-0 truncate">趋势范围 · 全部 {exams.length} 场考试</span>
-              </div>
-            )}
-            {activeTab === "single" && examOpen && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 overflow-hidden min-w-72 max-w-96">
+            <button
+              type="button"
+              aria-disabled={activeTab === "trend"}
+              aria-haspopup={activeTab === "single" ? "listbox" : undefined}
+              aria-expanded={activeTab === "single" ? examOpen : undefined}
+              onClick={() => { if (activeTab === "single") setExamOpen(v => !v); }}
+              className={`flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border px-3 text-sm text-gray-700 transition-[background-color,border-color,box-shadow] duration-300 ${
+                activeTab === "single"
+                  ? "cursor-pointer border-gray-200 bg-gray-50 hover:border-blue-200 hover:bg-white hover:shadow-sm"
+                  : "cursor-default border-blue-100 bg-blue-50/50"
+              }`}
+              style={{ fontWeight: 600 }}
+            >
+              <span key={activeTab} className="grade-toolbar-copy-enter min-w-0 flex-1 truncate text-left">
+                {activeTab === "single"
+                  ? `${selectedExam.name} · ${selectedExam.date || "未填写日期"}`
+                  : `全部考试 · ${exams.length} 场趋势`}
+              </span>
+              <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-[opacity,transform] duration-300 ${activeTab === "single" ? "opacity-100" : "-translate-y-0.5 opacity-0"}`} />
+            </button>
+            <AnimatedPopover
+              open={activeTab === "single" && examOpen}
+              className="absolute left-0 top-full z-20 mt-1 min-w-72 max-w-96 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg"
+            >
                 {exams.map(exam => (
                   <button
                     key={exam.id}
@@ -402,64 +417,58 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                     {exam.name} · {exam.date || "未填写日期"}
                   </button>
                 ))}
-              </div>
-            )}
+            </AnimatedPopover>
           </div>
 
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-            {activeTab === "single" ? (
-              <SegmentedControl
-                value={metricKey}
-                ariaLabel="成绩学科切换"
-                onChange={subject => {
+            <SegmentedControl
+              value={activeTab === "single" ? metricKey : trendSubject}
+              ariaLabel="成绩学科切换"
+              onChange={subject => {
+                if (activeTab === "single") {
                   setSelectedSubject(subject);
                   setSortKey(subject);
                   setSortAsc(false);
-                }}
-                options={["total", ...subjects].map(subject => ({
-                  value: subject,
-                  label: subject === "total" ? "全部" : subject,
-                }))}
-                className="shrink-0"
-              />
-            ) : (
-              <>
-                <span className="px-1.5 py-1.5 text-xs text-gray-400 whitespace-nowrap" style={{ fontWeight: 700 }}>展示科目</span>
-                {trendSubjects.map(subject => (
-                  <span
-                    key={subject}
-                    className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-1.5 text-xs text-gray-500 whitespace-nowrap"
-                    style={{ fontWeight: 600 }}
-                  >
-                    {subject}
-                  </span>
-                ))}
-              </>
-            )}
+                } else {
+                  setTrendSubject(subject);
+                }
+              }}
+              options={(activeTab === "single" ? ["total", ...subjects] : ["all", ...trendSubjects]).map(subject => ({
+                value: subject,
+                label: subject === "total" || subject === "all" ? "全部" : subject,
+              }))}
+              className="grade-subject-switcher shrink-0"
+            />
           </div>
         </div>
 
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0">
-            {activeTab === "single" ? (
-              <button
-                onClick={() => setThresholdOpen(v => !v)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs border rounded-xl transition-colors ${thresholdOpen ? "bg-blue-50 text-blue-700 border-blue-200" : "text-gray-600 bg-gray-50 hover:bg-gray-100 border-gray-200"}`}
-                style={{ fontWeight: 700 }}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />阈值设置
-              </button>
-            ) : (
-              <div
-                className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-xl"
-                style={{ fontWeight: 700 }}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />阈值仅用于单次分析
-              </div>
-            )}
+            <button
+              type="button"
+              aria-disabled={activeTab === "trend"}
+              aria-haspopup={activeTab === "single" ? "dialog" : undefined}
+              aria-expanded={activeTab === "single" ? thresholdOpen : undefined}
+              onClick={() => { if (activeTab === "single") setThresholdOpen(v => !v); }}
+              className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs transition-[color,background-color,border-color] duration-300 ${
+                activeTab === "single"
+                  ? thresholdOpen
+                    ? "border-blue-200 bg-blue-50 text-blue-700"
+                    : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
+                  : "cursor-default border-gray-200 bg-gray-50 text-gray-400"
+              }`}
+              style={{ fontWeight: 700 }}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span key={activeTab} className="grade-toolbar-copy-enter">
+                {activeTab === "single" ? "阈值设置" : "趋势按原始分展示"}
+              </span>
+            </button>
 
-            {activeTab === "single" && thresholdOpen && (
-              <div className="surface-enter absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border border-gray-100 bg-white p-4 shadow-xl shadow-gray-200/70">
+            <AnimatedPopover
+              open={activeTab === "single" && thresholdOpen}
+              className="absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border border-gray-100 bg-white p-4 shadow-xl shadow-gray-200/70"
+            >
                 <div className="grid grid-cols-3 gap-3">
                   {(([
                     ["pass", "及格"],
@@ -481,8 +490,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                   ))}
                 </div>
                 <p className="mt-3 truncate text-xs text-gray-400">{metricKey === "total" ? totalThresholdHint : subjectThresholdHint}</p>
-              </div>
-            )}
+            </AnimatedPopover>
           </div>
 
           <button
@@ -732,6 +740,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           </>
         ) : (
           <>
+            <div key={visibleTrendSubjects.join("|") || "all"} className="grade-trend-subject-enter flex flex-col gap-5">
+              <TrendDashboard exams={exams} subjects={visibleTrendSubjects} />
+            </div>
             {trendFollowupCandidates.length > 0 && (
               <div className="surface-enter rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
                 <div className="mb-3 flex items-center justify-between gap-3">
@@ -763,7 +774,6 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                 </div>
               </div>
             )}
-            <TrendDashboard exams={exams} subjects={trendSubjects} />
           </>
         )}
       </div>

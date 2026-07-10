@@ -41,7 +41,7 @@ import { calcBalance, calcExpenseTotal, calcIncomeTotal, type NewFundTxInput } f
 import { DormEventForm } from "./DormEventForm";
 import { FundTransactionForm } from "./FundTransactionForm";
 import { SeatSettingsModal } from "./SeatSettingsModal";
-import { Button, FileDropZone, SegmentedControl, ToolDrawer } from "./ui";
+import { AnimatedPopover, Button, FileDropZone, SegmentedControl, ToolDrawer } from "./ui";
 import { hasStoredAiScoreMappingAuth, suggestRosterMappingWithAi, suggestScoreMappingWithAi, type AiRosterMappingSuggestion, type AiScoreMappingSuggestion } from "../state/aiScoreMappingService";
 import {
   buildScoreImportDraftFromRows,
@@ -206,8 +206,10 @@ export function DailyWorkspace({
               className="h-10 w-full rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-200 placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/10"
               placeholder="在座位表中查找学生"
             />
-            {search && (
-              <div className="popover-enter absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-1.5 shadow-[var(--app-shadow-float)]">
+            <AnimatedPopover
+              open={Boolean(search)}
+              className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-1.5 shadow-[var(--app-shadow-float)]"
+            >
                 {filteredStudents.map(student => (
                   <button
                     key={student.id}
@@ -220,8 +222,7 @@ export function DailyWorkspace({
                   </button>
                 ))}
                 {filteredStudents.length === 0 && <div className="px-3 py-5 text-center text-sm text-gray-400">无匹配结果</div>}
-              </div>
-            )}
+            </AnimatedPopover>
           </div>
         </div>
 
@@ -1073,7 +1074,7 @@ export function ScoresWorkspace({
 
         <aside
           aria-hidden={!managementOpen}
-          inert={!managementOpen}
+          {...(!managementOpen ? { inert: "" } : {})}
           className="score-management-panel min-h-0 w-[320px] space-y-4 overflow-y-auto"
         >
           <Panel title="成绩导入">

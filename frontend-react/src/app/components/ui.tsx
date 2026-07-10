@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 /**
@@ -164,6 +164,56 @@ export function SegmentedControl({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 统一下拉层动效。组件始终保留在 DOM 中，因此打开和关闭都能完整播放动画。
+ * 定位、尺寸和表面样式由调用方通过 className 提供。
+ */
+export function AnimatedPopover({
+  open,
+  children,
+  className = "",
+  style,
+}: {
+  open: boolean;
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const [phase, setPhase] = useState<"open" | "closing" | "closed">(open ? "open" : "closed");
+  const closeTimerRef = useRef<number | null>(null);
+  const openFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    if (openFrameRef.current !== null) window.cancelAnimationFrame(openFrameRef.current);
+
+    if (open) {
+      openFrameRef.current = window.requestAnimationFrame(() => setPhase("open"));
+    } else {
+      setPhase(current => current === "closed" ? "closed" : "closing");
+      closeTimerRef.current = window.setTimeout(() => setPhase("closed"), 240);
+    }
+
+    return () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+      if (openFrameRef.current !== null) window.cancelAnimationFrame(openFrameRef.current);
+    };
+  }, [open]);
+
+  return (
+    <div
+      data-open={open}
+      data-phase={phase}
+      aria-hidden={!open}
+      {...(!open ? { inert: "" } : {})}
+      className={`app-popover-motion ${className}`}
+      style={style}
+    >
+      {children}
     </div>
   );
 }
