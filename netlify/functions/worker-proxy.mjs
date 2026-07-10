@@ -1,28 +1,16 @@
+import { PUBLIC_POST_ROUTES, PUBLIC_ROUTE_PREFIXES, isPublicProxyRoute } from "../../cloudflare-worker/worker-routes.js";
+
 const DEFAULT_WORKER_ORIGIN = "https://seat-manager-ai.hongchenglin03.workers.dev";
 
-const ALLOWED_PATHS = [
-  "/auth",
-  "/analyze-class",
-  "/analyze-trend",
-  "/chat-assistant",
-  "/generate-comment",
-  "/student-followup",
-  "/suggest-roster-mapping",
-  "/suggest-score-mapping",
-  "/license/auth",
-  "/license/unbind-device",
-];
-
-const ALLOWED_PREFIXES = [
-  "/sync/",
-];
+export const ALLOWED_PATHS = PUBLIC_POST_ROUTES;
+export const ALLOWED_PREFIXES = PUBLIC_ROUTE_PREFIXES;
 
 function getWorkerOrigin() {
   return (Netlify.env.get("WORKER_ORIGIN") || DEFAULT_WORKER_ORIGIN).replace(/\/+$/, "");
 }
 
 function isAllowedPath(pathname) {
-  return ALLOWED_PATHS.includes(pathname) || ALLOWED_PREFIXES.some(prefix => pathname.startsWith(prefix));
+  return isPublicProxyRoute(pathname);
 }
 
 function getCorsHeaders(req) {

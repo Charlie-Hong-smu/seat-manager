@@ -23,50 +23,27 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    const url = new URL(request.url);
-    if (url.pathname.startsWith("/admin/licenses/")) {
-      return handleLicenseAdminRoute(request, env, corsHeaders, url.pathname);
+    try {
+      return await dispatchWorkerRequest(request, env, corsHeaders, {
+        licenseAdmin: handleLicenseAdminRoute,
+        sync: handleSyncRoute,
+        post: {
+          "/license/auth": handleLicenseAuth,
+          "/license/unbind-device": handleLicenseUnbindDevice,
+          "/auth": handleAuth,
+          "/analyze-trend": handleAnalyzeTrend,
+          "/analyze-class": handleAnalyzeClass,
+          "/chat-assistant": handleChatAssistant,
+          "/student-followup": handleStudentFollowup,
+          "/generate-comment": handleGenerateStudentComment,
+          "/suggest-score-mapping": handleSuggestScoreMapping,
+          "/suggest-roster-mapping": handleSuggestRosterMapping,
+        },
+      });
+    } catch (error) {
+      console.error(JSON.stringify({ event: "worker_request_failed", message: error instanceof Error ? error.message : "unknown_error" }));
+      return jsonResponse({ error: "internal_error" }, 500, corsHeaders);
     }
-
-    if (url.pathname.startsWith("/sync/")) {
-      return handleSyncRoute(request, env, corsHeaders, url.pathname);
-    }
-
-    if (request.method !== "POST") {
-      return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
-    }
-
-    if (url.pathname === "/license/auth") {
-      return handleLicenseAuth(request, env, corsHeaders);
-    }
-    if (url.pathname === "/license/unbind-device") {
-      return handleLicenseUnbindDevice(request, env, corsHeaders);
-    }
-    if (url.pathname === "/auth") {
-      return handleAuth(request, env, corsHeaders);
-    }
-    if (url.pathname === "/analyze-trend") {
-      return handleAnalyzeTrend(request, env, corsHeaders);
-    }
-    if (url.pathname === "/analyze-class") {
-      return handleAnalyzeClass(request, env, corsHeaders);
-    }
-    if (url.pathname === "/chat-assistant") {
-      return handleChatAssistant(request, env, corsHeaders);
-    }
-    if (url.pathname === "/student-followup") {
-      return handleStudentFollowup(request, env, corsHeaders);
-    }
-    if (url.pathname === "/generate-comment") {
-      return handleGenerateStudentComment(request, env, corsHeaders);
-    }
-    if (url.pathname === "/suggest-score-mapping") {
-      return handleSuggestScoreMapping(request, env, corsHeaders);
-    }
-    if (url.pathname === "/suggest-roster-mapping") {
-      return handleSuggestRosterMapping(request, env, corsHeaders);
-    }
-    return jsonResponse({ error: "not_found" }, 404, corsHeaders);
   }
 };
 
@@ -1348,30 +1325,6 @@ function getStudentCommentMissingInfo(context) {
   return missing;
 }
 
-function getCorsHeaders(origin, env) {
-  const defaultAllowed = "https://charlie-hong-smu.github.io";
-  const allowedList = String(env.ALLOWED_ORIGIN || defaultAllowed)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const localhostAllowed = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-  const allowOrigin = allowedList.includes("*")
-    ? origin || "*"
-    : allowedList.includes(origin) || localhostAllowed
-      ? origin
-      : defaultAllowed;
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Content-Type": "application/json"
-  };
-}
-
-function jsonResponse(body, status, headers) {
-  return new Response(JSON.stringify(body), { status, headers });
-}
-
 function getBearerToken(request) {
   const header = request.headers.get("Authorization") || "";
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -1767,3 +1720,5 @@ function trimAssistantContext(context) {
     comparisonContext: trimAssistantComparisonContext(context?.comparisonContext)
   };
 }
+import { dispatchWorkerRequest } from "./worker-router.js";
+import { getCorsHeaders, jsonResponse } from "./worker-response.js";

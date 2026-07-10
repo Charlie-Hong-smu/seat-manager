@@ -5,7 +5,9 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "test": "node --test test/*.test.js",
+    "check": "node --check deepseek-ai-worker.js && node --check worker-router.js && node --check worker-response.js && node --test test/*.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

@@ -143,6 +143,10 @@ jobs:
         working-directory: cloudflare-worker
         run: npm ci
 
+      - name: Validate Worker and proxy contracts
+        working-directory: cloudflare-worker
+        run: npm run check
+
       - name: Deploy Worker
         working-directory: cloudflare-worker
         env:
