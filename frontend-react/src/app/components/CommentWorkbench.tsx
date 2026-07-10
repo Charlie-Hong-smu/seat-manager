@@ -52,6 +52,7 @@ interface CommentBatchState {
 const COMMENT_BATCH_STATE_KEY = "seat-manager-ai-comment-batch-state-v1";
 type CommentFilterMode = "all" | "pending" | "needsInfo";
 type WorkbenchMode = "single" | "batch";
+type SingleGenerationPhase = "idle" | "loading" | "revealing";
 
 function emptyBatchState(): CommentBatchState {
   return {
@@ -198,6 +199,8 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiAuth());
   const [aiStatus, setAiStatus] = useState("AI 会使用学生成绩、标签和教师补充评价生成。");
+  const [singleGenerationPhase, setSingleGenerationPhase] = useState<SingleGenerationPhase>("idle");
+  const [displayedCommentText, setDisplayedCommentText] = useState(() => comments[0]?.text || "");
   const [customWordCount, setCustomWordCount] = useState(120);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showFollowupPanel, setShowFollowupPanel] = useState(false);
@@ -205,6 +208,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const [exportFormat, setExportFormat] = useState<"csv" | "txt">("csv");
   const pauseRequested = useRef(false);
   const workbenchRef = useRef<HTMLDivElement>(null);
+  const commentRevealFrame = useRef<number | null>(null);
   const batchProgress = batchState.total ? Math.round((batchState.done / batchState.total) * 100) : 0;
   const resumableCount = batchState.queue.length + batchState.failed.length;
 
@@ -257,6 +261,22 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   useEffect(() => {
     workbenchRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (commentRevealFrame.current !== null) {
+      window.cancelAnimationFrame(commentRevealFrame.current);
+      commentRevealFrame.current = null;
+    }
+    setSingleGenerationPhase("idle");
+    setDisplayedCommentText(selectedComment?.text || "");
+    return () => {
+      if (commentRevealFrame.current !== null) window.cancelAnimationFrame(commentRevealFrame.current);
+    };
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (singleGenerationPhase === "idle") setDisplayedCommentText(selectedComment?.text || "");
+  }, [selectedComment?.text, singleGenerationPhase]);
 
   function handleWorkbenchKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -373,14 +393,40 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     }[reason] || "AI 评语暂时不可用，请稍后重试。";
   }
 
+  function revealGeneratedComment(text: string) {
+    if (commentRevealFrame.current !== null) window.cancelAnimationFrame(commentRevealFrame.current);
+    setSingleGenerationPhase("revealing");
+    setDisplayedCommentText("");
+    const startedAt = window.performance.now();
+    const duration = Math.min(1500, Math.max(520, text.length * 8));
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - progress, 2.4);
+      const visibleLength = Math.min(text.length, Math.max(1, Math.ceil(text.length * eased)));
+      setDisplayedCommentText(text.slice(0, visibleLength));
+      if (progress < 1) {
+        commentRevealFrame.current = window.requestAnimationFrame(tick);
+      } else {
+        commentRevealFrame.current = null;
+        setDisplayedCommentText(text);
+        setSingleGenerationPhase("idle");
+      }
+    };
+    commentRevealFrame.current = window.requestAnimationFrame(tick);
+  }
+
   async function generateSingle() {
-    if (!selectedStudent || !selectedComment) return;
+    if (!selectedStudent || !selectedComment || singleGenerationPhase !== "idle") return;
+    setSingleGenerationPhase("loading");
+    setDisplayedCommentText("");
     setAiStatus(`正在生成 ${selectedStudent.name} 的评语...`);
     try {
       const draft = buildDraft(selectedComment);
       const result = await generateStudentAiComment(selectedStudent, draft, { accessCode, remember: rememberAuth, force: true });
       if (!result.comment) {
         setAiStatus(result.missingInfo?.length ? `需要补充：${result.missingInfo.join("、")}` : "信息不足，暂未生成评语。");
+        setDisplayedCommentText(selectedComment.text);
+        setSingleGenerationPhase("idle");
         return;
       }
       updateComment(selectedId, { text: result.comment, generated: true, needsInfo: Boolean(result.needsMoreInfo), failed: false });
@@ -405,9 +451,12 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       setAccessCode("");
       setHasAuth(true);
       setAiStatus(`已生成 ${selectedStudent.name} 的评语。`);
+      revealGeneratedComment(result.comment);
     } catch (error) {
       setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
       setHasAuth(hasStoredAiAuth());
+      setDisplayedCommentText(selectedComment.text);
+      setSingleGenerationPhase("idle");
     }
   }
 
@@ -1195,16 +1244,36 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col p-3">
-              <textarea value={selectedComment.text} onChange={event => updateComment(selectedId, { text: event.target.value })} placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。" className="min-h-[160px] flex-1 resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none transition-colors focus:border-blue-300 focus:bg-white" />
+              <div className="relative min-h-[160px] flex-1 overflow-hidden rounded-[var(--app-radius-sm)]">
+                <textarea
+                  value={displayedCommentText}
+                  readOnly={singleGenerationPhase !== "idle"}
+                  onChange={event => {
+                    setDisplayedCommentText(event.target.value);
+                    updateComment(selectedId, { text: event.target.value });
+                  }}
+                  placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。"
+                  className={`h-full min-h-[160px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
+                />
+                {singleGenerationPhase === "loading" && (
+                  <div className="absolute inset-0 flex flex-col justify-center gap-3 rounded-[var(--app-radius-sm)] border border-violet-100 bg-gradient-to-br from-violet-50/95 via-white to-blue-50/90 px-4" role="status" aria-label="AI 正在生成评语">
+                    {[82, 94, 71, 88, 58].map((width, index) => (
+                      <span key={width} className="ai-siri-loading-bar block h-2.5 rounded-full" style={{ width: `${width}%`, animationDelay: `${index * 90}ms` }} />
+                    ))}
+                    <span className="mt-1 text-xs font-semibold text-violet-600">正在组织语言与评语结构...</span>
+                  </div>
+                )}
+                {singleGenerationPhase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
+              </div>
               <div className="mt-2 rounded-[var(--app-radius-sm)] bg-blue-50/70 px-3 py-2 text-xs leading-5 text-blue-700" role="status">{aiStatus}</div>
             </div>
 
             <div className="shrink-0 border-t border-[var(--app-border)] bg-white p-3">
-              <div className={`grid items-center gap-2 ${selectedComment.generated ? "grid-cols-[1fr_88px_40px_40px]" : "grid-cols-[1fr_40px_40px]"}`}>
-                <button type="button" onClick={selectedComment.generated ? saveAndGoNext : generateSingle} disabled={batchRunning} className="flex h-10 items-center justify-center gap-2 rounded-[var(--app-radius-sm)] bg-blue-600 px-3 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-60">
+              <div className={`grid items-center gap-2 ${selectedComment.generated ? "grid-cols-[minmax(0,1fr)_40px_40px_40px]" : "grid-cols-[minmax(0,1fr)_40px_40px]"}`}>
+                <button type="button" onClick={selectedComment.generated ? saveAndGoNext : generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="flex h-10 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-blue-600 px-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-60">
                   {selectedComment.generated ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{selectedComment.generated ? "保存并下一位" : "生成评语"}
                 </button>
-                {selectedComment.generated && <button type="button" onClick={generateSingle} disabled={batchRunning} className="h-10 rounded-[var(--app-radius-sm)] bg-gray-100 text-xs font-semibold text-gray-600 hover:bg-gray-200 disabled:opacity-50">重新生成</button>}
+                {selectedComment.generated && <button type="button" aria-label="重新生成" title="重新生成" onClick={generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="grid h-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50"><Sparkles className="h-4 w-4" /></button>}
                 <button type="button" onClick={saveSelectedComment} className="grid h-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200" title="保存"><Save className="h-4 w-4" /></button>
                 <button type="button" onClick={() => { if (selectedComment.text) navigator.clipboard.writeText(selectedComment.text).catch(() => {}); }} disabled={!selectedComment.text} className="grid h-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40" title="复制"><Copy className="h-4 w-4" /></button>
               </div>

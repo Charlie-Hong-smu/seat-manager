@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, Clipboard, Loader2, MessageSquareText, PlusCircle, Save, Sparkles, Star, Target } from "lucide-react";
 
 import {
@@ -58,6 +58,8 @@ export function AiStudentFollowupPanel({
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiFollowupAuth());
   const [savedRecord, setSavedRecord] = useState(false);
   const [savedMaterial, setSavedMaterial] = useState(false);
+  const [resultVisible, setResultVisible] = useState(() => Boolean(readLastStudentFollowup(student.id)));
+  const revealFrame = useRef<number | null>(null);
   const hasResult = Boolean(result);
 
   useEffect(() => {
@@ -65,7 +67,11 @@ export function AiStudentFollowupPanel({
     setResult(cached);
     setSavedRecord(false);
     setSavedMaterial(false);
+    setResultVisible(Boolean(cached));
     setStatus(cached ? "已恢复上次生成的 AI 跟进建议。" : "AI 会结合成绩、标签、记录、宿舍和座位信息生成跟进建议。");
+    return () => {
+      if (revealFrame.current !== null) window.cancelAnimationFrame(revealFrame.current);
+    };
   }, [student.id]);
   const materialText = useMemo(() => {
     if (!result) {
@@ -80,6 +86,8 @@ export function AiStudentFollowupPanel({
   }, [result]);
 
   async function handleGenerate(force = true) {
+    if (revealFrame.current !== null) window.cancelAnimationFrame(revealFrame.current);
+    setResultVisible(false);
     setBusy(true);
     setSavedRecord(false);
     setSavedMaterial(false);
@@ -94,12 +102,19 @@ export function AiStudentFollowupPanel({
       setAccessCode("");
       setHasAuth(true);
       setStatus(next.disclaimer);
+      setBusy(false);
+      revealFrame.current = window.requestAnimationFrame(() => {
+        revealFrame.current = window.requestAnimationFrame(() => {
+          setResultVisible(true);
+          revealFrame.current = null;
+        });
+      });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       setStatus(getAiErrorMessage(reason));
       setHasAuth(hasStoredAiFollowupAuth());
-    } finally {
       setBusy(false);
+      setResultVisible(Boolean(result));
     }
   }
 
@@ -182,8 +197,37 @@ export function AiStudentFollowupPanel({
           </div>
         )}
 
-        {result ? (
-          <div className="space-y-3">
+        {busy && (
+          <div className="ai-followup-loading-enter rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/90 via-white to-blue-50/80 p-4" role="status" aria-label="AI 正在生成跟进建议">
+            <div className="mb-4 flex items-center gap-2 text-sm font-bold text-violet-700">
+              <span className="relative grid h-8 w-8 place-items-center rounded-xl bg-violet-600 text-white shadow-sm shadow-violet-200">
+                <Sparkles className="h-4 w-4" />
+                <span className="absolute inset-0 animate-ping rounded-xl bg-violet-400/30" />
+              </span>
+              正在分析学生表现与跟进方向
+            </div>
+            <div className="space-y-3">
+              {[91, 76, 96, 63].map((width, index) => (
+                <span key={width} className="ai-siri-loading-bar block h-2.5 rounded-full" style={{ width: `${width}%`, animationDelay: `${index * 100}ms` }} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!busy && !result && (
+          <div className="grid place-items-center rounded-2xl border border-dashed border-violet-100 bg-violet-50/40 px-4 py-8 text-center">
+            <div className="max-w-sm">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-violet-600 shadow-sm">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <p className="mt-3 text-sm leading-6 text-gray-500">生成后会给出可保存的跟进记录、可复制的家校沟通草稿，以及可加入评语工作台的素材。</p>
+            </div>
+          </div>
+        )}
+
+        <div aria-hidden={!result || busy || !resultVisible} inert={!result || busy || !resultVisible} className={`grid transition-[grid-template-rows,opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${result && !busy && resultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-2 opacity-0"}`}>
+          <div className="overflow-hidden">
+          {result && <div className="ai-followup-result-enter space-y-3 pb-0.5">
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
               <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-500" style={{ fontWeight: 900 }}>
                 <Target className="h-3.5 w-3.5 text-violet-500" />近期判断
@@ -262,17 +306,9 @@ export function AiStudentFollowupPanel({
                 {savedMaterial ? "已加素材" : "加入评语素材"}
               </button>
             </div>
+          </div>}
           </div>
-        ) : (
-          <div className="grid place-items-center rounded-2xl border border-dashed border-violet-100 bg-violet-50/40 px-4 py-8 text-center">
-            <div className="max-w-sm">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-violet-600 shadow-sm">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <p className="mt-3 text-sm leading-6 text-gray-500">生成后会给出可保存的跟进记录、可复制的家校沟通草稿，以及可加入评语工作台的素材。</p>
-            </div>
-          </div>
-        )}
+        </div>
 
         <p className="text-xs leading-5 text-violet-600">{status}</p>
       </div>
