@@ -4,7 +4,11 @@
 
 ## 代码边界
 
-- `deepseek-ai-worker.js`：业务 handler 与 Worker 入口。
+- `deepseek-ai-worker.js`：稳定的 Wrangler 入口，只导出应用。
+- `worker-app.js`：CORS、异常边界、显式路由装配与现有领域 handler。
+- `worker-auth.js`：token、hash 和常量时间比较。
+- `worker-usage.js`：`AiRequestContext`、短窗口限流和 KV 日计数。
+- `routes/`：license、sync 与 AI 的领域路由表；管理员路由仍由应用入口显式装配并受同一鉴权/响应边界保护。
 - `worker-router.js`：统一路由调度。
 - `worker-response.js`：CORS、JSON 和异常响应。
 - `worker-routes.js`：浏览器可调用的公共路由契约。
@@ -65,6 +69,14 @@ printf '你的访问码' | shasum -a 256
 ## KV 数据
 
 Worker 绑定的 KV 名称固定为 `SEAT_MANAGER_KV`。
+
+AI 日计数 key（内部防滥用，不进入备份或同步）：
+
+```text
+seat-manager:ai-usage:<YYYY-MM-DD>:<actorHash>
+```
+
+value 为 `{ "count": number, "updatedAt": string }`，3 天过期。payload 校验成功后、调用 DeepSeek 前计数；KV 故障只记录结构化告警并放行。`AUTH_RATE_LIMITER` 为每来源/登录路由每分钟 20 次，`AI_RATE_LIMITER` 为每个已验证 actor 每分钟 12 次。
 
 产品授权记录 key：
 

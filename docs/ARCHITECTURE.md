@@ -15,13 +15,16 @@
 
 - `frontend-react/src/app/App.tsx`：应用壳、页面切换和跨业务协调。
 - `state/seatManagerController.ts`：唯一持久业务状态控制器；学生、座位、成绩、宿舍、班费和历史都来自同一个 `SeatManagerState`。
-- `components/workspaces/`：App 使用的稳定页面入口。
+- `components/workspaces/`：Daily、Data、History、Scores、ClassFund 的独立页面实现与稳定 barrel；Scores 由 App 按需加载。
+- `components/RetryableLazy.tsx`：非首屏模块统一骨架、错误边界和原地重试；重试不刷新页面或重建持久状态控制器。
+- `components/studentModalSelectors.ts`：学生弹窗的日期周、成绩和别名纯派生逻辑。
+- `components/commentBatchStorage.ts`：评语批量队列的兼容存储边界，键保持 `seat-manager-ai-comment-batch-state-v1`。
 - `state/aiApiClient.ts`：AI token、商用授权复用、代理/直连 fallback 和公共错误语义。
 - `cloudflare-worker/`：授权、手动同步、AI 和授权管理接口。
 - `cloudflare-worker/worker-routes.js`：浏览器可调用的公共路由契约；Netlify 代理直接复用。
 - `license-admin/`：仅管理员使用的静态授权管理页。
 
-`WorkspacePages.tsx`、`CommentWorkbench.tsx`、`StudentModal.tsx` 和 `DormitoryWorkspace.tsx` 仍是较大的功能实现文件。新增工作应优先在稳定边界内提取局部组件或纯函数，不得为了缩短文件一次性改写业务流程。
+`DormitoryWorkspace.tsx`、`CommentWorkbench.tsx` 和 `StudentModal.tsx` 仍包含较多紧密相连的交互状态。新增工作应从现有纯逻辑/存储边界继续局部提取，不得为了缩短文件一次性改写业务流程，也不得创建无业务意义的一行转发组件。
 
 ## 持久数据流
 
@@ -55,10 +58,13 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 - AI service 负责业务 payload、缓存和返回类型；公共认证由 `AiApiClient` 负责。
 - AI 只能生成建议。写入档案、评语素材或记录必须由老师点击确认。
 - Worker 公共路由新增或删除时，必须同时通过 `cloudflare-worker/test/routes.test.js`。
+- AI handler 在 payload 校验后、调用上游前统一经过 `AiRequestContext`/usage 边界：Cloudflare Rate Limiting 负责短窗口保护，KV 负责尽力而为的 UTC 日计数；KV 故障告警后放行。
 
 ## PWA
 
 `vite-plugin-pwa` 为两种 base 生成 manifest 和 service worker。静态应用壳、哈希资源、图标和本地 XLSX 库进入 precache；API、Worker、同步和第三方请求不缓存。发现新 service worker 时只显示提示，用户点击“立即更新”后才刷新。
+
+Scores、AI Assistant 和 Comment Workbench 是非首屏异步模块；登录、应用壳和默认座位页保持同步加载。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.2 MiB，XLSX vendor 单独报告。
 
 ## 设计原则
 

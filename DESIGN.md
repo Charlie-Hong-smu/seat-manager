@@ -38,9 +38,11 @@ Figma Make 只提供页面结构、视觉层级、间距、颜色、卡片、表
 
 ```bash
 cd frontend-react
-pnpm check
+pnpm lint && pnpm typecheck && pnpm test:coverage
 pnpm build:zhang
+pnpm check:size
 pnpm build:commercial
+pnpm check:size && pnpm check:production
 ```
 
-涉及登录、持久数据、响应式交互或 PWA 时，再运行 `pnpm test:e2e`。
+涉及登录、持久数据、响应式交互或 PWA 时，再运行 `pnpm test:e2e:all`。

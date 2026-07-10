@@ -27,10 +27,12 @@ Agent 开始工作时必须先读 [`AGENTS.md`](AGENTS.md)。长期说明按职�
 cd frontend-react
 pnpm install --frozen-lockfile
 pnpm dev
-pnpm check
+pnpm lint && pnpm typecheck && pnpm test:coverage
 pnpm build:zhang
+pnpm check:size
 pnpm build:commercial
-pnpm test:e2e
+pnpm check:size && pnpm check:production
+pnpm test:e2e:all
 ```
 
 Worker 使用 npm：

@@ -7,16 +7,19 @@
 ```bash
 pnpm install --frozen-lockfile
 pnpm dev
-pnpm check
+pnpm lint && pnpm typecheck && pnpm test:coverage
 pnpm build:zhang
+pnpm check:size
 pnpm build:commercial
-pnpm test:e2e
+pnpm check:size && pnpm check:production
+pnpm test:e2e:all
 ```
 
-- `check`：ESLint、TypeScript strict、Vitest。
+- `test:coverage`：核心持久状态、业务 action 和 AI 转换覆盖率门槛。
 - `build:zhang`：默认小张版，base `/seat-manager/`。
 - `build:commercial`：商用授权版，base `/`。
-- `test:e2e`：本机 Chrome 冒烟测试，包括登录/状态重载和 PWA 离线重开。
+- `test:e2e:all`：Zhang 本地密码/PWA 与 Commercial 产品授权两套 Chromium 测试；Commercial mock 只存在于 `e2e/`。
+- `check:size` / `check:production`：构建预算与生产包测试标记扫描。
 
 不要使用 npm 修改本目录依赖；锁文件是 `pnpm-lock.yaml`。不要提交 `dist`、测试报告或浏览器产物。
 
@@ -26,7 +29,7 @@ pnpm test:e2e
 - `src/app/state/seatManagerController.ts`：唯一持久状态控制器。
 - `src/app/state/`：数据转换、存储、导入导出和 API service。
 - `src/app/state/aiApiClient.ts`：共享 AI 认证与网络 fallback。
-- `src/app/components/workspaces/`：App 使用的页面入口。
+- `src/app/components/workspaces/`：独立工作区页面与稳定入口；Scores 按需加载。
 - `src/app/components/`：页面、抽屉、弹窗和共享 UI。
 - `public/`：PWA 图标、Headers 和本地 XLSX 库。
 

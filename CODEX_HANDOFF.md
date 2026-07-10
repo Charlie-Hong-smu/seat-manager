@@ -20,6 +20,8 @@
 - `AiApiClient` 统一 AI auth 与代理 fallback；不要在新 service 再复制 token 存储逻辑。
 - React PWA 支持 Zhang `/seat-manager/` 和 Commercial `/`，更新由用户确认。
 - Worker 公共路由在 `cloudflare-worker/worker-routes.js`，Netlify 代理复用并有契约测试。
+- 工作区页面位于 `components/workspaces/`；Scores、AI Assistant、Comment Workbench 为可重试的非首屏异步模块。
+- Worker 入口只装配 CORS、异常和路由；鉴权、usage 与领域路由分别在 `worker-auth.js`、`worker-usage.js`、`routes/`。
 - GitHub Pages、Commercial Pages 和 Worker workflow 发布前都会运行自动检查。
 
 ## 修改后的最低验收
@@ -27,18 +29,23 @@
 ```bash
 cd frontend-react
 pnpm check
+pnpm test:coverage
 pnpm build:zhang
+pnpm check:size
 pnpm build:commercial
+pnpm check:size
+pnpm check:production
+pnpm test:e2e:all
 
 cd ../cloudflare-worker
 npm run check
 ```
 
-涉及登录、持久数据或 PWA 时，再运行 `pnpm test:e2e`。涉及 Worker 配置时，增加 Wrangler dry-run。线上部署不是普通本地修改的默认步骤。
+涉及登录、持久数据或 PWA 时，两种 edition 都要运行 `pnpm test:e2e:all`。涉及 Worker 配置时，增加 Wrangler dry-run。线上部署不是普通本地修改的默认步骤。
 
 ## 已知边界
 
 - 多班级云同步仍是整个 workspace book 手动覆盖，上限 5 MiB。
 - 订阅计费、自动续费和实时同步没有实现，也不应在普通维护中顺带引入。
-- 核心大页面仍可按功能逐步提取子组件；必须先补对应测试，禁止一次性重写。
+- 宿舍、学生弹窗和评语工作台仍可沿已有 selector/storage 边界逐步提取；必须先补对应测试，禁止一次性重写。
 - `promo-video/` 是为独立宣传工程保留的忽略路径；当前主仓库不依赖该目录。

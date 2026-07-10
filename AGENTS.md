@@ -22,8 +22,9 @@ Read this file before changing the repository. The durable architecture and depl
 
 1. Inspect the dirty worktree and preserve unrelated user changes.
 2. Keep changes scoped to the requested feature or refactor.
-3. Run `pnpm check`, both edition builds, Worker tests, and relevant browser smoke tests before handoff.
-4. When an app endpoint changes, verify the frontend call, Worker route, Netlify allowlist, and deployment workflow together.
-5. Update durable documentation when architecture, storage, public routes, deployment, or validation commands change.
+3. Run frontend lint, strict typecheck, `test:coverage`, both edition builds, `check:size`, Worker tests, and relevant browser smoke tests before handoff.
+4. Commercial release checks must run `check:production`; mocks and Playwright routes belong only in `frontend-react/e2e/`.
+5. When an app endpoint changes, verify the frontend call, Worker route, Netlify allowlist, and deployment workflow together.
+6. Update durable documentation when architecture, storage, public routes, deployment, or validation commands change.
 
 Use pnpm for `frontend-react/` and npm for `cloudflare-worker/`. Do not mix lockfile owners.

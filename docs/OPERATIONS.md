@@ -7,13 +7,18 @@
 ```bash
 cd frontend-react
 pnpm install --frozen-lockfile
-pnpm check
+pnpm lint
+pnpm typecheck
+pnpm test:coverage
 pnpm build:zhang
+pnpm check:size
 pnpm build:commercial
-pnpm test:e2e
+pnpm check:size
+pnpm check:production
+pnpm test:e2e:all
 ```
 
-`check` 包含 ESLint、TypeScript strict 和 Vitest。Playwright 默认使用本机 Chrome，覆盖首次登录/状态持久化、manifest 和断网重开。
+覆盖率门槛只约束持久状态、导入导出、业务 action 和 AI 数据转换等核心模块：语句/行/函数 70%，分支 60%。Playwright 分为 `test:e2e:zhang` 与 `test:e2e:commercial`；Commercial 的模拟授权只存在于测试浏览器上下文，不会进入生产源码或构建。
 
 Worker 使用 npm：
 
@@ -26,8 +31,8 @@ npx wrangler deploy --dry-run
 
 ## 自动发布
 
-- `.github/workflows/pages.yml`：每次 `main` push 检查并构建 Zhang edition，发布 GitHub Pages。
-- `.github/workflows/cloudflare-commercial.yml`：按变更目录检查并发布 Commercial Pages、Worker 或授权管理页。
+- `.github/workflows/pages.yml`：只有前端源码、资源、锁文件、测试或构建配置变化时运行，检查覆盖率与双 edition Chromium 后发布 Zhang edition。
+- `.github/workflows/cloudflare-commercial.yml`：排除纯 Markdown 变化，再按实际目录发布 Commercial Pages、Worker 或授权管理页。
 - `frontend-react/dist` 不进入 Git；根 `index.html` 只是线上入口说明，不是应用 bundle。
 
 Cloudflare workflow 需要 GitHub Secrets `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`；Commercial 前端可通过仓库变量 `COMMERCIAL_WORKER_URL` 指向 Netlify `/api`。
@@ -51,11 +56,12 @@ netlify deploy --prod
 
 ## 发布前验收
 
-1. 前端 `pnpm check` 与两个 edition build 通过。
-2. Worker `npm run check` 和 Wrangler dry-run 通过。
-3. 新接口同时存在于 Worker handler、`worker-routes.js`、代理和前端调用中。
-4. 浏览器检查登录、当前 workspace、学生数量和关键本地数据没有变化。
-5. PWA 检查 manifest base；Zhang 为 `/seat-manager/`，Commercial 为 `/`。
+1. 前端 lint、strict typecheck、`test:coverage`、两个 edition build、`check:size` 和 `check:production` 通过。
+2. `test:e2e:all` 同时通过；Commercial 测试不得访问生产授权记录。
+3. Worker `npm run check` 和 Wrangler dry-run 通过。
+4. 新接口同时存在于 Worker handler、`worker-routes.js`、代理和前端调用中。
+5. 浏览器检查登录、当前 workspace、学生数量和关键本地数据没有变化。
+6. PWA 检查 manifest base；Zhang 为 `/seat-manager/`，Commercial 为 `/`。
 
 ## 常见故障定位
 
