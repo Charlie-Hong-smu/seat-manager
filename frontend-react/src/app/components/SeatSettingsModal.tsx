@@ -26,7 +26,7 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds, but
   onChange: (id: string) => void;
   placeholder: string;
   excludeIds?: string[];
-  buttonRef?: React.RefObject<HTMLButtonElement | null>;
+  buttonRef?: React.RefObject<HTMLButtonElement>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -78,7 +78,7 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds, but
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open]);
+  }, [open, triggerRef]);
 
   return (
     <div className="relative min-w-0">

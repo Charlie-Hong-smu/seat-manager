@@ -8,7 +8,6 @@ import type {
   DormEvent,
   DormPeriodArchive,
   Dormitory,
-  FundTransaction,
   Gender,
   GradeExam,
   GradeRow,

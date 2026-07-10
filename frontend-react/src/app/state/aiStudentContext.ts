@@ -1,4 +1,4 @@
-import type { AppStudent, Dormitory, StudentCommentDraft, StudentExamSummary } from "./types";
+import type { AppStudent, CommentCriteriaSummary, CommentCustomOptionSummary, Dormitory, StudentCommentDraft, StudentExamSummary } from "./types";
 
 export interface AiStudentExamContext {
   order: number;
@@ -49,8 +49,8 @@ export interface AiStudentContext {
   records: string[];
   dormitory: string;
   commentProfile?: {
-    criteriaSummary: string[];
-    customOptions: string[];
+    criteriaSummary: CommentCriteriaSummary[];
+    customOptions: CommentCustomOptionSummary[];
     teacherNote: string;
   };
   teacherNote?: string;

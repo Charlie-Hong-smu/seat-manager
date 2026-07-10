@@ -102,16 +102,16 @@ export function Card({
   );
 }
 
-export function SegmentedControl({
+export function SegmentedControl<T extends string>({
   value,
   options,
   onChange,
   ariaLabel,
   className = "",
 }: {
-  value: string;
-  options: Array<{ value: string; label: string; icon?: ReactNode }>;
-  onChange: (value: string) => void;
+  value: T;
+  options: Array<{ value: T; label: string; icon?: ReactNode }>;
+  onChange: (value: T) => void;
   ariaLabel: string;
   className?: string;
 }) {
@@ -209,7 +209,7 @@ export function AnimatedPopover({
       data-open={open}
       data-phase={phase}
       aria-hidden={!open}
-      {...(!open ? { inert: "" } : {})}
+      inert={!open}
       className={`app-popover-motion ${className}`}
       style={style}
     >

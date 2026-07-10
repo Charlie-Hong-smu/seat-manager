@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
-  CalendarClock,
-  Check,
   ChevronDown,
   Dices,
   FileDown,
   FileUp,
-  History,
   LayoutGrid,
   Maximize2,
   Minimize2,
@@ -36,9 +33,7 @@ import {
   restoreBackup,
   type BackupImportPreview,
 } from "../state/backupStorage";
-import { type NewDormEventInput } from "../state/dormitoryActions";
 import { calcBalance, calcExpenseTotal, calcIncomeTotal, type NewFundTxInput } from "../state/classFundActions";
-import { DormEventForm } from "./DormEventForm";
 import { FundTransactionForm } from "./FundTransactionForm";
 import { SeatSettingsModal } from "./SeatSettingsModal";
 import { AnimatedPopover, Button, FileDropZone, SegmentedControl, ToolDrawer } from "./ui";
@@ -57,7 +52,6 @@ import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type 
 import type { AiClassTrendResult } from "../state/aiTrendService";
 import type {
   AppStudent,
-  Dormitory,
   FundTransaction,
   FundTxType,
   Gender,
@@ -81,18 +75,6 @@ function Panel({ title, action, children }: { title: string; action?: ReactNode;
       </div>
       <div className="p-5">{children}</div>
     </section>
-  );
-}
-
-function PageHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-4 border-b border-gray-100 bg-white px-6 py-4">
-      <div>
-        <h1 className="text-xl text-gray-900" style={{ fontWeight: 900 }}>{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-gray-400">{subtitle}</p>}
-      </div>
-      {right}
-    </div>
   );
 }
 
@@ -342,15 +324,6 @@ export function DailyWorkspace({
     </div>
   );
 }
-
-function scoreClass(value: number): string {
-  return value > 0 ? "text-emerald-600" : value < 0 ? "text-red-500" : "text-gray-500";
-}
-
-function formatSigned(value: number): string {
-  return `${value > 0 ? "+" : ""}${value}`;
-}
-
 
 export { DormitoryWorkspace } from "./DormitoryWorkspace";
 export function DataWorkspace({
@@ -1074,7 +1047,7 @@ export function ScoresWorkspace({
 
         <aside
           aria-hidden={!managementOpen}
-          {...(!managementOpen ? { inert: "" } : {})}
+          inert={!managementOpen}
           className="score-management-panel min-h-0 w-[320px] space-y-4 overflow-y-auto"
         >
           <Panel title="成绩导入">

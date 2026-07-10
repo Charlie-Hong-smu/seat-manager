@@ -212,7 +212,7 @@ export function StudentModal({
     setAiTrendAccessCode("");
     setHasAiTrendAuth(hasStoredAiTrendAuth());
     setActiveTab(initialActiveTab);
-  }, [student]);
+  }, [initialActiveTab, student]);
 
   useEffect(() => {
     setLocalRecords(student.records.map(r => ({

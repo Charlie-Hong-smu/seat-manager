@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Check, ChevronDown, GraduationCap, Pencil, Plus, School, Trash2 } from "lucide-react";
 
 import {
@@ -264,10 +264,10 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("menu");
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [, setRefreshKey] = useState(0);
 
-  const current = useMemo(() => getCurrentSlice(), [refreshKey, open]);
-  const classViews = useMemo(() => getClassViews(), [refreshKey, open]);
+  const current = getCurrentSlice();
+  const classViews = getClassViews();
 
   function closeAll() {
     setOpen(false);

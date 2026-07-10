@@ -799,7 +799,7 @@ export default function App() {
       await unbindCurrentDevice();
       setLoggedIn(false);
       window.alert("本机设备已解绑。");
-    } catch (error) {
+    } catch {
       window.alert("解绑失败，请稍后再试。");
     }
   }

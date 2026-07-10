@@ -168,7 +168,7 @@ function getBandKey(value: number | null, thresholds: Thresholds): "excellent" |
   return "fail";
 }
 
-function getMetricBandValue(row: GradeRow & { totalScore: number | null }, key: string, subjects: string[], thresholds: Thresholds): number | null {
+function getMetricBandValue(row: GradeRow & { totalScore: number | null }, key: string, subjects: string[]): number | null {
   if (key !== "total") {
     return getMetricValue(row, key);
   }
@@ -290,11 +290,11 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const maxMetric = metricValues.length ? Math.max(...metricValues) : null;
   const minMetric = metricValues.length ? Math.min(...metricValues) : null;
   const passCount = rowsWithMetrics.filter(row => {
-    const value = getMetricBandValue(row, metricKey, subjects, thresholds);
+    const value = getMetricBandValue(row, metricKey, subjects);
     return value !== null && value >= thresholds.pass;
   }).length;
   const excellentCount = rowsWithMetrics.filter(row => {
-    const value = getMetricBandValue(row, metricKey, subjects, thresholds);
+    const value = getMetricBandValue(row, metricKey, subjects);
     return value !== null && value >= thresholds.excellent;
   }).length;
   const subjectAvgData = subjects.map((subject, index) => {
@@ -313,18 +313,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const distributionData = [
     ...bandLabels.map(band => ({
       ...band,
-      count: rowsWithMetrics.filter(row => getBandKey(getMetricBandValue(row, metricKey, subjects, thresholds), thresholds) === band.key).length,
+      count: rowsWithMetrics.filter(row => getBandKey(getMetricBandValue(row, metricKey, subjects), thresholds) === band.key).length,
     })),
   ];
-  const rankingData = [...rowsWithMetrics]
-    .map(row => ({
-      name: row.name,
-      value: getMetricValue(row, metricKey),
-    }))
-    .filter((item): item is { name: string; value: number } => typeof item.value === "number" && Number.isFinite(item.value))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 12)
-    .map((item, index) => ({ ...item, rank: index + 1, fill: metricKey === "total" ? "#2563eb" : SUBJECT_COLORS[Math.max(0, subjects.indexOf(metricKey)) % SUBJECT_COLORS.length] }));
   const subjectRankingRows = [...rowsWithMetrics]
     .filter(row => row.name.includes(searchQuery))
     .map(row => ({
@@ -628,7 +619,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                       {filtered.map((row, index) => {
                         const matchedStudent = (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null;
                         const rank = [...rowsWithMetrics].sort((a, b) => compareValues(a.totalScore, b.totalScore, false)).findIndex(item => item.id === row.id) + 1;
-                        const grade = getGradeLabel(getMetricBandValue(row, metricKey, subjects, thresholds), thresholds);
+                        const grade = getGradeLabel(getMetricBandValue(row, metricKey, subjects), thresholds);
                         const gradeColor = {
                           优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
                           良好: "text-blue-600 bg-blue-50 border border-blue-100",

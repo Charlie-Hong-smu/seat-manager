@@ -111,6 +111,10 @@ jobs:
         working-directory: frontend-react
         run: pnpm install --frozen-lockfile
 
+      - name: Validate React frontend
+        working-directory: frontend-react
+        run: pnpm run check
+
       - name: Build commercial frontend
         working-directory: frontend-react
         run: VITE_EDITION=commercial VITE_BASE=/ VITE_WORKER_URL="${{ vars.COMMERCIAL_WORKER_URL }}" pnpm run build

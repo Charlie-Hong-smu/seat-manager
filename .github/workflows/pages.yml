@@ -39,6 +39,10 @@ jobs:
         working-directory: frontend-react
         run: pnpm install --frozen-lockfile
 
+      - name: Validate React frontend
+        working-directory: frontend-react
+        run: pnpm run check
+
       - name: Build React frontend
         working-directory: frontend-react
         run: pnpm run build

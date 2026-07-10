@@ -2,6 +2,14 @@
 node_modules/
 dist/
 .pnpm-store/
+.npm-cache/
 .netlify/
+.claude/
+.codebuddy/
+.playwright-cli/
+.workbuddy/
+.wrangler/
+**/.wrangler/
+/promo-video/
 *.log
 .dev.vars

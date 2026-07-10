@@ -184,7 +184,7 @@ async function requestAiAuth(accessCode: string, remember: boolean): Promise<AiA
   let response: Response;
   try {
     response = await send(getWorkerBaseUrl());
-  } catch (error) {
+  } catch {
     response = await send(getDirectWorkerUrl());
   }
   if (response.status === 404 || response.status === 405) {
@@ -300,7 +300,7 @@ function getSubjectAverages(exam: GradeExam | undefined): Record<string, number>
       .map(row => row.scores[subject]?.score)
       .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
     return [subject, average(values) ?? 0];
-  }).filter(([, value]) => value > 0));
+  }).filter((entry) => Number(entry[1]) > 0));
 }
 
 function getExamTotals(exam: GradeExam | undefined): number[] {
@@ -641,7 +641,8 @@ function getStudentExamSeries(student: AppStudent): string[] {
   return [...student.exams]
     .sort((a, b) => `${a.date || "9999-12-31"}-${a.name}`.localeCompare(`${b.date || "9999-12-31"}-${b.name}`))
     .map(exam => {
-      const rank = typeof exam.rankClass === "number" ? `，班排${exam.rankClass}` : "";
+      const parsedRank = Number.parseInt(String(exam.rank || ""), 10);
+      const rank = Number.isFinite(parsedRank) ? `，班排${parsedRank}` : "";
       return `${exam.name}${exam.date ? `(${exam.date})` : ""}：总分${formatMaybeNumber(exam.total)}${rank}`;
     })
     .slice(-8);
@@ -738,15 +739,15 @@ function buildStudentTermPack(students: AppStudent[], compareStudents: AppStuden
 
 function buildCandidateTermPack(currentStudents: AppStudent[], compareStudents: AppStudent[]): AiComparisonPack | null {
   const items = currentStudents
-    .map(student => {
+    .flatMap<AiComparisonPackItem>(student => {
       const compareStudent = findStudentByName(student, compareStudents);
       const currentTotal = getLatestStudentTotal(student);
       const compareTotal = getLatestStudentTotal(compareStudent);
       if (!compareStudent || currentTotal === null || compareTotal === null) {
-        return null;
+        return [];
       }
       const diff = Math.round((currentTotal - compareTotal) * 10) / 10;
-      return {
+      return [{
         name: student.name,
         summary: `${student.name} 总分变化 ${diff >= 0 ? "+" : ""}${diff}`,
         current: `当前最新总分 ${currentTotal}`,
@@ -754,9 +755,8 @@ function buildCandidateTermPack(currentStudents: AppStudent[], compareStudents: 
         trend: diff,
         subjects: [],
         exams: [],
-      };
+      }];
     })
-    .filter((item): item is AiComparisonPackItem => Boolean(item))
     .sort((a, b) => Math.abs(b.trend || 0) - Math.abs(a.trend || 0))
     .slice(0, 30);
   return items.length ? {

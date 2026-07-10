@@ -81,7 +81,7 @@ async function requestAiAuth(accessCode: string, remember: boolean): Promise<AiA
   let response: Response;
   try {
     response = await send(getWorkerBaseUrl());
-  } catch (error) {
+  } catch {
     response = await send(getDirectWorkerUrl());
   }
   if (response.status === 404 || response.status === 405) {

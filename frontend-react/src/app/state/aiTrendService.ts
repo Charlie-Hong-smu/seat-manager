@@ -90,7 +90,7 @@ async function requestAiAuth(accessCode: string, remember: boolean): Promise<AiA
   let response: Response;
   try {
     response = await send(getWorkerBaseUrl());
-  } catch (error) {
+  } catch {
     response = await send(getDirectWorkerUrl());
   }
   if (response.status === 404 || response.status === 405) {
@@ -400,7 +400,7 @@ function buildClassPayload(students: AppStudent[], exams: GradeExam[]) {
       studentCount: students.length,
       comparedStudentCount: compared.length,
       examStats: buildExamStats(exams),
-      focusCandidates: focusCandidates.map(({ concernScore, ...item }) => item),
+      focusCandidates: focusCandidates.map(({ concernScore: _concernScore, ...item }) => item),
       localAnalysis: {
         totalImproved: compared.filter(item => item.totalDiff > 0).length,
         totalDeclined: compared.filter(item => item.totalDiff < 0).length,

@@ -256,7 +256,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         setExpandedCriteria(current => new Set([...current, ...selectedCriterionIds, ...customCriterionIds]));
       }
     }
-  }, [selectedId, selectedProfile?.updatedAt, selectedComment?.needsInfo]);
+  }, [selectedComment?.needsInfo, selectedId, selectedProfile]);
 
   useEffect(() => {
     workbenchRef.current?.focus();
@@ -272,7 +272,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     return () => {
       if (commentRevealFrame.current !== null) window.cancelAnimationFrame(commentRevealFrame.current);
     };
-  }, [selectedId]);
+  }, [selectedComment?.text, selectedId]);
 
   useEffect(() => {
     if (singleGenerationPhase === "idle") setDisplayedCommentText(selectedComment?.text || "");
@@ -622,24 +622,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     }));
   }
 
-  function updateCriterion(criterionId: string, patch: Partial<CommentCriterion>) {
-    persistRubric({
-      ...rubric,
-      criteria: rubric.criteria.map(criterion => criterion.id === criterionId ? { ...criterion, ...patch } : criterion),
-    });
-  }
-
-  function deleteOrHideCriterion(criterion: CommentCriterion) {
-    if (criterion.builtIn) {
-      updateCriterion(criterion.id, { hidden: !criterion.hidden });
-      return;
-    }
-    persistRubric({
-      ...rubric,
-      criteria: rubric.criteria.filter(item => item.id !== criterion.id),
-    });
-  }
-
   function addCriterion() {
     const label = window.prompt("请输入新标准名称");
     if (!label?.trim()) return;
@@ -658,43 +640,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           options: [],
         },
       ],
-    });
-  }
-
-  function addCriterionOption(criterion: CommentCriterion) {
-    const label = window.prompt(`给「${criterion.label}」新增预设选项`);
-    if (!label?.trim()) return;
-    const id = makeSafeId(label, "option");
-    updateCriterion(criterion.id, {
-      options: [
-        ...criterion.options,
-        {
-          id,
-          label: label.trim(),
-          linkedTagId: criterion.syncToTags && label.trim().length <= 6 ? `comment_${criterion.id}_${id}` : "",
-          builtIn: false,
-        },
-      ],
-    });
-  }
-
-  function removeCriterionOption(criterion: CommentCriterion, optionId: string) {
-    updateCriterion(criterion.id, {
-      options: criterion.options.filter(option => option.id !== optionId),
-    });
-    setCommentProfiles(prev => {
-      const next: Record<StudentId, StudentCommentProfile> = {};
-      Object.entries(prev).forEach(([studentId, profile]) => {
-        const cleaned = {
-          ...profile,
-          criteriaValues: {
-            ...profile.criteriaValues,
-            [criterion.id]: (profile.criteriaValues[criterion.id] || []).filter(id => id !== optionId),
-          },
-        };
-        next[studentId] = saveStudentCommentProfile(studentId, rubric, cleaned);
-      });
-      return next;
     });
   }
 
@@ -855,33 +800,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     setAiStatus("正在暂停，当前学生生成完成后停止。");
   }
 
-  function copyAll() {
-    const text = comments
-      .filter(c => c.generated)
-      .map(c => {
-        const s = students.find(st => st.id === c.studentId)!;
-        return `【${s.name}】\n${c.text}`;
-      })
-      .join("\n\n");
-    navigator.clipboard.writeText(text).catch(() => {});
-  }
-
-  function exportCommentsCsv() {
-    const rows = [
-      ["姓名", "字数", "评语"],
-      ...students.map(student => {
-        const state = comments.find(c => c.studentId === student.id);
-        return [
-          student.name,
-          state?.text.length || 0,
-          state?.text || "",
-        ];
-      }),
-    ];
-    const content = `\ufeff${rows.map(row => row.map(csvEscape).join(",")).join("\n")}`;
-    downloadTextFile(`期末评语-${new Date().toISOString().slice(0, 10)}.csv`, content, "text/csv;charset=utf-8");
-  }
-
   function exportSelectedComments(format: "csv" | "txt") {
     const chosen = students.filter(s => exportSelectedIds.has(s.id));
     if (chosen.length === 0) return;
@@ -907,14 +825,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     setShowExportModal(false);
   }
 
-  const tagSummary = (s: AppStudent) =>
-    s.academicTags.length > 0 ? s.academicTags.slice(0, 2).join("、") : "暂无标签";
-
-  const scoreSummary = (student: AppStudent) => {
-    const exam = student.exams[0];
-    if (!exam) return "暂无成绩";
-    return `${exam.name} · 总分 ${exam.total ?? "—"}`;
-  };
   const batchButtonLabel = batchRunning
     ? "暂停"
     : batchState.queue.length
@@ -928,7 +838,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const headerProgress = Math.max(0, Math.min(100, batchProgress));
   const showHeaderProgress = batchRunning && batchState.total > 0;
   const selectedCount = selectedSummary.criteriaSummary.reduce((total, item) => total + item.values.length, 0) + selectedSummary.customOptions.length;
-  const selectedTags = selectedStudent ? [...selectedStudent.academicTags, ...selectedStudent.tags].filter(tag => !tag.startsWith("comment_")) : [];
   const selectedInitial = selectedStudent?.name.slice(0, 1) || "";
   const hasUnsavedTeacherNote = selectedProfile ? teacherNote !== selectedProfile.teacherNote : false;
   const selectedMaterialLabels = selectedSummary.criteriaSummary.flatMap(item => item.values);

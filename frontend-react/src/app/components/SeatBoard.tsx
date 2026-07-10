@@ -140,7 +140,7 @@ function SeatCard({
       </div>
 
       {/* 次要信息在卡片接近展开后再淡入，避免高度动画中途反复裁切。 */}
-      <div aria-hidden={cardMode !== "detail"} {...(cardMode !== "detail" ? { inert: "" } : {})} className={`absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none ${cardMode === "detail" ? "translate-y-0 opacity-100 delay-100" : "pointer-events-none translate-y-1 opacity-0 delay-0"}`}>
+      <div aria-hidden={cardMode !== "detail"} inert={cardMode !== "detail"} className={`absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none ${cardMode === "detail" ? "translate-y-0 opacity-100 delay-100" : "pointer-events-none translate-y-1 opacity-0 delay-0"}`}>
           {hasTags ? (
             <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap">
               {visibleTags.map(tag => {
