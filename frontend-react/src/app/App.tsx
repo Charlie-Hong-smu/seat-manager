@@ -12,7 +12,7 @@ import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import { HistorySeatModal } from "./components/HistorySeatModal";
 import { AiAssistantWorkspace } from "./components/AiAssistantWorkspace";
-import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ScoresWorkspace, ClassFundWorkspace } from "./components/WorkspacePages";
+import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ScoresWorkspace, ClassFundWorkspace } from "./components/workspaces";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
@@ -22,15 +22,14 @@ import {
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
 import { IS_COMMERCIAL } from "./config";
-import { createSeatManagerState } from "./state/legacyStateAdapter";
 import { closeDormitoryPeriod, createDormEvent, createDormitory, createDormStudentRecord, normalizeDormitoryScore, type NewDormEventInput } from "./state/dormitoryActions";
 import { createFundTransaction, type NewFundTxInput } from "./state/classFundActions";
 import { createStudent, createStudentRecord } from "./state/studentActions";
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "./state/commentRubricStorage";
-import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
+import { deleteGradeExamRecord, saveGradeExamRecord, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
-import { readLegacyRootState } from "./state/storage";
 import { useSeatManagerState } from "./state/store";
+import { useSeatManagerController } from "./state/seatManagerController";
 import { generateClassAiTrend, generateStudentAiTrend, readCachedStudentAiTrend, type AiClassTrendResult } from "./state/aiTrendService";
 import type { AppStudent, Dormitory, FundTransaction, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
 
@@ -50,22 +49,22 @@ type BeforeInstallPromptEvent = Event & {
 
 export default function App() {
   const initialState = useSeatManagerState();
-  const [appState, setAppState] = useState(() => initialState);
+  const controller = useSeatManagerController(initialState);
+  const appState = controller.state;
+  const { students, dormitories, fundTransactions, seatOrder, seatSettings } = appState;
+  const savedSeatHistory = appState.seatHistory;
+  const lockedSeats = new Set(appState.lockedSeats);
+  const { setStudents, setDormitories, setFundTransactions, setSeatOrder, setSeatSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory } = controller;
+  const { persist: persistState, reload: reloadState, replace: replaceState } = controller;
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [sidebarTab, setSidebarTab] = useState<AppTab>("daily");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1199px)").matches);
-  const [students, setStudents] = useState<AppStudent[]>(() => initialState.students);
-  const [dormitories, setDormitories] = useState<Dormitory[]>(() => initialState.dormitories);
-  const [fundTransactions, setFundTransactions] = useState<FundTransaction[]>(() => initialState.fundTransactions ?? []);
-  const [selectedStudent, setSelectedStudent] = useState<AppStudent | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<StudentId | null>(null);
+  const selectedStudent = students.find(student => student.id === selectedStudentId) || null;
   const [selectedStudentInitialTab, setSelectedStudentInitialTab] = useState<"records" | "profile" | "trend" | "followup">("records");
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
-  const [seatOrder, setSeatOrder] = useState<SeatOrder>(() => initialState.seatOrder);
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
-  const [savedSeatHistory, setSavedSeatHistory] = useState<SeatHistorySnapshot[]>(() => initialState.seatHistory);
   const [selectedHistorySnapshot, setSelectedHistorySnapshot] = useState<SeatHistorySnapshot | null>(null);
-  const [lockedSeats, setLockedSeats] = useState<Set<number>>(() => new Set(initialState.lockedSeats));
-  const [seatSettings, setSeatSettings] = useState<SeatSettings>(() => initialState.seatSettings);
   const [shufflePreview, setShufflePreview] = useState<ShuffleCandidate | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [showCloudSync, setShowCloudSync] = useState(false);
@@ -92,16 +91,8 @@ export default function App() {
     if (!loggedIn) {
       return;
     }
-    saveLegacySnapshot({
-      students,
-      seatOrder,
-      lockedSeats: [...lockedSeats],
-      seatSettings,
-      dormitories,
-      seatHistory: savedSeatHistory,
-      fundTransactions,
-    });
-  }, [students, seatOrder, lockedSeats, seatSettings, dormitories, savedSeatHistory, fundTransactions, loggedIn]);
+    persistState();
+  }, [appState, loggedIn, persistState]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -166,11 +157,7 @@ export default function App() {
   }
 
   function updateSeatSettings(updater: (current: SeatSettings) => SeatSettings) {
-    setSeatSettings(current => {
-      const next = updater(current);
-      setAppState(prev => ({ ...prev, seatSettings: next }));
-      return next;
-    });
+    setSeatSettings(updater);
   }
 
   function normalizeNameForHistory(name: string): string {
@@ -253,12 +240,11 @@ export default function App() {
 
   function openStudentDetail(student: AppStudent, initialTab: "records" | "profile" | "trend" | "followup" = "records") {
     setSelectedStudentInitialTab(initialTab);
-    setSelectedStudent(student);
+    setSelectedStudentId(student.id);
   }
 
   function handleUpdateStudent(nextStudent: AppStudent) {
     setStudents(prev => prev.map(student => (student.id === nextStudent.id ? nextStudent : student)));
-    setSelectedStudent(nextStudent);
   }
 
   function handleCreateDormitory(name: string, baseScore: number) {
@@ -285,9 +271,6 @@ export default function App() {
     setStudents(prev => prev.map(student => (
       student.dormitoryId === dormitoryId ? { ...student, dormitoryId: undefined } : student
     )));
-    setSelectedStudent(prev => (
-      prev?.dormitoryId === dormitoryId ? { ...prev, dormitoryId: undefined } : prev
-    ));
   }
 
   function handleAssignStudentDormitory(studentId: StudentId, dormitoryId?: string) {
@@ -301,9 +284,6 @@ export default function App() {
       const memberIds = dormitory.id === nextDormitoryId ? [...withoutStudent, studentId] : withoutStudent;
       return { ...dormitory, memberIds: Array.from(new Set(memberIds)) };
     }));
-    setSelectedStudent(prev => (
-      prev?.id === studentId ? { ...prev, dormitoryId: nextDormitoryId } : prev
-    ));
   }
 
   function handleAddDormitoryEvent(input: NewDormEventInput) {
@@ -328,11 +308,6 @@ export default function App() {
         const record = createDormStudentRecord(event, nextDormitory, student.id);
         return record ? { ...student, records: [record, ...student.records] } : student;
       }));
-      setSelectedStudent(prev => {
-        if (!prev || !idSet.has(prev.id)) return prev;
-        const record = createDormStudentRecord(event, nextDormitory, prev.id);
-        return record ? { ...prev, records: [record, ...prev.records] } : prev;
-      });
     }
     return event;
   }
@@ -385,10 +360,6 @@ export default function App() {
         if (!idSet.has(student.id)) return student;
         return { ...student, records: student.records.filter(record => !isLinkedRecord(record.id)) };
       }));
-      setSelectedStudent(prev => {
-        if (!prev || !idSet.has(prev.id)) return prev;
-        return { ...prev, records: prev.records.filter(record => !isLinkedRecord(record.id)) };
-      });
     }
   }
 
@@ -458,9 +429,6 @@ export default function App() {
       }
       return student;
     }));
-    setSelectedStudent(prev => (
-      prev?.id === studentId ? { ...prev, records: [record, ...prev.records] } : prev
-    ));
   }
 
   function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -494,7 +462,6 @@ export default function App() {
       },
     };
     setStudents(prev => prev.map(item => (item.id === student.id ? nextStudent : item)));
-    setSelectedStudent(prev => (prev?.id === student.id ? nextStudent : prev));
   }
 
   function handleDeleteStudent(studentId: StudentId) {
@@ -514,34 +481,18 @@ export default function App() {
       },
     }));
     setSelectedStudentInitialTab("records");
-    setSelectedStudent(null);
+    setSelectedStudentId(null);
   }
 
   function saveCurrentLegacySnapshot() {
-    saveLegacySnapshot({
-      students,
-      seatOrder,
-      lockedSeats: [...lockedSeats],
-      seatSettings,
-      dormitories,
-      seatHistory: savedSeatHistory,
-      fundTransactions,
-    });
+    persistState();
   }
 
   function reloadFromLegacyState() {
-    const next = createSeatManagerState(readLegacyRootState());
-    setAppState(next);
-    setStudents(next.students);
-    setSeatOrder(next.seatOrder);
-    setLockedSeats(new Set(next.lockedSeats));
-    setSeatSettings(next.seatSettings);
-    setDormitories(next.dormitories);
-    setFundTransactions(next.fundTransactions ?? []);
-    setSavedSeatHistory(next.seatHistory);
+    reloadState();
     setSeatHistory([]);
     setSelectedStudentInitialTab("records");
-    setSelectedStudent(null);
+    setSelectedStudentId(null);
   }
 
   function handleSaveScoreImport(record: SavedGradeExamRecord): GradeExam | null {
@@ -557,14 +508,7 @@ export default function App() {
     if (!next) {
       return null;
     }
-    setAppState(next);
-    setStudents(next.students);
-    setSeatOrder(next.seatOrder);
-    setLockedSeats(new Set(next.lockedSeats));
-    setSeatSettings(next.seatSettings);
-    setDormitories(next.dormitories);
-    setFundTransactions(next.fundTransactions ?? []);
-    setSavedSeatHistory(next.seatHistory);
+    replaceState(next);
     setSeatHistory([]);
     setSidebarTab("scores");
     return next.gradeExams.find(exam => exam.id === record.id) || next.gradeExams[0] || null;
@@ -585,14 +529,7 @@ export default function App() {
     if (!next) {
       return false;
     }
-    setAppState(next);
-    setStudents(next.students);
-    setSeatOrder(next.seatOrder);
-    setLockedSeats(new Set(next.lockedSeats));
-    setSeatSettings(next.seatSettings);
-    setDormitories(next.dormitories);
-    setFundTransactions(next.fundTransactions ?? []);
-    setSavedSeatHistory(next.seatHistory);
+    replaceState(next);
     return true;
   }
 
@@ -609,14 +546,7 @@ export default function App() {
     if (!next) {
       return false;
     }
-    setAppState(next);
-    setStudents(next.students);
-    setSeatOrder(next.seatOrder);
-    setLockedSeats(new Set(next.lockedSeats));
-    setSeatSettings(next.seatSettings);
-    setDormitories(next.dormitories);
-    setFundTransactions(next.fundTransactions ?? []);
-    setSavedSeatHistory(next.seatHistory);
+    replaceState(next);
     return true;
   }
 
@@ -755,16 +685,10 @@ export default function App() {
   async function handleImportRoster(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
     saveCurrentLegacySnapshot();
     const result = await importRosterFile(file, options);
-    setAppState(result.state);
-    setStudents(result.state.students);
-    setSeatOrder(result.state.seatOrder);
-    setLockedSeats(new Set(result.state.lockedSeats));
-    setSeatSettings(result.state.seatSettings);
-    setDormitories(result.state.dormitories);
-    setSavedSeatHistory(result.state.seatHistory);
+    replaceState(result.state);
     setSeatHistory([]);
     setSelectedStudentInitialTab("records");
-    setSelectedStudent(null);
+    setSelectedStudentId(null);
     return result;
   }
 
@@ -857,7 +781,7 @@ export default function App() {
               dormitories={dormitories}
               onClose={() => {
                 setSelectedStudentInitialTab("records");
-                setSelectedStudent(null);
+                setSelectedStudentId(null);
               }}
               onUpdateStudent={handleUpdateStudent}
               onApplyRecord={handleApplyStudentRecord}

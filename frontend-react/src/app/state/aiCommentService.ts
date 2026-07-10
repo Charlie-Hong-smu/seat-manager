@@ -1,23 +1,14 @@
 import { saveStudentCommentDraft } from "./commentStorage";
 import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
+import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
-import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
+import { getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, StudentCommentDraft } from "./types";
 
-const AI_AUTH_TOKEN_KEY = "seat-manager-ai-auth-token";
-const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
-const AI_AUTH_SESSION_TOKEN_KEY = "seat-manager-ai-session-token";
-const AI_AUTH_SESSION_EXPIRES_KEY = "seat-manager-ai-session-expires";
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
 const AI_COMMENT_CACHE_SCOPE = "student-comment";
-const AI_REMEMBER_DAYS = 30;
 const AI_REQUEST_LIMIT_BYTES = 20 * 1024;
-
-interface AiAuth {
-  token: string;
-  expiresAt: number;
-}
 
 interface AiResult {
   comment: string;
@@ -29,76 +20,12 @@ function hasBrowserStorage(): boolean {
   return typeof window !== "undefined" && Boolean(window.localStorage) && Boolean(window.sessionStorage);
 }
 
-function getStoredAiAuth(): AiAuth | null {
-  if (!hasBrowserStorage()) {
-    return null;
-  }
-  const now = Date.now();
-  const candidates = [
-    {
-      token: window.localStorage.getItem(AI_AUTH_TOKEN_KEY) || "",
-      expiresAt: Number.parseInt(window.localStorage.getItem(AI_AUTH_EXPIRES_KEY) || "", 10),
-    },
-    {
-      token: window.sessionStorage.getItem(AI_AUTH_SESSION_TOKEN_KEY) || "",
-      expiresAt: Number.parseInt(window.sessionStorage.getItem(AI_AUTH_SESSION_EXPIRES_KEY) || "", 10),
-    },
-  ];
-  return candidates.find(item => item.token && Number.isFinite(item.expiresAt) && item.expiresAt > now) || null;
-}
-
-function storeAiAuth(auth: AiAuth, remember: boolean): void {
-  if (!hasBrowserStorage()) {
-    return;
-  }
-  clearAiAuth();
-  const storage = remember ? window.localStorage : window.sessionStorage;
-  storage.setItem(remember ? AI_AUTH_TOKEN_KEY : AI_AUTH_SESSION_TOKEN_KEY, auth.token);
-  storage.setItem(remember ? AI_AUTH_EXPIRES_KEY : AI_AUTH_SESSION_EXPIRES_KEY, String(auth.expiresAt));
-}
-
 export function hasStoredAiAuth(): boolean {
-  return Boolean(IS_COMMERCIAL && getProductAuthToken()) || Boolean(getStoredAiAuth());
+  return hasStoredAiApiAuth();
 }
 
 export function clearAiAuth(): void {
-  if (!hasBrowserStorage()) {
-    return;
-  }
-  window.localStorage.removeItem(AI_AUTH_TOKEN_KEY);
-  window.localStorage.removeItem(AI_AUTH_EXPIRES_KEY);
-  window.sessionStorage.removeItem(AI_AUTH_SESSION_TOKEN_KEY);
-  window.sessionStorage.removeItem(AI_AUTH_SESSION_EXPIRES_KEY);
-}
-
-async function requestAiAuth(accessCode: string, remember: boolean): Promise<AiAuth> {
-  const requestBody = JSON.stringify({ accessCode, rememberDays: remember ? AI_REMEMBER_DAYS : 0 });
-  const send = (baseUrl: string) => fetch(`${baseUrl}/auth`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: requestBody,
-  });
-  let response: Response;
-  try {
-    response = await send(getWorkerBaseUrl());
-  } catch {
-    response = await send(getDirectWorkerUrl());
-  }
-  if (response.status === 404 || response.status === 405) {
-    response = await send(getDirectWorkerUrl());
-  }
-  if (response.status === 403) {
-    throw new Error("ai_unauthorized");
-  }
-  if (!response.ok) {
-    throw new Error("ai_auth_failed");
-  }
-  const data = await response.json() as AiAuth;
-  if (!data.token || !Number.isFinite(data.expiresAt)) {
-    throw new Error("ai_auth_failed");
-  }
-  storeAiAuth(data, remember);
-  return data;
+  clearAiApiAuth();
 }
 
 function stableStringify(value: unknown): string {
@@ -183,22 +110,6 @@ function validatePayloadSize(payload: unknown): boolean {
   return new TextEncoder().encode(JSON.stringify(payload)).length <= AI_REQUEST_LIMIT_BYTES;
 }
 
-async function getAuth(input?: { accessCode?: string; remember?: boolean }): Promise<AiAuth> {
-  const productToken = IS_COMMERCIAL ? getProductAuthToken() : "";
-  if (productToken) {
-    return { token: productToken, expiresAt: Date.now() + AI_REMEMBER_DAYS * 24 * 60 * 60 * 1000 };
-  }
-  const stored = getStoredAiAuth();
-  if (stored) {
-    return stored;
-  }
-  const accessCode = input?.accessCode?.trim();
-  if (!accessCode) {
-    throw new Error("ai_auth_required");
-  }
-  return requestAiAuth(accessCode, Boolean(input?.remember));
-}
-
 export async function generateStudentAiComment(
   student: AppStudent,
   draft: StudentCommentDraft,
@@ -233,14 +144,14 @@ export async function generateStudentAiComment(
     body: JSON.stringify(payload),
   });
 
-  let auth = await getAuth(input);
+  let auth = await getAiAuth(input);
   let response = await send(auth.token);
   if (response.status === 401) {
     if (IS_COMMERCIAL && getProductAuthToken()) {
       throw new Error("ai_unauthorized");
     }
-    clearAiAuth();
-    auth = await getAuth(input);
+    clearAiApiAuth();
+    auth = await getAiAuth(input);
     response = await send(auth.token);
   }
   if (response.status === 403) {
