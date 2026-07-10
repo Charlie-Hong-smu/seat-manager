@@ -11,8 +11,10 @@ test("Netlify proxy uses the Worker public route contract", () => {
 });
 
 test("every public Worker POST handler is declared in the route contract", async () => {
-  const source = await readFile(new URL("../deepseek-ai-worker.js", import.meta.url), "utf8");
-  const handlerBlock = source.match(/post:\s*\{([\s\S]*?)\n\s*\},\n\s*\}\);/u)?.[1] || "";
-  const implemented = [...handlerBlock.matchAll(/"(\/[^\"]+)"\s*:/g)].map(match => match[1]).sort();
+  const sources = await Promise.all([
+    readFile(new URL("../routes/license-routes.js", import.meta.url), "utf8"),
+    readFile(new URL("../routes/ai-routes.js", import.meta.url), "utf8"),
+  ]);
+  const implemented = [...sources.join("\n").matchAll(/"(\/[^\"]+)"\s*:/g)].map(match => match[1]).sort();
   assert.deepEqual(implemented, [...PUBLIC_POST_ROUTES].sort());
 });

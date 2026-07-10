@@ -7,7 +7,7 @@
     "dev": "wrangler dev",
     "tail": "wrangler tail",
     "test": "node --test test/*.test.js",
-    "check": "node --check deepseek-ai-worker.js && node --check worker-router.js && node --check worker-response.js && node --test test/*.test.js"
+    "check": "node --check deepseek-ai-worker.js && node --check worker-app.js && node --check worker-auth.js && node --check worker-router.js && node --check worker-response.js && node --check worker-usage.js && node --test test/*.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

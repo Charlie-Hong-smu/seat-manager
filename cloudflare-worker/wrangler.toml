@@ -9,3 +9,19 @@ ALLOWED_ORIGIN = "https://charlie-hong-smu.github.io,https://seat-manager-commer
 [[kv_namespaces]]
 binding = "SEAT_MANAGER_KV"
 id = "c825c37e3d1a43e5928251dab78731c4"
+
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "202607101"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[[ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "202607102"
+
+  [ratelimits.simple]
+  limit = 12
+  period = 60
