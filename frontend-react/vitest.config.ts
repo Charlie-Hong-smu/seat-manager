@@ -11,7 +11,7 @@ export default defineConfig({
       reporter: ["text", "json-summary"],
       reportsDirectory: "./coverage",
       include: [
-        "src/app/state/{backupStorage,classFundActions,dormitoryActions,studentActions,aiStudentContext,commentStorage}.ts",
+        "src/app/state/{backupStorage,classFundActions,dormitoryActions,studentActions,aiStudentContext,aiAssistantPayload,aiAssistantResult,commentStorage}.ts",
       ],
       thresholds: {
         statements: 70,

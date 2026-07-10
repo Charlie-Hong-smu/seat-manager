@@ -16,6 +16,8 @@ import { DORM_EVENT_PRESETS } from "../state/dormitoryActions";
 import type { NewDormEventInput } from "../state/dormitoryActions";
 import type { AppStudent, Dormitory, StudentId } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
+import { DormitoryListPanel } from "./DormitoryListPanel";
+import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-emerald-600" : value < 0 ? "text-red-500" : "text-gray-500";
@@ -24,9 +26,6 @@ function scoreClass(value: number): string {
 function formatSigned(value: number): string {
   return `${value > 0 ? "+" : ""}${value}`;
 }
-
-const DORM_ITEM_HEIGHT = 48;
-const DORM_ITEM_GAP = 4;
 
 interface PresetEvent {
   label: string;
@@ -325,104 +324,23 @@ export function DormitoryWorkspace({
   return (
     <div className="flex h-full flex-col bg-gray-50">
       <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr_220px] gap-4 overflow-hidden p-4">
-        {/* 左侧：宿舍列表 */}
-        <aside className="flex flex-col min-h-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 p-3">
-            <div className="flex gap-2">
-              <input
-                value={newName}
-                onChange={event => setNewName(event.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm outline-none focus:border-blue-300"
-                placeholder="新宿舍名称"
-              />
-              <input
-                type="number"
-                value={newBaseScore}
-                onChange={event => setNewBaseScore(Number(event.target.value) || 0)}
-                className="w-14 rounded-lg border border-gray-200 bg-gray-50 px-1 py-1.5 text-center text-sm outline-none focus:border-blue-300"
-                placeholder="分"
-              />
-              <button
-                onClick={createDormitory}
-                disabled={!newName.trim()}
-                className="shrink-0 rounded-lg bg-blue-600 px-2.5 py-1.5 text-white hover:bg-blue-700 disabled:bg-gray-200"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-          <nav
-            className="relative flex-1 min-h-0 overflow-y-auto p-2"
-            style={{ ["--dorm-active-y" as string]: `${activeDormIndex * (DORM_ITEM_HEIGHT + DORM_ITEM_GAP)}px` }}
-          >
-            {/* 选中指示条 */}
-            <div
-              className="pointer-events-none absolute left-2 right-2 top-2 h-12 rounded-xl bg-gray-900 shadow-sm transition-transform duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-              style={{ transform: "translateY(var(--dorm-active-y))" }}
-            />
-            <div className="relative space-y-1">
-              {sortedDormitories.map((dormitory, index) => {
-                const active = selectedDormitory?.id === dormitory.id;
-                return (
-                  <button
-                    key={dormitory.id}
-                    onClick={() => selectDorm(dormitory.id)}
-                    className={`relative z-10 flex h-12 w-full items-center justify-between gap-2 rounded-xl px-3 text-left transition-colors duration-100 ${active ? "text-white" : "hover:bg-gray-50 text-gray-700"}`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md text-[10px] font-bold ${active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-400"}`}>
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0">
-                        <div className={`truncate text-sm font-semibold ${active ? "text-white" : "text-gray-800"}`}>
-                          {dormitory.name}
-                        </div>
-                        <div className={`text-[10px] ${active ? "text-white/60" : "text-gray-400"}`}>
-                          {dormitory.memberIds.length} 人
-                        </div>
-                      </div>
-                    </div>
-                    <div className={`shrink-0 text-sm font-bold ${active ? "text-white" : scoreClass(dormitory.currentScore)}`}>
-                      {formatSigned(dormitory.currentScore)}
-                    </div>
-                  </button>
-                );
-              })}
-              {dormitories.length === 0 && (
-                <div className="px-2 py-6 text-center text-xs text-gray-400">暂无宿舍</div>
-              )}
-            </div>
-          </nav>
-          <div className="border-t border-gray-100 p-3 space-y-2">
-            <div className="text-[10px] text-gray-400">
-              共 {dormitories.length} 间 · {students.filter(s => s.dormitoryId).length} 名学生
-            </div>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              <input
-                type="checkbox"
-                checked={carryOver}
-                onChange={event => setCarryOver(event.target.checked)}
-                className="accent-blue-600"
-              />
-              结转上期分数
-            </label>
-            <button
-              onClick={() => {
-                if (!hasPendingEvents) return;
-                if (window.confirm(
-                  `将结算所有宿舍的当前周期${carryOver ? "（结转分数到下一周期）" : "（分数归零）"}，已记录事件会归档。是否继续？`
-                )) {
-                  onCloseAllDormitoryPeriods({ carryOver });
-                }
-              }}
-              disabled={!hasPendingEvents}
-              className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"
-            >
-              <CalendarClock className="h-3.5 w-3.5" />
-              一键周清
-            </button>
-          </div>
-        </aside>
+        <DormitoryListPanel
+          newName={newName}
+          setNewName={setNewName}
+          newBaseScore={newBaseScore}
+          setNewBaseScore={setNewBaseScore}
+          createDormitory={createDormitory}
+          activeDormIndex={activeDormIndex}
+          sortedDormitories={sortedDormitories}
+          selectedDormitory={selectedDormitory}
+          selectDorm={selectDorm}
+          dormitories={dormitories}
+          students={students}
+          carryOver={carryOver}
+          setCarryOver={setCarryOver}
+          hasPendingEvents={hasPendingEvents}
+          onCloseAllDormitoryPeriods={onCloseAllDormitoryPeriods}
+        />
 
         {/* 中间：事件账本 + 列表（带切换动画） */}
         <main ref={mainRef} className="flex flex-col min-h-0 overflow-hidden gap-4">
@@ -883,78 +801,17 @@ export function DormitoryWorkspace({
           )}
         </main>
 
-        {/* 右侧：成员 */}
-        <aside className="flex flex-col min-h-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 bg-gradient-to-r from-white to-blue-50/50 px-4 py-3 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-gray-800">宿舍成员</h3>
-              <p className="mt-0.5 text-[10px] text-gray-400">点击姓名查看学生资料</p>
-            </div>
-            <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">{memberStudents.length} 人</span>
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-            <div ref={memberListRef} className="grid min-h-10 gap-2 rounded-xl border border-dashed border-blue-100 bg-blue-50/30 p-2">
-              {memberStudents.map(student => (
-                <div
-                  key={student.id}
-                  data-selection-motion-id={student.id}
-                  className="dorm-member-enter group flex items-center gap-2 rounded-xl border border-blue-100 bg-white p-2 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-blue-200 hover:shadow-md"
-                >
-                  <button onClick={() => onSelectStudent(student)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold ${student.gender === "男" ? "bg-blue-50 text-blue-500" : student.gender === "女" ? "bg-pink-50 text-pink-500" : "bg-gray-100 text-gray-500"}`}>
-                      {student.name.slice(0, 1)}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-bold text-gray-800">{student.name}</span>
-                      <span className="block text-[10px] text-gray-400">{student.gender || "性别未填"} · 宿舍成员</span>
-                    </span>
-                  </button>
-                  <button
-                    onClick={event => removeMemberWithAnimation(event, student)}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-gray-300 opacity-60 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                    title={`将 ${student.name} 移出宿舍`}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-              {memberStudents.length === 0 && (
-                <div className="grid min-h-12 place-items-center text-center text-[11px] text-blue-300">从下方选择学生加入</div>
-              )}
-            </div>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-              <input
-                value={memberSearch}
-                onChange={event => setMemberSearch(event.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2 pl-7 pr-2 text-sm outline-none focus:border-blue-300"
-                placeholder="搜索并加入学生"
-              />
-            </div>
-            <div ref={memberCandidatesRef} className="max-h-52 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50/40 p-1">
-              {assignableStudents.map(student => (
-                <button
-                  key={student.id}
-                  data-selection-motion-id={student.id}
-                  onClick={event => addMemberWithAnimation(event, student)}
-                  className="group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-[background-color,transform] duration-200 hover:bg-white hover:shadow-sm active:scale-[.99]"
-                >
-                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold ${student.gender === "男" ? "bg-blue-50 text-blue-500" : student.gender === "女" ? "bg-pink-50 text-pink-500" : "bg-gray-100 text-gray-500"}`}>
-                    {student.name.slice(0, 1)}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-700">{student.name}</span>
-                  <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-blue-100 bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-500 transition-colors group-hover:border-blue-200 group-hover:bg-blue-50">
-                    <Plus className="h-2.5 w-2.5" />
-                    {student.dormitoryId ? "转入" : "加入"}
-                  </span>
-                </button>
-              ))}
-              {assignableStudents.length === 0 && (
-                <div className="px-3 py-4 text-center text-xs text-gray-400">无可加入学生</div>
-              )}
-            </div>
-          </div>
-        </aside>
+        <DormitoryMembersPanel
+          memberListRef={memberListRef}
+          memberStudents={memberStudents}
+          onSelectStudent={onSelectStudent}
+          removeMemberWithAnimation={removeMemberWithAnimation}
+          memberSearch={memberSearch}
+          setMemberSearch={setMemberSearch}
+          memberCandidatesRef={memberCandidatesRef}
+          assignableStudents={assignableStudents}
+          addMemberWithAnimation={addMemberWithAnimation}
+        />
       </div>
 
       {presetManagerOpen && (

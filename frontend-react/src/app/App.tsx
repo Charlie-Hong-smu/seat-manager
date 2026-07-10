@@ -14,23 +14,21 @@ import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, Cl
 import { RetryableLazy } from "./components/RetryableLazy";
 import {
   buildSeatOrderByStudentList,
-  placeStudentInFirstEmptySeat,
   swapSeatOrder,
   type SeatOrder,
 } from "./state/seatActions";
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
 import { IS_COMMERCIAL } from "./config";
-import { closeDormitoryPeriod, createDormEvent, createDormitory, createDormStudentRecord, normalizeDormitoryScore, type NewDormEventInput } from "./state/dormitoryActions";
-import { createFundTransaction, type NewFundTxInput } from "./state/classFundActions";
-import { createStudent, createStudentRecord } from "./state/studentActions";
-import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "./state/commentRubricStorage";
 import { deleteGradeExamRecord, saveGradeExamRecord, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { useSeatManagerState } from "./state/store";
 import { useSeatManagerController } from "./state/seatManagerController";
 import { generateClassAiTrend, generateStudentAiTrend, readCachedStudentAiTrend, type AiClassTrendResult } from "./state/aiTrendService";
-import type { AppStudent, Dormitory, FundTransaction, Gender, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId, StudentRecord } from "./state/types";
+import type { AppStudent, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId } from "./state/types";
+import { useStudentActions } from "./hooks/useStudentActions";
+import { useDormitoryActions } from "./hooks/useDormitoryActions";
+import { useClassFundActions } from "./hooks/useClassFundActions";
 
 type AppTab = SidebarTab;
 type StudentAdviceProgress = {
@@ -240,256 +238,9 @@ export default function App() {
     });
   }
 
-  function handleAddStudent(name: string, gender: Gender, alias?: string) {
-    const student = createStudent({ name, gender, alias });
-    setStudents(prev => [...prev, student]);
-    commitSeatOrder(placeStudentInFirstEmptySeat(seatOrder, student.id, students.length + 1));
-  }
-
   function openStudentDetail(student: AppStudent, initialTab: "records" | "profile" | "trend" | "followup" = "records") {
     setSelectedStudentInitialTab(initialTab);
     setSelectedStudentId(student.id);
-  }
-
-  function handleUpdateStudent(nextStudent: AppStudent) {
-    setStudents(prev => prev.map(student => (student.id === nextStudent.id ? nextStudent : student)));
-  }
-
-  function handleCreateDormitory(name: string, baseScore: number) {
-    const dormitory = createDormitory(name, baseScore);
-    setDormitories(prev => [dormitory, ...prev]);
-    return dormitory;
-  }
-
-  function handleUpdateDormitory(dormitoryId: string, patch: Partial<Pick<Dormitory, "name" | "baseScore">>) {
-    setDormitories(prev => prev.map(dormitory => {
-      if (dormitory.id !== dormitoryId) {
-        return dormitory;
-      }
-      return normalizeDormitoryScore({
-        ...dormitory,
-        name: patch.name !== undefined ? patch.name.trim() || dormitory.name : dormitory.name,
-        baseScore: patch.baseScore !== undefined && Number.isFinite(patch.baseScore) ? patch.baseScore : dormitory.baseScore,
-      });
-    }));
-  }
-
-  function handleDeleteDormitory(dormitoryId: string) {
-    setDormitories(prev => prev.filter(dormitory => dormitory.id !== dormitoryId));
-    setStudents(prev => prev.map(student => (
-      student.dormitoryId === dormitoryId ? { ...student, dormitoryId: undefined } : student
-    )));
-  }
-
-  function handleAssignStudentDormitory(studentId: StudentId, dormitoryId?: string) {
-    const targetDormitory = dormitoryId ? dormitories.find(dormitory => dormitory.id === dormitoryId) : undefined;
-    const nextDormitoryId = targetDormitory?.id;
-    setStudents(prev => prev.map(student => (
-      student.id === studentId ? { ...student, dormitoryId: nextDormitoryId } : student
-    )));
-    setDormitories(prev => prev.map(dormitory => {
-      const withoutStudent = dormitory.memberIds.filter(id => id !== studentId);
-      const memberIds = dormitory.id === nextDormitoryId ? [...withoutStudent, studentId] : withoutStudent;
-      return { ...dormitory, memberIds: Array.from(new Set(memberIds)) };
-    }));
-  }
-
-  function handleAddDormitoryEvent(input: NewDormEventInput) {
-    const dormitory = dormitories.find(item => item.id === input.dormId);
-    if (!dormitory) {
-      return null;
-    }
-    const event = createDormEvent(input, students);
-    const nextDormitory = normalizeDormitoryScore({
-      ...dormitory,
-      events: [event, ...dormitory.events].slice(0, 200),
-    });
-    setDormitories(prev => prev.map(item => (item.id === dormitory.id ? nextDormitory : item)));
-    // 同时把这条事件写入每个责任人的个人奖惩档案
-    const shouldRecord = input.recordToStudent !== false;
-    const responsibleIds = event.responsibleStudentIds
-      ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []);
-    if (shouldRecord && responsibleIds.length > 0) {
-      const idSet = new Set(responsibleIds);
-      setStudents(prev => prev.map(student => {
-        if (!idSet.has(student.id)) return student;
-        const record = createDormStudentRecord(event, nextDormitory, student.id);
-        return record ? { ...student, records: [record, ...student.records] } : student;
-      }));
-    }
-    return event;
-  }
-
-  function handleUpdateDormEvent(dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean }) {
-    setDormitories(prev => prev.map(dormitory => {
-      if (dormitory.id !== dormId) {
-        return dormitory;
-      }
-      const events = dormitory.events.map(event => {
-        if (event.id !== eventId) {
-          return event;
-        }
-        const nextScore = patch.score !== undefined && Number.isFinite(patch.score) ? Math.round(patch.score * 10) / 10 : event.score;
-        return {
-          ...event,
-          reason: patch.reason !== undefined ? patch.reason.trim() || event.reason : event.reason,
-          score: nextScore,
-          type: nextScore > 0 ? "reward" as const : nextScore < 0 ? "punish" as const : "note" as const,
-          note: patch.note !== undefined ? patch.note.trim() : event.note,
-          punishment: patch.punishment !== undefined ? patch.punishment.trim() : event.punishment,
-          punishmentDone: patch.punishmentDone !== undefined ? patch.punishmentDone : event.punishmentDone,
-        };
-      });
-      return normalizeDormitoryScore({ ...dormitory, events });
-    }));
-  }
-
-  function handleDeleteDormEvent(dormId: string, eventId: string) {
-    let responsibleIds: StudentId[] = [];
-    setDormitories(prev => prev.map(dormitory => {
-      if (dormitory.id !== dormId) {
-        return dormitory;
-      }
-      const target = dormitory.events.find(event => event.id === eventId);
-      responsibleIds = target?.responsibleStudentIds
-        ?? (target?.responsibleStudentId ? [target.responsibleStudentId] : []);
-      return normalizeDormitoryScore({
-        ...dormitory,
-        events: dormitory.events.filter(event => event.id !== eventId),
-      });
-    }));
-    // 删除事件时，一并清掉当初联动写入每个责任人个人档案的记录
-    if (responsibleIds.length > 0) {
-      const idSet = new Set(responsibleIds);
-      // 兼容新旧两种 record id 格式
-      const isLinkedRecord = (recordId: string) =>
-        recordId === `record-${eventId}` || responsibleIds.some(sid => recordId === `record-${eventId}-${sid}`);
-      setStudents(prev => prev.map(student => {
-        if (!idSet.has(student.id)) return student;
-        return { ...student, records: student.records.filter(record => !isLinkedRecord(record.id)) };
-      }));
-    }
-  }
-
-  function handleCloseDormitoryPeriod(dormId: string, options: { carryOver?: boolean } = {}) {
-    setDormitories(prev => prev.map(dormitory => (
-      dormitory.id === dormId ? closeDormitoryPeriod(dormitory, options) : dormitory
-    )));
-  }
-
-  function handleCloseAllDormitoryPeriods(options: { carryOver?: boolean } = {}) {
-    setDormitories(prev => prev.map(dormitory => (
-      dormitory.events.length ? closeDormitoryPeriod(dormitory, options) : dormitory
-    )));
-  }
-
-  function handleAddFundTransaction(input: NewFundTxInput) {
-    const tx = createFundTransaction(input, students);
-    setFundTransactions(prev => [tx, ...prev]);
-  }
-
-  function handleUpdateFundTransaction(id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds">>) {
-    setFundTransactions(prev => prev.map(tx => {
-      if (tx.id !== id) {
-        return tx;
-      }
-      const nextAmount = patch.amount !== undefined && Number.isFinite(patch.amount) ? Math.abs(patch.amount) : tx.amount;
-      const nextRelatedIds = patch.relatedStudentIds !== undefined ? patch.relatedStudentIds : tx.relatedStudentIds;
-      const resolved = (nextRelatedIds ?? [])
-        .map(rid => students.find(s => s.id === rid))
-        .filter((s): s is AppStudent => Boolean(s));
-      const relatedIds = resolved.map(s => s.id);
-      const relatedNames = resolved.map(s => s.name);
-      return {
-        ...tx,
-        type: patch.type ?? tx.type,
-        amount: nextAmount,
-        category: patch.category !== undefined ? patch.category : tx.category,
-        note: patch.note !== undefined ? patch.note : tx.note,
-        date: patch.date !== undefined ? patch.date : tx.date,
-        relatedStudentId: relatedIds[0],
-        relatedStudentName: relatedNames[0],
-        relatedStudentIds: relatedIds.length ? relatedIds : undefined,
-        relatedStudentNames: relatedNames.length ? relatedNames : undefined,
-      };
-    }));
-  }
-
-  function handleDeleteFundTransaction(id: string) {
-    setFundTransactions(prev => prev.filter(tx => tx.id !== id));
-  }
-
-  function handleClearFundTransactions() {
-    setFundTransactions([]);
-  }
-
-  function handleApplyStudentRecord(studentId: StudentId, record: StudentRecord, syncIds: StudentId[]) {
-    const syncSet = new Set(syncIds.filter(id => id !== studentId));
-    setStudents(prev => prev.map(student => {
-      if (student.id === studentId) {
-        return { ...student, records: [record, ...student.records] };
-      }
-      if (syncSet.has(student.id)) {
-        return {
-          ...student,
-          records: [{ ...record, id: `${record.id}-${student.id}` }, ...student.records],
-        };
-      }
-      return student;
-    }));
-  }
-
-  function isPlainRecord(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-  }
-
-  function handleSaveAiAssistantRecord(student: AppStudent, note: string) {
-    const record = createStudentRecord("note", `AI助手：${note}`.slice(0, 800));
-    handleApplyStudentRecord(student.id, record, []);
-  }
-
-  function handleAppendAiAssistantMaterial(student: AppStudent, text: string) {
-    const rubric = readCommentRubric();
-    const profile = readStudentCommentProfile(student);
-    const nextNote = [profile.teacherNote, `AI助手素材：${text}`]
-      .map(item => item.trim())
-      .filter(Boolean)
-      .join("\n");
-    const savedProfile = saveStudentCommentProfile(student.id, rubric, {
-      ...profile,
-      teacherNote: nextNote,
-      status: profile.generatedComment ? "edited" : "draft",
-      updatedAt: new Date().toISOString(),
-    });
-    const aiComments = isPlainRecord(student.aiComments) ? student.aiComments : {};
-    const nextStudent = {
-      ...student,
-      aiComments: {
-        ...aiComments,
-        profile: savedProfile,
-      },
-    };
-    setStudents(prev => prev.map(item => (item.id === student.id ? nextStudent : item)));
-  }
-
-  function handleDeleteStudent(studentId: StudentId) {
-    setStudents(prev => prev.filter(student => student.id !== studentId));
-    setDormitories(prev => prev.map(dormitory => ({
-      ...dormitory,
-      memberIds: dormitory.memberIds.filter(id => id !== studentId),
-    })));
-    commitSeatOrder(seatOrder.map(id => (id === studentId ? null : id)));
-    updateSeatSettings(current => ({
-      ...current,
-      constraints: {
-        ...current.constraints,
-        lockedDeskmatePairs: current.constraints.lockedDeskmatePairs.filter(pair => pair.a !== studentId && pair.b !== studentId),
-        noDeskmatePairs: current.constraints.noDeskmatePairs.filter(pair => pair.a !== studentId && pair.b !== studentId),
-        frontRowStudentIds: current.constraints.frontRowStudentIds.filter(id => id !== studentId),
-      },
-    }));
-    setSelectedStudentInitialTab("records");
-    setSelectedStudentId(null);
   }
 
   function saveCurrentLegacySnapshot() {
@@ -735,6 +486,43 @@ export default function App() {
       window.alert("解绑失败，请稍后再试。");
     }
   }
+
+  const {
+    handleAddStudent,
+    handleUpdateStudent,
+    handleApplyStudentRecord,
+    handleSaveAiAssistantRecord,
+    handleAppendAiAssistantMaterial,
+    handleDeleteStudent,
+  } = useStudentActions({
+    students,
+    seatOrder,
+    setStudents,
+    setDormitories,
+    setSeatSettings,
+    commitSeatOrder,
+    closeStudentDetail: () => {
+      setSelectedStudentInitialTab("records");
+      setSelectedStudentId(null);
+    },
+  });
+  const {
+    handleCreateDormitory,
+    handleUpdateDormitory,
+    handleDeleteDormitory,
+    handleAssignStudentDormitory,
+    handleAddDormitoryEvent,
+    handleUpdateDormEvent,
+    handleDeleteDormEvent,
+    handleCloseDormitoryPeriod,
+    handleCloseAllDormitoryPeriods,
+  } = useDormitoryActions({ students, dormitories, setStudents, setDormitories });
+  const {
+    handleAddFundTransaction,
+    handleUpdateFundTransaction,
+    handleDeleteFundTransaction,
+    handleClearFundTransactions,
+  } = useClassFundActions({ students, setFundTransactions });
 
   if (!loggedIn) {
     return <LoginScreen onLogin={() => setLoggedIn(true)} />;
