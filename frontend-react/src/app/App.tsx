@@ -4,15 +4,14 @@ import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar, type SidebarTab } from "./components/Sidebar";
 import { StudentDetail } from "./components/StudentDetail";
-import { CommentWorkbench } from "./components/CommentWorkbench";
 import { TopHeader } from "./components/TopHeader";
 import { CloudSyncModal } from "./components/CloudSyncModal";
 import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import { HistorySeatModal } from "./components/HistorySeatModal";
-import { AiAssistantWorkspace } from "./components/AiAssistantWorkspace";
-import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ScoresWorkspace, ClassFundWorkspace } from "./components/workspaces";
+import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ClassFundWorkspace } from "./components/workspaces";
+import { RetryableLazy } from "./components/RetryableLazy";
 import {
   buildSeatOrderByStudentList,
   placeStudentInFirstEmptySeat,
@@ -47,6 +46,10 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+const loadCommentWorkbench = () => import("./components/CommentWorkbench").then((module) => ({ default: module.CommentWorkbench }));
+const loadAiAssistantWorkspace = () => import("./components/AiAssistantWorkspace").then((module) => ({ default: module.AiAssistantWorkspace }));
+const loadScoresWorkspace = () => import("./components/workspaces/ScoresWorkspace").then((module) => ({ default: module.ScoresWorkspace }));
+
 export default function App() {
   const initialState = useSeatManagerState();
   const controller = useSeatManagerController(initialState);
@@ -63,6 +66,7 @@ export default function App() {
   const selectedStudent = students.find(student => student.id === selectedStudentId) || null;
   const [selectedStudentInitialTab, setSelectedStudentInitialTab] = useState<"records" | "profile" | "trend" | "followup">("records");
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
+  const [aiWorkspaceMounted, setAiWorkspaceMounted] = useState(false);
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
   const [selectedHistorySnapshot, setSelectedHistorySnapshot] = useState<SeatHistorySnapshot | null>(null);
   const [shufflePreview, setShufflePreview] = useState<ShuffleCandidate | null>(null);
@@ -80,6 +84,10 @@ export default function App() {
     skipped: 0,
     total: 0,
   });
+
+  useEffect(() => {
+    if (sidebarTab === "ai") setAiWorkspaceMounted(true);
+  }, [sidebarTab]);
   const hasMounted = useRef(false);
   const studentAdviceRunning = useRef(false);
 
@@ -771,7 +779,7 @@ export default function App() {
       overlays={
         <>
           {showCommentWorkbench && (
-            <CommentWorkbench students={students} onClose={() => setShowCommentWorkbench(false)} onSelectStudent={student => openStudentDetail(student)} />
+            <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, onClose: () => setShowCommentWorkbench(false), onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
           )}
 
           {selectedStudent && (
@@ -889,34 +897,13 @@ export default function App() {
 
         {sidebarTab === "scores" && (
           <div className="h-full workspace-tab-enter">
-            <ScoresWorkspace
-              exams={appState.gradeExams}
-              students={students}
-              onSelectStudent={student => openStudentDetail(student)}
-              onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
-              onSaveScoreImport={handleSaveScoreImport}
-              onUpdateGradeExam={handleUpdateGradeExam}
-              onDeleteGradeExam={handleDeleteGradeExam}
-              onGenerateClassAnalysis={handleGenerateClassAnalysis}
-              onGenerateLocalClassAnalysis={handleGenerateLocalClassAnalysis}
-              onGenerateStudentTrendAdvice={handleGenerateStudentTrendAdvice}
-              studentAdviceProgress={studentAdviceProgress}
-            />
+            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress }} />
           </div>
         )}
 
-        <div className={sidebarTab === "ai" ? "h-full workspace-tab-enter" : "hidden"}>
-          <AiAssistantWorkspace
-            active={sidebarTab === "ai"}
-            students={students}
-            exams={appState.gradeExams}
-            dormitories={dormitories}
-            fundTransactions={fundTransactions}
-            seatOrder={seatOrder}
-            onSaveStudentRecord={handleSaveAiAssistantRecord}
-            onAppendCommentMaterial={handleAppendAiAssistantMaterial}
-          />
-        </div>
+        {aiWorkspaceMounted && <div className={sidebarTab === "ai" ? "h-full workspace-tab-enter" : "hidden"}>
+          <RetryableLazy load={loadAiAssistantWorkspace} componentProps={{ active: sidebarTab === "ai", students, exams: appState.gradeExams, dormitories, fundTransactions, seatOrder, onSaveStudentRecord: handleSaveAiAssistantRecord, onAppendCommentMaterial: handleAppendAiAssistantMaterial }} />
+        </div>}
 
         {sidebarTab === "data" && (
           <div className="h-full workspace-tab-enter">

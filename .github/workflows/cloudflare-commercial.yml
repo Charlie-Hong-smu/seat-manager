@@ -9,6 +9,9 @@ on:
       - "cloudflare-worker/**"
       - "license-admin/**"
       - ".github/workflows/cloudflare-commercial.yml"
+      - "!frontend-react/**/*.md"
+      - "!cloudflare-worker/**/*.md"
+      - "!license-admin/**/*.md"
   workflow_dispatch:
 
 permissions:
@@ -28,7 +31,7 @@ jobs:
       license_admin: ${{ steps.filter.outputs.license_admin }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # 拉全历史,否则 git diff 在多提交 push / force push 时会因浅克隆缺 before 提交而失败。
           fetch-depth: 0
@@ -68,20 +71,21 @@ jobs:
           fi
 
           git diff --name-only "$BEFORE" "${{ github.sha }}" > /tmp/changed-files.txt
+          grep -Ev '\.md$' /tmp/changed-files.txt > /tmp/deploy-files.txt || true
 
-          if grep -Eq '^(frontend-react/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/changed-files.txt; then
+          if grep -Eq '^(frontend-react/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/deploy-files.txt; then
             echo "commercial_frontend=true" >> "$GITHUB_OUTPUT"
           else
             echo "commercial_frontend=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if grep -Eq '^(cloudflare-worker/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/changed-files.txt; then
+          if grep -Eq '^(cloudflare-worker/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/deploy-files.txt; then
             echo "worker=true" >> "$GITHUB_OUTPUT"
           else
             echo "worker=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if grep -Eq '^(license-admin/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/changed-files.txt; then
+          if grep -Eq '^(license-admin/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/deploy-files.txt; then
             echo "license_admin=true" >> "$GITHUB_OUTPUT"
           else
             echo "license_admin=false" >> "$GITHUB_OUTPUT"
@@ -93,17 +97,17 @@ jobs:
     if: needs.changes.outputs.has_cloudflare_secrets == 'true' && needs.changes.outputs.commercial_frontend == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           cache-dependency-path: frontend-react/pnpm-lock.yaml
 
@@ -113,11 +117,15 @@ jobs:
 
       - name: Validate React frontend
         working-directory: frontend-react
-        run: pnpm run check
+        run: pnpm run lint && pnpm run typecheck && pnpm run test:coverage
 
       - name: Build commercial frontend
         working-directory: frontend-react
         run: VITE_EDITION=commercial VITE_BASE=/ VITE_WORKER_URL="${{ vars.COMMERCIAL_WORKER_URL }}" pnpm run build
+
+      - name: Enforce production bundle budgets
+        working-directory: frontend-react
+        run: pnpm run check:size && pnpm run check:production
 
       - name: Deploy commercial Cloudflare Pages
         working-directory: frontend-react
@@ -132,12 +140,12 @@ jobs:
     if: needs.changes.outputs.has_cloudflare_secrets == 'true' && needs.changes.outputs.worker == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Install Worker dependencies
         working-directory: cloudflare-worker
@@ -160,12 +168,12 @@ jobs:
     if: needs.changes.outputs.has_cloudflare_secrets == 'true' && needs.changes.outputs.license_admin == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Install Wrangler
         working-directory: cloudflare-worker

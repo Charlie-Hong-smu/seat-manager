@@ -9,6 +9,18 @@ const base = process.env.VITE_BASE || "/seat-manager/";
 
 export default defineConfig({
   base,
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3-") || id.includes("node_modules/victory-vendor")) return "charts-vendor";
+          if (id.includes("node_modules/react") || id.includes("node_modules/scheduler")) return "react-vendor";
+          if (id.includes("node_modules/lucide-react")) return "icons-vendor";
+          return undefined;
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

@@ -8,6 +8,8 @@
     "build": "vite build",
     "build:zhang": "vite build",
     "build:commercial": "VITE_EDITION=commercial VITE_BASE=/ vite build",
+    "check:size": "node scripts/check-build-size.mjs",
+    "check:production": "node scripts/check-production-bundle.mjs",
     "preview": "vite preview",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",

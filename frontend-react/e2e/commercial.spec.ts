@@ -30,3 +30,11 @@ test("commercial login reports rejected and full-device licenses", async ({ page
   await page.getByRole("button", { name: "进入" }).click();
   await expect(page.getByText("这个授权码绑定设备已满，请联系我处理")).toBeVisible();
 });
+
+test("commercial login reports an expired license without using a real license record", async ({ page }) => {
+  await page.route("**/license/auth", route => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "license_expired" }) }));
+  await page.goto("./");
+  await page.getByPlaceholder("请输入授权码").fill("EXPIRED-LICENSE");
+  await page.getByRole("button", { name: "进入" }).click();
+  await expect(page.getByText("授权码不正确，请检查后重试")).toBeVisible();
+});
