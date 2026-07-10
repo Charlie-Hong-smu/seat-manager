@@ -1,30 +1,40 @@
-# React Frontend
+# React 前端
 
-这是“小张专用座位管理器”的新版 React/Vite/Tailwind 前端目录。
+这是座位管理系统唯一的前端实现，使用 React、TypeScript、Vite、Tailwind 和 pnpm。开始修改前先读仓库根目录 `AGENTS.md` 与 `docs/ARCHITECTURE.md`。
 
-当前阶段已接入旧版本地数据桥，可显示和保存真实学生、座位顺序、锁定座位、名单批量导入、学生详情编辑、奖罚记录、行为标签、成绩导入与考试保存写回、保存考试看板数据，以及 AI 评语草稿缓存、评语标准库、真实 Worker 生成调用、批量评语队列续跑/失败恢复和评语 CSV 导出。登录、修改密码、本地自动保存、座位表 CSV 导出、本机备份 JSON 导出/恢复、手动云端备份/恢复入口和安装到桌面入口已经按旧版键名兼容迁移。没有旧数据时会回退到 `src/app/components/mockData.ts` 的模拟数据。
-
-核心模块已基本齐全。最近一轮改进（宿舍周期制重构、座位限制条件、评语工作台体验、学生详情标签页、商用化双版本等）的清单见仓库根目录 `README.md` 的「最近进展」与「版本与商用化」两节。
+## 开发和验证
 
 ```bash
-npm install
-npm run dev
-npm run build                          # 小张版（默认 edition，等同 VITE_EDITION=zhang）
-VITE_EDITION=commercial npm run build  # 商用版（授权码登录）
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm check
+pnpm build:zhang
+pnpm build:commercial
+pnpm test:e2e
 ```
 
-版本由 `src/app/config.ts` 的 `VITE_EDITION` 决定：`zhang` = 小张版（默认不设也等同于 `zhang`，本地密码、离线，行为不可改动）；`commercial` = 商用授权码版。详见根 `README.md`。
+- `check`：ESLint、TypeScript strict、Vitest。
+- `build:zhang`：默认小张版，base `/seat-manager/`。
+- `build:commercial`：商用授权版，base `/`。
+- `test:e2e`：本机 Chrome 冒烟测试，包括登录/状态重载和 PWA 离线重开。
 
-Vite 已配置 `base: "/seat-manager/"`，用于 GitHub Pages 部署。
+不要使用 npm 修改本目录依赖；锁文件是 `pnpm-lock.yaml`。不要提交 `dist`、测试报告或浏览器产物。
 
-GitHub Pages 主要通过 Actions 发布本目录的 React 构建产物。仓库根目录的 `index.html` 只是分支发布兜底启动页，会加载 `frontend-react/dist`；旧版 `style.css`、`app.js` 等文件已从工作区移除。如需回退旧版，可从垃圾箱或 Git 历史恢复。
+## 结构
 
-## Figma Make 协作约定
+- `src/app/App.tsx`：应用壳与跨页面协调。
+- `src/app/state/seatManagerController.ts`：唯一持久状态控制器。
+- `src/app/state/`：数据转换、存储、导入导出和 API service。
+- `src/app/state/aiApiClient.ts`：共享 AI 认证与网络 fallback。
+- `src/app/components/workspaces/`：App 使用的页面入口。
+- `src/app/components/`：页面、抽屉、弹窗和共享 UI。
+- `public/`：PWA 图标、Headers 和本地 XLSX 库。
 
-详细规则见仓库根目录 `DESIGN.md`。
+完整数据流、兼容键、双 edition、Worker 和 PWA 说明见 `../docs/ARCHITECTURE.md`。
 
-- `frontend-react/` 是真实实现源。
-- Figma Make 文件只作为设计参考，不直接覆盖本目录。
-- 成绩页主要参考 `1QpH5tRbV2oVGkSKN8tDph`。
-- 全局浅色 dashboard 风格参考 `T89q98PawNHmuhwiEPbBHY`。
-- 修改 UI 时要保留现有真实数据、成绩导入保存、AI 评语、评语工作台、备份同步、登录和 PWA 逻辑。
+## 不可破坏项
+
+- 不改变 Zhang 本地密码与 Commercial 产品授权两套登录行为。
+- 不改变已有 workspace、旧数据、备份和云同步格式。
+- 不让 AI 未经教师确认写入业务数据。
+- 不把 Figma Make 导出直接覆盖真实组件；视觉规则见 `../DESIGN.md`。

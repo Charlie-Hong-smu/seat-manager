@@ -2,6 +2,8 @@
 
 这个 Worker 用于给静态网页中转 DeepSeek API 请求，并提供第一版手动云同步。不要把 DeepSeek API Key、同步码、KV 管理 token 写进前端或提交到 GitHub。
 
+公共路由定义在 `worker-routes.js`，调度和 CORS/JSON 响应分别在 `worker-router.js`、`worker-response.js`。Netlify 代理直接复用公共路由契约。整体链路与发布顺序见 `../docs/ARCHITECTURE.md` 和 `../docs/OPERATIONS.md`。
+
 ## Secrets
 
 在 Cloudflare Workers 中配置这些变量：
@@ -41,7 +43,7 @@ printf '你的云同步码' | shasum -a 256
 
 ```bash
 cd cloudflare-worker
-npm install
+npm ci
 npm exec wrangler -- login
 ```
 
@@ -51,6 +53,7 @@ npm exec wrangler -- login
 npm run deploy      # 部署 deepseek-ai-worker.js 到 seat-manager-ai
 npm run dev         # 本地开发预览
 npm run tail        # 查看线上实时日志
+npm run check       # 语法、Worker 行为和代理路由契约
 ```
 
 `wrangler.toml` 只记录 Worker 名称、入口文件和 KV 绑定，不保存任何密钥。`DEEPSEEK_API_KEY`、`TOKEN_SECRET`、`AI_ACCESS_CODE_HASH`、`PRODUCT_TOKEN_SECRET` 等仍应保存在 Cloudflare Worker 的 Secrets / Variables 中。
@@ -74,7 +77,7 @@ npm exec wrangler -- secret put SECRET_NAME
 
 ```bash
 cd ../frontend-react
-VITE_EDITION=commercial VITE_BASE=/ npm run build
+pnpm build:commercial
 ../cloudflare-worker/node_modules/.bin/wrangler pages deploy dist --project-name seat-manager-commercial --branch main --commit-dirty true
 ```
 
@@ -88,7 +91,7 @@ VITE_EDITION=commercial VITE_BASE=/ npm run build
 
 ```bash
 cd ../frontend-react
-VITE_EDITION=commercial VITE_BASE=/ VITE_WORKER_URL=https://你的-netlify-站点.netlify.app/api npm run build
+VITE_WORKER_URL=https://你的-netlify-站点.netlify.app/api pnpm build:commercial
 ```
 
 GitHub Actions 商用部署也支持仓库变量 `COMMERCIAL_WORKER_URL`。未设置时仍直连 Worker。

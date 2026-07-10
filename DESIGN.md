@@ -7,7 +7,7 @@ Do not directly overwrite the React app with Figma Make exports. Treat Figma Mak
 ## Current Source Roles
 
 - Real app source: `frontend-react/`
-- Pages fallback launcher: root `index.html`
+- Repository launcher: root `index.html`（只链接线上站点，不加载构建产物）
 - Removed legacy app files: root `style.css`, `app.js`, `sw.js`, `manifest.webmanifest`, `avatar.jpg`, and `vendor/`
 - AI and cloud logic: `cloudflare-worker/`
 - Design workflow note: this file
@@ -48,7 +48,7 @@ These files are enough to reproduce the layout and visual style, but they should
 ## Implementation Rules
 
 1. Keep `frontend-react/` as the single source of truth for the new app.
-2. Do not route new product work through root `index.html`; it is only a GitHub Pages fallback launcher. The removed legacy files `style.css` and `app.js` must stay out of new product work.
+2. Do not route product work through root `index.html`; GitHub Actions publishes `frontend-react/dist` directly. The removed legacy files `style.css` and `app.js` must stay out of new product work.
 3. Keep `cloudflare-worker/` independent; do not move API keys or Worker-only secrets into frontend code.
 4. Preserve existing business logic when applying Figma designs:
    - seat data and seat operations
@@ -120,5 +120,6 @@ After UI changes, run:
 
 ```bash
 cd frontend-react
-npm run build
+pnpm check
+pnpm build:zhang
 ```

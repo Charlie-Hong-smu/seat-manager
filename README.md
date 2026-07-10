@@ -2,11 +2,13 @@
 
 这是座位管理、成绩分析和 AI 期末评语辅助工具。新版 React 前端已经成为主应用，旧版原生前端已从工作区移除，不再随 GitHub Pages 发布。
 
+Agent 开始工作时先读 `AGENTS.md`；长期架构和运维说明分别在 `docs/ARCHITECTURE.md`、`docs/OPERATIONS.md`。
+
 ## 入口
 
 - 主应用源码：`frontend-react/`
 - GitHub Pages 部署后：React 新版在站点根路径。
-- 根目录 `index.html`：仅用于 GitHub Pages 分支发布兜底，加载 `frontend-react/dist` 的 React 构建产物，不是旧版应用。
+- 根目录 `index.html`：仅作为仓库入口链接线上站点，不加载或发布构建产物。
 - 旧版原生前端：旧版大文件已移到垃圾箱；需要时也可从 Git 历史找回。
 
 ## 旧版移除
@@ -20,7 +22,7 @@
 - `avatar.jpg`
 - `vendor/`
 
-根目录新保留的 `index.html` 是一个很小的 React 启动页，用于防止 GitHub Pages 仍按分支根目录发布时渲染 README。旧版文件删除时先移入 macOS 垃圾箱，不是永久删除；提交后也仍可从 Git 历史恢复。`cloudflare-worker/` 是独立后端，不属于旧版前端。
+根目录保留一个很小的线上入口页；正式 GitHub Pages 只由 Actions 构建 `frontend-react/`。旧版文件仍可从 Git 历史恢复。`cloudflare-worker/` 是独立后端，不属于旧版前端。
 
 ## React 新版开发
 
@@ -28,6 +30,7 @@
 cd frontend-react
 pnpm install
 pnpm dev
+pnpm check
 ```
 
 > 项目使用 pnpm（见 `frontend-react/pnpm-lock.yaml`），请勿混用 npm，否则依赖树可能不一致。
@@ -71,7 +74,7 @@ base: "/seat-manager/"
 
 - 稳定地址：`https://seat-manager-commercial.pages.dev/`
 - 项目名：`seat-manager-commercial`
-- 构建方式：`VITE_EDITION=commercial VITE_BASE=/ npm run build`
+- 构建方式：`pnpm build:commercial`
 - 部署方式：从 `frontend-react/dist` 用 Wrangler Pages 部署。
 
 授权/计费（后端在 `cloudflare-worker/`，详见其 README）：
