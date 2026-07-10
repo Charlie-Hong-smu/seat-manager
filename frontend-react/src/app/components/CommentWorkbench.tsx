@@ -221,7 +221,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     [comments]
   );
   const allGeneratedExportSelected = generatedExportIds.size > 0 &&
-    exportSelectedIds.size === generatedExportIds.size &&
     [...generatedExportIds].every(id => exportSelectedIds.has(id));
 
   const filteredStudents = useMemo(() => {
@@ -705,11 +704,18 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
 
   async function runBatchQueue(seed: CommentBatchState) {
     if (batchRunning) return;
+    if (commentRevealFrame.current !== null) {
+      window.cancelAnimationFrame(commentRevealFrame.current);
+      commentRevealFrame.current = null;
+    }
     setBatchRunning(true);
+    setSingleGenerationPhase("loading");
+    setDisplayedCommentText("");
     pauseRequested.current = false;
     const queue = [...seed.queue];
     const failed = [...seed.failed];
     let done = seed.done;
+    let selectedBatchResult: string | null = null;
     const total = seed.total || queue.length;
     commitBatchState({ ...seed, queue, failed, done, total, status: "running" });
 
@@ -741,6 +747,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           });
           done += 1;
           if (result.comment) {
+            if (student.id === selectedId) selectedBatchResult = result.comment;
             updateComment(student.id, {
               text: result.comment,
               generated: true,
@@ -792,6 +799,12 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       setHasAuth(hasStoredAiAuth());
     } finally {
       setBatchRunning(false);
+      if (selectedBatchResult) {
+        revealGeneratedComment(selectedBatchResult);
+      } else {
+        setDisplayedCommentText(selectedComment?.text || "");
+        setSingleGenerationPhase("idle");
+      }
     }
   }
 
@@ -1257,7 +1270,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                     {[82, 94, 71, 88, 58].map((width, index) => (
                       <span key={width} className="ai-siri-loading-bar block h-2.5 rounded-full" style={{ width: `${width}%`, animationDelay: `${index * 90}ms` }} />
                     ))}
-                    <span className="mt-1 text-xs font-semibold text-violet-600">正在组织语言与评语结构...</span>
+                    <span className="mt-1 text-xs font-semibold text-violet-600">{batchRunning ? "批量生成中，正在组织评语..." : "正在组织语言与评语结构..."}</span>
                   </div>
                 )}
                 {singleGenerationPhase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
@@ -1311,7 +1324,12 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                   全选
                 </button>
                 <button
-                  onClick={() => setExportSelectedIds(new Set(generatedExportIds))}
+                  onClick={() => setExportSelectedIds(prev => {
+                    const next = new Set(prev);
+                    if (allGeneratedExportSelected) generatedExportIds.forEach(id => next.delete(id));
+                    else generatedExportIds.forEach(id => next.add(id));
+                    return next;
+                  })}
                   disabled={generatedExportIds.size === 0}
                   className="flex shrink-0 items-center gap-2 text-sm text-gray-700 disabled:text-gray-300"
                   style={{ fontWeight: 800 }}

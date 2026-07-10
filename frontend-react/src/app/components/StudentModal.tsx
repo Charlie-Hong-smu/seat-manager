@@ -506,21 +506,21 @@ export function StudentModal({
               </button>
             </div>
             <div className="p-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
-                <label className="space-y-1.5">
-                  <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>姓名</span>
+              <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
+                <label className="flex min-w-0 flex-col gap-1.5">
+                  <span className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>姓名</span>
                   <input
                     value={nameInput}
                     onChange={e => {
                       setNameInput(e.target.value);
                       setProfileStatus("");
                     }}
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm outline-none focus:border-blue-300"
                   />
                 </label>
-                <div className="space-y-1.5">
-                  <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>性别</span>
-                  <SegmentedControl value={genderInput} ariaLabel="学生性别" onChange={value => { setGenderInput(value as Gender); setProfileStatus(""); }} options={[{ value: "男", label: "男" }, { value: "女", label: "女" }]} className="flex min-w-28" />
+                <div className="flex flex-col gap-1.5">
+                  <span className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>性别</span>
+                  <SegmentedControl value={genderInput} ariaLabel="学生性别" onChange={value => { setGenderInput(value as Gender); setProfileStatus(""); }} options={[{ value: "男", label: "男" }, { value: "女", label: "女" }]} className="flex h-10 w-full" />
                 </div>
               </div>
               <label className="space-y-1.5 block">
