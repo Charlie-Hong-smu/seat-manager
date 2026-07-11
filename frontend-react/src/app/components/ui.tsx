@@ -83,21 +83,25 @@ export function Card({
   action,
   children,
   className = "",
+  bodyClassName = "p-5",
+  overflow = "hidden",
 }: {
   title?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  bodyClassName?: string;
+  overflow?: "hidden" | "visible";
 }) {
   return (
-    <section className={`overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-[var(--app-surface)] shadow-[var(--app-shadow-card)] ${className}`}>
+    <section className={`${overflow === "visible" ? "overflow-visible" : "overflow-hidden"} rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-[var(--app-surface)] shadow-[var(--app-shadow-card)] ${className}`}>
       {title && (
         <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
           <h2 className="text-base font-bold text-gray-900">{title}</h2>
           {action}
         </div>
       )}
-      <div className="p-5">{children}</div>
+      <div className={bodyClassName}>{children}</div>
     </section>
   );
 }
@@ -209,7 +213,7 @@ export function AnimatedPopover({
       data-open={open}
       data-phase={phase}
       aria-hidden={!open}
-      inert={!open}
+      {...(!open ? { inert: "" as unknown as boolean } : {})}
       className={`app-popover-motion ${className}`}
       style={style}
     >

@@ -9,11 +9,13 @@ import {
   PanelsTopLeft,
   Sparkles,
   Wallet,
+  CalendarCheck2,
+  ListTodo,
 } from "lucide-react";
 
 import type { AppStudent, Dormitory, GradeExam, StudentId } from "../state/types";
 
-export type SidebarTab = "daily" | "dormitories" | "scores" | "ai" | "funds" | "data" | "history";
+export type SidebarTab = "daily" | "attendance" | "followups" | "dormitories" | "scores" | "ai" | "funds" | "data" | "history";
 
 interface Props {
   activeTab: SidebarTab;
@@ -23,11 +25,12 @@ interface Props {
   gradeExams: GradeExam[];
   seatOrder: Array<StudentId | null>;
   savedSeatHistoryCount: number;
+  pendingTaskCount: number;
   onTabChange: (tab: SidebarTab) => void;
   onOpenCommentWorkbench: () => void;
 }
 
-type NavInput = Pick<Props, "students" | "dormitories" | "gradeExams" | "seatOrder" | "savedSeatHistoryCount">;
+type NavInput = Pick<Props, "students" | "dormitories" | "gradeExams" | "seatOrder" | "savedSeatHistoryCount" | "pendingTaskCount">;
 type NavEntry = {
   key: SidebarTab | "comments";
   label: string;
@@ -40,6 +43,8 @@ const NAV_GROUPS: Array<{ label: string; items: NavEntry[] }> = [
     label: "日常管理",
     items: [
       { key: "daily", label: "日常", icon: <LayoutGrid className="h-[18px] w-[18px]" />, getBadge: ({ students }) => String(students.length) },
+      { key: "attendance", label: "出勤", icon: <CalendarCheck2 className="h-[18px] w-[18px]" /> },
+      { key: "followups", label: "跟进任务", icon: <ListTodo className="h-[18px] w-[18px]" />, getBadge: ({ pendingTaskCount }) => pendingTaskCount ? String(pendingTaskCount) : "" },
       { key: "dormitories", label: "宿舍", icon: <Home className="h-[18px] w-[18px]" />, getBadge: ({ dormitories }) => String(dormitories.length) },
     ],
   },
@@ -74,10 +79,11 @@ export function Sidebar({
   gradeExams,
   seatOrder,
   savedSeatHistoryCount,
+  pendingTaskCount,
   onTabChange,
   onOpenCommentWorkbench,
 }: Props) {
-  const navInput = { students, dormitories, gradeExams, seatOrder, savedSeatHistoryCount };
+  const navInput = { students, dormitories, gradeExams, seatOrder, savedSeatHistoryCount, pendingTaskCount };
   const navRef = useRef<HTMLElement>(null);
   const activeButtonRef = useRef<HTMLButtonElement>(null);
   const [activeIndicator, setActiveIndicator] = useState({ top: 0, height: 40, ready: false });

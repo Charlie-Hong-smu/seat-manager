@@ -36,10 +36,10 @@ export function useClassFundActions({ students, setFundTransactions }: {
   }, [setFundTransactions, students]);
 
   const handleDeleteFundTransaction = useCallback((id: string) => {
-    setFundTransactions((current) => current.filter((tx) => tx.id !== id));
+    setFundTransactions((current) => current.map((tx) => tx.id === id ? { ...tx, status: "void", voidedAt: new Date().toISOString(), voidReason: "教师手动作废" } : tx));
   }, [setFundTransactions]);
 
-  const handleClearFundTransactions = useCallback(() => setFundTransactions([]), [setFundTransactions]);
+  const handleClearFundTransactions = useCallback(() => setFundTransactions(current => current.map(tx => ({ ...tx, status: "void", voidedAt: new Date().toISOString(), voidReason: "批量作废" }))), [setFundTransactions]);
 
   return { handleAddFundTransaction, handleUpdateFundTransaction, handleDeleteFundTransaction, handleClearFundTransactions };
 }

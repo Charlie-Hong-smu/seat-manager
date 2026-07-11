@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { DORM_EVENT_PRESETS, type NewDormEventInput } from "../state/dormitoryActions";
 import type { AppStudent } from "../state/types";
+import { StudentPicker } from "./StudentPicker";
 
 interface DormEventFormProps {
   /** 可作为责任人的成员；当 lockedResponsible 存在时忽略。 */
@@ -86,16 +87,7 @@ export function DormEventForm({ members, lockedResponsible, submitLabel = "保�
         />
       </div>
 
-      {!lockedResponsible && (
-        <select
-          value={responsibleId}
-          onChange={event => setResponsibleId(event.target.value)}
-          className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300"
-        >
-          <option value="">不指定责任人（仅记宿舍分）</option>
-          {members.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}
-        </select>
-      )}
+      {!lockedResponsible && <StudentPicker students={members} value={responsibleId} onChange={setResponsibleId} label="责任人（可选）" allowClear />}
 
       <input
         value={note}

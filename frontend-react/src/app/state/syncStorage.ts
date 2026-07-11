@@ -1,5 +1,6 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { exportWholeBook, importWholeBook } from "./workspaces";
+import { exportPreImportBackup } from "./backupStorage";
 import { getProductAuthToken } from "./authStorage";
 import { getWorkerBaseUrl } from "./workerEndpoint";
 
@@ -181,6 +182,8 @@ export async function restoreStateFromCloud(): Promise<SyncStatus> {
     workspaceBook?: unknown;
     version?: number;
   }>("/sync/load");
+
+  exportPreImportBackup();
 
   // 优先恢复整柜；没有整柜时回退到旧格式单班数据。
   if (cloud.workspaceBook) {

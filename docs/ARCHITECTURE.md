@@ -45,9 +45,12 @@ React event
 - `homeroom-seat-manager-v1`：首次迁移用的旧单班数据入口，不得删除读取兼容。
 - WorkspaceSlice `data`：保持旧完整 state 形状，供导入、导出和旧客户端兼容。
 - 本机备份：`{ version, exportedAt, data }`。
+- 本机整柜备份：v2 `{ version, exportedAt, workspaceBook }`；继续兼容导入 v1 单班 `{ version, data }`。
 - 云同步：同时发送 `workspaceBook` 和旧兼容字段 `data`，上限 5 MiB。
 
 云同步是显式上传/恢复，不做后台同步、冲突合并或增量覆盖。恢复前先生成本机备份。
+
+出勤、学生跟进任务和抽签会话属于当前学期切片数据，随整柜备份和手动云同步一起保存。评语与 AI 辅助缓存使用 `workspaceSliceId + studentId` 作为作用域，不能跨班级或学期复用。
 
 ## AI 与网络链路
 

@@ -10,7 +10,7 @@ import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import { HistorySeatModal } from "./components/HistorySeatModal";
-import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ClassFundWorkspace } from "./components/workspaces";
+import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ClassFundWorkspace, AttendanceWorkspace, FollowupWorkspace } from "./components/workspaces";
 import { RetryableLazy } from "./components/RetryableLazy";
 import {
   buildSeatOrderByStudentList,
@@ -29,6 +29,9 @@ import type { AppStudent, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, 
 import { useStudentActions } from "./hooks/useStudentActions";
 import { useDormitoryActions } from "./hooks/useDormitoryActions";
 import { useClassFundActions } from "./hooks/useClassFundActions";
+import { createFollowupTask, findOpenLinkedTask, getTaskUrgency, todayKey } from "./state/dailyManagement";
+import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
+import { buildTimeline, inspectStateHealth, type TimelineTarget } from "./state/dataInsights";
 
 type AppTab = SidebarTab;
 type StudentAdviceProgress = {
@@ -52,10 +55,10 @@ export default function App() {
   const initialState = useSeatManagerState();
   const controller = useSeatManagerController(initialState);
   const appState = controller.state;
-  const { students, dormitories, fundTransactions, seatOrder, seatSettings } = appState;
+  const { students, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, seatOrder, seatSettings } = appState;
   const savedSeatHistory = appState.seatHistory;
   const lockedSeats = new Set(appState.lockedSeats);
-  const { setStudents, setDormitories, setFundTransactions, setSeatOrder, setSeatSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory } = controller;
+  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatOrder, setSeatSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory } = controller;
   const { persist: persistState, reload: reloadState, replace: replaceState } = controller;
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [sidebarTab, setSidebarTab] = useState<AppTab>("daily");
@@ -82,6 +85,38 @@ export default function App() {
     skipped: 0,
     total: 0,
   });
+  const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "failed" | "quota">("saved");
+  const [followupDraft, setFollowupDraft] = useState<FollowupTaskDraft | null>(null);
+  const [timelineTarget, setTimelineTarget] = useState<TimelineTarget | null>(null);
+  const followupAfterSave = useRef<((taskIds: string[]) => void) | null>(null);
+
+  function requestFollowupTask(draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) {
+    if (!draft.id && draft.sourceRef) {
+      const existing = findOpenLinkedTask(followupTasks, draft.studentId, draft.sourceRef);
+      if (existing) {
+        setFollowupDraft({ id: existing.id, studentId: existing.studentId, title: existing.title, type: existing.type, description: existing.description, plannedDate: existing.plannedDate, dueDate: existing.dueDate, source: existing.source, sourceRef: existing.sourceRef });
+        return;
+      }
+    }
+    followupAfterSave.current = afterSave || null;
+    setFollowupDraft(draft);
+  }
+
+  function confirmFollowupTask(draft: FollowupTaskDraft) {
+    let savedIds: string[] = draft.id ? [draft.id] : [];
+    if (draft.id) {
+      const { studentIds: _studentIds, id: _id, ...patch } = draft;
+      setFollowupTasks(current => current.map(task => task.id === draft.id ? { ...task, ...patch, updatedAt: new Date().toISOString() } : task));
+    } else {
+      const studentIds = draft.studentIds?.length ? draft.studentIds : [draft.studentId];
+      const created = studentIds.map(studentId => createFollowupTask({ ...draft, studentId }));
+      savedIds = created.map(task => task.id);
+      setFollowupTasks(current => [...created, ...current]);
+    }
+    followupAfterSave.current?.(savedIds);
+    followupAfterSave.current = null;
+    setFollowupDraft(null);
+  }
 
   useEffect(() => {
     if (sidebarTab === "ai") setAiWorkspaceMounted(true);
@@ -112,8 +147,22 @@ export default function App() {
     if (!loggedIn) {
       return;
     }
-    persistState();
+    setSaveStatus("saving");
+    const saved = persistState();
+    if (saved) setSaveStatus("saved");
+    else {
+      try { const probe = "seat-manager-storage-probe"; localStorage.setItem(probe, "1"); localStorage.removeItem(probe); setSaveStatus("failed"); } catch { setSaveStatus("quota"); }
+    }
   }, [appState, loggedIn, persistState]);
+
+  useEffect(() => {
+    if (!loggedIn || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const due = followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task)) && task.lastNotifiedAt?.slice(0, 10) !== new Date().toISOString().slice(0, 10));
+    if (!due.length) return;
+    new Notification("班级跟进提醒", { body: `今天有 ${due.length} 项待处理或已逾期任务。` });
+    const now = new Date().toISOString();
+    setFollowupTasks(current => current.map(task => due.some(item => item.id === task.id) ? { ...task, lastNotifiedAt: now } : task));
+  }, [followupTasks, loggedIn, setFollowupTasks]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -256,6 +305,17 @@ export default function App() {
   function openStudentDetail(student: AppStudent, initialTab: "records" | "profile" | "trend" | "followup" = "records") {
     setSelectedStudentInitialTab(initialTab);
     setSelectedStudentId(student.id);
+  }
+
+  function openTimelineTarget(target: TimelineTarget) {
+    if (target.kind === "student") {
+      const student = students.find(item => item.id === target.studentId || item.id === target.entityId);
+      if (student) openStudentDetail(student, target.studentTab || "records");
+      return;
+    }
+    if (!target.workspace) return;
+    setTimelineTarget({ ...target });
+    setSidebarTab(target.workspace);
   }
 
   function saveCurrentLegacySnapshot() {
@@ -515,6 +575,8 @@ export default function App() {
     setStudents,
     setDormitories,
     setSeatSettings,
+    setAttendanceRecords,
+    setFollowupTasks,
     commitSeatOrder,
     closeStudentDetail: () => {
       setSelectedStudentInitialTab("records");
@@ -560,6 +622,8 @@ export default function App() {
           onSelectStudent={student => openStudentDetail(student)}
           onUnbindDevice={IS_COMMERCIAL ? handleUnbindDevice : undefined}
           onWorkspaceChanged={reloadFromLegacyState}
+          saveStatus={saveStatus}
+          onRetrySave={() => { setSaveStatus("saving"); setSaveStatus(persistState() ? "saved" : "failed"); }}
           onLogout={() => {
             clearAuth();
             setLoggedIn(false);
@@ -575,6 +639,7 @@ export default function App() {
           seatOrder={seatOrder}
           gradeExams={appState.gradeExams}
           savedSeatHistoryCount={savedSeatHistory.length}
+          pendingTaskCount={followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task))).length}
           onTabChange={setSidebarTab}
           onOpenCommentWorkbench={() => setShowCommentWorkbench(true)}
         />
@@ -605,6 +670,10 @@ export default function App() {
               }}
               seatOrder={seatOrder}
               initialActiveTab={selectedStudentInitialTab}
+              onCreateFollowupTask={input => requestFollowupTask({ ...input, type: "常规跟进", plannedDate: todayKey(), dueDate: todayKey(), source: "ai", sourceRef: { domain: "ai", entityId: `${input.studentId}-${Date.now()}` } })}
+              attendanceRecords={attendanceRecords}
+              followupTasks={followupTasks}
+              onAttendanceChange={setAttendanceRecords}
             />
           )}
 
@@ -640,6 +709,7 @@ export default function App() {
               onRestored={reloadFromLegacyState}
             />
           )}
+          <FollowupTaskDrawer open={Boolean(followupDraft)} students={students} draft={followupDraft} onClose={() => { followupAfterSave.current = null; setFollowupDraft(null); }} onConfirm={confirmFollowupTask} />
 
           {showInstallHelp && (
             <InstallHelpModal message={installMessage} onClose={() => setShowInstallHelp(false)} />
@@ -675,6 +745,12 @@ export default function App() {
               onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
               onMoveSeat={handleMoveSeat}
               onToggleLock={toggleLock}
+              drawSessions={drawSessions}
+              onDrawSessionsChange={setDrawSessions}
+              attendanceRecords={attendanceRecords}
+              followupTasks={followupTasks}
+              onOpenAttendance={() => setSidebarTab("attendance")}
+              onOpenFollowups={() => setSidebarTab("followups")}
             />
           </div>
         )}
@@ -694,9 +770,16 @@ export default function App() {
               onCloseDormitoryPeriod={handleCloseDormitoryPeriod}
               onCloseAllDormitoryPeriods={handleCloseAllDormitoryPeriods}
               onSelectStudent={student => openStudentDetail(student)}
+              followupTasks={followupTasks}
+              onRequestFollowupTask={requestFollowupTask}
+              onSetLinkedTaskStatus={(taskIds, status) => { const now = new Date().toISOString(); setFollowupTasks(current => current.map(task => taskIds.includes(task.id) ? { ...task, status, updatedAt: now, completedAt: status === "completed" ? now : undefined } : task)); }}
             />
           </div>
         )}
+
+        {sidebarTab === "attendance" && <div className="h-full workspace-tab-enter"><AttendanceWorkspace students={students} records={attendanceRecords} onChange={setAttendanceRecords} onRequestTask={requestFollowupTask} initialTarget={timelineTarget?.workspace === "attendance" ? timelineTarget : undefined} /></div>}
+
+        {sidebarTab === "followups" && <div className="h-full workspace-tab-enter"><FollowupWorkspace students={students} tasks={followupTasks} onChange={setFollowupTasks} onRequestTask={requestFollowupTask} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} /></div>}
 
         {sidebarTab === "scores" && (
           <div className="h-full workspace-tab-enter">
@@ -716,6 +799,7 @@ export default function App() {
               onImportRoster={handleImportRoster}
               onBeforeBackupExport={saveCurrentLegacySnapshot}
               onBackupImported={reloadFromLegacyState}
+              healthIssues={inspectStateHealth(appState)}
             />
           </div>
         )}
@@ -723,12 +807,15 @@ export default function App() {
         {sidebarTab === "history" && (
           <div className="h-full workspace-tab-enter">
             <HistoryWorkspace
+              students={students}
               history={savedSeatHistory}
+              timeline={buildTimeline(appState)}
               onSave={handleSaveSeatHistory}
               onRename={handleUpdateSeatHistoryNote}
               onView={setSelectedHistorySnapshot}
               onApply={handleApplySeatHistory}
               onDelete={handleDeleteSeatHistory}
+              onOpenTimeline={openTimelineTarget}
             />
           </div>
         )}

@@ -4,6 +4,7 @@ import { getProductAuthToken } from "./authStorage";
 import { buildLocalStudentTrendSummary, buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import { getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, GradeExam, StudentExamSummary } from "./types";
+import { getCurrentWorkspaceScope } from "./workspaces";
 
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
 const AI_TREND_CACHE_SCOPE = "student-trend";
@@ -44,7 +45,7 @@ function stableStringify(value: unknown): string {
 }
 
 function getCacheSignature(scope: string, payload: unknown): string {
-  return `${scope}:${stableStringify(payload)}`;
+  return `${getCurrentWorkspaceScope()}:${scope}:${stableStringify(payload)}`;
 }
 
 function getCachedTrend<T>(signature: string): T | null {

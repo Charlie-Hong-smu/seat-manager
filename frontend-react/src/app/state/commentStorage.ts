@@ -1,5 +1,6 @@
 import type { AppStudent, CommentLengthMode, CommentStyle, StudentCommentDraft, StudentId } from "./types";
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
+import { getCurrentWorkspaceScope } from "./workspaces";
 
 const AI_COMMENT_DRAFT_KEY_PREFIX = "seat-manager-ai-comment-draft";
 const DEFAULT_LENGTH_MODE: CommentLengthMode = "standard";
@@ -12,7 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function getStudentCommentCacheKey(studentId: StudentId): string {
-  return `${AI_COMMENT_DRAFT_KEY_PREFIX}:${studentId || "unknown"}`;
+  return `${AI_COMMENT_DRAFT_KEY_PREFIX}:${getCurrentWorkspaceScope()}:${studentId || "unknown"}`;
 }
 
 function normalizeLengthMode(value: unknown): CommentLengthMode {

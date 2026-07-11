@@ -6,3 +6,5 @@ export { DataWorkspace } from "./DataWorkspace";
 export { DormitoryWorkspace } from "../DormitoryWorkspace";
 export { HistoryWorkspace } from "./HistoryWorkspace";
 export { ScoresWorkspace } from "./ScoresWorkspace";
+export { AttendanceWorkspace } from "./AttendanceWorkspace";
+export { FollowupWorkspace } from "./FollowupWorkspace";

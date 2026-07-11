@@ -22,6 +22,8 @@ import type {
   StudentId,
 } from "../../state/types";
 import { SeatBoard } from "../SeatBoard";
+import { drawStudents, todayKey } from "../../state/dailyManagement";
+import type { AttendanceRecord, DrawSession, FollowupTask } from "../../state/types";
 
 export function DailyWorkspace({
   students,
@@ -38,6 +40,12 @@ export function DailyWorkspace({
   onOpenStudentFollowup,
   onMoveSeat,
   onToggleLock,
+  drawSessions,
+  onDrawSessionsChange,
+  attendanceRecords,
+  followupTasks,
+  onOpenAttendance,
+  onOpenFollowups,
 }: {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
@@ -53,6 +61,12 @@ export function DailyWorkspace({
   onOpenStudentFollowup: (student: AppStudent) => void;
   onMoveSeat: (fromIndex: number, toIndex: number) => void;
   onToggleLock: (idx: number) => void;
+  drawSessions: DrawSession[];
+  onDrawSessionsChange: (sessions: DrawSession[]) => void;
+  attendanceRecords: AttendanceRecord[];
+  followupTasks: FollowupTask[];
+  onOpenAttendance: () => void;
+  onOpenFollowups: () => void;
 }) {
   const [showSeatSettings, setShowSeatSettings] = useState(false);
   const [activeTool, setActiveTool] = useState<"student" | "draw" | null>(null);
@@ -75,6 +89,9 @@ export function DailyWorkspace({
     + constraints.frontRowStudentIds.length
     + seatSettings.complementRuleIds.length
     + (seatSettings.pairByGender ? 1 : 0);
+  const todayAttendance = attendanceRecords.filter(item => item.date === todayKey());
+  const abnormalAttendance = todayAttendance.filter(item => item.status !== "normal" || item.late || item.earlyLeave).length;
+  const dueTasks = followupTasks.filter(item => item.status === "pending" && item.dueDate <= todayKey()).length;
 
   function addStudent() {
     if (!name.trim()) return;
@@ -85,21 +102,11 @@ export function DailyWorkspace({
   }
 
   function draw() {
-    const pool = students.map(student => student.name);
-    const picked: string[] = [];
-    const used = new Set<number>();
-    for (let index = 0; index < drawCount && pool.length; index += 1) {
-      let pickedIndex = Math.floor(Math.random() * pool.length);
-      if (noRepeat) {
-        let guard = 0;
-        while (used.has(pickedIndex) && guard < pool.length * 2) {
-          pickedIndex = Math.floor(Math.random() * pool.length);
-          guard += 1;
-        }
-      }
-      used.add(pickedIndex);
-      picked.push(pool[pickedIndex]);
-    }
+    const usedToday = noRepeat ? new Set(drawSessions.filter(item => item.date === todayKey()).flatMap(item => item.studentIds)) : new Set<string>();
+    let selected = drawStudents(students, drawCount, usedToday);
+    if (!selected.length && noRepeat) selected = drawStudents(students, drawCount);
+    const picked = selected.map(student => student.name);
+    if (selected.length) onDrawSessionsChange([{ id: `draw-${Date.now()}`, date: todayKey(), studentIds: selected.map(student => student.id), createdAt: new Date().toISOString() }, ...drawSessions].slice(0, 50));
     setDrawResult(picked);
     setDrawHistory(current => [
       { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, time: new Date().toLocaleTimeString("zh-CN", { hour12: false }), names: picked },
@@ -118,6 +125,8 @@ export function DailyWorkspace({
             <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-violet-50 px-2.5 text-xs font-bold text-violet-700">
               <LayoutGrid className="h-3.5 w-3.5" />{seatOrder.length} 座
             </span>
+            <button onClick={onOpenAttendance} className="h-8 rounded-xl bg-amber-50 px-2.5 text-xs font-bold text-amber-700">今日异常 {abnormalAttendance}</button>
+            <button onClick={onOpenFollowups} className="h-8 rounded-xl bg-rose-50 px-2.5 text-xs font-bold text-rose-700">待跟进 {dueTasks}</button>
           </div>
 
           <div className="relative min-w-[180px] flex-1 sm:max-w-xs">

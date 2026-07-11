@@ -55,13 +55,13 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
     return event;
   }, [dormitories, setDormitories, setStudents, students]);
 
-  const handleUpdateDormEvent = useCallback((dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean }) => {
+  const handleUpdateDormEvent = useCallback((dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean; followupTaskIds?: string[] }) => {
     setDormitories((current) => current.map((dormitory) => {
       if (dormitory.id !== dormId) return dormitory;
       const events = dormitory.events.map((event) => {
         if (event.id !== eventId) return event;
         const nextScore = patch.score !== undefined && Number.isFinite(patch.score) ? Math.round(patch.score * 10) / 10 : event.score;
-        return { ...event, reason: patch.reason !== undefined ? patch.reason.trim() || event.reason : event.reason, score: nextScore, type: nextScore > 0 ? "reward" as const : nextScore < 0 ? "punish" as const : "note" as const, note: patch.note !== undefined ? patch.note.trim() : event.note, punishment: patch.punishment !== undefined ? patch.punishment.trim() : event.punishment, punishmentDone: patch.punishmentDone !== undefined ? patch.punishmentDone : event.punishmentDone };
+        return { ...event, reason: patch.reason !== undefined ? patch.reason.trim() || event.reason : event.reason, score: nextScore, type: nextScore > 0 ? "reward" as const : nextScore < 0 ? "punish" as const : "note" as const, note: patch.note !== undefined ? patch.note.trim() : event.note, punishment: patch.punishment !== undefined ? patch.punishment.trim() : event.punishment, punishmentDone: patch.punishmentDone !== undefined ? patch.punishmentDone : event.punishmentDone, followupTaskIds: patch.followupTaskIds !== undefined ? patch.followupTaskIds : event.followupTaskIds };
       });
       return normalizeDormitoryScore({ ...dormitory, events });
     }));

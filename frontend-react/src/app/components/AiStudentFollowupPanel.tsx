@@ -16,6 +16,7 @@ interface Props {
   compact?: boolean;
   onSaveRecord?: (note: string) => void;
   onAppendCommentMaterial?: (text: string) => void;
+  onCreateTask?: (input: { title: string; description: string }) => void;
 }
 
 function getAiErrorMessage(reason: string): string {
@@ -49,6 +50,7 @@ export function AiStudentFollowupPanel({
   compact = false,
   onSaveRecord,
   onAppendCommentMaterial,
+  onCreateTask,
 }: Props) {
   const [result, setResult] = useState<AiStudentFollowupResult | null>(() => readLastStudentFollowup(student.id));
   const [busy, setBusy] = useState(false);
@@ -153,6 +155,14 @@ export function AiStudentFollowupPanel({
     onAppendCommentMaterial(materialText);
     setSavedMaterial(true);
     setStatus("已加入评语素材。");
+  }
+
+  function createTask() {
+    if (!result || !onCreateTask) return;
+    const title = result.actions[0] || result.summary || `跟进 ${student.name}`;
+    if (!window.confirm(`根据这条 AI 建议为 ${student.name} 创建跟进任务？创建后仍可在任务工作区编辑。`)) return;
+    onCreateTask({ title: title.slice(0, 80), description: buildRecordText(result).slice(0, 800) });
+    setStatus("已创建跟进任务，请到跟进任务工作区确认日期和状态。");
   }
 
   return (
@@ -306,6 +316,7 @@ export function AiStudentFollowupPanel({
                 {savedMaterial ? "已加素材" : "加入评语素材"}
               </button>
             </div>
+            {onCreateTask && <button onClick={createTask} className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white text-sm font-bold text-violet-700 hover:bg-violet-50"><PlusCircle className="h-4 w-4" />创建跟进任务</button>}
           </div>}
           </div>
         </div>

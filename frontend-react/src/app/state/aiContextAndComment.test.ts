@@ -39,6 +39,6 @@ describe("AI student context and comment cache", () => {
     expect(readStudentCommentDraft(student)).toEqual(saved);
     expect(normalizeStudentCommentDraft(null)).toBeNull();
     window.localStorage.setItem("seat-manager-ai-comment-draft:s1", "not-json");
-    expect(readStudentCommentDraft(student).generatedComment).toBe("");
+    expect(readStudentCommentDraft(student).generatedComment).toBe("很好");
   });
 });

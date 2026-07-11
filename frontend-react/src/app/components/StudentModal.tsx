@@ -16,8 +16,10 @@ import { createStudentRecord, updateStudentProfile } from "../state/studentActio
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
-import type { AppStudent, Dormitory, Gender, RecordType, StudentId, StudentRecord } from "../state/types";
+import type { AppStudent, AttendanceRecord, Dormitory, FollowupTask, Gender, RecordType, StudentId, StudentRecord } from "../state/types";
+import { todayKey, upsertAttendance } from "../state/dailyManagement";
 import { SegmentedControl } from "./ui";
+import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import {
   buildWeekOptions,
   formatScore,
@@ -48,6 +50,10 @@ interface Props {
   onOpenAiComment?: () => void;
   seatOrder?: Array<StudentId | null>;
   initialActiveTab?: "records" | "profile" | "trend" | "followup";
+  onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
+  attendanceRecords?: AttendanceRecord[];
+  followupTasks?: FollowupTask[];
+  onAttendanceChange?: (records: AttendanceRecord[]) => void;
 }
 
 export function StudentModal({
@@ -64,6 +70,10 @@ export function StudentModal({
   onOpenAiComment,
   seatOrder = [],
   initialActiveTab = "records",
+  onCreateFollowupTask,
+  attendanceRecords = [],
+  followupTasks = [],
+  onAttendanceChange,
 }: Props) {
   const [nameInput, setNameInput] = useState(student.name);
   const [genderInput, setGenderInput] = useState<Gender>(student.gender);
@@ -90,7 +100,7 @@ export function StudentModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [profileStatus, setProfileStatus] = useState("");
   const [dormStatus, setDormStatus] = useState("");
-  const [activeTab, setActiveTab] = useState<"records" | "profile" | "trend" | "followup">(initialActiveTab);
+  const [activeTab, setActiveTab] = useState<"records" | "profile" | "attendance" | "trend" | "followup">(initialActiveTab);
   const [dormAssignmentOpen, setDormAssignmentOpen] = useState(false);
   const [dormEventOpen, setDormEventOpen] = useState(false);
   const [pendingDormitoryId, setPendingDormitoryId] = useState(student.dormitoryId || "");
@@ -376,7 +386,7 @@ export function StudentModal({
         </div>
 
         <div className="flex items-center gap-1 border-b border-gray-100 px-6 pt-3">
-          {([["records", "奖罚记录"], ["profile", "档案"], ["trend", "成绩"], ["followup", "AI跟进"]] as Array<["records" | "profile" | "trend" | "followup", string]>).map(([key, label]) => (
+          {([["records", "奖罚记录"], ["profile", "档案"], ["attendance", "出勤"], ["trend", "成绩"], ["followup", "AI跟进"]] as Array<["records" | "profile" | "attendance" | "trend" | "followup", string]>).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -671,8 +681,11 @@ export function StudentModal({
               }}
               onSaveRecord={saveAiFollowupRecord}
               onAppendCommentMaterial={appendAiFollowupMaterial}
+              onCreateTask={input => onCreateFollowupTask?.({ studentId: student.id, ...input })}
             />
           )}
+
+          {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-gray-50 p-3 text-center"><div className="text-xl font-black text-gray-800">{item.value}</div><div className="text-xs text-gray-400">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div className="mb-3 text-sm font-bold text-gray-800">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={patch=>onAttendanceChange?.(upsertAttendance(attendanceRecords,{studentId:student.id,date:todayKey(),status:patch.status??current?.status??"normal",late:patch.late??current?.late??false,earlyLeave:patch.earlyLeave??current?.earlyLeave??false,note:current?.note||"",leaveStart:current?.leaveStart,leaveEnd:current?.leaveEnd}))}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3"><span className="text-sm font-bold text-gray-700">{item.date}</span><span className="text-sm text-gray-500">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-sm text-gray-400">暂无出勤异常</p>}</div><div className="rounded-xl bg-violet-50 p-3 text-sm text-violet-700">当前跟进任务 {followupTasks.filter(task=>task.studentId===student.id&&task.status==="pending").length} 项</div></div>; })()}
 
           {activeTab === "trend" && (
           <div className="space-y-5">

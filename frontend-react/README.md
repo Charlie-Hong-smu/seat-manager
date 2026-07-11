@@ -28,6 +28,7 @@ pnpm test:e2e:all
 - `src/app/App.tsx`：应用壳与跨页面协调。
 - `src/app/state/seatManagerController.ts`：唯一持久状态控制器。
 - `src/app/state/`：数据转换、存储、导入导出和 API service。
+- 出勤、跟进任务、抽签会话、统一时间线和数据健康检查均属于当前 workspace 的本地业务能力，不新增后台自动同步。
 - `src/app/state/aiApiClient.ts`：共享 AI 认证与网络 fallback。
 - `src/app/components/workspaces/`：独立工作区页面与稳定入口；Scores 按需加载。
 - `src/app/components/`：页面、抽屉、弹窗和共享 UI。

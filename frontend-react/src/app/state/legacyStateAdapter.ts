@@ -1,6 +1,7 @@
 import { EXAMS, INITIAL_SEATS, SAMPLE_RECORDS, STUDENTS } from "../components/mockData";
 import { calculateDormScore } from "./dormitoryActions";
 import { normalizeFundTransactions } from "./classFundActions";
+import { normalizeAttendanceRecords, normalizeDrawSessions, normalizeFollowupTasks } from "./dailyManagement";
 import { getTagLabels, isAcademicTagLabel } from "./tagCatalog";
 import type {
   AppStudent,
@@ -123,6 +124,7 @@ function normalizeDormEvent(value: unknown, index: number, dormId: string): Dorm
     note: toStringValue(value.note),
     punishment: toStringValue(value.punishment) || undefined,
     punishmentDone: value.punishmentDone === true,
+    followupTaskIds: toStringArray(value.followupTaskIds),
     date: toStringValue(value.date) || new Date().toISOString().slice(0, 10),
     createdAt: toStringValue(value.createdAt) || new Date().toISOString(),
   };
@@ -700,6 +702,9 @@ export function createMockSeatManagerState(): SeatManagerState {
     seatSettings: createDefaultSeatSettings(),
     dormitories: [],
     fundTransactions: [],
+    attendanceRecords: [],
+    followupTasks: [],
+    drawSessions: [],
     seatHistory: [],
     savedExams: EXAMS,
     exams: EXAMS,
@@ -722,6 +727,9 @@ export function createEmptySeatManagerState(): SeatManagerState {
     seatSettings: createDefaultSeatSettings(),
     dormitories: [],
     fundTransactions: [],
+    attendanceRecords: [],
+    followupTasks: [],
+    drawSessions: [],
     seatHistory: [],
     savedExams: [],
     exams: [],
@@ -781,6 +789,9 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     seatSettings: normalizeSeatSettings(settings, normalizedStudents),
     dormitories: normalizedDormitories,
     fundTransactions: normalizeFundTransactions(raw.fundTransactions),
+    attendanceRecords: normalizeAttendanceRecords(raw.attendanceRecords),
+    followupTasks: normalizeFollowupTasks(raw.followupTasks),
+    drawSessions: normalizeDrawSessions(raw.drawSessions),
     seatHistory: normalizeSeatHistory(raw.seatHistory),
     savedExams: toUnknownArray(raw.savedExams),
     exams: toUnknownArray(raw.exams),

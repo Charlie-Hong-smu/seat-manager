@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { calcBalance, createFundTransaction, normalizeFundTransactions } from "./classFundActions";
+import { calcBalance, createFundTransaction, filterFundTransactionsByPeriod, getFundPeriodRange, normalizeFundTransactions, shiftFundPeriod } from "./classFundActions";
 import { calculateDormScore, closeDormitoryPeriod, createDormEvent, createDormStudentRecord } from "./dormitoryActions";
 import { createStudent, createStudentRecord, updateStudentProfile } from "./studentActions";
 import { createTestStudent } from "./testFixtures";
@@ -45,6 +45,14 @@ describe("student, dormitory and fund actions", () => {
     expect(normalizeFundTransactions([null, { type: "income", amount: "bad" }])).toEqual([
       expect.objectContaining({ type: "income", amount: 0 }),
     ]);
+  });
+
+  it("uses calendar weeks and months for fund periods", () => {
+    expect(getFundPeriodRange("week", "2026-07-11")).toMatchObject({ start: "2026-07-06", end: "2026-07-12" });
+    expect(getFundPeriodRange("month", "2026-07-11")).toMatchObject({ start: "2026-07-01", end: "2026-07-31" });
+    expect(shiftFundPeriod("week", "2026-07-11", 1)).toBe("2026-07-18");
+    const transactions = normalizeFundTransactions([{ id: "a", type: "expense", amount: 1, date: "2026-07-01" }, { id: "b", type: "expense", amount: 2, date: "2026-08-01" }]);
+    expect(filterFundTransactionsByPeriod(transactions, "month", "2026-07-11").map(tx => tx.id)).toEqual(["a"]);
   });
 
   it("handles note-only dorm events without creating student records", () => {

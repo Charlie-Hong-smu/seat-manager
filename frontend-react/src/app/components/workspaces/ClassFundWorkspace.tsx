@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Pencil, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, Pencil, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 
-import { calcBalance, calcExpenseTotal, calcIncomeTotal, type NewFundTxInput } from "../../state/classFundActions";
+import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
 import { FundTransactionForm } from "../FundTransactionForm";
+import { Card, IconButton, SegmentedControl } from "../ui";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -30,10 +31,14 @@ export function ClassFundWorkspace({
   const [editCategory, setEditCategory] = useState("");
   const [editNote, setEditNote] = useState("");
   const [editDate, setEditDate] = useState("");
+  const [periodMode, setPeriodMode] = useState<FundPeriodMode>("month");
+  const [periodAnchor, setPeriodAnchor] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const balance = calcBalance(transactions);
-  const incomeTotal = calcIncomeTotal(transactions);
-  const expenseTotal = calcExpenseTotal(transactions);
+  const periodTransactions = filterFundTransactionsByPeriod(transactions, periodMode, periodAnchor);
+  const periodRange = getFundPeriodRange(periodMode, periodAnchor);
+  const balance = calcBalance(periodTransactions);
+  const incomeTotal = calcIncomeTotal(periodTransactions);
+  const expenseTotal = calcExpenseTotal(periodTransactions);
 
   function startEdit(tx: FundTransaction) {
     setEditingId(tx.id);
@@ -76,16 +81,20 @@ export function ClassFundWorkspace({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-5xl space-y-5">
+          <Card className="surface-enter" bodyClassName="flex flex-wrap items-center gap-3 p-3">
+            <SegmentedControl value={periodMode} onChange={setPeriodMode} ariaLabel="班费统计周期" options={[{ value: "all", label: "全部" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }]} />
+            {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><label className="flex h-9 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-[var(--app-surface-muted)] px-3"><CalendarRange className="h-4 w-4 text-blue-500" /><input type="date" value={periodAnchor} onChange={event => setPeriodAnchor(event.target.value)} className="bg-transparent text-sm outline-none" /></label><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-xs font-bold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
+          </Card>
           {/* 统计卡：左大余额 + 右两小卡 */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem_12rem]">
-            <div className="surface-enter rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-              <div className="text-xs text-gray-400">当前余额</div>
+            <Card className="surface-enter" bodyClassName="p-5">
+              <div className="text-xs text-gray-400">{periodMode === "all" ? "全部结余" : periodMode === "week" ? "本周收支差额" : "本月收支差额"}</div>
               <div className={`mt-1 text-3xl ${balance >= 0 ? "text-gray-900" : "text-red-500"}`} style={{ fontWeight: 900 }}>
                 ¥{formatCurrency(balance)}
               </div>
-              <div className="mt-1 text-xs text-gray-400">{transactions.length} 笔交易</div>
-            </div>
-            <div className="surface-enter flex flex-col justify-center rounded-2xl border border-gray-100 bg-white p-4 shadow-sm [animation-delay:60ms]">
+              <div className="mt-1 text-xs text-gray-400">当前周期 {periodTransactions.filter(tx => tx.status !== "void").length} 笔有效交易</div>
+            </Card>
+            <Card className="surface-enter [animation-delay:60ms]" bodyClassName="flex h-full flex-col justify-center p-4">
               <div className="flex items-center gap-1.5 text-xs text-gray-400">
                 <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
                 收入合计
@@ -93,8 +102,8 @@ export function ClassFundWorkspace({
               <div className="mt-1 text-xl text-emerald-600" style={{ fontWeight: 900 }}>
                 ¥{formatCurrency(incomeTotal)}
               </div>
-            </div>
-            <div className="surface-enter flex flex-col justify-center rounded-2xl border border-gray-100 bg-white p-4 shadow-sm [animation-delay:120ms]">
+            </Card>
+            <Card className="surface-enter [animation-delay:120ms]" bodyClassName="flex h-full flex-col justify-center p-4">
               <div className="flex items-center gap-1.5 text-xs text-gray-400">
                 <TrendingDown className="h-3.5 w-3.5 text-red-500" />
                 支出合计
@@ -102,7 +111,7 @@ export function ClassFundWorkspace({
               <div className="mt-1 text-xl text-red-500" style={{ fontWeight: 900 }}>
                 ¥{formatCurrency(expenseTotal)}
               </div>
-            </div>
+            </Card>
           </div>
 
           {/* 左右双栏：记一笔 + 收支流水 */}
@@ -117,7 +126,7 @@ export function ClassFundWorkspace({
             <div className="surface-enter rounded-2xl border border-gray-100 bg-white p-5 shadow-sm [animation-delay:120ms]">
               <div className="mb-4 flex items-center justify-between">
                 <div className="text-sm font-semibold text-gray-900">收支流水</div>
-                {transactions.length > 0 && (
+                {periodMode === "all" && transactions.length > 0 && (
                   <button
                     onClick={handleClearAll}
                     className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs text-red-500 transition-colors hover:bg-red-50"
@@ -126,13 +135,13 @@ export function ClassFundWorkspace({
                   </button>
                 )}
               </div>
-              {transactions.length === 0 ? (
+              {periodTransactions.length === 0 ? (
                 <div className="py-10 text-center text-sm text-gray-400">
-                  暂无交易记录，在左侧「记一笔」开始记录
+                  当前周期暂无交易记录
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {transactions.map(tx => (
+                  {periodTransactions.map(tx => (
                     <div key={tx.id} className="border-b border-gray-50 last:border-b-0">
                       {editingId === tx.id ? (
                         /* 编辑态 */
@@ -201,7 +210,7 @@ export function ClassFundWorkspace({
                         </div>
                       ) : (
                         /* 展示态 */
-                        <div className="group flex items-center gap-3 px-1 py-2.5 transition-colors hover:bg-gray-50">
+                        <div className={`group flex items-center gap-3 px-1 py-2.5 transition-colors hover:bg-gray-50 ${tx.status === "void" ? "opacity-50" : ""}`}>
                           {/* 图标 */}
                           <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
                             tx.type === "income" ? "bg-emerald-50 text-emerald-500" : "bg-red-50 text-red-500"
@@ -216,7 +225,7 @@ export function ClassFundWorkspace({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline gap-2">
                               <span className="text-sm text-gray-800" style={{ fontWeight: 700 }}>
-                                {tx.category || "未分类"}
+                                {tx.category || "未分类"}{tx.status === "void" ? "（已作废）" : ""}
                               </span>
                               {tx.note && (
                                 <span className="text-xs text-gray-400">{tx.note}</span>
@@ -234,7 +243,7 @@ export function ClassFundWorkspace({
                             {tx.type === "income" ? "+" : "−"}¥{formatCurrency(tx.amount)}
                           </span>
                           {/* 操作 */}
-                          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                          {tx.status !== "void" && <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                             <button
                               onClick={() => startEdit(tx)}
                               className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
@@ -247,7 +256,7 @@ export function ClassFundWorkspace({
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
-                          </div>
+                          </div>}
                         </div>
                       )}
                     </div>
@@ -261,4 +270,3 @@ export function ClassFundWorkspace({
     </div>
   );
 }
-

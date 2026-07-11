@@ -14,6 +14,42 @@ export const FUND_EXPENSE_PRESETS: Array<{ category: string; note: string }> = [
   { category: "其他支出", note: "" },
 ];
 
+export type FundPeriodMode = "all" | "week" | "month";
+
+function parseDateKey(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year || 1970, Math.max(0, (month || 1) - 1), day || 1);
+}
+
+function dateKey(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+export function getFundPeriodRange(mode: FundPeriodMode, anchor: string): { start: string; end: string; label: string } | null {
+  if (mode === "all") return null;
+  const date = parseDateKey(anchor);
+  if (mode === "week") {
+    const start = new Date(date); start.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    return { start: dateKey(start), end: dateKey(end), label: `${dateKey(start)} 至 ${dateKey(end)}` };
+  }
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return { start: dateKey(start), end: dateKey(end), label: `${date.getFullYear()} 年 ${date.getMonth() + 1} 月` };
+}
+
+export function filterFundTransactionsByPeriod(transactions: FundTransaction[], mode: FundPeriodMode, anchor: string): FundTransaction[] {
+  const range = getFundPeriodRange(mode, anchor);
+  return range ? transactions.filter(tx => tx.date >= range.start && tx.date <= range.end) : transactions;
+}
+
+export function shiftFundPeriod(mode: FundPeriodMode, anchor: string, amount: number): string {
+  const date = parseDateKey(anchor);
+  if (mode === "week") date.setDate(date.getDate() + amount * 7);
+  if (mode === "month") date.setMonth(date.getMonth() + amount, 1);
+  return dateKey(date);
+}
+
 export interface NewFundTxInput {
   type: FundTxType;
   amount: number;
@@ -34,13 +70,13 @@ function todayString(): string {
 
 export function calcIncomeTotal(transactions: FundTransaction[]): number {
   return transactions
-    .filter(tx => tx.type === "income")
+    .filter(tx => tx.status !== "void" && tx.type === "income")
     .reduce((sum, tx) => sum + tx.amount, 0);
 }
 
 export function calcExpenseTotal(transactions: FundTransaction[]): number {
   return transactions
-    .filter(tx => tx.type === "expense")
+    .filter(tx => tx.status !== "void" && tx.type === "expense")
     .reduce((sum, tx) => sum + tx.amount, 0);
 }
 
@@ -68,6 +104,7 @@ export function createFundTransaction(input: NewFundTxInput, students: AppStuden
     relatedStudentNames: relatedNames.length ? relatedNames : undefined,
     date: input.date || todayString(),
     createdAt: new Date().toISOString(),
+    status: "active",
   };
 }
 
@@ -103,6 +140,9 @@ export function normalizeFundTransactions(raw: unknown): FundTransaction[] {
           : undefined,
         date: typeof record.date === "string" ? record.date : todayString(),
         createdAt: typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString(),
+        status: record.status === "void" ? "void" : "active",
+        voidedAt: typeof record.voidedAt === "string" ? record.voidedAt : undefined,
+        voidReason: typeof record.voidReason === "string" ? record.voidReason : undefined,
       };
     })
     .filter((item): item is FundTransaction => Boolean(item));

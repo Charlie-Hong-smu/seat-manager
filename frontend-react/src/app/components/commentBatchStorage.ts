@@ -1,4 +1,5 @@
 import type { AppStudent, StudentId } from "../state/types";
+import { getCurrentWorkspaceScope } from "../state/workspaces";
 
 export interface CommentBatchState {
   queue: StudentId[];
@@ -10,6 +11,7 @@ export interface CommentBatchState {
 }
 
 export const COMMENT_BATCH_STATE_KEY = "seat-manager-ai-comment-batch-state-v1";
+function scopedKey(): string { return `${COMMENT_BATCH_STATE_KEY}:${getCurrentWorkspaceScope()}`; }
 
 export function emptyCommentBatchState(): CommentBatchState {
   return { queue: [], failed: [], done: 0, total: 0, status: "idle", updatedAt: "" };
@@ -23,7 +25,10 @@ export function loadCommentBatchState(students: AppStudent[]): CommentBatchState
   if (!hasBrowserStorage()) return emptyCommentBatchState();
   try {
     const validIds = new Set(students.map((student) => student.id));
-    const raw = JSON.parse(window.localStorage.getItem(COMMENT_BATCH_STATE_KEY) || "null") as Partial<CommentBatchState> | null;
+    const scoped = window.localStorage.getItem(scopedKey());
+    const legacy = scoped === null ? window.localStorage.getItem(COMMENT_BATCH_STATE_KEY) : null;
+    const raw = JSON.parse(scoped ?? legacy ?? "null") as Partial<CommentBatchState> | null;
+    if (legacy !== null) { window.localStorage.setItem(scopedKey(), legacy); window.localStorage.removeItem(COMMENT_BATCH_STATE_KEY); }
     if (!raw || typeof raw !== "object") return emptyCommentBatchState();
     return {
       queue: Array.isArray(raw.queue) ? raw.queue.filter((id) => validIds.has(id)) : [],
@@ -41,8 +46,9 @@ export function loadCommentBatchState(students: AppStudent[]): CommentBatchState
 export function saveCommentBatchState(state: CommentBatchState): void {
   if (!hasBrowserStorage()) return;
   if (!state.queue.length && !state.failed.length && (state.status === "idle" || state.status === "complete")) {
+    window.localStorage.removeItem(scopedKey());
     window.localStorage.removeItem(COMMENT_BATCH_STATE_KEY);
     return;
   }
-  window.localStorage.setItem(COMMENT_BATCH_STATE_KEY, JSON.stringify(state));
+  window.localStorage.setItem(scopedKey(), JSON.stringify(state));
 }

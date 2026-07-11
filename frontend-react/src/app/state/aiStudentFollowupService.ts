@@ -4,6 +4,7 @@ import { getProductAuthToken } from "./authStorage";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, Dormitory, StudentCommentDraft } from "./types";
+import { getCurrentWorkspaceScope } from "./workspaces";
 
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
 const AI_STUDENT_FOLLOWUP_LAST_KEY = "seat-manager-ai-student-followup-last-v1";
@@ -88,7 +89,8 @@ export function readLastStudentFollowup(studentId: string): AiStudentFollowupRes
   }
   try {
     const cache = JSON.parse(window.localStorage.getItem(AI_STUDENT_FOLLOWUP_LAST_KEY) || "{}") as Record<string, AiStudentFollowupResult>;
-    const cached = cache[studentId] ? normalizeResult(cache[studentId]) : null;
+    const key = `${getCurrentWorkspaceScope()}:${studentId}`;
+    const cached = cache[key] ? normalizeResult(cache[key]) : null;
     return hasUsefulFollowup(cached) ? cached : null;
   } catch {
     return null;
@@ -101,7 +103,8 @@ function storeLastStudentFollowup(studentId: string, result: AiStudentFollowupRe
   }
   try {
     const cache = JSON.parse(window.localStorage.getItem(AI_STUDENT_FOLLOWUP_LAST_KEY) || "{}") as Record<string, AiStudentFollowupResult>;
-    const next = Object.fromEntries(Object.entries({ ...cache, [studentId]: result }).slice(-120));
+    const key = `${getCurrentWorkspaceScope()}:${studentId}`;
+    const next = Object.fromEntries(Object.entries({ ...cache, [key]: result }).slice(-120));
     window.localStorage.setItem(AI_STUDENT_FOLLOWUP_LAST_KEY, JSON.stringify(next));
   } catch {
     // Ignore page-cache write failures.

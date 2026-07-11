@@ -22,6 +22,7 @@ import {
   updateClassInfo,
   type SchoolStage,
 } from "../state/workspaces";
+import { exportPreImportBackup } from "../state/backupStorage";
 import type { TermSeason } from "../state/types";
 import { AnimatedPopover } from "./ui";
 
@@ -300,6 +301,8 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
     }
     if (switchSlice(sliceId)) {
       onChanged();
+    } else {
+      window.alert("切换失败，本机数据未改变。请检查浏览器存储空间后重试。");
     }
     closeAll();
   }
@@ -311,7 +314,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
       ? composeClassNameByNumber(input.stage, input.gradeNumber, input.classNo)
       : "";
     const customName = input.className && input.className !== auto ? input.className : undefined;
-    createClass({
+    const created = createClass({
       stage: input.stage,
       gradeNumber: input.gradeNumber || undefined,
       classNo: input.classNo || undefined,
@@ -319,6 +322,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
       className: input.className,
       term,
     });
+    if (!created) { window.alert("创建班级失败，本机数据未改变。请先导出备份并检查存储空间。"); return; }
     setRefreshKey(k => k + 1);
     onChanged();
     closeAll();
@@ -326,7 +330,8 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
 
   function handleNextTerm(input: TermFormResult) {
     const term = makeTerm({ year: input.year, season: input.season, label: input.label });
-    advanceToNextTerm({ fromSliceId: current.id, term, copyRoster: true });
+    const created = advanceToNextTerm({ fromSliceId: current.id, term, copyRoster: true });
+    if (!created) { window.alert("创建新学期失败，本机数据未改变。请先导出备份并检查存储空间。"); return; }
     setRefreshKey(k => k + 1);
     onChanged();
     closeAll();
@@ -338,7 +343,8 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
     if (!window.confirm(`确定要删除「${label}」这个学期的所有数据吗？\n删除后无法恢复。`)) {
       return;
     }
-    deleteSlice(sliceId);
+    exportPreImportBackup();
+    if (!deleteSlice(sliceId)) { window.alert("删除失败，本机数据未改变。"); return; }
     setRefreshKey(k => k + 1);
     // 如果删掉的是当前切片，重新加载（deleteSlice 会自动切换到第一个切片）
     onChanged();

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AiCommentDrawer } from "./AiCommentDrawer";
 import { StudentModal } from "./StudentModal";
 import type { NewDormEventInput } from "../state/dormitoryActions";
-import type { AppStudent, Dormitory, StudentId, StudentRecord } from "../state/types";
+import type { AppStudent, AttendanceRecord, Dormitory, FollowupTask, StudentId, StudentRecord } from "../state/types";
 
 interface StudentDetailProps {
   student: AppStudent;
@@ -18,6 +18,10 @@ interface StudentDetailProps {
   onOpenDormitories: () => void;
   seatOrder?: Array<StudentId | null>;
   initialActiveTab?: "records" | "profile" | "trend" | "followup";
+  onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
+  attendanceRecords?: AttendanceRecord[];
+  followupTasks?: FollowupTask[];
+  onAttendanceChange?: (records: AttendanceRecord[]) => void;
 }
 
 export function StudentDetail({
@@ -33,6 +37,10 @@ export function StudentDetail({
   onOpenDormitories,
   seatOrder,
   initialActiveTab,
+  onCreateFollowupTask,
+  attendanceRecords,
+  followupTasks,
+  onAttendanceChange,
 }: StudentDetailProps) {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
@@ -53,6 +61,10 @@ export function StudentDetail({
         onOpenAiComment={() => setAiDrawerOpen(true)}
         seatOrder={seatOrder}
         initialActiveTab={initialActiveTab}
+        onCreateFollowupTask={onCreateFollowupTask}
+        attendanceRecords={attendanceRecords}
+        followupTasks={followupTasks}
+        onAttendanceChange={onAttendanceChange}
       />
       <AiCommentDrawer
         open={aiDrawerOpen}

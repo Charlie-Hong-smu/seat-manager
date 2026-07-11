@@ -9,12 +9,14 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function useStudentActions({ students, seatOrder, setStudents, setDormitories, setSeatSettings, commitSeatOrder, closeStudentDetail }: {
+export function useStudentActions({ students, seatOrder, setStudents, setDormitories, setSeatSettings, setAttendanceRecords, setFollowupTasks, commitSeatOrder, closeStudentDetail }: {
   students: AppStudent[];
   seatOrder: SeatOrder;
   setStudents: SeatManagerController["setStudents"];
   setDormitories: SeatManagerController["setDormitories"];
   setSeatSettings: SeatManagerController["setSeatSettings"];
+  setAttendanceRecords: SeatManagerController["setAttendanceRecords"];
+  setFollowupTasks: SeatManagerController["setFollowupTasks"];
   commitSeatOrder: (next: SeatOrder) => void;
   closeStudentDetail: () => void;
 }) {
@@ -53,8 +55,10 @@ export function useStudentActions({ students, seatOrder, setStudents, setDormito
     setDormitories((current) => current.map((dormitory) => ({ ...dormitory, memberIds: dormitory.memberIds.filter((id) => id !== studentId) })));
     commitSeatOrder(seatOrder.map((id) => id === studentId ? null : id));
     setSeatSettings((current) => ({ ...current, constraints: { ...current.constraints, lockedDeskmatePairs: current.constraints.lockedDeskmatePairs.filter((pair) => pair.a !== studentId && pair.b !== studentId), noDeskmatePairs: current.constraints.noDeskmatePairs.filter((pair) => pair.a !== studentId && pair.b !== studentId), frontRowStudentIds: current.constraints.frontRowStudentIds.filter((id) => id !== studentId) } }));
+    setAttendanceRecords(current => current.filter(record => record.studentId !== studentId));
+    setFollowupTasks(current => current.filter(task => task.studentId !== studentId));
     closeStudentDetail();
-  }, [closeStudentDetail, commitSeatOrder, seatOrder, setDormitories, setSeatSettings, setStudents]);
+  }, [closeStudentDetail, commitSeatOrder, seatOrder, setAttendanceRecords, setDormitories, setFollowupTasks, setSeatSettings, setStudents]);
 
   return { handleAddStudent, handleUpdateStudent, handleApplyStudentRecord, handleSaveAiAssistantRecord, handleAppendAiAssistantMaterial, handleDeleteStudent };
 }

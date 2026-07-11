@@ -9,6 +9,7 @@
     "build:zhang": "vite build",
     "build:commercial": "VITE_EDITION=commercial VITE_BASE=/ vite build",
     "check:size": "node scripts/check-build-size.mjs",
+    "check:design": "node scripts/check-design-system.mjs",
     "check:production": "node scripts/check-production-bundle.mjs",
     "preview": "vite preview",
     "lint": "eslint . --max-warnings=0",
@@ -20,7 +21,7 @@
     "test:e2e:zhang": "E2E_EDITION=zhang playwright test",
     "test:e2e:commercial": "E2E_EDITION=commercial playwright test",
     "test:e2e:all": "pnpm test:e2e:zhang && pnpm test:e2e:commercial",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm check:design && pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
     "@vitejs/plugin-react": "4.7.0",

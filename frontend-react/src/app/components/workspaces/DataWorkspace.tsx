@@ -3,6 +3,7 @@ import { FileDown, FileUp, X } from "lucide-react";
 
 import {
   exportBackupJson,
+  exportCurrentClassBackupJson,
   exportSeatsCsv,
   formatBackupTime,
   getLastBackupAt,
@@ -14,6 +15,7 @@ import { hasStoredAiScoreMappingAuth, suggestRosterMappingWithAi, type AiRosterM
 import { readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
 import type { AppStudent, StudentId } from "../../state/types";
+import type { HealthIssue } from "../../state/dataInsights";
 import { Button, FileDropZone } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
@@ -23,12 +25,14 @@ export function DataWorkspace({
   onImportRoster,
   onBeforeBackupExport,
   onBackupImported,
+  healthIssues = [],
 }: {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
   onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
   onBeforeBackupExport: () => void;
   onBackupImported: () => void;
+  healthIssues?: HealthIssue[];
 }) {
   const [replaceExisting, setReplaceExisting] = useState(true);
   const [keepHistory, setKeepHistory] = useState(true);
@@ -181,6 +185,7 @@ export function DataWorkspace({
   return (
     <div className="flex h-full flex-col bg-gray-50">
       <div className="grid gap-4 overflow-y-auto p-4 lg:grid-cols-3">
+        <div className="surface-enter lg:col-span-3"><Panel title="数据健康检查" action={<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${healthIssues.some(i => i.severity === "critical") ? "bg-red-50 text-red-600" : healthIssues.length ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"}`}>{healthIssues.length ? `${healthIssues.length} 项问题` : "状态正常"}</span>}><div className="grid gap-2 sm:grid-cols-2">{healthIssues.map(issue => <div key={issue.id} className={`rounded-xl border p-3 ${issue.severity === "critical" ? "border-red-100 bg-red-50" : "border-amber-100 bg-amber-50"}`}><div className="text-sm font-bold text-gray-800">{issue.title}</div><div className="mt-1 text-xs text-gray-500">{issue.detail}</div></div>)}{!healthIssues.length && <p className="text-sm text-gray-500">未发现重复学号、孤立座位、宿舍重复归属或无效学生引用。</p>}</div></Panel></div>
         <div className="surface-enter">
         <Panel title="导入名单" action={<span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600" style={{ fontWeight: 800 }}>导入</span>}>
           <div className="space-y-3">
@@ -214,8 +219,9 @@ export function DataWorkspace({
               <FileDown className="h-4 w-4" />导出座位表 CSV
             </Button>
             <Button variant="secondary" onClick={exportBackup} className="w-full flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3">
-              <FileDown className="h-4 w-4" />导出备份 JSON
+              <FileDown className="h-4 w-4" />备份全部班级与学期
             </Button>
+            <Button variant="ghost" onClick={() => { onBeforeBackupExport(); exportCurrentClassBackupJson(); }} className="w-full flex items-center justify-center gap-2"><FileDown className="h-4 w-4" />仅导出当前班级</Button>
             {lastBackupAt && <p className="text-sm text-gray-400">上次备份：{formatBackupTime(lastBackupAt)}</p>}
           </div>
         </Panel>
@@ -228,7 +234,7 @@ export function DataWorkspace({
               <FileUp className="h-4 w-4 text-gray-400" />
               <span className="text-sm text-gray-500">{backupPreview ? "已选择备份文件" : "拖拽或选择 JSON 备份文件"}</span>
             </FileDropZone>
-            {backupPreview && <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">{backupPreview.studentCount} 名学生 · {backupPreview.seatCount} 个座位</div>}
+            {backupPreview && <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">{backupPreview.workspaceBook ? `${backupPreview.workspaceBook.slices.length} 个班级学期 · ` : ""}{backupPreview.studentCount} 名学生 · {backupPreview.seatCount} 个座位</div>}
             <Button variant="danger" onClick={restore} className="w-full">恢复备份</Button>
             {backupStatus && <p className="text-sm text-amber-600">{backupStatus}</p>}
           </div>
@@ -383,4 +389,3 @@ export function DataWorkspace({
     </div>
   );
 }
-

@@ -31,6 +31,7 @@ export interface DormEvent {
   punishment?: string;
   /** 处罚是否已执行。 */
   punishmentDone?: boolean;
+  followupTaskIds?: string[];
   date: string;
   createdAt: string;
 }
@@ -74,6 +75,52 @@ export interface FundTransaction {
   /** 多个关联学生姓名（新）。 */
   relatedStudentNames?: string[];
   date: string;
+  createdAt: string;
+  status: "active" | "void";
+  voidedAt?: string;
+  voidReason?: string;
+}
+
+export type AttendanceStatus = "normal" | "leave" | "absent";
+
+export interface AttendanceRecord {
+  id: string;
+  studentId: StudentId;
+  date: string;
+  status: AttendanceStatus;
+  late: boolean;
+  earlyLeave: boolean;
+  note: string;
+  leaveStart?: string;
+  leaveEnd?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FollowupTaskStatus = "pending" | "completed" | "cancelled";
+export type FollowupTaskSource = "manual" | "ai" | "score" | "attendance" | "dormitory";
+
+export interface FollowupTask {
+  id: string;
+  studentId: StudentId;
+  title: string;
+  type: string;
+  description: string;
+  plannedDate: string;
+  dueDate: string;
+  status: FollowupTaskStatus;
+  source: FollowupTaskSource;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  lastNotifiedAt?: string;
+  sourceRef?: { domain: "dormitory" | "attendance" | "ai"; entityId: string };
+}
+
+export interface DrawSession {
+  id: string;
+  date: string;
+  studentIds: StudentId[];
   createdAt: string;
 }
 
@@ -278,6 +325,9 @@ export interface SeatManagerState {
   seatSettings: SeatSettings;
   dormitories: Dormitory[];
   fundTransactions: FundTransaction[];
+  attendanceRecords: AttendanceRecord[];
+  followupTasks: FollowupTask[];
+  drawSessions: DrawSession[];
   seatHistory: SeatHistorySnapshot[];
   savedExams: unknown[];
   exams: unknown[];

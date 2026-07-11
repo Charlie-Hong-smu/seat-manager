@@ -1,12 +1,14 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
-import type { AppStudent, StudentId } from "./types";
+import type { AppStudent, StudentId, WorkspaceBook } from "./types";
+import { exportWholeBook, importWholeBook } from "./workspaces";
 
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2;
 const COLS = 8;
 
 export interface BackupImportPreview {
   version: number;
   data: Record<string, unknown>;
+  workspaceBook?: WorkspaceBook;
   studentCount: number;
   seatCount: number;
   warning: string;
@@ -59,14 +61,20 @@ export function formatBackupTime(value: string): string {
 
 export function exportBackupJson(): string {
   const exportedAt = new Date().toISOString();
-  const data = { ...getCurrentLegacyState(), lastBackupAt: exportedAt };
   const payload = {
     version: BACKUP_VERSION,
     exportedAt,
-    data,
+    workspaceBook: exportWholeBook(),
   };
-  const filename = `classroom_backup_${formatDateForFilename()}_${formatTimeForFilename()}.json`;
+  const filename = `seat_manager_full_backup_${formatDateForFilename()}_${formatTimeForFilename()}.json`;
   downloadFile(filename, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  return exportedAt;
+}
+
+export function exportCurrentClassBackupJson(): string {
+  const exportedAt = new Date().toISOString();
+  const data = { ...getCurrentLegacyState(), lastBackupAt: exportedAt };
+  downloadFile(`classroom_backup_${formatDateForFilename()}_${formatTimeForFilename()}.json`, JSON.stringify({ version: 1, exportedAt, data }, null, 2), "application/json;charset=utf-8");
   writeLegacyRootState(data);
   return exportedAt;
 }
@@ -77,7 +85,7 @@ export function exportPreImportBackup(): void {
     version: BACKUP_VERSION,
     exportedAt,
     reason: "before-import",
-    data: getCurrentLegacyState(),
+    workspaceBook: exportWholeBook(),
   };
   const filename = `before_import_backup_${formatDateForFilename()}_${formatTimeForFilename()}.json`;
   downloadFile(filename, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
@@ -103,6 +111,12 @@ export function exportSeatsCsv(students: AppStudent[], seatOrder: Array<StudentI
 export async function parseBackupFile(file: File): Promise<BackupImportPreview> {
   const parsed = JSON.parse(await file.text()) as unknown;
   const version = isRecord(parsed) && typeof parsed.version === "number" ? parsed.version : 0;
+  const workspaceBook = isRecord(parsed) && isRecord(parsed.workspaceBook) ? parsed.workspaceBook as unknown as WorkspaceBook : undefined;
+  if (workspaceBook?.slices?.length) {
+    const current = workspaceBook.slices.find(slice => slice.id === workspaceBook.currentSliceId) || workspaceBook.slices[0];
+    const data = isRecord(current?.data) ? current.data : { students: [], seatOrder: [] };
+    return { version, data, workspaceBook, studentCount: workspaceBook.slices.reduce((sum, slice) => sum + (Array.isArray(slice.data?.students) ? slice.data.students.length : 0), 0), seatCount: Array.isArray(data.seatOrder) ? data.seatOrder.length : 0, warning: "" };
+  }
   const data = isRecord(parsed) && parsed.data ? parsed.data : parsed;
   if (!isValidLegacyState(data)) {
     throw new Error("invalid_backup");
@@ -114,11 +128,11 @@ export async function parseBackupFile(file: File): Promise<BackupImportPreview> 
     data,
     studentCount,
     seatCount,
-    warning: version && version !== BACKUP_VERSION ? `备份版本 ${version} 与当前版本 ${BACKUP_VERSION} 不同，仍尝试兼容导入。` : "",
+    warning: version && ![1, BACKUP_VERSION].includes(version) ? `备份版本 ${version} 与当前版本 ${BACKUP_VERSION} 不同，仍尝试兼容导入。` : "",
   };
 }
 
 export function restoreBackup(preview: BackupImportPreview): boolean {
   exportPreImportBackup();
-  return writeLegacyRootState(preview.data);
+  return preview.workspaceBook ? importWholeBook(preview.workspaceBook) : writeLegacyRootState(preview.data);
 }

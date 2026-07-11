@@ -3,7 +3,7 @@ import { useCallback, useState, type Dispatch, type SetStateAction } from "react
 import { createSeatManagerState } from "./legacyStateAdapter";
 import { saveLegacySnapshot } from "./legacyWriteAdapter";
 import { readLegacyRootState } from "./storage";
-import type { AppStudent, Dormitory, FundTransaction, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
+import type { AppStudent, AttendanceRecord, Dormitory, DrawSession, FollowupTask, FundTransaction, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 type FieldUpdater<T> = SetStateAction<T>;
 
@@ -23,6 +23,9 @@ export interface SeatManagerController {
   setLockedSeats: Dispatch<SetStateAction<Set<number>>>;
   setSeatSettings: Dispatch<SetStateAction<SeatSettings>>;
   setSeatHistory: Dispatch<SetStateAction<SeatHistorySnapshot[]>>;
+  setAttendanceRecords: Dispatch<SetStateAction<AttendanceRecord[]>>;
+  setFollowupTasks: Dispatch<SetStateAction<FollowupTask[]>>;
+  setDrawSessions: Dispatch<SetStateAction<DrawSession[]>>;
 }
 
 export function useSeatManagerController(initialState: SeatManagerState): SeatManagerController {
@@ -43,6 +46,9 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
     dormitories: state.dormitories,
     seatHistory: state.seatHistory,
     fundTransactions: state.fundTransactions,
+    attendanceRecords: state.attendanceRecords,
+    followupTasks: state.followupTasks,
+    drawSessions: state.drawSessions,
   }), [state]);
 
   const setStudents = useCallback<SeatManagerController["setStudents"]>(update => {
@@ -70,5 +76,9 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
     setState(current => ({ ...current, seatHistory: resolveUpdate(current.seatHistory, update) }));
   }, []);
 
-  return { state, replace, reload, persist, setStudents, setDormitories, setFundTransactions, setSeatOrder, setLockedSeats, setSeatSettings, setSeatHistory };
+  const setAttendanceRecords = useCallback<SeatManagerController["setAttendanceRecords"]>(update => setState(current => ({ ...current, attendanceRecords: resolveUpdate(current.attendanceRecords, update) })), []);
+  const setFollowupTasks = useCallback<SeatManagerController["setFollowupTasks"]>(update => setState(current => ({ ...current, followupTasks: resolveUpdate(current.followupTasks, update) })), []);
+  const setDrawSessions = useCallback<SeatManagerController["setDrawSessions"]>(update => setState(current => ({ ...current, drawSessions: resolveUpdate(current.drawSessions, update) })), []);
+
+  return { state, replace, reload, persist, setStudents, setDormitories, setFundTransactions, setSeatOrder, setLockedSeats, setSeatSettings, setSeatHistory, setAttendanceRecords, setFollowupTasks, setDrawSessions };
 }

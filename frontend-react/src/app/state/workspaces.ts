@@ -296,6 +296,11 @@ export function getCurrentSlice(): WorkspaceSlice {
   return book.slices.find(slice => slice.id === book.currentSliceId) || book.slices[0];
 }
 
+/** 浏览器辅助缓存的工作区作用域；不得只用 studentId，避免跨班级/学期串数据。 */
+export function getCurrentWorkspaceScope(): string {
+  return getCurrentSlice().id;
+}
+
 /** storage.ts 用:读当前切片的数据(等同旧的 readLegacyRootState 内容)。 */
 export function readCurrentSliceData(): Record<string, unknown> | null {
   const slice = getCurrentSlice();
@@ -335,7 +340,7 @@ export function createClass(input: {
   classNo?: string;
   customName?: string;
   term?: WorkspaceTerm;
-}): WorkspaceSlice {
+}): WorkspaceSlice | null {
   const book = ensureWorkspaceBook();
   const term = input.term || makeTerm(guessCurrentTerm());
   const displayName = input.customName?.trim()
@@ -355,8 +360,7 @@ export function createClass(input: {
   });
   book.slices.push(slice);
   book.currentSliceId = slice.id;
-  writeBook(book);
-  return slice;
+  return writeBook(book) ? slice : null;
 }
 
 /** 把一个班级(classId)已有切片按创建时间返回,供 UI 展示同班多个学期。 */
@@ -406,6 +410,11 @@ function copyRosterForNewTerm(data: Record<string, unknown>): Record<string, unk
       name: item.name,
       gender: item.gender,
       aliases: item.aliases,
+      studentNo: item.studentNo,
+      parentPhone: item.parentPhone,
+      address: item.address,
+      emergencyContact: item.emergencyContact,
+      isBoarding: item.isBoarding,
       dormitoryId: item.dormitoryId,
       manualTags: item.manualTags,
       autoTags: item.autoTags,
@@ -442,6 +451,10 @@ function copyRosterForNewTerm(data: Record<string, unknown>): Record<string, unk
     manualTags: Array.isArray(data.manualTags) ? data.manualTags : [],
     autoTags: Array.isArray(data.autoTags) ? data.autoTags : [],
     commentRubric: data.commentRubric ?? null,
+    fundTransactions: [],
+    attendanceRecords: [],
+    followupTasks: [],
+    drawSessions: [],
   };
 }
 
@@ -492,8 +505,7 @@ export function advanceToNextTerm(input: {
   };
   book.slices.push(slice);
   book.currentSliceId = slice.id;
-  writeBook(book);
-  return slice;
+  return writeBook(book) ? slice : null;
 }
 
 export function renameClass(classId: string, nextName: string): boolean {

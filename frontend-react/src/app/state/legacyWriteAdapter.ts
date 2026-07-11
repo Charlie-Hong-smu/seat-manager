@@ -1,6 +1,6 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
-import type { AppStudent, Dormitory, FundTransaction, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
+import type { AppStudent, AttendanceRecord, Dormitory, DrawSession, FollowupTask, FundTransaction, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 interface PersistSnapshotInput {
   students: AppStudent[];
@@ -10,6 +10,9 @@ interface PersistSnapshotInput {
   seatHistory?: SeatHistorySnapshot[];
   dormitories?: Dormitory[];
   fundTransactions?: FundTransaction[];
+  attendanceRecords?: AttendanceRecord[];
+  followupTasks?: FollowupTask[];
+  drawSessions?: DrawSession[];
 }
 
 interface SaveGradeExamInput extends PersistSnapshotInput {
@@ -264,7 +267,7 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
   return syncedStudents;
 }
 
-export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions }: PersistSnapshotInput): boolean {
+export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions }: PersistSnapshotInput): boolean {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -282,6 +285,9 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSetti
     lockedSeats,
     dormitories: dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
     fundTransactions: fundTransactions ?? (Array.isArray(baseState.fundTransactions) ? baseState.fundTransactions : []),
+    attendanceRecords: attendanceRecords ?? (Array.isArray(baseState.attendanceRecords) ? baseState.attendanceRecords : []),
+    followupTasks: followupTasks ?? (Array.isArray(baseState.followupTasks) ? baseState.followupTasks : []),
+    drawSessions: drawSessions ?? (Array.isArray(baseState.drawSessions) ? baseState.drawSessions : []),
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams: Array.isArray(baseState.savedExams) ? baseState.savedExams : [],
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],

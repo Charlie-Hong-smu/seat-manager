@@ -7,6 +7,7 @@
 ```bash
 cd frontend-react
 pnpm install --frozen-lockfile
+pnpm check:design
 pnpm lint
 pnpm typecheck
 pnpm test:coverage
@@ -19,6 +20,8 @@ pnpm test:e2e:all
 ```
 
 覆盖率门槛只约束持久状态、导入导出、业务 action 和 AI 数据转换等核心模块：语句/行/函数 70%，分支 60%。Playwright 分为 `test:e2e:zhang` 与 `test:e2e:commercial`；Commercial 的模拟授权只存在于测试浏览器上下文，不会进入生产源码或构建。
+
+`check:design` 验证 `AGENTS.md` 的设计规范入口、`docs/DESIGN_SYSTEM.md`、共享 UI primitives 与核心 CSS tokens 同步存在。它用于防止重构后设计系统入口或基础组件静默丢失；视觉验收仍按设计规范清单和浏览器 smoke test 执行。
 
 Worker 使用 npm：
 

@@ -32,6 +32,8 @@ interface TopHeaderProps {
   onUnbindDevice?: () => void;
   onLogout: () => void;
   onWorkspaceChanged: () => void;
+  saveStatus?: "saving" | "saved" | "failed" | "quota";
+  onRetrySave?: () => void;
 }
 
 function normalizeSearch(value: string): string {
@@ -52,6 +54,8 @@ export function TopHeader({
   onUnbindDevice,
   onLogout,
   onWorkspaceChanged,
+  saveStatus = "saved",
+  onRetrySave,
 }: TopHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -114,6 +118,7 @@ export function TopHeader({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <button type="button" onClick={saveStatus === "failed" || saveStatus === "quota" ? onRetrySave : undefined} className={`hidden rounded-full px-2.5 py-1 text-[11px] font-bold sm:block ${saveStatus === "failed" || saveStatus === "quota" ? "bg-red-50 text-red-600" : saveStatus === "saving" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`} title={saveStatus === "quota" ? "本机空间不足，点击重试" : saveStatus === "failed" ? "保存失败，点击重试" : undefined}>{saveStatus === "saving" ? "保存中…" : saveStatus === "quota" ? "空间不足" : saveStatus === "failed" ? "保存失败 · 重试" : "已保存"}</button>
           <IconButton label="搜索学生" className="min-[1100px]:hidden" onClick={openSearch}>
             <Search className="h-[18px] w-[18px]" />
           </IconButton>

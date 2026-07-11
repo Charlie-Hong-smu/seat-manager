@@ -6,6 +6,7 @@ import {
   History,
   Pencil,
   Plus,
+  ListPlus,
   Search,
   Settings2,
   Trash2,
@@ -14,7 +15,8 @@ import {
 
 import { DORM_EVENT_PRESETS } from "../state/dormitoryActions";
 import type { NewDormEventInput } from "../state/dormitoryActions";
-import type { AppStudent, Dormitory, StudentId } from "../state/types";
+import type { AppStudent, DormEvent, Dormitory, FollowupTask, StudentId } from "../state/types";
+import type { FollowupTaskDraft } from "./FollowupTaskDrawer";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
@@ -44,12 +46,15 @@ interface Props {
   onUpdateDormitory: (dormitoryId: string, patch: Partial<Pick<Dormitory, "name" | "baseScore">>) => void;
   onDeleteDormitory: (dormitoryId: string) => void;
   onAssignStudentDormitory: (studentId: StudentId, dormitoryId?: string) => void;
-  onAddDormitoryEvent: (input: NewDormEventInput) => void;
-  onUpdateDormitoryEvent: (dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean }) => void;
+  onAddDormitoryEvent: (input: NewDormEventInput) => DormEvent | null;
+  onUpdateDormitoryEvent: (dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean; followupTaskIds?: string[] }) => void;
   onDeleteDormitoryEvent: (dormId: string, eventId: string) => void;
   onCloseDormitoryPeriod: (dormId: string, options?: { carryOver?: boolean }) => void;
   onCloseAllDormitoryPeriods: (options?: { carryOver?: boolean }) => void;
   onSelectStudent: (student: AppStudent) => void;
+  followupTasks: FollowupTask[];
+  onRequestFollowupTask: (draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) => void;
+  onSetLinkedTaskStatus: (taskIds: string[], status: "completed" | "cancelled") => void;
 }
 
 export function DormitoryWorkspace({
@@ -65,6 +70,9 @@ export function DormitoryWorkspace({
   onCloseDormitoryPeriod,
   onCloseAllDormitoryPeriods,
   onSelectStudent,
+  followupTasks,
+  onRequestFollowupTask,
+  onSetLinkedTaskStatus,
 }: Props) {
   const [selectedDormId, setSelectedDormId] = useState(dormitories[0]?.id || "");
   const [newName, setNewName] = useState("");
@@ -87,6 +95,8 @@ export function DormitoryWorkspace({
   const [showResponsible, setShowResponsible] = useState(false);
   const [responsibleSearch, setResponsibleSearch] = useState("");
   const [recordToStudent, setRecordToStudent] = useState(true);
+  const [createFollowup, setCreateFollowup] = useState(false);
+  const [followupDueDate, setFollowupDueDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   // 可变预设事件列表 + 自定义输入
   const [presets, setPresets] = useState<PresetEvent[]>(() => {
@@ -298,7 +308,7 @@ export function DormitoryWorkspace({
     if (!selectedDormitory || !reason.trim()) return;
     // 记住这次设定的分数
     setScoreMemory(prev => ({ ...prev, [reason.trim()]: score }));
-    onAddDormitoryEvent({
+    const savedEvent = onAddDormitoryEvent({
       dormId: selectedDormitory.id,
       reason,
       score,
@@ -307,8 +317,27 @@ export function DormitoryWorkspace({
       responsibleStudentIds: responsibleIds.length > 0 ? responsibleIds : undefined,
       recordToStudent: responsibleIds.length > 0 ? recordToStudent : false,
     });
+    if (savedEvent && createFollowup && punishment.trim() && responsibleIds.length) {
+      const studentId = responsibleIds[0];
+      onRequestFollowupTask({ studentId, studentIds: responsibleIds, title: `宿舍处理：${punishment.trim()}`, description: `${selectedDormitory.name} · ${reason.trim()}${note.trim() ? ` · ${note.trim()}` : ""}`, plannedDate: new Date().toISOString().slice(0, 10), dueDate: followupDueDate, type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: savedEvent.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, savedEvent.id, { followupTaskIds: taskIds }));
+    }
     setNote("");
     setPunishment("");
+    setCreateFollowup(false);
+  }
+
+  function togglePunishment(event: DormEvent) {
+    const nextDone = !event.punishmentDone;
+    const pendingIds = (event.followupTaskIds || []).filter(id => followupTasks.some(task => task.id === id && task.status === "pending"));
+    onUpdateDormitoryEvent(event.dormId, event.id, { punishmentDone: nextDone });
+    if (nextDone && pendingIds.length && window.confirm(`处罚已标记完成。是否同时完成关联的 ${pendingIds.length} 项跟进任务？`)) onSetLinkedTaskStatus(pendingIds, "completed");
+  }
+
+  function deleteEvent(event: DormEvent) {
+    const pendingIds = (event.followupTaskIds || []).filter(id => followupTasks.some(task => task.id === id && task.status === "pending"));
+    if (!window.confirm(`确定删除「${event.reason}」这条宿舍事件？已完成任务会保留。`)) return;
+    if (pendingIds.length && window.confirm(`这条事件还有 ${pendingIds.length} 项未完成任务。点击“确定”同时取消任务，点击“取消”保留任务。`)) onSetLinkedTaskStatus(pendingIds, "cancelled");
+    onDeleteDormitoryEvent(event.dormId, event.id);
   }
 
   function resetForm() {
@@ -498,6 +527,7 @@ export function DormitoryWorkspace({
                         className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-blue-300"
                         placeholder="处罚措施（可选）"
                       />
+                      {punishment.trim() && <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3"><label className={`flex items-center gap-2 text-sm font-semibold ${responsibleIds.length ? "text-violet-700" : "text-gray-400"}`}><input type="checkbox" checked={createFollowup && responsibleIds.length > 0} disabled={!responsibleIds.length} onChange={event => setCreateFollowup(event.target.checked)} className="accent-violet-600"/><ListPlus className="h-4 w-4"/>同时为责任人创建跟进任务</label>{createFollowup && responsibleIds.length > 0 && <label className="mt-2 flex items-center gap-2 text-xs text-violet-600"><span>截止日期</span><input type="date" value={followupDueDate} onChange={event => setFollowupDueDate(event.target.value)} className="rounded-lg border border-violet-100 bg-white px-2 py-1.5 outline-none"/></label>} {!responsibleIds.length && <p className="mt-1 text-xs text-gray-400">选择责任人后才能关联任务。</p>}</div>}
 
                       {/* 责任人（可展开，带动画） */}
                       <div>
@@ -713,7 +743,7 @@ export function DormitoryWorkspace({
                                     <Pencil className="h-3 w-3" />
                                   </button>
                                   <button
-                                    onClick={() => onDeleteDormitoryEvent(selectedDormitory.id, event.id)}
+                                    onClick={() => deleteEvent(event)}
                                     className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
                                   >
                                     <Trash2 className="h-3 w-3" />
@@ -722,7 +752,7 @@ export function DormitoryWorkspace({
                               </div>
                             </div>
                             {event.punishment && (
-                              <label
+                              <div
                                 className={`mt-2 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs ${
                                   event.punishmentDone
                                     ? "border-emerald-100 bg-emerald-50 text-emerald-600"
@@ -732,11 +762,7 @@ export function DormitoryWorkspace({
                                 <input
                                   type="checkbox"
                                   checked={Boolean(event.punishmentDone)}
-                                  onChange={() =>
-                                    onUpdateDormitoryEvent(selectedDormitory.id, event.id, {
-                                      punishmentDone: !event.punishmentDone,
-                                    })
-                                  }
+                                  onChange={() => togglePunishment(event)}
                                   className="accent-emerald-600"
                                 />
                                 <span className="font-semibold">处罚</span>
@@ -750,7 +776,8 @@ export function DormitoryWorkspace({
                                 <span className="shrink-0 font-semibold">
                                   {event.punishmentDone ? "已执行" : "待执行"}
                                 </span>
-                              </label>
+                                {!event.punishmentDone && (event.responsibleStudentIds?.length || event.responsibleStudentId) && <button type="button" onClick={() => { const ids = event.responsibleStudentIds ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []); const studentId = ids[0]; const linked = followupTasks.find(task => task.studentId === studentId && task.status === "pending" && task.sourceRef?.domain === "dormitory" && task.sourceRef.entityId === event.id); onRequestFollowupTask(linked ? { id: linked.id, studentId: linked.studentId, title: linked.title, type: linked.type, description: linked.description, plannedDate: linked.plannedDate, dueDate: linked.dueDate, source: linked.source, sourceRef: linked.sourceRef } : { studentId, studentIds: ids, title: `宿舍处理：${event.punishment}`, description: `${selectedDormitory.name} · ${event.reason}`, plannedDate: new Date().toISOString().slice(0,10), dueDate: new Date().toISOString().slice(0,10), type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: Array.from(new Set([...(event.followupTaskIds || []), ...taskIds])) })); }} className="ml-1 rounded-lg bg-white px-2 py-1 font-bold text-violet-600 shadow-sm hover:bg-violet-50"><ListPlus className="mr-1 inline h-3 w-3"/>{event.followupTaskIds?.length ? "查看任务" : "转为任务"}</button>}
+                              </div>
                             )}
                           </div>
                         )
