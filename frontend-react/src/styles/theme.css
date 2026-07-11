@@ -72,6 +72,18 @@
   }
 }
 
+@keyframes comment-workbench-content-enter {
+  from {
+    opacity: 0.82;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes ai-siri-loading {
   0%, 100% {
     opacity: 0.34;
@@ -276,6 +288,14 @@
 
 .workspace-tab-enter {
   animation: workspace-tab-enter 260ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+.comment-workbench-shell {
+  isolation: isolate;
+}
+
+.comment-workbench-enter-item {
+  animation: comment-workbench-content-enter 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .surface-enter {

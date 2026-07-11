@@ -23,6 +23,22 @@ test("first login and student edits survive a reload", async ({ page }) => {
   expect(storedBook.slices[0].data.students.some((student: { name: string }) => student.name === "测试学生")).toBe(true);
 });
 
+test("preloads the comment workbench and keeps its full-screen background stable", async ({ page }) => {
+  await login(page);
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((entry) => entry.name.includes("CommentWorkbench-")))).toBe(true);
+
+  await page.getByRole("button", { name: "评语工作台" }).click();
+  const dialog = page.getByRole("dialog", { name: "评语工作台" });
+  await expect(dialog).toBeVisible();
+  const shellStyle = await dialog.evaluate((element) => ({
+    animationName: getComputedStyle(element).animationName,
+    opacity: getComputedStyle(element).opacity,
+  }));
+  expect(shellStyle).toEqual({ animationName: "none", opacity: "1" });
+  const contentDuration = await dialog.locator(":scope > .comment-workbench-enter-item").first().evaluate((element) => getComputedStyle(element).animationDuration);
+  expect(contentDuration).toBe("0.16s");
+});
+
 test("roster, exam, cloud sync and workspace switching keep data isolated", async ({ page }) => {
   test.setTimeout(60_000);
   await login(page);

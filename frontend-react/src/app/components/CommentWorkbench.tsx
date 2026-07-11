@@ -807,21 +807,21 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
 
   if (!selectedStudent || !selectedComment) {
     return (
-      <div className="workspace-tab-enter fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-50">
-        <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+      <div role="dialog" aria-modal="true" aria-label="评语工作台" className="comment-workbench-shell fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-50">
+        <div className="comment-workbench-enter-item shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
           <h2 className="text-gray-900">评语工作台</h2>
           <button aria-label="关闭评语工作台" onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 grid place-items-center text-gray-400">暂无学生</div>
+        <div className="comment-workbench-enter-item flex-1 grid place-items-center text-gray-400">暂无学生</div>
       </div>
     );
   }
 
   return (
-    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} onKeyDown={handleWorkbenchKeyDown} className="workspace-tab-enter fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
-      <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-white px-4">
+    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} onKeyDown={handleWorkbenchKeyDown} className="comment-workbench-shell fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
+      <header className="comment-workbench-enter-item flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-white px-4">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="shrink-0 text-base font-bold text-gray-900">评语工作台</h2>
           <span className="text-sm font-semibold text-gray-400">
@@ -859,7 +859,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[184px_minmax(460px,1fr)_340px] overflow-hidden xl:grid-cols-[216px_minmax(460px,1fr)_360px]">
+      <div className="comment-workbench-enter-item grid min-h-0 flex-1 grid-cols-[184px_minmax(460px,1fr)_340px] overflow-hidden xl:grid-cols-[216px_minmax(460px,1fr)_360px]">
         <aside className="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-white">
           <div className="space-y-3 border-b border-[var(--app-border)] p-3">
             <div className="relative grid grid-cols-2 gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1" role="group" aria-label="评语处理模式">

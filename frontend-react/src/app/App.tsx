@@ -86,6 +86,21 @@ export default function App() {
   useEffect(() => {
     if (sidebarTab === "ai") setAiWorkspaceMounted(true);
   }, [sidebarTab]);
+
+  useEffect(() => {
+    if (!loggedIn || typeof window === "undefined") return;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const preload = () => { void loadCommentWorkbench().catch(() => undefined); };
+    if (idleWindow.requestIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(preload, { timeout: 2_000 });
+      return () => idleWindow.cancelIdleCallback?.(handle);
+    }
+    const handle = window.setTimeout(preload, 800);
+    return () => window.clearTimeout(handle);
+  }, [loggedIn]);
   const hasMounted = useRef(false);
   const studentAdviceRunning = useRef(false);
 
