@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
-import { localizeTrendText } from "./aiTrendService";
+import { localizeTrendText, restoreStudentDisplayName } from "./aiTrendService";
 import { normalizeStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "./commentStorage";
 import { createTestStudent } from "./testFixtures";
 
@@ -10,6 +10,11 @@ describe("AI student context and comment cache", () => {
     const localized = localizeTrendText("totalScore: -51,classRank: 29,subjects: 物理: -35; 英语: -27.5; 语文: 16");
     expect(localized).toBe("总分下降51分；班级排名退步29名；各科变化：物理下降35分、英语下降27.5分、语文上升16分。");
     expect(localized).not.toMatch(/totalScore|classRank|subjects/);
+  });
+
+  it("restores the real student name only in the local display result", () => {
+    expect(restoreStudentDisplayName("学生A本学期总分上升，建议继续关注学生 A。", "林梓晴"))
+      .toBe("林梓晴本学期总分上升，建议继续关注林梓晴。");
   });
 
   it("builds chronological context and keeps first/latest details when compacting", () => {

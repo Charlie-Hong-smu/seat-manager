@@ -80,7 +80,7 @@ export function readCachedStudentAiTrend(student: AppStudent): AiTrendResult | n
   const payload = buildPayload(student);
   const signature = getCacheSignature(AI_TREND_CACHE_SCOPE, { studentId: student.id, payload });
   const cached = getCachedTrend<AiTrendResult>(signature);
-  return cached ? normalizeResult(cached) : null;
+  return cached ? personalizeStudentTrendResult(normalizeResult(cached), student.name) : null;
 }
 
 function getExamSortValue(exam: StudentExamSummary): string {
@@ -175,6 +175,21 @@ function normalizeResult(data: Partial<AiTrendResult>): AiTrendResult {
     changes: localizeTrendText(data.changes),
     suggestions: localizeTrendText(data.suggestions),
     disclaimer: localizeTrendText(data.disclaimer || "AI 分析仅供教师参考，请结合课堂观察判断。"),
+  };
+}
+
+export function restoreStudentDisplayName(value: string, studentName: string): string {
+  const name = studentName.trim();
+  if (!name) return value;
+  return value.replace(/学生\s*[AaＡａ](?=[^A-Za-zＡ-Ｚａ-ｚ]|$)/g, () => name);
+}
+
+function personalizeStudentTrendResult(result: AiTrendResult, studentName: string): AiTrendResult {
+  return {
+    overall: restoreStudentDisplayName(result.overall, studentName),
+    changes: restoreStudentDisplayName(result.changes, studentName),
+    suggestions: restoreStudentDisplayName(result.suggestions, studentName),
+    disclaimer: restoreStudentDisplayName(result.disclaimer, studentName),
   };
 }
 
@@ -460,7 +475,7 @@ export async function generateStudentAiTrend(
   if (!input?.force) {
     const cached = getCachedTrend<AiTrendResult>(signature);
     if (cached?.overall || cached?.changes || cached?.suggestions) {
-      return normalizeResult(cached);
+      return personalizeStudentTrendResult(normalizeResult(cached), student.name);
     }
   }
 
@@ -498,5 +513,5 @@ export async function generateStudentAiTrend(
     throw new Error("ai_failed");
   }
   storeCachedTrend(signature, result);
-  return result;
+  return personalizeStudentTrendResult(result, student.name);
 }

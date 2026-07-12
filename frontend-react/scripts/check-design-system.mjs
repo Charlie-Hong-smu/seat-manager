@@ -37,6 +37,8 @@ for (const component of ["Button", "IconButton", "Card", "SegmentedControl", "An
 
 requireText(design, "禁止使用 `window.confirm`", "docs/DESIGN_SYSTEM.md");
 requireText(design, "不使用 `window.alert`", "docs/DESIGN_SYSTEM.md");
+requireText(design, "脱敏占位身份", "docs/DESIGN_SYSTEM.md");
+requireText(design, "旧缓存读取", "docs/DESIGN_SYSTEM.md");
 requireText(primitives, "export function useAppDialog", "components/ui.tsx");
 
 async function collectSourceFiles(directory) {
