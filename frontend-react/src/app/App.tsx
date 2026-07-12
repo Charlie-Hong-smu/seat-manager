@@ -692,6 +692,9 @@ export default function App() {
               onOpenDormitories={() => {
                 setSidebarTab("dormitories");
                 setSidebarCollapsed(false);
+                setShowCommentWorkbench(false);
+                setSelectedStudentInitialTab("records");
+                setSelectedStudentId(null);
               }}
               seatOrder={seatOrder}
               initialActiveTab={selectedStudentInitialTab}
