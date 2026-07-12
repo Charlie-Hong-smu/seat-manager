@@ -55,6 +55,10 @@ jobs:
         working-directory: frontend-react
         run: pnpm install --frozen-lockfile
 
+      - name: Install Chromium
+        working-directory: frontend-react
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Validate shared frontend and both editions
         working-directory: frontend-react
         run: pnpm run check:design && pnpm run lint && pnpm run typecheck && pnpm run test:coverage && pnpm run test:e2e:all
