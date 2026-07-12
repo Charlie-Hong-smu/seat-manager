@@ -69,6 +69,8 @@ export default function App() {
   const selectedStudent = students.find(student => student.id === selectedStudentId) || null;
   const [selectedStudentInitialTab, setSelectedStudentInitialTab] = useState<"records" | "profile" | "trend" | "followup">("records");
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
+  const [commentWorkbenchTransition, setCommentWorkbenchTransition] = useState<"preparing" | "open" | "closing">("preparing");
+  const [CommentWorkbenchComponent, setCommentWorkbenchComponent] = useState<Awaited<ReturnType<typeof loadCommentWorkbench>>["default"] | null>(null);
   const [aiWorkspaceMounted, setAiWorkspaceMounted] = useState(false);
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
   const [selectedHistorySnapshot, setSelectedHistorySnapshot] = useState<SeatHistorySnapshot | null>(null);
@@ -104,6 +106,37 @@ export default function App() {
     setFollowupDraft(draft);
   }
 
+  async function openCommentWorkbench() {
+    if (!CommentWorkbenchComponent) {
+      try {
+        const Workbench = (await loadCommentWorkbench()).default;
+        setCommentWorkbenchComponent(() => Workbench);
+      } catch {
+        setShowCommentWorkbench(true);
+        return;
+      }
+    }
+    setCommentWorkbenchTransition("preparing");
+    setShowCommentWorkbench(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setCommentWorkbenchTransition("open"));
+    });
+  }
+
+  function closeCommentWorkbench() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShowCommentWorkbench(false);
+      setCommentWorkbenchTransition("preparing");
+      return;
+    }
+    setCommentWorkbenchTransition("closing");
+  }
+
+  function finishClosingCommentWorkbench() {
+    setShowCommentWorkbench(false);
+    setCommentWorkbenchTransition("preparing");
+  }
+
   function confirmFollowupTask(draft: FollowupTaskDraft) {
     let savedIds: string[] = draft.id ? [draft.id] : [];
     if (draft.id) {
@@ -130,7 +163,11 @@ export default function App() {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
       cancelIdleCallback?: (handle: number) => void;
     };
-    const preload = () => { void loadCommentWorkbench().catch(() => undefined); };
+    const preload = () => {
+      void loadCommentWorkbench()
+        .then(module => setCommentWorkbenchComponent(() => module.default))
+        .catch(() => undefined);
+    };
     if (idleWindow.requestIdleCallback) {
       const handle = idleWindow.requestIdleCallback(preload, { timeout: 2_000 });
       return () => idleWindow.cancelIdleCallback?.(handle);
@@ -666,13 +703,15 @@ export default function App() {
           savedSeatHistoryCount={savedSeatHistory.length}
           pendingTaskCount={followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task))).length}
           onTabChange={setSidebarTab}
-          onOpenCommentWorkbench={() => setShowCommentWorkbench(true)}
+          onOpenCommentWorkbench={openCommentWorkbench}
         />
       }
       overlays={
         <>
           {showCommentWorkbench && (
-            <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, onClose: () => setShowCommentWorkbench(false), onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
+            CommentWorkbenchComponent
+              ? <CommentWorkbenchComponent students={students} transitionState={commentWorkbenchTransition} onClose={closeCommentWorkbench} onExitComplete={finishClosingCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />
+              : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, transitionState: commentWorkbenchTransition, onClose: closeCommentWorkbench, onExitComplete: finishClosingCommentWorkbench, onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
           )}
 
           {selectedStudent && (
@@ -692,7 +731,7 @@ export default function App() {
               onOpenDormitories={() => {
                 setSidebarTab("dormitories");
                 setSidebarCollapsed(false);
-                setShowCommentWorkbench(false);
+                finishClosingCommentWorkbench();
                 setSelectedStudentInitialTab("records");
                 setSelectedStudentId(null);
               }}

@@ -38,14 +38,22 @@ test("preloads the comment workbench and keeps its full-screen background stable
   await page.getByRole("button", { name: "评语工作台" }).click();
   const dialog = page.getByRole("dialog", { name: "评语工作台" });
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("data-transition-state", "open");
   await expect(page.getByPlaceholder("AI 授权码")).toHaveCount(0);
   const shellStyle = await dialog.evaluate((element) => ({
     animationName: getComputedStyle(element).animationName,
+    animationDuration: getComputedStyle(element).animationDuration,
     opacity: getComputedStyle(element).opacity,
   }));
-  expect(shellStyle).toEqual({ animationName: "none", opacity: "1" });
-  const contentDuration = await dialog.locator(":scope > .comment-workbench-enter-item").first().evaluate((element) => getComputedStyle(element).animationDuration);
-  expect(contentDuration).toBe("0.16s");
+  expect(shellStyle).toEqual({ animationName: "comment-workbench-panel-enter", animationDuration: "0.44s", opacity: "1" });
+  const contentStyle = await dialog.locator(":scope > .comment-workbench-enter-item").first().evaluate((element) => ({
+    animationName: getComputedStyle(element).animationName,
+    opacity: getComputedStyle(element).opacity,
+  }));
+  expect(contentStyle).toEqual({ animationName: "none", opacity: "1" });
+  await dialog.getByRole("button", { name: "关闭评语工作台" }).click();
+  await expect(dialog).toHaveAttribute("data-transition-state", "closing");
+  await expect(dialog).toBeHidden();
 });
 
 test("roster, exam, cloud sync and workspace switching keep data isolated", async ({ page }) => {

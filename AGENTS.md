@@ -32,5 +32,6 @@ Before changing any visible UI, layout, interaction, or animation, read `docs/DE
 5. When an app endpoint changes, verify the frontend call, Worker route, Netlify allowlist, and deployment workflow together.
 6. Update durable documentation when architecture, storage, public routes, deployment, or validation commands change.
 7. For UI work, run `pnpm check:design` and compare the result against the acceptance checklist in `docs/DESIGN_SYSTEM.md`. If a new visual pattern repeats twice, promote it to `ui.tsx` or `theme.css` instead of copying classes a third time.
+8. For local interactive UI debugging, default to `cd frontend-react && pnpm dev --host 127.0.0.1` and open the printed `/seat-manager/` URL. Use the localhost-only **进入本地预览** action instead of a product license; it creates only a temporary development session and does not consume a device slot. Do not use `vite preview` for routine manual debugging: preview mode intentionally behaves like a production build and still requires product-license login. Use it only when validating a production build, PWA, or release artifact.
 
 Use pnpm for `frontend-react/` and npm for `cloudflare-worker/`. Do not mix lockfile owners.

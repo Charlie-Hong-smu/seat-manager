@@ -2,6 +2,17 @@
 
 ## 本地验证
 
+人工调试 UI 时，默认启动开发服务器：
+
+```bash
+cd frontend-react
+pnpm dev --host 127.0.0.1
+```
+
+打开终端输出的 `/seat-manager/` 本地地址，在登录页点击“进入本地预览”。该入口只在 Vite 开发模式且 hostname 为 `127.0.0.1` 或 `localhost` 时可用，仅创建临时会话，不占用授权设备名额。
+
+`vite preview` 用于验证生产构建、PWA 或发布包，会按生产环境保留产品授权登录，不作为日常 UI 调试入口。
+
 前端统一使用 pnpm：
 
 ```bash

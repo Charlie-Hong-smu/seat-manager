@@ -78,7 +78,9 @@ function buildInitialComments(students: AppStudent[], failedIds: StudentId[] = [
 
 interface Props {
   students: AppStudent[];
+  transitionState: "preparing" | "open" | "closing";
   onClose: () => void;
+  onExitComplete: () => void;
   onSelectStudent: (student: AppStudent) => void;
 }
 
@@ -109,7 +111,7 @@ function downloadTextFile(filename: string, content: string, type: string): void
   URL.revokeObjectURL(link.href);
 }
 
-export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) {
+export function CommentWorkbench({ students, transitionState, onClose, onExitComplete, onSelectStudent }: Props) {
   const initialBatchState = useMemo(() => loadCommentBatchState(students), [students]);
   const initialRubric = useMemo(() => readCommentRubric(), []);
   const [comments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
@@ -760,7 +762,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
 
   if (!selectedStudent || !selectedComment) {
     return (
-      <div role="dialog" aria-modal="true" aria-label="评语工作台" className="comment-workbench-shell fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-50">
+      <div role="dialog" aria-modal="true" aria-label="评语工作台" data-transition-state={transitionState} onAnimationEnd={event => { if (event.target === event.currentTarget && transitionState === "closing") onExitComplete(); }} className="comment-workbench-shell fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-50">
         <div className="comment-workbench-enter-item shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
           <h2 className="text-gray-900">评语工作台</h2>
           <button aria-label="关闭评语工作台" onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
@@ -773,7 +775,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   }
 
   return (
-    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} onKeyDown={handleWorkbenchKeyDown} className="comment-workbench-shell fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
+    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} data-transition-state={transitionState} onKeyDown={handleWorkbenchKeyDown} onAnimationEnd={event => { if (event.target === event.currentTarget && transitionState === "closing") onExitComplete(); }} className="comment-workbench-shell fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
       <header className="comment-workbench-enter-item flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-white px-4">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="shrink-0 text-base font-bold text-gray-900">评语工作台</h2>
