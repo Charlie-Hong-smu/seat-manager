@@ -20,6 +20,7 @@ import type { FollowupTaskDraft } from "./FollowupTaskDrawer";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
+import { ConfirmDialog, useAppDialog } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-emerald-600" : value < 0 ? "text-red-500" : "text-gray-500";
@@ -74,6 +75,7 @@ export function DormitoryWorkspace({
   onRequestFollowupTask,
   onSetLinkedTaskStatus,
 }: Props) {
+  const appDialog = useAppDialog();
   const [selectedDormId, setSelectedDormId] = useState(dormitories[0]?.id || "");
   const [newName, setNewName] = useState("");
   const [newBaseScore, setNewBaseScore] = useState(0);
@@ -110,6 +112,8 @@ export function DormitoryWorkspace({
   const [presetManagerOpen, setPresetManagerOpen] = useState(false);
   const [presetDrafts, setPresetDrafts] = useState<PresetDraft[]>([]);
   const [pendingDeletePreset, setPendingDeletePreset] = useState("");
+  const [pendingDeleteDormitory, setPendingDeleteDormitory] = useState<Dormitory | null>(null);
+  const [pendingDeleteEvent, setPendingDeleteEvent] = useState<DormEvent | null>(null);
 
   // 分数记忆：记录每个事件标签上次设定的分数
   const [scoreMemory, setScoreMemory] = useState<Record<string, number>>(() => {
@@ -326,18 +330,24 @@ export function DormitoryWorkspace({
     setCreateFollowup(false);
   }
 
-  function togglePunishment(event: DormEvent) {
+  async function togglePunishment(event: DormEvent) {
     const nextDone = !event.punishmentDone;
     const pendingIds = (event.followupTaskIds || []).filter(id => followupTasks.some(task => task.id === id && task.status === "pending"));
     onUpdateDormitoryEvent(event.dormId, event.id, { punishmentDone: nextDone });
-    if (nextDone && pendingIds.length && window.confirm(`处罚已标记完成。是否同时完成关联的 ${pendingIds.length} 项跟进任务？`)) onSetLinkedTaskStatus(pendingIds, "completed");
+    if (nextDone && pendingIds.length && await appDialog.confirm({ title: "同步完成关联任务？", description: `处罚已标记完成。是否同时将关联的 ${pendingIds.length} 项待处理任务标记为已完成？`, confirmLabel: "同步完成任务", variant: "primary" })) onSetLinkedTaskStatus(pendingIds, "completed");
   }
 
   function deleteEvent(event: DormEvent) {
+    setPendingDeleteEvent(event);
+  }
+
+  function confirmDeleteEvent(cancelLinkedTasks: boolean) {
+    const event = pendingDeleteEvent;
+    if (!event) return;
     const pendingIds = (event.followupTaskIds || []).filter(id => followupTasks.some(task => task.id === id && task.status === "pending"));
-    if (!window.confirm(`确定删除「${event.reason}」这条宿舍事件？已完成任务会保留。`)) return;
-    if (pendingIds.length && window.confirm(`这条事件还有 ${pendingIds.length} 项未完成任务。点击“确定”同时取消任务，点击“取消”保留任务。`)) onSetLinkedTaskStatus(pendingIds, "cancelled");
+    if (cancelLinkedTasks && pendingIds.length) onSetLinkedTaskStatus(pendingIds, "cancelled");
     onDeleteDormitoryEvent(event.dormId, event.id);
+    setPendingDeleteEvent(null);
   }
 
   function resetForm() {
@@ -381,17 +391,7 @@ export function DormitoryWorkspace({
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-bold text-gray-900">{selectedDormitory.name}</h2>
                     <button
-                      onClick={() => {
-                        const memberText = selectedDormitory.memberIds.length
-                          ? `\n当前 ${selectedDormitory.memberIds.length} 名成员将变为未分配宿舍。`
-                          : "";
-                        const eventText = selectedDormitory.events.length
-                          ? `\n本周的 ${selectedDormitory.events.length} 条事件记录也会一并删除。`
-                          : "";
-                        if (window.confirm(`确定删除宿舍「${selectedDormitory.name}」吗？${memberText}${eventText}\n此操作无法撤销。`)) {
-                          onDeleteDormitory(selectedDormitory.id);
-                        }
-                      }}
+                      onClick={() => setPendingDeleteDormitory(selectedDormitory)}
                       className="text-gray-300 hover:text-red-500 transition-colors"
                       title="删除宿舍"
                     >
@@ -648,12 +648,8 @@ export function DormitoryWorkspace({
                   <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
                     <h3 className="text-sm font-bold text-gray-700">事件记录</h3>
                     <button
-                      onClick={() => {
-                        if (window.confirm(
-                          `结算「${selectedDormitory.name}」当前周期${carryOver ? "（结转分数）" : "（分数归零）"}？已记录事件会归档。`
-                        )) {
-                          onCloseDormitoryPeriod(selectedDormitory.id, { carryOver });
-                        }
+                      onClick={async () => {
+                        if (await appDialog.confirm({ title: "结算当前宿舍周期？", description: `将结算“${selectedDormitory.name}”当前周期${carryOver ? "，并把分数结转到下一周期" : "，下一周期分数归零"}。已记录事件会归档。`, confirmLabel: "确认结算", variant: "primary" })) onCloseDormitoryPeriod(selectedDormitory.id, { carryOver });
                       }}
                       disabled={!selectedDormitory.events.length}
                       className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
@@ -908,26 +904,6 @@ export function DormitoryWorkspace({
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <div className="dorm-preset-delete-confirm" data-open={deletePending}>
-                      <div className="dorm-preset-delete-confirm__inner">
-                        <div className="flex items-center justify-between gap-3 border-t border-red-100 bg-red-50 px-3 py-2">
-                          <span className="text-xs font-medium text-red-600">确定移除“{preset.label || "未命名类型"}”？保存后生效。</span>
-                          <div className="flex shrink-0 gap-1.5">
-                            <button type="button" onClick={() => setPendingDeletePreset("")} className="rounded-md px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-white">保留</button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPresetDrafts(previous => previous.filter((_, itemIndex) => itemIndex !== index));
-                                setPendingDeletePreset("");
-                              }}
-                              className="rounded-md bg-red-500 px-2 py-1 text-xs font-semibold text-white hover:bg-red-600"
-                            >
-                              确认删除
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 );
               })}
@@ -970,6 +946,10 @@ export function DormitoryWorkspace({
           </div>
         </div>
       )}
+      <ConfirmDialog open={Boolean(pendingDeleteDormitory)} title="删除这个宿舍？" description={`将删除“${pendingDeleteDormitory?.name || "当前宿舍"}”及本周期 ${pendingDeleteDormitory?.events.length || 0} 条事件，${pendingDeleteDormitory?.memberIds.length || 0} 名成员会变为未分配宿舍。此操作无法撤销。`} confirmLabel="确认删除宿舍" onCancel={() => setPendingDeleteDormitory(null)} onConfirm={() => { if (!pendingDeleteDormitory) return; onDeleteDormitory(pendingDeleteDormitory.id); setPendingDeleteDormitory(null); }} />
+      <ConfirmDialog open={Boolean(pendingDeleteEvent)} title="删除这条宿舍事件？" description={`将删除“${pendingDeleteEvent?.reason || "当前事件"}”。已完成的关联任务会保留；未完成任务可选择保留或同时取消。`} confirmLabel={(pendingDeleteEvent?.followupTaskIds || []).some(id => followupTasks.some(task => task.id === id && task.status === "pending")) ? "删除并取消未完成任务" : "确认删除事件"} alternateLabel={(pendingDeleteEvent?.followupTaskIds || []).some(id => followupTasks.some(task => task.id === id && task.status === "pending")) ? "删除但保留任务" : undefined} onCancel={() => setPendingDeleteEvent(null)} onAlternate={() => confirmDeleteEvent(false)} onConfirm={() => confirmDeleteEvent(true)} />
+      <ConfirmDialog open={Boolean(pendingDeletePreset)} title="删除这个事件类型？" description={`将从预设中移除“${presetDrafts.find(item => item.originalLabel === pendingDeletePreset)?.label || "当前类型"}”，保存类型设置后生效。`} confirmLabel="确认删除类型" onCancel={() => setPendingDeletePreset("")} onConfirm={() => { setPresetDrafts(previous => previous.filter(item => item.originalLabel !== pendingDeletePreset)); setPendingDeletePreset(""); }} />
+      {appDialog.dialog}
     </div>
   );
 }

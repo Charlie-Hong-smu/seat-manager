@@ -516,7 +516,7 @@ async function handleAnalyzeTrend(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的教师助手。只根据提供的匿名成绩摘要生成温和、可参考的趋势建议，不做绝对判断。recentExams 包含当前学期该学生全部考试，按考试先后从早到晚排列，最后一项是最新考试；所有升降必须用最新考试减最早考试判断，不要把顺序反过来。必须返回 JSON，字段为 overall、changes、suggestions、disclaimer。"
+              "你是谨慎的教师助手。只根据提供的匿名成绩摘要生成温和、可参考的趋势建议，不做绝对判断。recentExams 包含当前学期该学生全部考试，按考试先后从早到晚排列，最后一项是最新考试；所有升降必须用最新考试减最早考试判断，不要把顺序反过来。必须返回 JSON，字段为 overall、changes、suggestions、disclaimer。所有字段值必须使用面向中国教师的自然中文，禁止在字段值中输出 totalScore、classRank、subjects、score 等 JSON 输入字段名或其他英文指标名；变化应写成“总分下降51分、班级排名退步29名、物理下降35分”这类中文句子。"
           },
           {
             role: "user",
@@ -574,7 +574,7 @@ async function handleAnalyzeClass(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的班主任成绩分析助手。只根据提供的全班成绩变化摘要、考试统计和重点候选学生序列，概括班级趋势，并指出需要教师重点关注的学生。不要声称看到了完整全班逐科明细。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。focusStudents 必须逐行列出，格式为“姓名（简短原因）”，原因控制在 12 个字以内，例如“化学下降26”或“排名退步35”。"
+              "你是谨慎的班主任成绩分析助手。只根据提供的全班成绩变化摘要、考试统计和重点候选学生序列，概括班级趋势，并指出需要教师重点关注的学生。不要声称看到了完整全班逐科明细。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。所有字段值必须使用面向中国教师的自然中文，禁止输出 totalScore、classRank、subjects、score 等 JSON 输入字段名或其他英文指标名。focusStudents 必须逐行列出，格式为“姓名（简短原因）”，原因控制在 12 个字以内，例如“化学下降26分”或“排名退步35名”。"
           },
           {
             role: "user",

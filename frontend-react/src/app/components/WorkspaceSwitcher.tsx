@@ -24,7 +24,7 @@ import {
 } from "../state/workspaces";
 import { exportPreImportBackup } from "../state/backupStorage";
 import type { TermSeason } from "../state/types";
-import { AnimatedPopover } from "./ui";
+import { AnimatedPopover, ConfirmDialog, useAppDialog } from "./ui";
 
 interface Props {
   /** 切换 / 新建 / 升学期成功后回调,让上层重新加载当前班级数据。 */
@@ -262,9 +262,12 @@ function getNextTermDefault(current: { term: { year: number; season: TermSeason 
 }
 
 export function WorkspaceSwitcher({ onChanged }: Props) {
+  const appDialog = useAppDialog();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("menu");
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [pendingDeleteSlice, setPendingDeleteSlice] = useState<{ id: string; label: string } | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [, setRefreshKey] = useState(0);
 
   const current = getCurrentSlice();
@@ -302,7 +305,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
     if (switchSlice(sliceId)) {
       onChanged();
     } else {
-      window.alert("切换失败，本机数据未改变。请检查浏览器存储空间后重试。");
+      void appDialog.notice({ title: "切换失败", description: "本机数据没有改变。请检查浏览器存储空间后重试。" });
     }
     closeAll();
   }
@@ -322,7 +325,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
       className: input.className,
       term,
     });
-    if (!created) { window.alert("创建班级失败，本机数据未改变。请先导出备份并检查存储空间。"); return; }
+    if (!created) { void appDialog.notice({ title: "创建班级失败", description: "本机数据没有改变。请先导出备份并检查浏览器存储空间。" }); return; }
     setRefreshKey(k => k + 1);
     onChanged();
     closeAll();
@@ -331,7 +334,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
   function handleNextTerm(input: TermFormResult) {
     const term = makeTerm({ year: input.year, season: input.season, label: input.label });
     const created = advanceToNextTerm({ fromSliceId: current.id, term, copyRoster: true });
-    if (!created) { window.alert("创建新学期失败，本机数据未改变。请先导出备份并检查存储空间。"); return; }
+    if (!created) { void appDialog.notice({ title: "创建新学期失败", description: "本机数据没有改变。请先导出备份并检查浏览器存储空间。" }); return; }
     setRefreshKey(k => k + 1);
     onChanged();
     closeAll();
@@ -339,12 +342,10 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
 
   const currentName = sliceDisplayName(current);
 
-  function handleDeleteSlice(sliceId: string, label: string) {
-    if (!window.confirm(`确定要删除「${label}」这个学期的所有数据吗？\n删除后无法恢复。`)) {
-      return;
-    }
+  function handleDeleteSlice(sliceId: string) {
     exportPreImportBackup();
-    if (!deleteSlice(sliceId)) { window.alert("删除失败，本机数据未改变。"); return; }
+    if (!deleteSlice(sliceId)) { setDeleteError("删除失败，本机数据未改变，请检查本机存储空间。"); return; }
+    setPendingDeleteSlice(null);
     setRefreshKey(k => k + 1);
     // 如果删掉的是当前切片，重新加载（deleteSlice 会自动切换到第一个切片）
     onChanged();
@@ -408,7 +409,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
                                 {slice.id === current.id && <Check className="w-3.5 h-3.5 shrink-0" />}
                               </button>
                               <button
-                                onClick={e => { e.stopPropagation(); handleDeleteSlice(slice.id, `${displayName} ${slice.term.label}`); }}
+                                onClick={e => { e.stopPropagation(); setDeleteError(""); setPendingDeleteSlice({ id: slice.id, label: `${displayName} ${slice.term.label}` }); }}
                                 className="opacity-0 group-hover:opacity-100 mr-2 p-1 text-gray-300 hover:text-red-400 rounded-lg transition-all"
                                 title="删除这个学期"
                               >
@@ -482,6 +483,8 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
               );
             })()}
       </AnimatedPopover>
+      <ConfirmDialog open={Boolean(pendingDeleteSlice)} title="删除这个学期？" description={`将删除“${pendingDeleteSlice?.label || "当前学期"}”的学生、成绩、出勤、任务及其他学期数据。删除前会自动导出安全备份，但此操作仍不可直接撤销。`} confirmLabel="确认删除学期" error={deleteError} onCancel={() => { setPendingDeleteSlice(null); setDeleteError(""); }} onConfirm={() => pendingDeleteSlice && handleDeleteSlice(pendingDeleteSlice.id)} />
+      {appDialog.dialog}
     </div>
   );
 }

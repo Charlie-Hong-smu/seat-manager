@@ -16,7 +16,7 @@ import type { AiClassTrendResult } from "../../state/aiTrendService";
 import type { AppStudent, GradeExam, SavedGradeExamRecord, ScoreImportDraft } from "../../state/types";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { Button, FileDropZone } from "../ui";
+import { AiGenerationPanel, Button, ConfirmDialog, FileDropZone } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function ScoresWorkspace({
@@ -73,6 +73,8 @@ export function ScoresWorkspace({
   const [classAnalysisStatus, setClassAnalysisStatus] = useState("");
   const [classAnalysisBusy, setClassAnalysisBusy] = useState(false);
   const [managementOpen, setManagementOpen] = useState(true);
+  const [pendingDeleteExam, setPendingDeleteExam] = useState<GradeExam | null>(null);
+  const [deleteExamError, setDeleteExamError] = useState("");
 
   async function readScoreFile(file?: File) {
     if (!file) return;
@@ -252,11 +254,12 @@ export function ScoresWorkspace({
   }
 
   function deleteExam(exam: GradeExam) {
-    if (!window.confirm(`确定要删除「${exam.name}」这场考试及对应学生成绩记录吗？\n删除后无法恢复。`)) {
-      return;
-    }
     if (onDeleteGradeExam(exam.id)) {
       setScoreStatus(`已删除「${exam.name}」。`);
+      setPendingDeleteExam(null);
+      setDeleteExamError("");
+    } else {
+      setDeleteExamError("删除失败，本机成绩数据未改变，请检查存储空间后重试。");
     }
   }
 
@@ -389,7 +392,7 @@ export function ScoresWorkspace({
                       <div className="mt-2 grid grid-cols-3 gap-2">
                         <Button size="sm" variant="secondary" onClick={() => setExamTable(exam)}>表格</Button>
                         <Button size="sm" variant="secondary" onClick={() => editExam(exam)}>编辑</Button>
-                        <Button size="sm" variant="danger" onClick={() => deleteExam(exam)}>删除</Button>
+                        <Button size="sm" variant="danger" onClick={() => { setDeleteExamError(""); setPendingDeleteExam(exam); }}>删除</Button>
                       </div>
                     </>
                   )}
@@ -405,8 +408,10 @@ export function ScoresWorkspace({
               <button disabled={studentAdviceProgress.busy} onClick={() => void onGenerateStudentTrendAdvice()} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-60" style={{ fontWeight: 800 }}>
                 <Sparkles className="mr-1.5 inline h-4 w-4 -mt-0.5" />{studentAdviceProgress.busy ? "生成中" : "生成学生建议"}
               </button>
-              {classAnalysis && (
-                <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-700">
+              {classAnalysisBusy && <AiGenerationPanel compact title="正在生成班级趋势分析" steps={["汇总考试变化", "识别班级趋势", "形成关注建议"]} />}
+              {studentAdviceProgress.busy && <AiGenerationPanel compact title="正在生成学生建议" steps={["筛选变化学生", "整理个人趋势", "写入建议草稿"]} />}
+              {classAnalysis && !classAnalysisBusy && (
+                <div className="ai-followup-result-enter rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-700">
                   <div>{classAnalysis.overall}</div>
                   {classAnalysis.disclaimer && <div className="mt-1 text-blue-500">{classAnalysis.disclaimer}</div>}
                 </div>
@@ -679,7 +684,7 @@ export function ScoresWorkspace({
         </div>
       )}
       {examTable && <ExamTableModal exam={examTable} onClose={() => setExamTable(null)} />}
+      <ConfirmDialog open={Boolean(pendingDeleteExam)} title="删除这场考试？" description={`将删除“${pendingDeleteExam?.name || "当前考试"}”及其对应的全部学生成绩记录。删除后无法恢复。`} confirmLabel="确认删除考试" error={deleteExamError} onCancel={() => { setPendingDeleteExam(null); setDeleteExamError(""); }} onConfirm={() => pendingDeleteExam && deleteExam(pendingDeleteExam)} />
     </div>
   );
 }
-

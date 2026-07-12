@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save } from "lucide-react";
+import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2 } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -18,7 +18,7 @@ import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
 import type { AppStudent, AttendanceRecord, Dormitory, FollowupTask, Gender, RecordType, StudentId, StudentRecord } from "../state/types";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
-import { SegmentedControl } from "./ui";
+import { AiGenerationPanel, ConfirmDialog, SegmentedControl, useAppDialog } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import {
   buildWeekOptions,
@@ -75,6 +75,7 @@ export function StudentModal({
   followupTasks = [],
   onAttendanceChange,
 }: Props) {
+  const appDialog = useAppDialog();
   const [nameInput, setNameInput] = useState(student.name);
   const [genderInput, setGenderInput] = useState<Gender>(student.gender);
   const [aliasesInput, setAliasesInput] = useState(student.aliases.join("、"));
@@ -98,6 +99,7 @@ export function StudentModal({
   const [syncSearch, setSyncSearch] = useState("");
   const [syncSelected, setSyncSelected] = useState<Set<StudentId>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingRecordDelete, setPendingRecordDelete] = useState<StudentModalRecord | null>(null);
   const [profileStatus, setProfileStatus] = useState("");
   const [dormStatus, setDormStatus] = useState("");
   const [activeTab, setActiveTab] = useState<"records" | "profile" | "attendance" | "trend" | "followup">(initialActiveTab);
@@ -106,6 +108,7 @@ export function StudentModal({
   const [pendingDormitoryId, setPendingDormitoryId] = useState(student.dormitoryId || "");
   const [trendMetric, setTrendMetric] = useState("total");
   const [aiTrendResult, setAiTrendResult] = useState<AiTrendResult | null>(() => readCachedStudentAiTrend(student));
+  const [aiTrendResultVisible, setAiTrendResultVisible] = useState(true);
   const [aiTrendStatus, setAiTrendStatus] = useState("");
   const [aiTrendBusy, setAiTrendBusy] = useState(false);
   const [aiTrendAccessCode, setAiTrendAccessCode] = useState("");
@@ -115,6 +118,7 @@ export function StudentModal({
   useEffect(() => {
     const cached = readCachedStudentAiTrend(student);
     setAiTrendResult(cached);
+    setAiTrendResultVisible(Boolean(cached));
     setAiTrendStatus(cached ? "已载入上次生成的趋势分析。" : "");
     setAiTrendAccessCode("");
     setHasAiTrendAuth(hasStoredAiTrendAuth());
@@ -215,8 +219,8 @@ export function StudentModal({
     setProfileStatus("学生信息已保存。");
   }
 
-  function addRecord(type: RecordType) {
-    if (type !== "note" && !noteInput.trim() && !window.confirm("不填备注直接添加？")) return;
+  async function addRecord(type: RecordType) {
+    if (type !== "note" && !noteInput.trim() && !await appDialog.confirm({ title: "添加无备注记录？", description: `将为 ${student.name} 添加一条没有说明的${type === "reward" ? "奖励" : "纪律"}记录。建议填写事实依据，便于以后回看。`, confirmLabel: "仍然添加", variant: "primary" })) return;
     const newRecord = createStudentRecord(type, noteInput);
     setLocalRecords(prev => [newRecord, ...prev]);
     onApplyRecord(student.id, newRecord, [...syncSelected]);
@@ -315,6 +319,7 @@ export function StudentModal({
 
   async function handleGenerateAiTrend() {
     setAiTrendBusy(true);
+    setAiTrendResultVisible(false);
     setAiTrendStatus("正在生成趋势分析...");
     try {
       const result = await generateStudentAiTrend(student, {
@@ -323,10 +328,12 @@ export function StudentModal({
         force: true,
       });
       setAiTrendResult(result);
+      window.requestAnimationFrame(() => setAiTrendResultVisible(true));
       setAiTrendStatus("AI 趋势分析已生成。");
       setAiTrendAccessCode("");
       setHasAiTrendAuth(hasStoredAiTrendAuth());
     } catch (error) {
+      setAiTrendResultVisible(Boolean(aiTrendResult));
       const reason = error instanceof Error ? error.message : "";
       const messages: Record<string, string> = {
         ai_auth_required: "请输入 AI 授权码后再生成。",
@@ -358,14 +365,7 @@ export function StudentModal({
             </h3>
           </div>
           <div className="flex items-center gap-2">
-            {showDeleteConfirm ? (
-              <>
-                <span className="text-xs text-red-500 mr-1">确认删除？</span>
-                <button onClick={() => setShowDeleteConfirm(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">取消</button>
-                <button onClick={() => onDeleteStudent(student.id)} className="px-3 py-1.5 text-sm bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors" style={{ fontWeight: 600 }}>确认</button>
-              </>
-            ) : (
-              <>
+            <>
                 <button onClick={() => setActiveTab("followup")} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors" style={{ fontWeight: 700 }}>
                   <Sparkles className="w-3.5 h-3.5" />AI跟进
                 </button>
@@ -380,8 +380,7 @@ export function StudentModal({
                 <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
                   <X className="w-5 h-5" />
                 </button>
-              </>
-            )}
+            </>
           </div>
         </div>
 
@@ -656,7 +655,7 @@ export function StudentModal({
                   </span>
                   <span className={`flex-1 text-sm ${recordTypeStyle[record.type].text}`}>{record.note || "(无备注)"}</span>
                   <span className="text-xs text-gray-400">{record.date}</span>
-                  <button onClick={() => deleteRecord(record.id)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-white/70 rounded-lg transition-colors">
+                  <button onClick={() => setPendingRecordDelete(record)} aria-label={`删除记录 ${record.note || "无备注"}`} className="p-1 text-gray-300 hover:text-red-500 hover:bg-white/70 rounded-lg transition-colors">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -741,10 +740,11 @@ export function StudentModal({
                   <button
                     onClick={handleGenerateAiTrend}
                     disabled={aiTrendBusy || chronologicalExams.length < 2}
-                    className="shrink-0 px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex shrink-0 items-center justify-center gap-2 px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ fontWeight: 700 }}
                   >
-                    {aiTrendBusy ? "生成中" : aiTrendResult ? "重新生成" : "生成分析"}
+                    {aiTrendBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {aiTrendBusy ? "正在分析" : aiTrendResult ? "重新生成" : "生成分析"}
                   </button>
                 </div>
 
@@ -764,9 +764,11 @@ export function StudentModal({
                   </div>
                 )}
 
-                {aiTrendStatus && <p className="text-xs text-violet-600">{aiTrendStatus}</p>}
-                {aiTrendResult && (
-                  <div className="grid grid-cols-1 gap-2">
+                {aiTrendBusy && <AiGenerationPanel title="正在生成成绩趋势分析" steps={["整理历次考试", "识别关键变化", "形成教师建议"]} />}
+                {!aiTrendBusy && aiTrendStatus && <p className="text-xs text-violet-600">{aiTrendStatus}</p>}
+                <div aria-hidden={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible} inert={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible} className={`grid transition-[grid-template-rows,opacity,transform] duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${aiTrendResult && !aiTrendBusy && aiTrendResultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
+                  <div className="overflow-hidden">
+                  {aiTrendResult && <div className="ai-followup-result-enter grid grid-cols-1 gap-2 pb-0.5">
                     {[
                       ["总体判断", aiTrendResult.overall],
                       ["重点变化", aiTrendResult.changes],
@@ -778,8 +780,9 @@ export function StudentModal({
                         <p className="text-sm text-gray-700 leading-relaxed">{value}</p>
                       </div>
                     ))}
+                  </div>}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
@@ -892,6 +895,9 @@ export function StudentModal({
           </div>
         </div>
       )}
+      <ConfirmDialog open={showDeleteConfirm} title="删除这名学生？" description={`将删除“${student.name}”在当前学期的档案、记录、出勤和跟进数据，并从当前座位及宿舍中移除。删除后无法恢复。`} confirmLabel="确认删除学生" onCancel={() => setShowDeleteConfirm(false)} onConfirm={() => onDeleteStudent(student.id)} />
+      <ConfirmDialog open={Boolean(pendingRecordDelete)} title="删除这条学生记录？" description={`将删除“${pendingRecordDelete?.note || "无备注记录"}”，删除后无法恢复。`} confirmLabel="确认删除记录" onCancel={() => setPendingRecordDelete(null)} onConfirm={() => { if (!pendingRecordDelete) return; deleteRecord(pendingRecordDelete.id); setPendingRecordDelete(null); }} />
+      {appDialog.dialog}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
 } from "../state/aiAssistantService";
 import { getCurrentSlice, sliceDisplayName } from "../state/workspaces";
 import type { AppStudent, Dormitory, FundTransaction, GradeExam, StudentId } from "../state/types";
+import { ConfirmDialog, useAppDialog } from "./ui";
 
 const QUICK_PROMPTS = [
   "帮我分析这个班当前最需要关注的学生，并给出跟进建议。",
@@ -311,7 +312,9 @@ export function AiAssistantWorkspace({
   onSaveStudentRecord?: (student: AppStudent, note: string) => void;
   onAppendCommentMaterial?: (student: AppStudent, text: string) => void;
 }) {
+  const appDialog = useAppDialog();
   const [messages, setMessages] = useState<AiChatMessage[]>(() => loadChatHistory());
+  const [confirmClearMessages, setConfirmClearMessages] = useState(false);
   const [input, setInput] = useState(() => loadDraftInput());
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
@@ -444,22 +447,22 @@ export function AiAssistantWorkspace({
     return students.find(student => labels.includes(student.name)) || null;
   }
 
-  function saveAssistantRecord(message: AiChatMessage, student: AppStudent) {
+  async function saveAssistantRecord(message: AiChatMessage, student: AppStudent) {
     if (!onSaveStudentRecord) {
       return;
     }
-    if (!window.confirm(`把这条 AI 回复保存到 ${student.name} 的学生记录？`)) {
+    if (!await appDialog.confirm({ title: "保存到学生记录？", description: `将把这条 AI 回复写入 ${student.name} 的学生记录。AI 内容仍应由教师确认后使用。`, confirmLabel: "确认保存", variant: "primary" })) {
       return;
     }
     onSaveStudentRecord(student, formatChatDisplayText(message));
     setSavedActionKey(`${message.id}:record`);
   }
 
-  function appendAssistantMaterial(message: AiChatMessage, student: AppStudent) {
+  async function appendAssistantMaterial(message: AiChatMessage, student: AppStudent) {
     if (!onAppendCommentMaterial) {
       return;
     }
-    if (!window.confirm(`把这条 AI 回复加入 ${student.name} 的评语素材？`)) {
+    if (!await appDialog.confirm({ title: "加入评语素材？", description: `将把这条 AI 回复加入 ${student.name} 的评语素材，之后仍可继续编辑。`, confirmLabel: "确认加入", variant: "primary" })) {
       return;
     }
     onAppendCommentMaterial(student, formatChatDisplayText(message));
@@ -529,6 +532,7 @@ export function AiAssistantWorkspace({
     setMessages([]);
     saveChatHistory([]);
     setStatus("对话已清空。");
+    setConfirmClearMessages(false);
   }
 
   return (
@@ -547,7 +551,7 @@ export function AiAssistantWorkspace({
             </div>
           </div>
           <button
-            onClick={clearMessages}
+            onClick={() => setConfirmClearMessages(true)}
             disabled={!messages.length || busy}
             className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 disabled:opacity-40"
             style={{ fontWeight: 800 }}
@@ -805,6 +809,8 @@ export function AiAssistantWorkspace({
           </div>
         </main>
       </div>
+      <ConfirmDialog open={confirmClearMessages} title="清空当前 AI 对话？" description="将删除当前工作区缓存的全部 AI 对话内容。已保存到学生记录或评语素材的数据不会受到影响。" confirmLabel="确认清空对话" onCancel={() => setConfirmClearMessages(false)} onConfirm={clearMessages} />
+      {appDialog.dialog}
     </div>
   );
 }

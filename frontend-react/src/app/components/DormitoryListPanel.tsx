@@ -1,6 +1,7 @@
 import { CalendarClock, Plus } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppStudent, Dormitory } from "../state/types";
+import { useAppDialog } from "./ui";
 
 const DORM_ITEM_HEIGHT = 48;
 const DORM_ITEM_GAP = 4;
@@ -34,7 +35,8 @@ export function DormitoryListPanel({
   hasPendingEvents: boolean;
   onCloseAllDormitoryPeriods: (options?: { carryOver?: boolean }) => void;
 }) {
-  return (
+  const appDialog = useAppDialog();
+  return <>
         <aside className="flex flex-col min-h-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 p-3">
             <div className="flex gap-2">
@@ -116,13 +118,9 @@ export function DormitoryListPanel({
               结转上期分数
             </label>
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (!hasPendingEvents) return;
-                if (window.confirm(
-                  `将结算所有宿舍的当前周期${carryOver ? "（结转分数到下一周期）" : "（分数归零）"}，已记录事件会归档。是否继续？`
-                )) {
-                  onCloseAllDormitoryPeriods({ carryOver });
-                }
+                if (await appDialog.confirm({ title: "结算全部宿舍周期？", description: `将结算所有宿舍的当前周期${carryOver ? "，并把分数结转到下一周期" : "，下一周期分数归零"}。全部已记录事件会归档。`, confirmLabel: "确认一键周清", variant: "primary" })) onCloseAllDormitoryPeriods({ carryOver });
               }}
               disabled={!hasPendingEvents}
               className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"
@@ -132,7 +130,7 @@ export function DormitoryListPanel({
             </button>
           </div>
         </aside>
-  );
+        {appDialog.dialog}
+  </>;
 }
-
 

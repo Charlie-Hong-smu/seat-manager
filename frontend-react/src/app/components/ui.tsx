@@ -1,5 +1,5 @@
-import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Sparkles, X } from "lucide-react";
 
 /**
  * 统一按钮组件
@@ -73,6 +73,99 @@ export function IconButton({
       {children}
     </button>
   );
+}
+
+export function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel = "确认",
+  alternateLabel,
+  variant = "danger",
+  showCancel = true,
+  error,
+  onCancel,
+  onConfirm,
+  onAlternate,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  alternateLabel?: string;
+  variant?: "primary" | "danger";
+  showCancel?: boolean;
+  error?: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onAlternate?: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+  return <div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
+    <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-description" className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-5 shadow-[var(--app-shadow-float)]">
+      <h2 id="confirm-dialog-title" className="text-base font-bold text-[var(--app-text)]">{title}</h2>
+      <p id="confirm-dialog-description" className="mt-2 text-sm leading-6 text-[var(--app-text-muted)]">{description}</p>
+      {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{error}</p>}
+      <div className="mt-5 flex flex-wrap justify-end gap-2">{showCancel && <Button variant="ghost" onClick={onCancel}>取消</Button>}{alternateLabel && onAlternate && <Button variant="secondary" onClick={onAlternate}>{alternateLabel}</Button>}<Button autoFocus variant={variant} onClick={onConfirm}>{confirmLabel}</Button></div>
+    </div>
+  </div>;
+}
+
+type AppDialogOptions = {
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  variant?: "primary" | "danger";
+};
+
+type AppDialogRequest = AppDialogOptions & {
+  mode: "confirm" | "notice";
+  resolve: (confirmed: boolean) => void;
+};
+
+// 与 ConfirmDialog 共置，确保所有业务确认都从唯一设计系统入口创建。
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAppDialog() {
+  const [request, setRequest] = useState<AppDialogRequest | null>(null);
+  const open = useCallback((mode: AppDialogRequest["mode"], options: AppDialogOptions) => new Promise<boolean>(resolve => setRequest({ ...options, mode, resolve })), []);
+  const close = useCallback((confirmed: boolean) => {
+    setRequest(current => {
+      current?.resolve(confirmed);
+      return null;
+    });
+  }, []);
+  return {
+    confirm: useCallback((options: AppDialogOptions) => open("confirm", options), [open]),
+    notice: useCallback((options: AppDialogOptions) => open("notice", options).then(() => undefined), [open]),
+    dialog: <ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} />,
+  };
+}
+
+export function AiGenerationPanel({ title, steps, compact = false }: { title: string; steps: string[]; compact?: boolean }) {
+  const [activeStep, setActiveStep] = useState(0);
+  useEffect(() => {
+    setActiveStep(0);
+    if (steps.length < 2) return;
+    const timer = window.setInterval(() => setActiveStep(current => Math.min(current + 1, steps.length - 1)), 1200);
+    return () => window.clearInterval(timer);
+  }, [steps.length]);
+  return <div className={`ai-generation-panel ai-followup-loading-enter relative overflow-hidden rounded-[var(--app-radius-md)] border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-blue-50 text-left ${compact ? "p-3" : "p-4"}`} role="status" aria-live="polite" aria-label={title}>
+    <span aria-hidden="true" className="ai-generation-scan absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-white/75 to-transparent" />
+    <div className="relative flex items-center gap-3">
+      <span className="ai-generation-core relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-200/70"><Sparkles className="h-5 w-5"/><span className="ai-generation-orbit absolute -inset-1 rounded-[18px] border border-violet-300/70"/></span>
+      <span className="min-w-0 flex-1"><strong className="block text-sm text-violet-800">{title}</strong><span className="mt-1 block text-xs font-semibold text-violet-600" key={activeStep}>{steps[activeStep] || "正在生成内容"}</span></span>
+    </div>
+    {!compact && <div className="relative mt-4 grid gap-2 sm:grid-cols-3">{steps.map((step, index) => <div key={step} className={`flex items-center gap-2 rounded-[var(--app-radius-sm)] border px-2.5 py-2 text-[11px] font-semibold transition-colors duration-300 ${index < activeStep ? "border-emerald-100 bg-emerald-50 text-emerald-700" : index === activeStep ? "border-violet-200 bg-white text-violet-700 shadow-sm" : "border-white/70 bg-white/55 text-gray-400"}`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${index < activeStep ? "bg-emerald-500 text-white" : index === activeStep ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400"}`}>{index < activeStep ? "✓" : index + 1}</span><span className="truncate">{step}</span></div>)}</div>}
+  </div>;
 }
 
 /**
@@ -295,6 +388,7 @@ export function FileDropZone({
   children: ReactNode;
   className?: string;
 }) {
+  const appDialog = useAppDialog();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -314,7 +408,7 @@ export function FileDropZone({
     }
   }
 
-  function handleDrop(e: React.DragEvent) {
+  async function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -327,7 +421,7 @@ export function FileDropZone({
         const acceptedTypes = accept.split(",").map(t => t.trim());
         const ext = "." + (file.name.split(".").pop() || "");
         if (!acceptedTypes.some(a => ext.toLowerCase() === a.toLowerCase())) {
-          alert(`不支持的文件类型。仅支持：${accept}`);
+          await appDialog.notice({ title: "文件类型不受支持", description: `请选择以下格式的文件：${accept}`, confirmLabel: "重新选择" });
           return;
         }
       }
@@ -341,7 +435,7 @@ export function FileDropZone({
     e.target.value = ""; // 清空，允许重复选同一文件
   }
 
-  return (
+  return <>
     <label
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -361,5 +455,6 @@ export function FileDropZone({
         onChange={handleFileChange}
       />
     </label>
-  );
+    {appDialog.dialog}
+  </>;
 }

@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { CalendarClock, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { CalendarClock, Check, RotateCcw, Save, Trash2, X } from "lucide-react";
 import type { SeatHistorySnapshot } from "../state/types";
+import { Button, ConfirmDialog, IconButton } from "./ui";
 
 interface Props {
   snapshot: SeatHistorySnapshot;
   onClose: () => void;
-  onSaveNote: (id: string, note: string) => void;
+  onSaveNote: (id: string, note: string) => boolean;
   onApply: (snapshot: SeatHistorySnapshot) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => boolean;
 }
 
 const COLS = 8;
@@ -20,6 +21,8 @@ function formatTime(value: string): string {
 export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDelete }: Props) {
   const [note, setNote] = useState(snapshot.note);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [saveResult, setSaveResult] = useState<"idle" | "saved" | "failed">("idle");
+  const [deleteError, setDeleteError] = useState("");
   const rows = Math.max(1, snapshot.rows || Math.ceil(snapshot.seats.length / COLS));
   const displayRows = Array.from({ length: rows }, (_, displayRow) => rows - 1 - displayRow);
   const occupied = snapshot.seats.filter(Boolean).length;
@@ -38,30 +41,9 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
             <p className="text-xs text-gray-400 mt-1">{occupied} 人 · {rows} 排 · 最下方为讲台</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => onApply(snapshot)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-50 transition-colors"
-              style={{ fontWeight: 700 }}
-            >
-              <RotateCcw className="w-3.5 h-3.5" />应用
-            </button>
-            {confirmDelete ? (
-              <>
-                <button onClick={() => setConfirmDelete(false)} className="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl transition-colors">取消</button>
-                <button onClick={() => onDelete(snapshot.id)} className="px-3 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors" style={{ fontWeight: 700 }}>确认删除</button>
-              </>
-            ) : (
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-500 border border-red-200 rounded-xl hover:bg-red-50 transition-colors"
-                style={{ fontWeight: 700 }}
-              >
-                <Trash2 className="w-3.5 h-3.5" />删除
-              </button>
-            )}
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
-              <X className="w-5 h-5" />
-            </button>
+            <Button variant="ghost" size="sm" onClick={() => onApply(snapshot)}><RotateCcw className="h-3.5 w-3.5" />应用</Button>
+            <Button variant="ghost" size="sm" onClick={() => { setDeleteError(""); setConfirmDelete(true); }} className="border-red-200 text-red-500 hover:border-red-200 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" />删除</Button>
+            <IconButton label="关闭历史座位详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
           </div>
         </div>
 
@@ -69,18 +51,13 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
             <input
               value={note}
-              onChange={event => setNote(event.target.value)}
+              onChange={event => { setNote(event.target.value); setSaveResult("idle"); }}
               placeholder="给这份历史座位添加备注"
               className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
             />
-            <button
-              onClick={() => onSaveNote(snapshot.id, note)}
-              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors"
-              style={{ fontWeight: 700 }}
-            >
-              <Save className="w-3.5 h-3.5" />保存备注
-            </button>
+            <Button onClick={() => setSaveResult(onSaveNote(snapshot.id, note) ? "saved" : "failed")} className={saveResult === "saved" ? "bg-emerald-600 hover:bg-emerald-700" : ""}>{saveResult === "saved" ? <Check className="h-4 w-4"/> : <Save className="h-4 w-4"/>}{saveResult === "saved" ? "已保存" : "保存备注"}</Button>
           </div>
+          <div aria-live="polite" className="-mt-3 min-h-5 text-xs">{saveResult === "saved" && <span className="font-semibold text-emerald-600">备注已保存到本机。</span>}{saveResult === "failed" && <span role="alert" className="font-semibold text-red-600">保存失败，请检查本机存储空间后重试。</span>}</div>
 
           <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 overflow-x-auto">
             <div className="min-w-[820px] space-y-2">
@@ -115,6 +92,7 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
           </div>
         </div>
       </div>
+      <ConfirmDialog open={confirmDelete} title="删除这份座位快照？" description={`“${snapshot.note || formatTime(snapshot.time)}”删除后无法恢复，当前座位不会受到影响。`} confirmLabel="确认删除" error={deleteError} onCancel={() => { setConfirmDelete(false); setDeleteError(""); }} onConfirm={() => { if (!onDelete(snapshot.id)) setDeleteError("删除失败，请检查本机存储空间后重试。"); }} />
     </div>
   );
 }

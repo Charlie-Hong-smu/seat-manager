@@ -16,7 +16,7 @@ import { readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
 import type { AppStudent, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
-import { Button, FileDropZone } from "../ui";
+import { Button, FileDropZone, useAppDialog } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function DataWorkspace({
@@ -34,6 +34,7 @@ export function DataWorkspace({
   onBackupImported: () => void;
   healthIssues?: HealthIssue[];
 }) {
+  const appDialog = useAppDialog();
   const [replaceExisting, setReplaceExisting] = useState(true);
   const [keepHistory, setKeepHistory] = useState(true);
   const [rosterFile, setRosterFile] = useState<File | null>(null);
@@ -160,12 +161,12 @@ export function DataWorkspace({
     setBackupStatus("备份 JSON 已导出。");
   }
 
-  function restore() {
+  async function restore() {
     if (!backupPreview) {
       setBackupStatus("请先选择备份 JSON 文件。");
       return;
     }
-    if (!window.confirm("将覆盖当前本机数据，并在恢复前自动导出一份当前备份。是否继续？")) return;
+    if (!await appDialog.confirm({ title: "导入并覆盖当前数据？", description: "导入内容将覆盖当前本机工作区。系统会先自动导出一份当前备份，确认后再执行恢复。", confirmLabel: "确认导入恢复", variant: "danger" })) return;
     if (restoreBackup(backupPreview)) {
       setBackupPreview(null);
       setBackupStatus("备份已恢复。");
@@ -386,6 +387,7 @@ export function DataWorkspace({
           </div>
         </div>
       )}
+      {appDialog.dialog}
     </div>
   );
 }

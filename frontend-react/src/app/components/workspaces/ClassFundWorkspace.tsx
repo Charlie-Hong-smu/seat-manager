@@ -4,7 +4,7 @@ import { CalendarRange, ChevronLeft, ChevronRight, Pencil, Trash2, TrendingDown,
 import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
 import { FundTransactionForm } from "../FundTransactionForm";
-import { Card, IconButton, SegmentedControl } from "../ui";
+import { Card, ConfirmDialog, IconButton, SegmentedControl } from "../ui";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -33,6 +33,8 @@ export function ClassFundWorkspace({
   const [editDate, setEditDate] = useState("");
   const [periodMode, setPeriodMode] = useState<FundPeriodMode>("month");
   const [periodAnchor, setPeriodAnchor] = useState(() => new Date().toISOString().slice(0, 10));
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [pendingVoidTransaction, setPendingVoidTransaction] = useState<FundTransaction | null>(null);
 
   const periodTransactions = filterFundTransactionsByPeriod(transactions, periodMode, periodAnchor);
   const periodRange = getFundPeriodRange(periodMode, periodAnchor);
@@ -71,9 +73,7 @@ export function ClassFundWorkspace({
     if (transactions.length === 0) {
       return;
     }
-    if (window.confirm(`确定清空全部 ${transactions.length} 条交易记录？此操作不可撤销。`)) {
-      onClearAll();
-    }
+    setConfirmClearAll(true);
   }
 
   return (
@@ -131,7 +131,7 @@ export function ClassFundWorkspace({
                     onClick={handleClearAll}
                     className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs text-red-500 transition-colors hover:bg-red-50"
                   >
-                    清空全部
+                    全部作废
                   </button>
                 )}
               </div>
@@ -251,7 +251,8 @@ export function ClassFundWorkspace({
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
-                              onClick={() => onDelete(tx.id)}
+                              onClick={() => setPendingVoidTransaction(tx)}
+                              aria-label={`作废流水 ${tx.category}`}
                               className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -267,6 +268,8 @@ export function ClassFundWorkspace({
           </div>
         </div>
       </div>
+      <ConfirmDialog open={confirmClearAll} title="作废全部班费流水？" description={`将把全部 ${transactions.length} 条交易记录标记为已作废。原金额和审计记录会保留，统计默认排除作废项。`} confirmLabel="确认全部作废" onCancel={() => setConfirmClearAll(false)} onConfirm={() => { onClearAll(); setConfirmClearAll(false); }} />
+      <ConfirmDialog open={Boolean(pendingVoidTransaction)} title="作废这笔班费流水？" description={`“${pendingVoidTransaction?.category || "当前流水"}”将保留原金额和记录，但不再计入默认统计。`} confirmLabel="确认作废" onCancel={() => setPendingVoidTransaction(null)} onConfirm={() => { if (!pendingVoidTransaction) return; onDelete(pendingVoidTransaction.id); setPendingVoidTransaction(null); }} />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   usesProductAuthForSync,
   type SyncStatus,
 } from "../state/syncStorage";
+import { useAppDialog } from "./ui";
 
 interface CloudSyncModalProps {
   open: boolean;
@@ -28,6 +29,7 @@ function formatTime(value?: string): string {
 }
 
 export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: CloudSyncModalProps) {
+  const appDialog = useAppDialog();
   const [syncCode, setSyncCode] = useState("");
   const [remember, setRemember] = useState(true);
   const [deviceName, setDeviceName] = useState(getSyncDeviceName);
@@ -72,7 +74,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
         return;
       }
       if (action === "restore") {
-        if (!window.confirm("将用云端数据覆盖本机当前数据。建议确认已有本机备份后再继续。")) {
+        if (!await appDialog.confirm({ title: "从云端恢复数据？", description: "云端数据将覆盖当前本机工作区。系统会先生成本机安全快照；请确认云端版本确实是需要恢复的版本。", confirmLabel: "确认恢复云端", variant: "danger" })) {
           setMessage("已取消恢复。");
           return;
         }
@@ -187,6 +189,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
           )}
         </div>
       </div>
+      {appDialog.dialog}
     </div>
   );
 }

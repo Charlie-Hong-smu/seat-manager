@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,9 +30,28 @@ for (const heading of ["## 1. 产品气质", "## 2. 唯一实现入口", "## 5. 
   requireText(design, heading, "docs/DESIGN_SYSTEM.md");
 }
 
-for (const component of ["Button", "IconButton", "Card", "SegmentedControl", "AnimatedPopover", "ToolDrawer", "FileDropZone"]) {
+for (const component of ["Button", "IconButton", "Card", "SegmentedControl", "AnimatedPopover", "ConfirmDialog", "AiGenerationPanel", "ToolDrawer", "FileDropZone"]) {
   requireText(primitives, `export function ${component}`, "components/ui.tsx");
   requireText(design, `\`${component}\``, "docs/DESIGN_SYSTEM.md");
+}
+
+requireText(design, "禁止使用 `window.confirm`", "docs/DESIGN_SYSTEM.md");
+requireText(design, "不使用 `window.alert`", "docs/DESIGN_SYSTEM.md");
+requireText(primitives, "export function useAppDialog", "components/ui.tsx");
+
+async function collectSourceFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(entries.map(entry => {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) return collectSourceFiles(path);
+    return /\.(ts|tsx)$/.test(entry.name) ? [path] : [];
+  }));
+  return nested.flat();
+}
+
+for (const path of await collectSourceFiles(resolve(frontendRoot, "src/app"))) {
+  const source = await readFile(path, "utf8");
+  if (/window\.(confirm|alert)\s*\(/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生确认或提示框`);
 }
 
 requireText(studentPicker, "export function StudentPicker", "components/StudentPicker.tsx");

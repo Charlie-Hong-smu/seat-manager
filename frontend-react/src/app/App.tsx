@@ -20,7 +20,7 @@ import {
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
 import { IS_COMMERCIAL } from "./config";
-import { deleteGradeExamRecord, saveGradeExamRecord, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
+import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { useSeatManagerState } from "./state/store";
 import { useSeatManagerController } from "./state/seatManagerController";
@@ -32,6 +32,7 @@ import { useClassFundActions } from "./hooks/useClassFundActions";
 import { createFollowupTask, findOpenLinkedTask, getTaskUrgency, todayKey } from "./state/dailyManagement";
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, inspectStateHealth, type TimelineTarget } from "./state/dataInsights";
+import { useAppDialog } from "./components/ui";
 
 type AppTab = SidebarTab;
 type StudentAdviceProgress = {
@@ -52,6 +53,7 @@ const loadAiAssistantWorkspace = () => import("./components/AiAssistantWorkspace
 const loadScoresWorkspace = () => import("./components/workspaces/ScoresWorkspace").then((module) => ({ default: module.ScoresWorkspace }));
 
 export default function App() {
+  const appDialog = useAppDialog();
   const initialState = useSeatManagerState();
   const controller = useSeatManagerController(initialState);
   const appState = controller.state;
@@ -241,6 +243,25 @@ export default function App() {
     return `seat-history-${Date.now()}`;
   }
 
+  function persistSeatHistory(nextHistory: SeatHistorySnapshot[]): boolean {
+    setSaveStatus("saving");
+    const saved = saveLegacySnapshot({
+      students,
+      seatOrder,
+      lockedSeats: appState.lockedSeats,
+      seatSettings,
+      dormitories,
+      seatHistory: nextHistory,
+      fundTransactions,
+      attendanceRecords,
+      followupTasks,
+      drawSessions,
+    });
+    setSaveStatus(saved ? "saved" : "failed");
+    if (saved) setSavedSeatHistory(nextHistory);
+    return saved;
+  }
+
   function handleSaveSeatHistory(note: string) {
     if (!students.length) {
       return;
@@ -254,18 +275,22 @@ export default function App() {
       rows,
       seats: seatOrder.map(id => (id ? studentById.get(id)?.name || "" : "")),
     };
-    setSavedSeatHistory(prev => [snapshot, ...prev].slice(0, 20));
-    setSelectedHistorySnapshot(snapshot);
+    const nextHistory = [snapshot, ...savedSeatHistory].slice(0, 20);
+    if (persistSeatHistory(nextHistory)) setSelectedHistorySnapshot(snapshot);
   }
 
-  function handleUpdateSeatHistoryNote(id: string, note: string) {
-    setSavedSeatHistory(prev => prev.map(item => (item.id === id ? { ...item, note: note.trim() } : item)));
-    setSelectedHistorySnapshot(prev => (prev?.id === id ? { ...prev, note: note.trim() } : prev));
+  function handleUpdateSeatHistoryNote(id: string, note: string): boolean {
+    const normalizedNote = note.trim();
+    const nextHistory = savedSeatHistory.map(item => (item.id === id ? { ...item, note: normalizedNote } : item));
+    const saved = persistSeatHistory(nextHistory);
+    if (saved) setSelectedHistorySnapshot(prev => (prev?.id === id ? { ...prev, note: normalizedNote } : prev));
+    return saved;
   }
 
-  function handleDeleteSeatHistory(id: string) {
-    setSavedSeatHistory(prev => prev.filter(item => item.id !== id));
-    setSelectedHistorySnapshot(prev => (prev?.id === id ? null : prev));
+  function handleDeleteSeatHistory(id: string): boolean {
+    const saved = persistSeatHistory(savedSeatHistory.filter(item => item.id !== id));
+    if (saved) setSelectedHistorySnapshot(prev => (prev?.id === id ? null : prev));
+    return saved;
   }
 
   function handleApplySeatHistory(snapshot: SeatHistorySnapshot) {
@@ -550,15 +575,15 @@ export default function App() {
   }
 
   async function handleUnbindDevice() {
-    if (!window.confirm("解绑后，本机将退出登录并释放一个设备名额。下次使用需要重新输入授权码，确定继续吗？")) {
+    if (!await appDialog.confirm({ title: "解绑当前设备？", description: "解绑后，本机将退出登录并释放一个设备名额。下次使用需要重新输入授权码。", confirmLabel: "确认解绑", variant: "danger" })) {
       return;
     }
     try {
       await unbindCurrentDevice();
+      await appDialog.notice({ title: "设备已解绑", description: "本机已经退出登录，并释放了一个设备名额。" });
       setLoggedIn(false);
-      window.alert("本机设备已解绑。");
     } catch {
-      window.alert("解绑失败，请稍后再试。");
+      await appDialog.notice({ title: "解绑失败", description: "暂时无法解绑当前设备，请稍后重试。", confirmLabel: "知道了" });
     }
   }
 
@@ -833,6 +858,7 @@ export default function App() {
           </div>
         )}
       </div>
+      {appDialog.dialog}
     </AppShell>
   );
 }

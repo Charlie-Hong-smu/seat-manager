@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
+import { localizeTrendText } from "./aiTrendService";
 import { normalizeStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "./commentStorage";
 import { createTestStudent } from "./testFixtures";
 
 describe("AI student context and comment cache", () => {
+  it("converts internal trend field names into teacher-facing Chinese", () => {
+    const localized = localizeTrendText("totalScore: -51,classRank: 29,subjects: 物理: -35; 英语: -27.5; 语文: 16");
+    expect(localized).toBe("总分下降51分；班级排名退步29名；各科变化：物理下降35分、英语下降27.5分、语文上升16分。");
+    expect(localized).not.toMatch(/totalScore|classRank|subjects/);
+  });
+
   it("builds chronological context and keeps first/latest details when compacting", () => {
     const student = createTestStudent();
     student.exams = Array.from({ length: 10 }, (_, index) => ({

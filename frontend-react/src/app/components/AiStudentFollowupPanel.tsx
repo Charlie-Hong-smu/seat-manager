@@ -9,6 +9,7 @@ import {
   type AiStudentFollowupResult,
 } from "../state/aiStudentFollowupService";
 import type { AppStudent } from "../state/types";
+import { AiGenerationPanel, useAppDialog } from "./ui";
 
 interface Props {
   student: AppStudent;
@@ -52,6 +53,7 @@ export function AiStudentFollowupPanel({
   onAppendCommentMaterial,
   onCreateTask,
 }: Props) {
+  const appDialog = useAppDialog();
   const [result, setResult] = useState<AiStudentFollowupResult | null>(() => readLastStudentFollowup(student.id));
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(() => readLastStudentFollowup(student.id) ? "已恢复上次生成的 AI 跟进建议。" : "AI 会结合成绩、标签、记录、宿舍和座位信息生成跟进建议。");
@@ -129,7 +131,7 @@ export function AiStudentFollowupPanel({
     }).catch(() => {});
   }
 
-  function saveRecord() {
+  async function saveRecord() {
     if (!result || !onSaveRecord) {
       return;
     }
@@ -137,7 +139,7 @@ export function AiStudentFollowupPanel({
     if (!text.trim()) {
       return;
     }
-    if (!window.confirm(`把这条 AI 跟进摘要保存到 ${student.name} 的学生记录？`)) {
+    if (!await appDialog.confirm({ title: "保存到学生记录？", description: `将把这条 AI 跟进摘要写入 ${student.name} 的学生记录。AI 内容仍应由教师确认后使用。`, confirmLabel: "确认保存", variant: "primary" })) {
       return;
     }
     onSaveRecord(text);
@@ -145,11 +147,11 @@ export function AiStudentFollowupPanel({
     setStatus("已保存到学生记录。");
   }
 
-  function appendMaterial() {
+  async function appendMaterial() {
     if (!materialText || !onAppendCommentMaterial) {
       return;
     }
-    if (!window.confirm(`把 AI 提炼的评语素材加入 ${student.name} 的补充说明？`)) {
+    if (!await appDialog.confirm({ title: "加入评语素材？", description: `将把 AI 提炼的内容加入 ${student.name} 的评语补充说明，之后仍可继续编辑。`, confirmLabel: "确认加入", variant: "primary" })) {
       return;
     }
     onAppendCommentMaterial(materialText);
@@ -157,15 +159,15 @@ export function AiStudentFollowupPanel({
     setStatus("已加入评语素材。");
   }
 
-  function createTask() {
+  async function createTask() {
     if (!result || !onCreateTask) return;
     const title = result.actions[0] || result.summary || `跟进 ${student.name}`;
-    if (!window.confirm(`根据这条 AI 建议为 ${student.name} 创建跟进任务？创建后仍可在任务工作区编辑。`)) return;
+    if (!await appDialog.confirm({ title: "创建跟进任务？", description: `将根据这条 AI 建议为 ${student.name} 预填跟进任务，创建后仍可在任务工作区编辑。`, confirmLabel: "确认创建", variant: "primary" })) return;
     onCreateTask({ title: title.slice(0, 80), description: buildRecordText(result).slice(0, 800) });
     setStatus("已创建跟进任务，请到跟进任务工作区确认日期和状态。");
   }
 
-  return (
+  return <>
     <section className={`surface-enter overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-sm ${compact ? "" : "shadow-violet-100/40"}`}>
       <div className="flex items-start justify-between gap-3 border-b border-violet-50 bg-violet-50/50 px-4 py-3">
         <div className="min-w-0">
@@ -207,22 +209,7 @@ export function AiStudentFollowupPanel({
           </div>
         )}
 
-        {busy && (
-          <div className="ai-followup-loading-enter rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/90 via-white to-blue-50/80 p-4" role="status" aria-label="AI 正在生成跟进建议">
-            <div className="mb-4 flex items-center gap-2 text-sm font-bold text-violet-700">
-              <span className="relative grid h-8 w-8 place-items-center rounded-xl bg-violet-600 text-white shadow-sm shadow-violet-200">
-                <Sparkles className="h-4 w-4" />
-                <span className="absolute inset-0 animate-ping rounded-xl bg-violet-400/30" />
-              </span>
-              正在分析学生表现与跟进方向
-            </div>
-            <div className="space-y-3">
-              {[91, 76, 96, 63].map((width, index) => (
-                <span key={width} className="ai-siri-loading-bar block h-2.5 rounded-full" style={{ width: `${width}%`, animationDelay: `${index * 100}ms` }} />
-              ))}
-            </div>
-          </div>
-        )}
+        {busy && <AiGenerationPanel title="正在生成学生跟进建议" steps={["整理学生表现", "提炼关注重点", "形成跟进建议"]} />}
 
         {!busy && !result && (
           <div className="grid place-items-center rounded-2xl border border-dashed border-violet-100 bg-violet-50/40 px-4 py-8 text-center">
@@ -324,5 +311,6 @@ export function AiStudentFollowupPanel({
         <p className="text-xs leading-5 text-violet-600">{status}</p>
       </div>
     </section>
-  );
+    {appDialog.dialog}
+  </>;
 }

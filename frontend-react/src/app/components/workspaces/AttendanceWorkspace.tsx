@@ -6,7 +6,7 @@ import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import type { TimelineTarget } from "../../state/dataInsights";
 import { AttendanceStatusControl } from "../AttendanceStatusControl";
 import { UndoToast } from "../UndoToast";
-import { Button, Card, SegmentedControl } from "../ui";
+import { Button, Card, SegmentedControl, useAppDialog } from "../ui";
 
 function downloadCsv(students: AppStudent[], records: AttendanceRecord[], date: string) {
   const names = new Map(students.map(student => [student.id, student.name]));
@@ -16,6 +16,7 @@ function downloadCsv(students: AppStudent[], records: AttendanceRecord[], date: 
 }
 
 export function AttendanceWorkspace({ students, records, onChange, onRequestTask, initialTarget }: { students: AppStudent[]; records: AttendanceRecord[]; onChange: (records: AttendanceRecord[]) => void; onRequestTask: (draft: FollowupTaskDraft) => void; initialTarget?: TimelineTarget }) {
+  const appDialog = useAppDialog();
   const [date, setDate] = useState(todayKey()); const [search, setSearch] = useState(""); const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<Set<StudentId>>(new Set()); const [editingId, setEditingId] = useState(""); const [undo, setUndo] = useState<AttendanceRecord[] | null>(null);
   useEffect(() => {
@@ -29,7 +30,7 @@ export function AttendanceWorkspace({ students, records, onChange, onRequestTask
   const counts = students.reduce((map, student) => { const status = byStudent.get(student.id)?.status || "normal"; map[status] += 1; return map; }, { normal: 0, leave: 0, absent: 0 });
   function commit(next: AttendanceRecord[]) { setUndo(records); onChange(next); window.setTimeout(() => setUndo(null), 6000); }
   function patchStudent(studentId: string, patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave" | "note" | "leaveStart" | "leaveEnd">>) { const current = byStudent.get(studentId); commit(upsertAttendance(records, { studentId, date, status: patch.status ?? current?.status ?? "normal", late: patch.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? current?.earlyLeave ?? false, note: patch.note ?? current?.note ?? "", leaveStart: patch.leaveStart ?? current?.leaveStart, leaveEnd: patch.leaveEnd ?? current?.leaveEnd })); }
-  function batch(patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave">>, label: string) { if (!selected.size || !window.confirm(`将 ${selected.size} 名学生批量设为${label}，是否继续？`)) return; commit(batchUpsertAttendance(records, [...selected], date, patch)); setSelected(new Set()); }
+  async function batch(patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave">>, label: string) { if (!selected.size || !await appDialog.confirm({ title: `批量设置为${label}？`, description: `将覆盖所选 ${selected.size} 名学生在 ${date} 的出勤状态。提交后可通过页面提示短时撤销。`, confirmLabel: `确认设置为${label}`, variant: "primary" })) return; commit(batchUpsertAttendance(records, [...selected], date, patch)); setSelected(new Set()); }
   function toggle(id: string) { setSelected(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
 
   return <div className="h-full overflow-y-auto bg-gray-50 p-4"><div className="mx-auto max-w-6xl space-y-4">
@@ -41,5 +42,6 @@ export function AttendanceWorkspace({ students, records, onChange, onRequestTask
       <div className="overflow-hidden rounded-xl border border-gray-100">{rows.map(student => { const record=byStudent.get(student.id); const status=record?.status||"normal"; const editing=editingId===student.id; return <div key={student.id} className="view-switch-enter border-b border-gray-50 px-4 py-3 last:border-0"><div className="grid grid-cols-[auto_minmax(7rem,1fr)_auto] items-center gap-3"><input type="checkbox" checked={selected.has(student.id)} onChange={() => toggle(student.id)} className="accent-blue-600" aria-label={`选择 ${student.name}`}/><div><div className="font-bold text-gray-800">{student.name}</div><div className="text-xs text-gray-400">{record?.note || "默认正常"}</div></div><div className="flex items-center gap-2"><AttendanceStatusControl compact value={status} late={record?.late||false} earlyLeave={record?.earlyLeave||false} onChange={patch => patchStudent(student.id, patch)}/><button onClick={() => setEditingId(editing ? "" : student.id)} className="rounded-lg bg-gray-50 p-2 text-gray-500" aria-label="编辑详情"><Settings2 className="h-4 w-4"/></button></div></div>{editing && <div className="mt-3 grid gap-2 rounded-xl bg-gray-50 p-3 sm:grid-cols-3"><input value={record?.note||""} onChange={event => patchStudent(student.id,{note:event.target.value})} placeholder="备注" className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none"/><input type="datetime-local" value={record?.leaveStart||""} onChange={event => patchStudent(student.id,{leaveStart:event.target.value})} className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-xs"/><input type="datetime-local" value={record?.leaveEnd||""} onChange={event => patchStudent(student.id,{leaveEnd:event.target.value})} className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-xs"/>{record && <button onClick={() => onRequestTask({studentId:student.id,title:`出勤跟进：${record.status==="leave"?"请假":record.status==="absent"?"缺勤":record.late?"迟到":"早退"}`,type:"出勤关注",description:`${date}${record.note?` · ${record.note}`:""}`,plannedDate:date,dueDate:date,source:"attendance",sourceRef:{domain:"attendance",entityId:record.id}})} className="sm:col-span-3 flex items-center justify-center gap-1 rounded-lg bg-violet-50 py-2 text-xs font-bold text-violet-700"><ListPlus className="h-3.5 w-3.5"/>创建跟进任务</button>}</div>}</div>})}{!rows.length&&<div className="py-12 text-center text-sm text-gray-400">没有符合条件的学生</div>}</div>
     </Card>
     {undo && <UndoToast message="出勤修改已保存" onUndo={() => { onChange(undo); setUndo(null); }} onClose={() => setUndo(null)}/>}
+    {appDialog.dialog}
   </div></div>;
 }

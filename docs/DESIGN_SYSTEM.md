@@ -25,6 +25,8 @@
 | 文件导入 | `FileDropZone` | 页面内重写拖拽高亮和文件 input |
 | 学生搜索选择 | `StudentPicker` 或业务已有选择器 | 每个模块各写一套搜索列表 |
 | 姓名跨区域移动 | `animateSelectionTransfer` | 只做淡入、没有目标位置与列表让位的假飞入 |
+| 业务确认、提示与破坏性操作 | `ConfirmDialog` / `useAppDialog` | `window.confirm`、`window.alert`、浏览器原生弹窗或页面内临时拼接的确认条 |
+| AI 生成中状态 | `AiGenerationPanel` | 只放几条模糊横线、无阶段说明，或各业务重新发明一套 loading |
 
 共享基础组件位于 `frontend-react/src/app/components/ui.tsx`。业务专用但可复用的组件位于同一 `components/` 目录，例如 `StudentPicker.tsx`。共享动效与令牌位于 `frontend-react/src/styles/theme.css`。
 
@@ -88,6 +90,10 @@ Tailwind 的 `gray`、`blue`、`violet`、`red` 可以用于同色阶状态，�
 - 弹窗必须有标题、关闭按钮、Esc 行为、可滚动内容区和稳定底部操作区。
 - 下拉统一使用展开与收起动画；靠近视口边缘时应自动换向或使用 portal，避免被父级裁切。
 - 关闭后焦点返回触发器；图标按钮必须有可访问名称。
+- 删除、清空全部、删除学期等不可撤销操作必须使用共享 `ConfirmDialog`，写清对象、影响范围和不可恢复性；禁止使用 `window.confirm` 或无确认直接执行。
+- 普通单项删除使用“取消 / 确认删除”；存在两种安全处理策略时，可增加一个中性备选动作，但红色按钮只能表示破坏性更强的最终动作。
+- AI 写入、批量修改、结算、恢复覆盖、设备解绑等业务确认统一通过 `useAppDialog` 调用；普通确认使用蓝色，覆盖、解绑和不可撤销操作使用红色。
+- 纯提示与错误信息使用 `useAppDialog().notice`，不使用 `window.alert`。提示弹窗只保留一个清晰的确认按钮。
 
 ## 5. 动效规范
 
@@ -99,6 +105,14 @@ Tailwind 的 `gray`、`blue`、`violet`、`red` 可以用于同色阶状态，�
 - 对象飞入、交换、吸附：520–760ms，可带轻微回弹但不能模糊最终位置。
 - 所有新增动效必须支持 `prefers-reduced-motion`，且不能阻塞点击后的数据提交。
 - 列表新增/删除使用 FLIP 或 `animateSelectionTransfer` 让其他项自然让位、合拢；不要瞬移后再播放无关淡入。
+
+### AI 生成动效
+
+- 预计会让教师等待的 AI 生成统一使用 `AiGenerationPanel`；空间受限时可使用其紧凑模式，不得退化成只有几条模糊横线闪烁的占位符。
+- 生成状态使用紫色 AI 语义，展示明确标题和 2–4 个与当前任务对应的处理阶段；阶段只解释正在做什么，不伪造百分比或完成时间。
+- 重新生成时先收起旧结果，生成完成后使用 `ai-followup-result-enter` 和容器展开动效呈现新结果，避免内容瞬间替换。
+- `prefers-reduced-motion` 下停止扫描、旋转和脉冲等循环动画，但保留当前阶段文字、结果状态和所有操作能力。
+- AI 输出必须是教师可直接阅读的自然中文。内部 JSON 字段名、英文指标名和模型调试信息不得进入结果卡片；生成端约束与展示端规范化必须同时防护旧缓存和异常响应。
 
 ## 6. UI 开发流程
 
@@ -120,7 +134,10 @@ Tailwind 的 `gray`、`blue`、`violet`、`red` 可以用于同色阶状态，�
 - [ ] 下拉、弹窗、抽屉不会被裁切，展开和收起都有动画。
 - [ ] 新增/删除对象时，来源、目标和最终位置清楚。
 - [ ] hover、focus-visible、disabled、loading、empty、error 状态完整。
+- [ ] 所有持久数据删除与清空均使用 `ConfirmDialog`，不存在浏览器原生删除确认框。
+- [ ] 页面中不存在 `window.confirm` 或 `window.alert`；业务确认、错误和提示均使用共享应用内弹窗。
 - [ ] `prefers-reduced-motion` 下功能仍可用。
+- [ ] AI 生成使用共享阶段动效，结果为自然中文且不泄露内部英文字段名。
 - [ ] Zhang 与 Commercial edition 的页面结构和视觉语言一致。
 - [ ] 没有改变登录、持久数据、备份、同步或 AI 确认边界。
 

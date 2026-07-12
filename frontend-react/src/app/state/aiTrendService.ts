@@ -79,7 +79,8 @@ export function readCachedStudentAiTrend(student: AppStudent): AiTrendResult | n
   }
   const payload = buildPayload(student);
   const signature = getCacheSignature(AI_TREND_CACHE_SCOPE, { studentId: student.id, payload });
-  return getCachedTrend<AiTrendResult>(signature);
+  const cached = getCachedTrend<AiTrendResult>(signature);
+  return cached ? normalizeResult(cached) : null;
 }
 
 function getExamSortValue(exam: StudentExamSummary): string {
@@ -136,22 +137,54 @@ function validatePayloadSize(payload: unknown): boolean {
   return new TextEncoder().encode(JSON.stringify(payload)).length <= AI_REQUEST_LIMIT_BYTES;
 }
 
+function formatChineseChange(value: number, unit: string, positive: string, negative: string): string {
+  if (value === 0) return "无变化";
+  return `${value > 0 ? positive : negative}${Math.abs(value)}${unit}`;
+}
+
+export function localizeTrendText(value: unknown): string {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const totalMatch = text.match(/\btotalScore\s*[:：]\s*(-?\d+(?:\.\d+)?)/i);
+  const rankMatch = text.match(/\bclassRank\s*[:：]\s*(-?\d+(?:\.\d+)?)/i);
+  const subjectsMatch = text.match(/\bsubjects?\s*[:：]\s*(.+)$/i);
+  if (totalMatch || rankMatch || subjectsMatch) {
+    const parts: string[] = [];
+    if (totalMatch) parts.push(`总分${formatChineseChange(Number(totalMatch[1]), "分", "上升", "下降")}`);
+    if (rankMatch) parts.push(`班级排名${formatChineseChange(Number(rankMatch[1]), "名", "退步", "进步")}`);
+    if (subjectsMatch) {
+      const subjects = Array.from(subjectsMatch[1].matchAll(/([\u3400-\u9fffA-Za-z]+)\s*[:：]\s*(-?\d+(?:\.\d+)?)/g))
+        .map(match => `${match[1]}${formatChineseChange(Number(match[2]), "分", "上升", "下降")}`);
+      if (subjects.length) parts.push(`各科变化：${subjects.join("、")}`);
+    }
+    if (parts.length) return `${parts.join("；")}。`;
+  }
+  return text
+    .replace(/\btotalScore\b/gi, "总分变化")
+    .replace(/\bclassRank\b/gi, "班级排名变化")
+    .replace(/\brankSchool\b/gi, "年级排名变化")
+    .replace(/\bsubjects?\b/gi, "各科变化")
+    .replace(/\bscore\b/gi, "分数")
+    .replace(/,/g, "，")
+    .replace(/;/g, "；");
+}
+
 function normalizeResult(data: Partial<AiTrendResult>): AiTrendResult {
   return {
-    overall: String(data.overall || "").trim(),
-    changes: String(data.changes || "").trim(),
-    suggestions: String(data.suggestions || "").trim(),
-    disclaimer: String(data.disclaimer || "AI 分析仅供教师参考，请结合课堂观察判断。").trim(),
+    overall: localizeTrendText(data.overall),
+    changes: localizeTrendText(data.changes),
+    suggestions: localizeTrendText(data.suggestions),
+    disclaimer: localizeTrendText(data.disclaimer || "AI 分析仅供教师参考，请结合课堂观察判断。"),
   };
 }
 
 function normalizeClassResult(data: Partial<AiClassTrendResult> & { changes?: string }): AiClassTrendResult {
   return {
-    overall: String(data.overall || "").trim(),
-    classChanges: String(data.classChanges || data.changes || "").trim(),
-    focusStudents: String(data.focusStudents || "").trim(),
-    suggestions: String(data.suggestions || "").trim(),
-    disclaimer: String(data.disclaimer || "AI 分析仅供教师参考，请结合课堂观察判断。").trim(),
+    overall: localizeTrendText(data.overall),
+    classChanges: localizeTrendText(data.classChanges || data.changes),
+    focusStudents: localizeTrendText(data.focusStudents),
+    suggestions: localizeTrendText(data.suggestions),
+    disclaimer: localizeTrendText(data.disclaimer || "AI 分析仅供教师参考，请结合课堂观察判断。"),
   };
 }
 
@@ -325,7 +358,8 @@ export function readCachedClassAiTrend(students: AppStudent[], exams: GradeExam[
   if (payload.comparedStudentCount < 2 || !payload.focusCandidates.length) {
     return null;
   }
-  return getCachedTrend<AiClassTrendResult>(getCacheSignature(AI_CLASS_TREND_CACHE_SCOPE, payload));
+  const cached = getCachedTrend<AiClassTrendResult>(getCacheSignature(AI_CLASS_TREND_CACHE_SCOPE, payload));
+  return cached ? normalizeClassResult(cached) : null;
 }
 
 export async function generateClassAiTrend(
@@ -350,7 +384,7 @@ export async function generateClassAiTrend(
   if (!input?.force) {
     const cached = getCachedTrend<AiClassTrendResult>(signature);
     if (cached?.overall || cached?.classChanges || cached?.suggestions) {
-      return cached;
+      return normalizeClassResult(cached);
     }
   }
 
@@ -426,7 +460,7 @@ export async function generateStudentAiTrend(
   if (!input?.force) {
     const cached = getCachedTrend<AiTrendResult>(signature);
     if (cached?.overall || cached?.changes || cached?.suggestions) {
-      return cached;
+      return normalizeResult(cached);
     }
   }
 
