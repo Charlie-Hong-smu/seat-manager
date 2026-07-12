@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2 } from "lucide-react";
+import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -18,7 +18,7 @@ import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
 import type { AppStudent, AttendanceRecord, Dormitory, FollowupTask, Gender, RecordType, StudentId, StudentRecord } from "../state/types";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
-import { AiGenerationPanel, ConfirmDialog, SegmentedControl, useAppDialog } from "./ui";
+import { AiGenerationPanel, Button, ConfirmDialog, SegmentedControl, useAppDialog } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import {
   buildWeekOptions,
@@ -101,6 +101,7 @@ export function StudentModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingRecordDelete, setPendingRecordDelete] = useState<StudentModalRecord | null>(null);
   const [profileStatus, setProfileStatus] = useState("");
+  const [profileEditing, setProfileEditing] = useState(false);
   const [dormStatus, setDormStatus] = useState("");
   const [activeTab, setActiveTab] = useState<"records" | "profile" | "attendance" | "trend" | "followup">(initialActiveTab);
   const [dormAssignmentOpen, setDormAssignmentOpen] = useState(false);
@@ -217,6 +218,20 @@ export function StudentModal({
     });
     onUpdateStudent(nextStudent);
     setProfileStatus("学生信息已保存。");
+    setProfileEditing(false);
+  }
+
+  function cancelProfileEditing() {
+    setNameInput(student.name);
+    setGenderInput(student.gender);
+    setAliasesInput(student.aliases.join("、"));
+    setParentPhoneInput(student.parentPhone || "");
+    setAddressInput(student.address || "");
+    setEmergencyContactInput(student.emergencyContact || "");
+    setIsBoardingInput(student.isBoarding === true);
+    setSelectedBehaviorTags(new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id))));
+    setProfileEditing(false);
+    setProfileStatus("已取消本次修改。");
   }
 
   async function addRecord(type: RecordType) {
@@ -402,55 +417,51 @@ export function StudentModal({
           <div className="border border-gray-100 rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
               <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>学生信息</span>
-              <button
-                onClick={saveProfile}
-                disabled={!profileDirty}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-xl transition-colors ${profileDirty ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-100 text-gray-400 cursor-default"}`}
-                style={{ fontWeight: 600 }}
-              >
-                <Save className="w-3.5 h-3.5" />保存信息
-              </button>
+              {profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存信息</Button></div> : <Button size="sm" variant="ghost" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}
             </div>
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
                 <label className="flex min-w-0 flex-col gap-1.5">
                   <span className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>姓名</span>
                   <input
+                    disabled={!profileEditing}
                     value={nameInput}
                     onChange={e => {
                       setNameInput(e.target.value);
                       setProfileStatus("");
                     }}
-                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm outline-none focus:border-blue-300"
+                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-gray-50 disabled:text-gray-700"
                   />
                 </label>
                 <div className="flex flex-col gap-1.5">
                   <span className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>性别</span>
-                  <SegmentedControl value={genderInput} ariaLabel="学生性别" onChange={value => { setGenderInput(value as Gender); setProfileStatus(""); }} options={[{ value: "男", label: "男" }, { value: "女", label: "女" }]} className="flex h-10 w-full" />
+                  <SegmentedControl value={genderInput} ariaLabel="学生性别" disabled={!profileEditing} onChange={value => { setGenderInput(value as Gender); setProfileStatus(""); }} options={[{ value: "男", label: "男" }, { value: "女", label: "女" }]} className="flex h-10 w-full" />
                 </div>
               </div>
               <label className="space-y-1.5 block">
                 <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>别名</span>
                 <input
+                  disabled={!profileEditing}
                   value={aliasesInput}
                   onChange={e => {
                     setAliasesInput(e.target.value);
                     setProfileStatus("");
                   }}
                   placeholder="多个别名用顿号或逗号分隔"
-                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-gray-50 disabled:text-gray-700"
                 />
               </label>
 
               <div className="rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <span className="text-xs text-blue-700" style={{ fontWeight: 800 }}>联系与住宿信息</span>
-                  <span className="text-xs text-blue-500/70">仅保存在本机/同步备份中</span>
+                  <span className="text-xs text-blue-500/70">{profileEditing ? "编辑中 · 保存后生效" : "查看模式 · 仅保存在本机/同步备份中"}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="space-y-1.5">
                     <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>家长电话</span>
                     <input
+                      disabled={!profileEditing}
                       value={parentPhoneInput}
                       onChange={e => {
                         setParentPhoneInput(e.target.value);
@@ -458,54 +469,38 @@ export function StudentModal({
                       }}
                       type="tel"
                       placeholder="例如：13800000000"
-                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300"
+                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-white/60 disabled:text-gray-700 disabled:placeholder:text-gray-400"
                     />
                   </label>
                   <label className="space-y-1.5">
                     <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>紧急联系人</span>
                     <input
+                      disabled={!profileEditing}
                       value={emergencyContactInput}
                       onChange={e => {
                         setEmergencyContactInput(e.target.value);
                         setProfileStatus("");
                       }}
                       placeholder="姓名 / 关系 / 电话"
-                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300"
+                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-white/60 disabled:text-gray-700 disabled:placeholder:text-gray-400"
                     />
                   </label>
                   <label className="space-y-1.5 sm:col-span-2">
                     <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>住址</span>
                     <input
+                      disabled={!profileEditing}
                       value={addressInput}
                       onChange={e => {
                         setAddressInput(e.target.value);
                         setProfileStatus("");
                       }}
                       placeholder="家庭住址（可选）"
-                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300"
+                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-white/60 disabled:text-gray-700 disabled:placeholder:text-gray-400"
                     />
                   </label>
                   <div className="space-y-1.5 sm:col-span-2">
                     <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>是否住宿</span>
-                    <div className="grid max-w-xs grid-cols-2 gap-1 rounded-xl bg-white p-1 ring-1 ring-blue-100">
-                      {[
-                        { label: "走读", value: false },
-                        { label: "住宿", value: true },
-                      ].map(option => (
-                        <button
-                          key={option.label}
-                          type="button"
-                          onClick={() => {
-                            setIsBoardingInput(option.value);
-                            setProfileStatus("");
-                          }}
-                          className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${isBoardingInput === option.value ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:bg-blue-50"}`}
-                          style={{ fontWeight: 800 }}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedControl value={isBoardingInput ? "boarding" : "commuter"} ariaLabel="住宿状态" disabled={!profileEditing} onChange={value => { setIsBoardingInput(value === "boarding"); setProfileStatus(""); }} options={[{ value: "commuter", label: "走读" }, { value: "boarding", label: "住宿" }]} className="flex max-w-xs" />
                   </div>
                 </div>
               </div>
@@ -547,8 +542,9 @@ export function StudentModal({
                           return (
                             <button
                               key={tag.id}
+                              disabled={!profileEditing}
                               onClick={() => toggleBehaviorTag(tag.id)}
-                              className={`px-2.5 py-1.5 rounded-full text-sm border transition-colors ${active ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                              className={`rounded-full border px-2.5 py-1.5 text-sm transition-colors disabled:cursor-default ${active ? "border-blue-200 bg-blue-50 text-blue-700" : `border-gray-200 bg-white text-gray-500 ${profileEditing ? "hover:bg-gray-50" : "opacity-70"}`}`}
                               style={{ fontWeight: 600 }}
                             >
                               {tag.label}

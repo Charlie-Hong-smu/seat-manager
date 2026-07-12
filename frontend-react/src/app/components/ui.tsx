@@ -205,12 +205,14 @@ export function SegmentedControl<T extends string>({
   onChange,
   ariaLabel,
   className = "",
+  disabled = false,
 }: {
   value: T;
   options: Array<{ value: T; label: string; icon?: ReactNode }>;
   onChange: (value: T) => void;
   ariaLabel: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -237,7 +239,7 @@ export function SegmentedControl<T extends string>({
   }, [value, options.length]);
 
   return (
-    <div ref={rootRef} role="group" aria-label={ariaLabel} className={`relative inline-flex items-center gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1 ${className}`}>
+    <div ref={rootRef} role="group" aria-label={ariaLabel} aria-disabled={disabled} className={`relative inline-flex items-center gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1 ${disabled ? "opacity-70" : ""} ${className}`}>
       <span
         aria-hidden="true"
         className="pointer-events-none absolute bottom-1 top-1 rounded-lg bg-white shadow-sm transition-[left,width,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
@@ -253,9 +255,10 @@ export function SegmentedControl<T extends string>({
               else buttonRefs.current.delete(option.value);
             }}
             type="button"
+            disabled={disabled}
             aria-pressed={selected}
             onClick={() => onChange(option.value)}
-            className={`relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-[color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${selected ? "text-blue-700" : "text-gray-500 hover:text-gray-800"}`}
+            className={`relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-[color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:cursor-default ${selected ? "text-blue-700" : `text-gray-500 ${disabled ? "" : "hover:text-gray-800"}`}`}
           >
             {option.icon}{option.label}
           </button>
