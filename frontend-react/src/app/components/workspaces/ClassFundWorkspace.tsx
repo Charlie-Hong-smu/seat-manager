@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { CalendarRange, ChevronLeft, ChevronRight, Pencil, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 
 import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
 import { FundTransactionForm } from "../FundTransactionForm";
-import { Card, ConfirmDialog, IconButton, SegmentedControl } from "../ui";
+import { Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl } from "../ui";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -83,7 +83,7 @@ export function ClassFundWorkspace({
         <div className="mx-auto max-w-5xl space-y-5">
           <Card className="surface-enter" bodyClassName="flex flex-wrap items-center gap-3 p-3">
             <SegmentedControl value={periodMode} onChange={setPeriodMode} ariaLabel="班费统计周期" options={[{ value: "all", label: "全部" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }]} />
-            {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><label className="flex h-9 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-[var(--app-surface-muted)] px-3"><CalendarRange className="h-4 w-4 text-blue-500" /><input type="date" value={periodAnchor} onChange={event => setPeriodAnchor(event.target.value)} className="bg-transparent text-sm outline-none" /></label><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-xs font-bold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
+            {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><DatePicker value={periodAnchor} onChange={setPeriodAnchor} ariaLabel="班费统计日期" className="h-9 w-44 bg-[var(--app-surface-muted)]"/><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-xs font-bold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
           </Card>
           {/* 统计卡：左大余额 + 右两小卡 */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem_12rem]">
@@ -187,12 +187,7 @@ export function ClassFundWorkspace({
                             className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300"
                             placeholder="说明"
                           />
-                          <input
-                            type="date"
-                            value={editDate}
-                            onChange={e => setEditDate(e.target.value)}
-                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300"
-                          />
+                          <DatePicker value={editDate} onChange={setEditDate} ariaLabel="修改交易日期" className="w-full" />
                           <div className="flex gap-2">
                             <button
                               onClick={saveEdit}

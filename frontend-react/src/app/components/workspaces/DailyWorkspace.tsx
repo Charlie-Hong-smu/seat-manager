@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
-import { AnimatedPopover, Button, SegmentedControl, SelectMenu, ToolDrawer } from "../ui";
+import { Button, SegmentedControl, SelectMenu, ToolDrawer } from "../ui";
 import type {
   AppStudent,
   Gender,
@@ -74,14 +74,12 @@ export function DailyWorkspace({
   const [name, setName] = useState("");
   const [gender, setGender] = useState<Gender>("");
   const [alias, setAlias] = useState("");
-  const [search, setSearch] = useState("");
   const [drawerSearch, setDrawerSearch] = useState("");
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
   const [drawHistory, setDrawHistory] = useState<Array<{ id: string; time: string; names: string[] }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const filteredStudents = students.filter(student => !search || student.name.includes(search) || student.aliases.some(item => item.includes(search))).slice(0, 8);
   const drawerStudents = students.filter(student => !drawerSearch || student.name.includes(drawerSearch) || student.aliases.some(item => item.includes(drawerSearch))).slice(0, 8);
   const constraints = seatSettings.constraints;
   const activeConstraintCount = constraints.lockedDeskmatePairs.length
@@ -129,32 +127,6 @@ export function DailyWorkspace({
             <button onClick={onOpenFollowups} className="h-8 rounded-xl bg-rose-50 px-2.5 text-xs font-bold text-rose-700">待跟进 {dueTasks}</button>
           </div>
 
-          <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-              className="h-10 w-full rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-200 placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-500/10"
-              placeholder="在座位表中查找学生"
-            />
-            <AnimatedPopover
-              open={Boolean(search)}
-              className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-1.5 shadow-[var(--app-shadow-float)]"
-            >
-                {filteredStudents.map(student => (
-                  <button
-                    key={student.id}
-                    type="button"
-                    onClick={() => { setSearch(""); onSelectStudent(student); }}
-                    className="flex h-10 w-full items-center justify-between rounded-[var(--app-radius-sm)] px-3 text-left text-sm transition-[background-color,transform] duration-150 hover:translate-x-px hover:bg-blue-50"
-                  >
-                    <span className="min-w-0 truncate font-semibold text-gray-700">{student.name}</span>
-                    <span className="ml-3 shrink-0 text-xs text-gray-400">{student.gender || "未知"}</span>
-                  </button>
-                ))}
-                {filteredStudents.length === 0 && <div className="px-3 py-5 text-center text-sm text-gray-400">无匹配结果</div>}
-            </AnimatedPopover>
-          </div>
         </div>
 
         <div className="daily-toolbar-actions ml-auto flex shrink-0 items-center justify-end gap-2 whitespace-nowrap">

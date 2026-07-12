@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, CalendarClock, CheckCircle2, CircleX, Pencil, Plus, RotateCcw, Search } from "lucide-react";
+import { Bell, CheckCircle2, CircleX, Pencil, Plus, RotateCcw, Search } from "lucide-react";
 import { createFollowupTask, getTaskUrgency, todayKey } from "../../state/dailyManagement";
 import type { AppStudent, FollowupTask, FollowupTaskSource } from "../../state/types";
-import { Button, Card, IconButton, SegmentedControl } from "../ui";
+import { Button, Card, DatePicker, IconButton, SegmentedControl } from "../ui";
 import { StudentMultiPicker } from "../StudentPicker";
 import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import { UndoToast } from "../UndoToast";
@@ -57,7 +57,7 @@ export function FollowupWorkspace({ students, tasks, onChange, onRequestTask, in
         <div><div className="mb-1.5 text-xs font-bold text-[var(--app-text-muted)]">跟进类型</div><SegmentedControl value={type} ariaLabel="跟进类型" onChange={setType} className="w-full overflow-x-auto" options={TYPE_OPTIONS.map(option => ({ value: option, label: option }))} /></div>
         <input value={title} onChange={event => setTitle(event.target.value)} placeholder="跟进事项，例如：确认处罚执行情况" className="h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-sm outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-500/10" />
         <textarea value={description} onChange={event => setDescription(event.target.value)} placeholder="补充说明（可选）" rows={3} className="w-full resize-none rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-500/10" />
-        <label className="flex h-10 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3"><CalendarClock className="h-4 w-4 text-[var(--app-text-muted)]"/><input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none"/></label>
+        <DatePicker value={dueDate} onChange={setDueDate} ariaLabel="跟进截止日期" className="w-full" />
         <Button disabled={!studentIds.length || !title.trim()} onClick={add} className="w-full"><Plus className="h-4 w-4" />创建 {studentIds.length > 1 ? `${studentIds.length} 项` : "任务"}</Button>
         <Button variant="ghost" onClick={() => void enableNotifications()} className="w-full"><Bell className="h-4 w-4" />开启本机通知</Button>
         <p className="text-xs leading-5 text-gray-400">应用打开或恢复时检查提醒；浏览器拒绝权限后仍保留应用内徽标。</p>

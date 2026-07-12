@@ -4,6 +4,7 @@ import { Check, ChevronDown, Search, X } from "lucide-react";
 import { FUND_EXPENSE_PRESETS, FUND_INCOME_PRESETS, type NewFundTxInput } from "../state/classFundActions";
 import type { AppStudent, FundTxType } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
+import { DatePicker } from "./ui";
 
 interface FundTransactionFormProps {
   students: AppStudent[];
@@ -166,12 +167,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
       />
 
       {/* 日期 */}
-      <input
-        type="date"
-        value={date}
-        onChange={e => setDate(e.target.value)}
-        className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-700 outline-none transition-colors focus:border-blue-300"
-      />
+      <DatePicker value={date} onChange={setDate} ariaLabel="交易日期" className="w-full" />
 
       {/* 关联学生（可展开，带动画，多选） */}
       <div>

@@ -3,7 +3,7 @@ import { Banknote, BedDouble, CalendarCheck2, Check, ClipboardList, GraduationCa
 import type { AppStudent, SeatHistorySnapshot } from "../../state/types";
 import { filterTimeline, type TimelineItem, type TimelineTarget, type TimelineTone, type TimelineType } from "../../state/dataInsights";
 import { StudentPicker } from "../StudentPicker";
-import { Button, Card, ConfirmDialog, IconButton, SegmentedControl } from "../ui";
+import { Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl } from "../ui";
 
 type HistoryView = "activity" | "seats";
 type DateRange = "7" | "30" | "term" | "custom";
@@ -101,7 +101,7 @@ export function HistoryWorkspace({ students, history, timeline = [], onSave, onR
             <StudentPicker students={students} value={studentId} onChange={setStudentId} label="筛选学生" allowClear />
           </div>
           <div className="mt-3 space-y-3">
-            <div className="flex flex-wrap items-center gap-2"><span className="w-16 shrink-0 text-xs font-bold text-[var(--app-text-muted)]">时间范围</span><SegmentedControl value={dateRange} onChange={setDateRange} ariaLabel="时间范围" className="max-w-full overflow-x-auto" options={[{value:"7",label:"近 7 天"},{value:"30",label:"近 30 天"},{value:"term",label:"本学期"},{value:"custom",label:"自定义"}]} />{dateRange === "custom" && <div className="flex flex-wrap items-center gap-2"><input aria-label="开始日期" type="date" value={customStart} onChange={event => setCustomStart(event.target.value)} className="h-10 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-sm outline-none focus:border-blue-300"/><span className="text-xs text-gray-400">至</span><input aria-label="结束日期" type="date" value={customEnd} onChange={event => setCustomEnd(event.target.value)} className="h-10 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-sm outline-none focus:border-blue-300"/></div>}</div>
+            <div className="flex flex-wrap items-center gap-2"><span className="w-16 shrink-0 text-xs font-bold text-[var(--app-text-muted)]">时间范围</span><SegmentedControl value={dateRange} onChange={setDateRange} ariaLabel="时间范围" className="max-w-full overflow-x-auto" options={[{value:"7",label:"近 7 天"},{value:"30",label:"近 30 天"},{value:"term",label:"本学期"},{value:"custom",label:"自定义"}]} />{dateRange === "custom" && <div className="flex flex-wrap items-center gap-2"><DatePicker value={customStart} onChange={setCustomStart} ariaLabel="开始日期" className="w-40"/><span className="text-xs text-gray-400">至</span><DatePicker value={customEnd} onChange={setCustomEnd} ariaLabel="结束日期" className="w-40" min={customStart}/></div>}</div>
             <div className="flex items-center gap-2"><span className="w-16 shrink-0 text-xs font-bold text-[var(--app-text-muted)]">事件类型</span><SegmentedControl value={type} onChange={setType} ariaLabel="事件类型" className="min-w-0 flex-1 overflow-x-auto" options={TIMELINE_TYPES.map(value => ({ value, label: value }))} /></div>
           </div>
         </Card>

@@ -20,7 +20,7 @@ import type { FollowupTaskDraft } from "./FollowupTaskDrawer";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
-import { ConfirmDialog, useAppDialog } from "./ui";
+import { ConfirmDialog, DatePicker, useAppDialog } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-emerald-600" : value < 0 ? "text-red-500" : "text-gray-500";
@@ -527,7 +527,7 @@ export function DormitoryWorkspace({
                         className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-blue-300"
                         placeholder="处罚措施（可选）"
                       />
-                      {punishment.trim() && <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3"><label className={`flex items-center gap-2 text-sm font-semibold ${responsibleIds.length ? "text-violet-700" : "text-gray-400"}`}><input type="checkbox" checked={createFollowup && responsibleIds.length > 0} disabled={!responsibleIds.length} onChange={event => setCreateFollowup(event.target.checked)} className="accent-violet-600"/><ListPlus className="h-4 w-4"/>同时为责任人创建跟进任务</label>{createFollowup && responsibleIds.length > 0 && <label className="mt-2 flex items-center gap-2 text-xs text-violet-600"><span>截止日期</span><input type="date" value={followupDueDate} onChange={event => setFollowupDueDate(event.target.value)} className="rounded-lg border border-violet-100 bg-white px-2 py-1.5 outline-none"/></label>} {!responsibleIds.length && <p className="mt-1 text-xs text-gray-400">选择责任人后才能关联任务。</p>}</div>}
+                      {punishment.trim() && <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3"><label className={`flex items-center gap-2 text-sm font-semibold ${responsibleIds.length ? "text-violet-700" : "text-gray-400"}`}><input type="checkbox" checked={createFollowup && responsibleIds.length > 0} disabled={!responsibleIds.length} onChange={event => setCreateFollowup(event.target.checked)} className="accent-violet-600"/><ListPlus className="h-4 w-4"/>同时为责任人创建跟进任务</label>{createFollowup && responsibleIds.length > 0 && <div className="mt-2 flex items-center gap-2 text-xs text-violet-600"><span>截止日期</span><DatePicker value={followupDueDate} onChange={setFollowupDueDate} ariaLabel="宿舍跟进截止日期" className="w-44 border-violet-100"/></div>} {!responsibleIds.length && <p className="mt-1 text-xs text-gray-400">选择责任人后才能关联任务。</p>}</div>}
 
                       {/* 责任人（可展开，带动画） */}
                       <div>

@@ -16,7 +16,7 @@ import type { AiClassTrendResult } from "../../state/aiTrendService";
 import type { AppStudent, GradeExam, SavedGradeExamRecord, ScoreImportDraft } from "../../state/types";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Button, ConfirmDialog, FileDropZone, SelectMenu } from "../ui";
+import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, SelectMenu } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function ScoresWorkspace({
@@ -340,7 +340,7 @@ export function ScoresWorkspace({
                     </div>
                   )}
                   <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
-                  <input type="date" value={examDate} onChange={event => setExamDate(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" />
+                  <DatePicker value={examDate} onChange={setExamDate} ariaLabel="考试日期" className="w-full bg-gray-50" />
                   <Button onClick={saveDraft} className="w-full">{remappingExamId ? "保存修改" : "保存考试"}</Button>
                 </div>
               )}
@@ -371,7 +371,7 @@ export function ScoresWorkspace({
                   {editingExamId === exam.id ? (
                     <div className="space-y-2">
                       <input value={editExamName} onChange={e => setEditExamName(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
-                      <input type="date" value={editExamDate} onChange={e => setEditExamDate(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300" />
+                      <DatePicker value={editExamDate} onChange={setEditExamDate} ariaLabel="修改考试日期" className="w-full" />
                       <div className="grid grid-cols-2 gap-2">
                         <Button
                           size="sm"

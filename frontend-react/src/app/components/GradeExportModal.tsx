@@ -3,6 +3,7 @@ import { FileSpreadsheet, Printer, Search, X } from "lucide-react";
 import { buildGradePrintPreviewHtml, exportGradeWorkbook, getDefaultGradeExportOptions } from "../state/gradeExport";
 import type { AppStudent, GradeExam } from "../state/types";
 import type { GradeExportContentKey, GradeExportOptions } from "../state/gradeExport";
+import { DatePicker } from "./ui";
 
 interface GradeExportModalProps {
   exams: GradeExam[];
@@ -251,11 +252,11 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
                 <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-3">
                   <label className="flex items-center gap-2 text-sm text-gray-500">
                     开始日期
-                    <input type="date" value={options.startDate} onChange={event => update({ startDate: event.target.value })} className="h-9 rounded-xl border border-gray-200 bg-white px-3 outline-none focus:border-blue-300" />
+                    <DatePicker value={options.startDate} onChange={startDate => update({ startDate })} ariaLabel="导出开始日期" className="w-full" />
                   </label>
                   <label className="flex items-center gap-2 text-sm text-gray-500">
                     结束日期
-                    <input type="date" value={options.endDate} onChange={event => update({ endDate: event.target.value })} className="h-9 rounded-xl border border-gray-200 bg-white px-3 outline-none focus:border-blue-300" />
+                    <DatePicker value={options.endDate} onChange={endDate => update({ endDate })} ariaLabel="导出结束日期" className="w-full" min={options.startDate} />
                   </label>
                 </div>
               )}

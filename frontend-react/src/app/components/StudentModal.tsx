@@ -883,8 +883,8 @@ export function StudentModal({
       </div>
 
       {dormAssignmentOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-5 shadow-2xl">
+        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[1px]">
+          <div className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-gray-100 bg-white p-5 shadow-[var(--app-shadow-float)]">
             <div className="text-base text-gray-900" style={{ fontWeight: 900 }}>更换宿舍</div>
             <SelectMenu value={pendingDormitoryId} onChange={setPendingDormitoryId} ariaLabel="选择宿舍" className="mt-4 w-full bg-gray-50" options={[{ value: "", label: "未分配" }, ...dormitories.map(dormitory => ({ value: dormitory.id, label: dormitory.name }))]} />
             <div className="mt-4 grid grid-cols-2 gap-2">
@@ -896,8 +896,8 @@ export function StudentModal({
       )}
 
       {dormEventOpen && currentDormitory && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-gray-100 bg-white p-5 shadow-2xl">
+        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[1px]">
+          <div className="modal-panel-enter w-full max-w-md rounded-[var(--app-radius-lg)] border border-gray-100 bg-white p-5 shadow-[var(--app-shadow-float)]">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-base text-gray-900" style={{ fontWeight: 900 }}>记宿舍事件</div>

@@ -31,7 +31,7 @@ for (const heading of ["## 1. 产品气质", "## 2. 唯一实现入口", "## 5. 
   requireText(design, heading, "docs/DESIGN_SYSTEM.md");
 }
 
-for (const component of ["Button", "IconButton", "Card", "SegmentedControl", "UnderlineTabs", "SelectMenu", "AnimatedPopover", "ConfirmDialog", "AiGenerationPanel", "ToolDrawer", "FileDropZone"]) {
+for (const component of ["Button", "IconButton", "Card", "SegmentedControl", "UnderlineTabs", "SelectMenu", "DatePicker", "AnimatedPopover", "ConfirmDialog", "AiGenerationPanel", "ToolDrawer", "FileDropZone"]) {
   requireText(primitives, `export function ${component}`, "components/ui.tsx");
   requireText(design, `\`${component}\``, "docs/DESIGN_SYSTEM.md");
 }
@@ -56,6 +56,7 @@ for (const path of await collectSourceFiles(resolve(frontendRoot, "src/app"))) {
   const source = await readFile(path, "utf8");
   if (/window\.(confirm|alert)\s*\(/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生确认或提示框`);
   if (/<select(?:\s|>)/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生 select`);
+  if (/type=["']date["']/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生日期选择器`);
 }
 
 requireText(studentPicker, "export function StudentPicker", "components/StudentPicker.tsx");

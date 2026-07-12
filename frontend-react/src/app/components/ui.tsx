@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Search, Sparkles, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Search, Sparkles, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
 /**
@@ -409,13 +409,79 @@ export function SelectMenu({ value, options, onChange, ariaLabel, placeholder = 
       <span className={`min-w-0 flex-1 truncate ${selected ? "" : "text-[var(--app-text-muted)]"}`}>{selected?.label || placeholder}</span>
       <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
     </button>
-    {open && createPortal(<div ref={panelRef} className="app-popover-enter fixed z-[120] overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-2 shadow-[var(--app-shadow-float)]" style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}>
+    {createPortal(<AnimatedPopover open={open} className="fixed z-[120] overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-2 shadow-[var(--app-shadow-float)]" style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}><div ref={panelRef}>
       {showSearch && <div className="relative mb-2"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索选项" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-[var(--app-surface-muted)] pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:bg-white"/></div>}
       <div role="listbox" aria-label={ariaLabel} className="max-h-[min(16rem,var(--select-menu-max-height,16rem))] space-y-1 overflow-y-auto">{filtered.map(option => {
         const active = String(option.value) === String(value);
         return <button key={String(option.value)} type="button" role="option" aria-selected={active} disabled={option.disabled} onClick={() => { onChange(String(option.value)); setOpen(false); setSearch(""); triggerRef.current?.focus(); }} className={`flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-sm transition-colors disabled:opacity-40 ${active ? "bg-blue-50 font-bold text-blue-700" : "text-gray-700 hover:bg-[var(--app-surface-muted)]"}`}><span className="min-w-0 flex-1 truncate text-left">{option.label}</span>{active && <Check className="h-4 w-4 shrink-0"/>}</button>;
       })}{!filtered.length && <div className="py-6 text-center text-sm text-[var(--app-text-muted)]">没有匹配选项</div>}</div>
-    </div>, document.body)}
+    </div></AnimatedPopover>, document.body)}
+  </>;
+}
+
+function parseDateValue(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date();
+}
+
+function formatDateValue(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+export function DatePicker({ value, onChange, ariaLabel, className = "", min, max }: { value: string; onChange: (value: string) => void; ariaLabel: string; className?: string; min?: string; max?: string }) {
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(() => { const date = parseDateValue(value); return new Date(date.getFullYear(), date.getMonth(), 1); });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const selected = value ? parseDateValue(value) : null;
+
+  useEffect(() => {
+    if (!value) return;
+    const date = parseDateValue(value);
+    setVisibleMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+  }, [value]);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const panelWidth = 304;
+      const panelHeight = 350;
+      setPosition({
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8)),
+        top: window.innerHeight - rect.bottom >= panelHeight ? rect.bottom + 8 : Math.max(8, rect.top - panelHeight - 8),
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => { window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => { const target = event.target as Node; if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false); };
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", key); };
+  }, [open]);
+
+  const gridStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1 - visibleMonth.getDay());
+  const days = Array.from({ length: 42 }, (_, index) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index));
+  const today = formatDateValue(new Date());
+  const label = selected ? `${selected.getFullYear()}年${selected.getMonth() + 1}月${selected.getDate()}日` : "请选择日期";
+
+  return <>
+    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-left text-sm transition-colors hover:border-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 ${className}`}><CalendarDays className="h-4 w-4 shrink-0 text-blue-500"/><span className="min-w-0 flex-1 truncate text-[var(--app-text)]">{label}</span><ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}/></button>
+    {createPortal(<AnimatedPopover open={open} className="fixed z-[125] w-[304px] rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-3 shadow-[var(--app-shadow-float)]" style={position}><div ref={panelRef} role="dialog" aria-label={ariaLabel}>
+      <div className="mb-3 flex items-center justify-between"><IconButton size="sm" label="上个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4"/></IconButton><strong className="text-sm text-[var(--app-text)]">{visibleMonth.getFullYear()}年 {visibleMonth.getMonth() + 1}月</strong><IconButton size="sm" label="下个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4"/></IconButton></div>
+      <div className="grid grid-cols-7 text-center text-[11px] font-bold text-[var(--app-text-muted)]">{"日一二三四五六".split("").map(day => <span key={day} className="py-1">{day}</span>)}</div>
+      <div className="mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-xs transition-colors disabled:opacity-25 ${active ? "bg-blue-600 font-bold text-white" : dayValue === today ? "bg-blue-50 font-bold text-blue-700" : currentMonth ? "text-gray-700 hover:bg-gray-100" : "text-gray-300 hover:bg-gray-50"}`}>{day.getDate()}</button>; })}</div>
+      <div className="mt-3 flex justify-between border-t border-gray-100 pt-2"><Button size="sm" variant="ghost" onClick={() => { onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
+    </div></AnimatedPopover>, document.body)}
   </>;
 }
 
