@@ -1,5 +1,5 @@
-import { IS_COMMERCIAL } from "../config";
 import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
+import { getProductAuthToken } from "./authStorage";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import { createSeatManagerState } from "./legacyStateAdapter";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
@@ -947,7 +947,7 @@ export async function sendAiAssistantChat(input: {
     response = await send(getDirectWorkerUrl());
   }
   if (response.status === 401) {
-    if (!IS_COMMERCIAL) {
+    if (!getProductAuthToken()) {
       clearAiApiAuth();
     }
     throw new Error("ai_unauthorized");

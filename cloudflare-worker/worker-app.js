@@ -10,6 +10,7 @@ const LICENSE_KEY_PREFIX = "seat-manager:license:";
 const LICENSE_SYNC_STATE_SUFFIX = ":state";
 const DEFAULT_MAX_DEVICES = 3;
 const DEFAULT_AI_DAILY_LIMIT = 30;
+const DEFAULT_ALLOWED_EDITIONS = Object.freeze(["commercial"]);
 
 export default {
   async fetch(request, env) {
@@ -74,6 +75,13 @@ async function handleLicenseAuth(request, env, corsHeaders) {
     return jsonResponse({ error: "license_expired" }, 403, corsHeaders);
   }
 
+  // Missing edition is the legacy Commercial client contract. Existing records
+  // without allowedEditions also remain Commercial-only by default.
+  const edition = normalizeEdition(body.value.edition) || "commercial";
+  if (!license.allowedEditions.includes(edition)) {
+    return jsonResponse({ error: "edition_forbidden" }, 403, corsHeaders);
+  }
+
   const deviceId = toText(body.value.deviceId || "").slice(0, 120);
   if (!deviceId) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
@@ -93,11 +101,14 @@ async function handleLicenseAuth(request, env, corsHeaders) {
     licenseId: license.licenseId,
     licenseKey: license.storageKey,
     deviceId,
+    edition,
   }, tokenSecret);
   return jsonResponse({
     token,
     expiresAt,
     licenseId: license.licenseId,
+    edition,
+    allowedEditions: license.allowedEditions,
     maxDevices: bound.maxDevices,
     aiEnabled: Boolean(license.aiEnabled),
     aiExpiresAt: license.aiExpiresAt || "",
@@ -918,6 +929,7 @@ async function loadLicenseRecord(codeHash, env) {
     storageKey: getLicenseKey(codeHash),
     legacyEnv: true,
     licenseId: sanitizeLicenseId(env.PRODUCT_LICENSE_ID || "single"),
+    allowedEditions: DEFAULT_ALLOWED_EDITIONS,
     status: "active",
     expiresAt: "",
     maxDevices: normalizeMaxDevices(env.PRODUCT_MAX_DEVICES),
@@ -945,6 +957,7 @@ async function loadLicenseRecordByKey(key, env) {
     storageKey: key,
     legacyEnv: false,
     licenseId,
+    allowedEditions: normalizeAllowedEditions(record.allowedEditions),
     status: toText(record.status || "active") || "active",
     expiresAt: toText(record.expiresAt || ""),
     maxDevices: normalizeMaxDevices(record.maxDevices),
@@ -977,6 +990,7 @@ async function bindLicenseDevice(license, deviceId, deviceName, env) {
   if (env.SEAT_MANAGER_KV && license.storageKey) {
     await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
       licenseId: license.licenseId,
+      allowedEditions: license.allowedEditions,
       status: license.status,
       expiresAt: license.expiresAt || "",
       maxDevices,
@@ -998,6 +1012,7 @@ async function unbindLicenseDevice(license, deviceId, env) {
   if (env.SEAT_MANAGER_KV && license.storageKey) {
     await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
       licenseId: license.licenseId,
+      allowedEditions: license.allowedEditions,
       status: license.status,
       expiresAt: license.expiresAt || "",
       maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
@@ -1017,6 +1032,7 @@ async function unbindAllLicenseDevices(license, env) {
   if (env.SEAT_MANAGER_KV && license.storageKey) {
     await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
       licenseId: license.licenseId,
+      allowedEditions: license.allowedEditions,
       status: license.status,
       expiresAt: license.expiresAt || "",
       maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
@@ -1050,6 +1066,7 @@ function getAdminLicenseKeyFromExisting(input) {
 function normalizeAdminLicenseInput(input, existing, fallback) {
   return {
     licenseId: fallback.licenseId,
+    allowedEditions: normalizeAllowedEditions(input.allowedEditions ?? existing?.allowedEditions),
     status: ["active", "disabled"].includes(input.status) ? input.status : existing?.status || "active",
     expiresAt: normalizeIsoDateInput(input.expiresAt),
     maxDevices: normalizeMaxDevices(input.maxDevices ?? existing?.maxDevices),
@@ -1070,6 +1087,7 @@ function serializeLicenseForAdmin(license) {
     licenseKey: license.storageKey,
     codeHash: license.storageKey.replace(LICENSE_KEY_PREFIX, ""),
     licenseId: license.licenseId,
+    allowedEditions: license.allowedEditions,
     status: license.status,
     expiresAt: license.expiresAt || "",
     maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
@@ -1088,6 +1106,17 @@ function normalizeProductCodeSecret(value) {
     return "";
   }
   return secret;
+}
+
+function normalizeEdition(value) {
+  const edition = toText(value).trim();
+  return edition === "zhang" || edition === "commercial" ? edition : "";
+}
+
+function normalizeAllowedEditions(value) {
+  const values = Array.isArray(value) ? value : DEFAULT_ALLOWED_EDITIONS;
+  const normalized = [...new Set(values.map(normalizeEdition).filter(Boolean))];
+  return normalized.length ? normalized : [...DEFAULT_ALLOWED_EDITIONS];
 }
 
 function normalizeIsoDateInput(value) {

@@ -34,11 +34,12 @@ npx wrangler deploy --dry-run
 
 ## 自动发布
 
-- `.github/workflows/pages.yml`：只有前端源码、资源、锁文件、测试或构建配置变化时运行，检查覆盖率与双 edition Chromium 后发布 Zhang edition。
-- `.github/workflows/cloudflare-commercial.yml`：排除纯 Markdown 变化，再按实际目录发布 Commercial Pages、Worker 或授权管理页。
+- `.github/workflows/pages.yml`：前端变化时检查并自动发布 Zhang 先行版。
+- `.github/workflows/cloudflare-commercial.yml`：只按目录变化自动发布共享 Worker 或授权管理页，不再自动发布 Commercial 前端。
+- `.github/workflows/promote-commercial.yml`：用户明确说“上线商用版”后，由 Codex传入已在 Zhang 验证的完整 commit SHA；同一入口传入上一稳定 SHA 即为回滚。
 - `frontend-react/dist` 不进入 Git；根 `index.html` 只是线上入口说明，不是应用 bundle。
 
-Cloudflare workflow 需要 GitHub Secrets `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`；Commercial 前端可通过仓库变量 `COMMERCIAL_WORKER_URL` 指向 Netlify `/api`。
+Cloudflare workflow 需要 GitHub Secrets `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`；Commercial 前端可通过仓库变量 `COMMERCIAL_WORKER_URL` 指向 Netlify `/api`。Commercial 晋升必须遵守 `VERSION_GOVERNANCE.md`；普通 `main` push 不得改变 Commercial 前端，晋升记录以 workflow summary 中的完整 SHA 为准。
 
 ## 手动操作
 
@@ -65,6 +66,7 @@ netlify deploy --prod
 4. 新接口同时存在于 Worker handler、`worker-routes.js`、代理和前端调用中。
 5. 浏览器检查登录、当前 workspace、学生数量和关键本地数据没有变化。
 6. PWA 检查 manifest base；Zhang 为 `/seat-manager/`，Commercial 为 `/`。
+7. Zhang 授权登录发送 `edition: zhang`；旧授权记录缺少 `allowedEditions` 时只能登录 Commercial。
 
 ## 常见故障定位
 

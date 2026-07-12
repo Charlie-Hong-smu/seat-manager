@@ -18,7 +18,7 @@ pnpm test:e2e:all
 - `test:coverage`：核心持久状态、业务 action 和 AI 转换覆盖率门槛。
 - `build:zhang`：默认小张版，base `/seat-manager/`。
 - `build:commercial`：商用授权版，base `/`。
-- `test:e2e:all`：Zhang 本地密码/PWA 与 Commercial 产品授权两套 Chromium 测试；Commercial mock 只存在于 `e2e/`。
+- `test:e2e:all`：Zhang / Commercial 产品授权与 PWA 的两套 Chromium 测试；授权 mock 只存在于 `e2e/`。
 - `check:size` / `check:production`：构建预算与生产包测试标记扫描。
 
 不要使用 npm 修改本目录依赖；锁文件是 `pnpm-lock.yaml`。不要提交 `dist`、测试报告或浏览器产物。
@@ -38,7 +38,7 @@ pnpm test:e2e:all
 
 ## 不可破坏项
 
-- 不改变 Zhang 本地密码与 Commercial 产品授权两套登录行为。
+- 两版均使用产品授权登录；不得删除旧本地密码数据或改变业务数据、备份和同步格式。
 - 不改变已有 workspace、旧数据、备份和云同步格式。
 - 不让 AI 未经教师确认写入业务数据。
 - 不把 Figma Make 导出直接覆盖真实组件；视觉规则见 `../DESIGN.md`。

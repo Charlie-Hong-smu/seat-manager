@@ -1,0 +1,62 @@
+# 版本治理与自然语言发布规范
+
+本文是 Zhang edition 与 Commercial edition 的功能分类、版本差异和发布意图唯一来源。新功能、版本专属需求或线上发布开始前必须先按本文分类；视觉实现仍遵守 `DESIGN_SYSTEM.md`。
+
+## 稳定模型
+
+- 只有一套 React 源码、业务状态、数据格式和 Worker 公共契约。
+- Zhang 是个人使用与先行验证通道，`main` 前端变更通过检查后自动发布。
+- Commercial 是稳定通道，只能发布已在 Zhang 验证并由用户明确批准的完整 commit SHA。
+- 版本差异只能控制入口、文案和能力开放，不得改变学生、座位、成绩、备份、同步等公共数据语义。
+- 不复制整页或状态控制器，不维护长期 `zhang` / `commercial` 业务分支，不为同一功能创建两套存储格式。
+
+## 自然语言指令契约
+
+| 用户表达 | 固定解释 | 实施与发布行为 |
+| --- | --- | --- |
+| “先在小张版测试”或未说明版本 | Zhang 先行功能 | 进入公共源码并自动发布 Zhang；Commercial 保持当前稳定 SHA，不添加永久版本开关 |
+| “只给小张版” | Zhang 永久专属 | 入口通过 `editionCapabilities` 集中控制，底层复用公共业务能力 |
+| “上线商用版” | 晋升已验证版本 | 核对工作区和 Zhang 验收，取得完整 SHA，运行全套检查后触发 `promote-commercial.yml` |
+| “商用版不要上线” | 不进入 Commercial | 明确转为 Zhang 专属或删除；不得长期保留含糊的“测试中”状态 |
+
+自然语言出现冲突时，以用户最后一次明确的版本范围为准。涉及登录、存储、同步、AI写入边界或公共接口的高风险变更，即使说“先测试”，也必须保持对当前 Commercial 的向后兼容。
+
+## 功能矩阵
+
+每个非纯修复功能增加或更新一行。`首次 Zhang 版本` 使用 commit 短 SHA；尚未提交时写 `pending`。
+
+| 功能 | 分类 | 首次 Zhang 版本 | Commercial 状态 | 最终决定 |
+| --- | --- | --- | --- | --- |
+| 统一授权码登录 | 公共基础能力 | pending | 待晋升 | 两版统一认证，保留独立品牌和部署 |
+| Zhang 先行发布通道 | 发布治理 | pending | 不适用 | Zhang 自动发布，Commercial 人工晋升 |
+
+允许的分类只有：`公共功能`、`Zhang 先行`、`Zhang 专属`、`Commercial 专属`、`内部诊断`。同一时间尽量只保留少量 `Zhang 先行`；验证结束必须晋升、转专属或删除。
+
+## 能力开关规则
+
+- 永久差异只在 `frontend-react/src/app/editionCapabilities.ts` 声明。
+- 页面读取有业务含义的能力名，不直接散落新的 `APP_EDITION` / `IS_COMMERCIAL` 判断。
+- 先行功能依靠发布 SHA 差异，不创建永久开关。
+- 专属功能可以增加入口、工具、报表和工作流；若要改变公共数据模型或核心业务含义，必须先重新评审为公共能力。
+- Commercial 构建不得暴露内部诊断入口；两版必须共同通过持久数据兼容测试。
+
+## Commercial 晋升与回滚
+
+用户说“上线商用版”后，Codex按以下顺序执行，不得跳步：
+
+1. 检查 dirty worktree、提交范围和目标 SHA，保留无关用户文件。
+2. 确认目标是 `main` 上完整的 40 位 SHA，且该 SHA 的 Zhang Pages 部署成功并已获用户验收。
+3. 运行设计检查、lint、strict typecheck、覆盖率、双版本构建、体积/生产包检查、双版本浏览器测试和相关 Worker 检查。
+4. 触发 `Promote verified Zhang release to Commercial`，参数只允许该 SHA。
+5. 验证 Commercial 线上登录、工作区、本地数据读取、PWA更新提示和本次功能；失败立即停止并报告。
+
+回滚不是修改代码：重新运行同一 workflow，传入上一稳定的 40 位 SHA。每次交接必须记录当前晋升 SHA；无法确认 Zhang 验收或测试失败时不得发布。
+
+## 授权与兼容边界
+
+- `APP_EDITION` 表示品牌与发布通道；`AUTH_MODE` 表示认证方式。当前两版均为 `license`。
+- 授权记录用 `allowedEditions` 控制 `zhang`、`commercial` 或两版通用。缺少字段的旧记录默认仅 Commercial。
+- Zhang 首次切换前必须先在授权后台创建 Zhang 或两版通用授权。
+- 旧本地密码 hash 不删除，但不再提供本地密码登录或修改入口。
+- 授权切换不得迁移、清空或重写 `seat-manager-workspaces-v1`；首次线上验收前先导出本机备份。
+- 两版 AI 均复用产品授权 token，由授权记录的 `aiEnabled`、`aiExpiresAt` 和 `aiDailyLimit` 控制；旧独立 AI 使用码仅作后端兼容。AI模型、DeepSeek Key、额度算法和确认写入边界不因版本治理改变。

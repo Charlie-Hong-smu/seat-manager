@@ -19,7 +19,7 @@ import {
 } from "./state/seatActions";
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
-import { IS_COMMERCIAL } from "./config";
+import { USES_LICENSE_AUTH } from "./config";
 import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { useSeatManagerState } from "./state/store";
@@ -642,10 +642,10 @@ export default function App() {
           onToggleAccount={() => setAccountOpen(v => !v)}
           onCloseAccount={() => setAccountOpen(false)}
           onInstallApp={handleInstallApp}
-          onChangePassword={IS_COMMERCIAL ? undefined : () => setShowChangePassword(true)}
+          onChangePassword={USES_LICENSE_AUTH ? undefined : () => setShowChangePassword(true)}
           onOpenCloudSync={() => setShowCloudSync(true)}
           onSelectStudent={student => openStudentDetail(student)}
-          onUnbindDevice={IS_COMMERCIAL ? handleUnbindDevice : undefined}
+          onUnbindDevice={USES_LICENSE_AUTH ? handleUnbindDevice : undefined}
           onWorkspaceChanged={reloadFromLegacyState}
           saveStatus={saveStatus}
           onRetrySave={() => { setSaveStatus("saving"); setSaveStatus(persistState() ? "saved" : "failed"); }}
@@ -740,7 +740,7 @@ export default function App() {
             <InstallHelpModal message={installMessage} onClose={() => setShowInstallHelp(false)} />
           )}
 
-          {!IS_COMMERCIAL && showChangePassword && (
+          {!USES_LICENSE_AUTH && showChangePassword && (
             <ChangePasswordModal
               onClose={() => setShowChangePassword(false)}
               onPasswordChanged={() => {

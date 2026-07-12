@@ -1,4 +1,3 @@
-import { IS_COMMERCIAL } from "../config";
 import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { getProductAuthToken } from "./authStorage";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
@@ -214,7 +213,7 @@ export async function generateStudentFollowup(
     response = await send(getDirectWorkerUrl(), auth.token);
   }
   if (response.status === 401) {
-    if (IS_COMMERCIAL && getProductAuthToken()) {
+    if (getProductAuthToken()) {
       throw new Error("ai_unauthorized");
     }
     clearAiApiAuth();

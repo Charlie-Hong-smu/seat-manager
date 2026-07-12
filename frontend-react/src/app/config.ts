@@ -1,16 +1,17 @@
-// 版本(edition)配置。
-// 默认是"小张专用"版,行为与现状完全一致(本地密码登录、可改密码、离线可用)。
-// 商用版在打包时设置环境变量 VITE_EDITION=commercial 来启用授权码登录。
-//
-// 本地构建 / GitHub Pages 默认不带 VITE_EDITION → 小张版,因此现有部署不受影响。
+// 产品版本与登录方式是两个独立维度。两版共用业务核心与授权码登录，
+// edition 只负责品牌、发布通道和少量集中声明的永久能力差异。
 
 const env = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env) || {};
 
 export type AppEdition = "zhang" | "commercial";
+export type AuthMode = "license";
 
 export const APP_EDITION: AppEdition = env.VITE_EDITION?.trim() === "commercial" ? "commercial" : "zhang";
 
 export const IS_COMMERCIAL = APP_EDITION === "commercial";
+
+export const AUTH_MODE: AuthMode = "license";
+export const USES_LICENSE_AUTH = AUTH_MODE === "license";
 
 /** 应用显示名称。商用版可通过 VITE_APP_NAME 覆盖,默认给一个通用名。 */
 export const APP_NAME =

@@ -173,6 +173,17 @@
             </select>
           </label>
           <label>
+            可登录版本
+            <select id="allowedEditions">
+              <option value="commercial">仅商用版</option>
+              <option value="zhang">仅小张版</option>
+              <option value="zhang,commercial">小张版和商用版</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <label>
             最多设备数
             <input id="maxDevices" type="number" min="1" max="10" value="3">
           </label>
@@ -229,6 +240,7 @@
             <tr>
               <th>代号</th>
               <th>状态</th>
+              <th>版本</th>
               <th>软件到期</th>
               <th>AI</th>
               <th>设备</th>
@@ -236,7 +248,7 @@
             </tr>
           </thead>
           <tbody id="licenseRows">
-            <tr><td colspan="6" class="muted">点击“刷新”加载授权记录。</td></tr>
+            <tr><td colspan="7" class="muted">点击“刷新”加载授权记录。</td></tr>
           </tbody>
         </table>
       </div>
@@ -253,6 +265,7 @@
       licenseId: $("licenseId"),
       productCode: $("productCode"),
       status: $("status"),
+      allowedEditions: $("allowedEditions"),
       maxDevices: $("maxDevices"),
       expiresAt: $("expiresAt"),
       aiEnabled: $("aiEnabled"),
@@ -363,6 +376,7 @@
       fields.licenseId.value = "";
       fields.productCode.value = "";
       fields.status.value = "active";
+      fields.allowedEditions.value = "commercial";
       fields.maxDevices.value = "3";
       fields.expiresAt.value = "";
       fields.aiEnabled.checked = true;
@@ -379,6 +393,9 @@
       fields.licenseId.value = license.licenseId;
       fields.productCode.value = license.productCode || "";
       fields.status.value = license.status;
+      fields.allowedEditions.value = [...(license.allowedEditions || ["commercial"])].sort().join(",") === "commercial,zhang"
+        ? "zhang,commercial"
+        : (license.allowedEditions || ["commercial"]).join(",");
       fields.maxDevices.value = license.maxDevices;
       fields.expiresAt.value = isoToDate(license.expiresAt);
       fields.aiEnabled.checked = Boolean(license.aiEnabled);
@@ -394,7 +411,7 @@
     function renderRows() {
       const tbody = $("licenseRows");
       if (!state.licenses.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="muted">暂无授权记录。</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="muted">暂无授权记录。</td></tr>';
         $("summaryText").textContent = "0 条记录";
         return;
       }
@@ -406,6 +423,7 @@
             <div class="muted mono">${escapeHtml(license.codeHash.slice(0, 12))}...</div>
           </td>
           <td><span class="pill ${license.status === "active" ? "active" : "disabled"}">${license.status}</span></td>
+          <td>${formatAllowedEditions(license.allowedEditions)}</td>
           <td>${formatDate(license.expiresAt)}</td>
           <td>
             ${license.aiEnabled ? "已开通" : "未开通"}
@@ -434,6 +452,12 @@
         '"': "&quot;",
         "'": "&#039;",
       })[char]);
+    }
+
+    function formatAllowedEditions(value) {
+      const editions = Array.isArray(value) ? value : ["commercial"];
+      if (editions.includes("zhang") && editions.includes("commercial")) return "两版通用";
+      return editions.includes("zhang") ? "小张版" : "商用版";
     }
 
     async function refreshLicenses() {
@@ -485,6 +509,7 @@
           productCode: fields.productCode.value.trim(),
           productCodeSecret: await encryptProductCode(fields.productCode.value),
           status: fields.status.value,
+          allowedEditions: fields.allowedEditions.value.split(",").filter(Boolean),
           expiresAt: dateToIsoEnd(fields.expiresAt.value),
           maxDevices: Number(fields.maxDevices.value),
           aiEnabled: fields.aiEnabled.checked,

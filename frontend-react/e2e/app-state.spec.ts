@@ -2,14 +2,22 @@ import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 
 async function login(page: import("@playwright/test").Page) {
+  await page.route("**/license/auth", async route => {
+    const body = route.request().postDataJSON() as { edition?: string };
+    expect(body.edition).toBe("zhang");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ token: "e2e-zhang-token", expiresAt: Date.now() + 60_000, licenseId: "e2e-zhang", edition: "zhang" }),
+    });
+  });
   await page.goto("./");
-  await page.getByPlaceholder("请设置密码").fill("codex-test-password");
-  await page.getByPlaceholder("再次输入密码").fill("codex-test-password");
-  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByPlaceholder("请输入授权码").fill("TEST-ZHANG-CODE");
+  await page.getByRole("button", { name: "进入" }).click();
   await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
 }
 
-test("first login and student edits survive a reload", async ({ page }) => {
+test("license login and student edits survive a reload", async ({ page }) => {
   await login(page);
 
   await page.getByRole("button", { name: /新增学生/ }).click();
@@ -30,6 +38,7 @@ test("preloads the comment workbench and keeps its full-screen background stable
   await page.getByRole("button", { name: "评语工作台" }).click();
   const dialog = page.getByRole("dialog", { name: "评语工作台" });
   await expect(dialog).toBeVisible();
+  await expect(page.getByPlaceholder("AI 授权码")).toHaveCount(0);
   const shellStyle = await dialog.evaluate((element) => ({
     animationName: getComputedStyle(element).animationName,
     opacity: getComputedStyle(element).opacity,

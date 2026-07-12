@@ -1,23 +1,20 @@
 import { useState } from "react";
 import { Lock, BookOpen } from "lucide-react";
 
-import { IS_COMMERCIAL, APP_NAME } from "../config";
-import { authorizeProduct, hasLoginPassword, setAuthenticated, setupPassword, verifyPassword } from "../state/authStorage";
+import { APP_NAME } from "../config";
+import { authorizeProduct } from "../state/authStorage";
 
 interface Props {
   onLogin: () => void;
 }
 
 export function LoginScreen({ onLogin }: Props) {
-  // 小张版:首次使用进入设置密码模式;商用版始终用授权码。
-  const [setupMode] = useState(() => !IS_COMMERCIAL && !hasLoginPassword());
   const [secret, setSecret] = useState("");
-  const [confirmSecret, setConfirmSecret] = useState("");
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleCommercialSubmit(submittedSecret: string) {
+  async function handleLicenseSubmit(submittedSecret: string) {
     try {
       await authorizeProduct(submittedSecret, remember);
       onLogin();
@@ -25,6 +22,9 @@ export function LoginScreen({ onLogin }: Props) {
       const message = error instanceof Error ? error.message : "";
       if (message === "license_unauthorized") {
         setError("授权码不正确，请检查后重试");
+        setSecret("");
+      } else if (message === "license_wrong_edition") {
+        setError("这个授权码不适用于当前版本，请联系我处理");
         setSecret("");
       } else if (message === "license_device_limit") {
         setError("这个授权码绑定设备已满，请联系我处理");
@@ -40,60 +40,27 @@ export function LoginScreen({ onLogin }: Props) {
     }
   }
 
-  async function handleLocalSubmit(submittedSecret: string, submittedConfirmSecret: string) {
-    if (setupMode && submittedSecret.length < 4) {
-      setError("密码至少需要 4 位");
-      return;
-    }
-    if (setupMode && submittedSecret !== submittedConfirmSecret) {
-      setError("两次输入的密码不一致");
-      return;
-    }
-    if (setupMode) {
-      await setupPassword(submittedSecret);
-      setAuthenticated(remember);
-      onLogin();
-      return;
-    }
-    if (await verifyPassword(submittedSecret)) {
-      setAuthenticated(remember);
-      onLogin();
-      return;
-    }
-    setError("密码不正确，请重试");
-    setSecret("");
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
     const submittedSecret = String(form.get("secret") || secret).trim();
-    const submittedConfirmSecret = String(form.get("confirmSecret") || confirmSecret);
     setSecret(submittedSecret);
     if (!submittedSecret) {
-      setError(IS_COMMERCIAL ? "请输入产品授权码" : "请输入密码");
+      setError("请输入产品授权码");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      if (IS_COMMERCIAL) {
-        await handleCommercialSubmit(submittedSecret);
-      } else {
-        await handleLocalSubmit(submittedSecret, submittedConfirmSecret);
-      }
+      await handleLicenseSubmit(submittedSecret);
     } finally {
       setLoading(false);
     }
   }
 
-  const fieldLabel = IS_COMMERCIAL ? "产品授权码" : "密码";
-  const placeholder = IS_COMMERCIAL ? "请输入授权码" : setupMode ? "请设置密码" : "请输入密码";
-  const subtitle = IS_COMMERCIAL
-    ? "请输入产品授权码后继续使用。"
-    : setupMode
-    ? "首次使用请设置本机登录密码。"
-    : "请输入密码后继续使用。";
+  const fieldLabel = "产品授权码";
+  const placeholder = "请输入授权码";
+  const subtitle = "请输入产品授权码后继续使用。";
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "linear-gradient(135deg, #f0f4ff 0%, #f5f5f7 50%, #f0f7f0 100%)" }}>
@@ -131,28 +98,11 @@ export function LoginScreen({ onLogin }: Props) {
                   value={secret}
                   onChange={e => { setSecret(e.target.value); setError(""); }}
                   placeholder={placeholder}
-                  autoComplete={IS_COMMERCIAL ? "one-time-code" : setupMode ? "new-password" : "current-password"}
+                  autoComplete="one-time-code"
                   className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:border-blue-400 focus:ring-3 focus:ring-blue-100 transition-all"
                 />
               </div>
             </label>
-            {setupMode && (
-              <label className="block">
-                <span className="text-xs text-gray-500 mb-1.5 block">确认密码</span>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-gray-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    name="confirmSecret"
-                    type="password"
-                    value={confirmSecret}
-                    onChange={e => { setConfirmSecret(e.target.value); setError(""); }}
-                    placeholder="再次输入密码"
-                    autoComplete="new-password"
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:border-blue-400 focus:ring-3 focus:ring-blue-100 transition-all"
-                  />
-                </div>
-              </label>
-            )}
           </div>
 
           <label className="flex items-center gap-2 mb-4 cursor-pointer">
@@ -162,7 +112,7 @@ export function LoginScreen({ onLogin }: Props) {
               onChange={event => setRemember(event.target.checked)}
               className="w-4 h-4 rounded accent-blue-600"
             />
-            <span className="text-sm text-gray-500">{IS_COMMERCIAL ? "记住授权 30 天" : "记住我"}</span>
+            <span className="text-sm text-gray-500">记住授权 30 天</span>
           </label>
 
           {error && (
@@ -175,11 +125,11 @@ export function LoginScreen({ onLogin }: Props) {
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors disabled:opacity-60"
             style={{ fontWeight: 600 }}
           >
-            {loading ? (IS_COMMERCIAL ? "验证中…" : "登录中…") : IS_COMMERCIAL ? "进入" : "登录"}
+            {loading ? "验证中…" : "进入"}
           </button>
 
           <p className="text-center text-xs text-gray-300 mt-5">
-            {IS_COMMERCIAL ? "授权码会绑定本机设备名额" : "密码只保存在当前浏览器本地"}
+            授权码会绑定本机设备名额
           </p>
         </div>
       </form>

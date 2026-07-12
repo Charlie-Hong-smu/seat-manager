@@ -51,7 +51,7 @@ npx wrangler secret put SECRET_NAME
 - `PRODUCT_TOKEN_SECRET`：产品授权 token 签名 secret。
 - `PRODUCT_LICENSE_ID`：单码 fallback 空间 ID，默认 `single`。
 - `PRODUCT_MAX_DEVICES`：单码 fallback 设备上限，默认 `3`。
-- `AI_ACCESS_CODE_HASH`：Zhang/旧路径独立 AI 使用码 hash。
+- `AI_ACCESS_CODE_HASH`：旧路径独立 AI 使用码 hash；两版正常流程均复用产品授权 token。
 - `TOKEN_SECRET`：独立 AI token 签名 secret。
 - `SYNC_ACCESS_CODE` / `SYNC_ACCESS_CODE_HASH`：旧同步码路径。
 - `SYNC_TOKEN_SECRET`：同步 token 签名 secret，应与其他 secret 不同。
@@ -89,6 +89,7 @@ value 的兼容形状：
 ```json
 {
   "licenseId": "teacher-a",
+  "allowedEditions": ["commercial"],
   "status": "active",
   "expiresAt": "",
   "maxDevices": 3,
@@ -100,6 +101,7 @@ value 的兼容形状：
 ```
 
 - `licenseId` 只使用字母、数字、`_` 和 `-`。
+- `allowedEditions` 只能包含 `zhang` / `commercial`；旧记录缺少该字段时默认仅允许 Commercial。
 - 空 `expiresAt` / `aiExpiresAt` 表示不单独到期。
 - `status: "disabled"` 停用授权。
 - `devices` 由产品登录和解绑接口维护。

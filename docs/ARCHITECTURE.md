@@ -6,10 +6,10 @@
 
 同一套 React 源码构建两个版本：
 
-- Zhang edition：GitHub Pages `/seat-manager/`，本地密码，离线使用。
+- Zhang edition：GitHub Pages `/seat-manager/`，产品授权码登录，作为个人与先行验证通道；已登录后保留离线应用能力。
 - Commercial edition：Cloudflare Pages 根路径，产品授权码、设备名额和 AI 权益。
 
-两个站点的浏览器存储按 origin 隔离。`VITE_EDITION` 只在构建时选择登录与产品文案，不应产生两套业务实现。
+两个站点的浏览器存储按 origin 隔离。`VITE_EDITION` 只选择品牌、base、发布通道和集中声明的能力；`AUTH_MODE` 独立表示登录方式，当前两版均为 `license`。版本治理与自然语言发布规则见 `VERSION_GOVERNANCE.md`。
 
 ## 代码边界
 
@@ -60,7 +60,7 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
                          -> Worker -> DeepSeek
 ```
 
-- Zhang edition 使用独立 AI 使用码；Commercial edition 优先复用产品授权 token。
+- Zhang 与 Commercial edition 都优先复用产品授权 token；一次授权同时控制软件登录、设备、云同步和 AI 权益。旧独立 AI 使用码只作为后端兼容路径保留，不再是两版前端的正常流程。
 - AI service 负责业务 payload、缓存和返回类型；公共认证由 `AiApiClient` 负责。
 - AI 只能生成建议。写入档案、评语素材或记录必须由老师点击确认。
 - Worker 公共路由新增或删除时，必须同时通过 `cloudflare-worker/test/routes.test.js`。

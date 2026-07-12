@@ -1,5 +1,4 @@
 import { saveStudentCommentDraft } from "./commentStorage";
-import { IS_COMMERCIAL } from "../config";
 import { getProductAuthToken } from "./authStorage";
 import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
@@ -147,7 +146,7 @@ export async function generateStudentAiComment(
   let auth = await getAiAuth(input);
   let response = await send(auth.token);
   if (response.status === 401) {
-    if (IS_COMMERCIAL && getProductAuthToken()) {
+    if (getProductAuthToken()) {
       throw new Error("ai_unauthorized");
     }
     clearAiApiAuth();

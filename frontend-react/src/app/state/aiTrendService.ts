@@ -1,4 +1,3 @@
-import { IS_COMMERCIAL } from "../config";
 import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { getProductAuthToken } from "./authStorage";
 import { buildLocalStudentTrendSummary, buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
@@ -415,7 +414,7 @@ export async function generateClassAiTrend(
   let auth = await getAiAuth(input);
   let response = await send(auth.token);
   if (response.status === 401) {
-    if (IS_COMMERCIAL && getProductAuthToken()) {
+    if (getProductAuthToken()) {
       throw new Error("ai_unauthorized");
     }
     clearAiApiAuth();
@@ -491,7 +490,7 @@ export async function generateStudentAiTrend(
   let auth = await getAiAuth(input);
   let response = await send(auth.token);
   if (response.status === 401) {
-    if (IS_COMMERCIAL && getProductAuthToken()) {
+    if (getProductAuthToken()) {
       throw new Error("ai_unauthorized");
     }
     clearAiApiAuth();

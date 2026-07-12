@@ -150,7 +150,7 @@ export function ScoresWorkspace({
 
   function getAiMappingErrorMessage(reason: string): string {
     return {
-      ai_auth_required: "请输入 AI 授权码后再识别。",
+      ai_auth_required: "产品授权已失效，请退出后重新登录。",
       ai_unauthorized: "当前授权未开通 AI 或 AI 已到期。",
       ai_auth_failed: "AI 授权暂时不可用，请稍后重试。",
       ai_file_protocol: "当前是本地文件打开方式，请通过网页地址打开后再使用 AI。",

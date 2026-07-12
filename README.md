@@ -48,10 +48,10 @@ npx wrangler deploy --dry-run
 
 ## 两个版本
 
-- Zhang edition：默认构建，GitHub Pages 路径 `/seat-manager/`，使用本地密码。
+- Zhang edition：默认构建，GitHub Pages 路径 `/seat-manager/`，使用产品授权码并作为先行验证通道。
 - Commercial edition：`pnpm build:commercial`，Cloudflare Pages 根路径 `/`，使用产品授权码和设备名额。
 
-两版共享业务实现，但登录方式和浏览器 origin 不同。不得改变 Zhang 本地密码、Commercial 产品授权、旧数据、备份或同步格式。
+两版共享业务实现与产品授权登录，但品牌、发布节奏和浏览器 origin 不同。版本规则见 `docs/VERSION_GOVERNANCE.md`；不得改变旧数据、备份或同步格式。
 
 线上入口：
 

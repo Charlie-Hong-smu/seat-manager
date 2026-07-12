@@ -1,12 +1,12 @@
-import { IS_COMMERCIAL } from "../config";
+import { APP_EDITION } from "../config";
 import { getWorkerBaseUrl } from "./workerEndpoint";
 
-// ── 小张版:本地密码登录(离线、密码只存在本机) ─────────────────────────
+// ── 旧本地密码数据（只保留兼容，不再作为活动登录入口） ───────────────
 const AUTH_PERSIST_KEY = "seat-manager-authenticated";
 const AUTH_SESSION_KEY = "seat-manager-session-authenticated";
 const CUSTOM_PASSWORD_HASH_KEY = "seat-manager-password-hash";
 
-// ── 商用版:产品授权码登录(服务端校验、按授权码绑定设备/空间) ──────────
+// ── 两版共用:产品授权码登录(服务端校验、按授权码绑定设备/空间) ───────
 const PRODUCT_AUTH_TOKEN_KEY = "seat-manager-product-auth-token";
 const PRODUCT_AUTH_EXPIRES_KEY = "seat-manager-product-auth-expires";
 const PRODUCT_AUTH_SESSION_TOKEN_KEY = "seat-manager-product-session-token";
@@ -28,7 +28,7 @@ function hasBrowserStorage(): boolean {
 // ── 统一入口:登录状态 / 退出 ─────────────────────────────────────────────
 
 export function isAuthenticated(): boolean {
-  return IS_COMMERCIAL ? Boolean(getStoredProductAuth()) : isLocallyAuthenticated();
+  return Boolean(getStoredProductAuth());
 }
 
 /** 退出登录:两种模式的凭据都清掉,保持幂等、互不影响。 */
@@ -51,7 +51,7 @@ function clearProductDeviceId(): void {
   window.localStorage.removeItem(PRODUCT_DEVICE_ID_KEY);
 }
 
-// ── 本地密码(小张版) ────────────────────────────────────────────────────
+// ── 旧本地密码 API（保留旧数据与兼容调用，不在当前 UI 暴露） ─────────
 
 async function hashPassword(password: string): Promise<string> {
   const bytes = new TextEncoder().encode(password);
@@ -59,13 +59,6 @@ async function hashPassword(password: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map(byte => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function isLocallyAuthenticated(): boolean {
-  if (!hasBrowserStorage()) {
-    return false;
-  }
-  return window.localStorage.getItem(AUTH_PERSIST_KEY) === "true" || window.sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
 }
 
 export function hasLoginPassword(): boolean {
@@ -175,9 +168,6 @@ export function getProductAuthToken(): string {
 }
 
 export async function unbindCurrentDevice(): Promise<void> {
-  if (!IS_COMMERCIAL) {
-    return;
-  }
   const token = getProductAuthToken();
   if (!token) {
     clearProductDeviceId();
@@ -209,6 +199,7 @@ export async function authorizeProduct(productCode: string, remember: boolean): 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         productCode: code,
+        edition: APP_EDITION,
         rememberDays: remember ? PRODUCT_REMEMBER_DAYS : 0,
         deviceId: getProductDeviceId(),
         deviceName: getDeviceName(),
@@ -218,6 +209,10 @@ export async function authorizeProduct(productCode: string, remember: boolean): 
     throw new Error("license_network_failed");
   }
   if (response.status === 403) {
+    const error = await response.json().catch(() => ({})) as { error?: string };
+    if (error.error === "edition_forbidden") {
+      throw new Error("license_wrong_edition");
+    }
     throw new Error("license_unauthorized");
   }
   if (response.status === 409) {

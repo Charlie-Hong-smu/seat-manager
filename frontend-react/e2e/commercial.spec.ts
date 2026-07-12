@@ -9,7 +9,10 @@ const SUCCESS = {
 };
 
 test("commercial login uses the real product-login UI with a test-only mocked response", async ({ page }) => {
-  await page.route("**/license/auth", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SUCCESS) }));
+  await page.route("**/license/auth", async route => {
+    expect((route.request().postDataJSON() as { edition?: string }).edition).toBe("commercial");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SUCCESS) });
+  });
   await page.goto("./");
   await expect(page.getByRole("heading", { name: "班级座位管理器" })).toBeVisible();
   await page.getByPlaceholder("请输入授权码").fill("TEST-ONLY-CODE");
@@ -37,4 +40,12 @@ test("commercial login reports an expired license without using a real license r
   await page.getByPlaceholder("请输入授权码").fill("EXPIRED-LICENSE");
   await page.getByRole("button", { name: "进入" }).click();
   await expect(page.getByText("授权码不正确，请检查后重试")).toBeVisible();
+});
+
+test("commercial login explains an edition-scoped rejection", async ({ page }) => {
+  await page.route("**/license/auth", route => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "edition_forbidden" }) }));
+  await page.goto("./");
+  await page.getByPlaceholder("请输入授权码").fill("ZHANG-ONLY");
+  await page.getByRole("button", { name: "进入" }).click();
+  await expect(page.getByText("这个授权码不适用于当前版本，请联系我处理")).toBeVisible();
 });

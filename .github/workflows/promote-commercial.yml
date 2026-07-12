@@ -1,0 +1,81 @@
+name: Promote verified Zhang release to Commercial
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "完整的、已在 Zhang 验证的 main commit SHA；回滚时填上一稳定 SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commercial-frontend-production
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: commercial-production
+      url: https://seat-manager-commercial.pages.dev/
+    steps:
+      - name: Checkout the approved commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Verify immutable main commit
+        shell: bash
+        run: |
+          APPROVED_SHA="${{ inputs.commit_sha }}"
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          [[ "$APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$ACTUAL_SHA" = "$APPROVED_SHA"
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "$ACTUAL_SHA" origin/main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+          package_json_file: frontend-react/package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend-react/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend-react
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate shared frontend and both editions
+        working-directory: frontend-react
+        run: pnpm run check:design && pnpm run lint && pnpm run typecheck && pnpm run test:coverage && pnpm run test:e2e:all
+
+      - name: Build Commercial from the approved commit
+        working-directory: frontend-react
+        run: VITE_EDITION=commercial VITE_BASE=/ VITE_WORKER_URL="${{ vars.COMMERCIAL_WORKER_URL }}" pnpm run build
+
+      - name: Enforce Commercial bundle guardrails
+        working-directory: frontend-react
+        run: pnpm run check:size && pnpm run check:production
+
+      - name: Deploy Commercial frontend
+        working-directory: frontend-react
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deploy dist --project-name seat-manager-commercial --branch main --commit-hash="${{ inputs.commit_sha }}" --commit-dirty=true
+
+      - name: Record promoted release
+        run: |
+          echo "## Commercial release" >> "$GITHUB_STEP_SUMMARY"
+          echo "Promoted Zhang commit: \`${{ inputs.commit_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Rollback: rerun this workflow with the previous stable 40-character SHA." >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,5 @@
-import { IS_COMMERCIAL } from "../config";
 import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
+import { getProductAuthToken } from "./authStorage";
 import type { RosterMapping } from "./rosterImport";
 import { SUBJECT_ORDER, type ScoreMapping } from "./scoreImport";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
@@ -115,7 +115,7 @@ export async function suggestScoreMappingWithAi(
     response = await send(getDirectWorkerUrl());
   }
   if (response.status === 401) {
-    if (!IS_COMMERCIAL) {
+    if (!getProductAuthToken()) {
       clearAiApiAuth();
     }
     throw new Error("ai_unauthorized");
@@ -177,7 +177,7 @@ export async function suggestRosterMappingWithAi(
     response = await send(getDirectWorkerUrl());
   }
   if (response.status === 401) {
-    if (!IS_COMMERCIAL) {
+    if (!getProductAuthToken()) {
       clearAiApiAuth();
     }
     throw new Error("ai_unauthorized");

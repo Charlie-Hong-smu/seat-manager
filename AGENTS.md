@@ -1,6 +1,6 @@
 # Agent operating guide
 
-Read this file before changing the repository. The durable architecture and deployment details live in `docs/ARCHITECTURE.md` and `docs/OPERATIONS.md`.
+Read this file before changing the repository. The durable architecture and deployment details live in `docs/ARCHITECTURE.md` and `docs/OPERATIONS.md`. Version classification, natural-language release intent, and edition boundaries are governed by `docs/VERSION_GOVERNANCE.md`; read it before planning any feature or release.
 
 Before changing any visible UI, layout, interaction, or animation, read `docs/DESIGN_SYSTEM.md`. It is the visual source of truth for both editions. New conversations must not infer a new style from one isolated screen or invent a parallel component language.
 
@@ -17,7 +17,8 @@ Before changing any visible UI, layout, interaction, or animation, read `docs/DE
 ## Non-negotiable compatibility
 
 - Preserve the `seat-manager-workspaces-v1` workspace book, the legacy `homeroom-seat-manager-v1` import path, backup JSON, cloud-sync payloads, Worker routes, KV keys, and secret names.
-- The default Zhang edition keeps local-password login. The commercial edition keeps product-license login and device limits.
+- Zhang and Commercial both use product-license login and device limits. Existing local-password data remains untouched for compatibility but is not an active login path.
+- Missing feature classification defaults to Zhang early access. Commercial frontend deployment requires explicit promotion of an already verified Zhang commit.
 - AI may prepare suggestions, but it must never write teacher data without an explicit teacher confirmation.
 - Manual cloud backup/restore remains manual. Do not add realtime sync or automatic conflict merging.
 - Do not commit secrets, `.dev.vars`, local tool state, caches, or `promo-video/`.
