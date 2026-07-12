@@ -11,10 +11,11 @@ const files = {
   primitives: resolve(frontendRoot, "src/app/components/ui.tsx"),
   studentPicker: resolve(frontendRoot, "src/app/components/StudentPicker.tsx"),
   selectionMotion: resolve(frontendRoot, "src/app/components/selectionMotion.ts"),
+  commentEditor: resolve(frontendRoot, "src/app/components/commentEditor.ts"),
   theme: resolve(frontendRoot, "src/styles/theme.css"),
 };
 
-const [agents, design, primitives, studentPicker, selectionMotion, theme] = await Promise.all(
+const [agents, design, primitives, studentPicker, selectionMotion, commentEditor, theme] = await Promise.all(
   Object.values(files).map(path => readFile(path, "utf8")),
 );
 
@@ -58,6 +59,8 @@ for (const path of await collectSourceFiles(resolve(frontendRoot, "src/app"))) {
 
 requireText(studentPicker, "export function StudentPicker", "components/StudentPicker.tsx");
 requireText(selectionMotion, "export function animateSelectionTransfer", "components/selectionMotion.ts");
+requireText(commentEditor, "export function buildStudentCommentDraft", "components/commentEditor.ts");
+requireText(design, "`commentEditor.ts`", "docs/DESIGN_SYSTEM.md");
 
 for (const token of [
   "--app-bg",

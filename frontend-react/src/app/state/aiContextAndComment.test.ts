@@ -39,7 +39,7 @@ describe("AI student context and comment cache", () => {
   it("normalizes, saves and reuses the newest comment draft", () => {
     const student = createTestStudent();
     const normalized = normalizeStudentCommentDraft({ text: " 评语 ", style: "invalid", targetWordCount: 999 });
-    expect(normalized).toMatchObject({ generatedComment: "评语", style: "warm", targetWordCount: 300 });
+    expect(normalized).toMatchObject({ generatedComment: "评语", style: "warm", targetWordCount: 999 });
     const saved = saveStudentCommentDraft(student.id, {
       generatedComment: "很好",
       teacherNote: "继续努力",

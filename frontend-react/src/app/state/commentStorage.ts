@@ -28,7 +28,7 @@ function normalizeStyle(value: unknown): CommentStyle {
 
 function normalizeTargetWordCount(value: unknown): number {
   const parsed = Number(value);
-  return Math.min(300, Math.max(50, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_TARGET_WORD_COUNT)));
+  return Math.min(999, Math.max(10, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_TARGET_WORD_COUNT)));
 }
 
 export function normalizeStudentCommentDraft(value: unknown): StudentCommentDraft | null {

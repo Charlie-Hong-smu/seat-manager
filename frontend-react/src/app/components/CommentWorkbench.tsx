@@ -29,7 +29,16 @@ import {
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
-import { SegmentedControl } from "./ui";
+import { AiGenerationPanel, SegmentedControl } from "./ui";
+import {
+  addCommentCustomOption,
+  COMMENT_LENGTH_MODES,
+  COMMENT_STYLES,
+  makeCommentItemId,
+  removeCommentCustomOption,
+  resolveCommentWordCount,
+  toggleCommentCriterion,
+} from "./commentEditor";
 import {
   emptyCommentBatchState,
   loadCommentBatchState,
@@ -73,18 +82,8 @@ interface Props {
   onSelectStudent: (student: AppStudent) => void;
 }
 
-const LENGTH_MODES = [
-  { value: "short",    label: "80～100" },
-  { value: "standard", label: "100～150" },
-  { value: "long",     label: "150～200" },
-  { value: "custom",   label: "自选" },
-];
-
-const STYLES = [
-  { value: "warm",   label: "温和鼓励" },
-  { value: "formal", label: "客观正式" },
-  { value: "brief",  label: "简洁家长会" },
-];
+const LENGTH_MODES = COMMENT_LENGTH_MODES;
+const STYLES = COMMENT_STYLES;
 
 function getBestSubject(scores: Record<string, number>): string {
   return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
@@ -108,16 +107,6 @@ function downloadTextFile(filename: string, content: string, type: string): void
   link.click();
   link.remove();
   URL.revokeObjectURL(link.href);
-}
-
-function makeSafeId(value: string, fallback = "item"): string {
-  const safe = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_\u4e00-\u9fa5]+/gi, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 32);
-  return safe || `${fallback}_${Date.now().toString(36)}`;
 }
 
 export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) {
@@ -150,6 +139,8 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const [singleGenerationPhase, setSingleGenerationPhase] = useState<SingleGenerationPhase>("idle");
   const [displayedCommentText, setDisplayedCommentText] = useState(() => comments[0]?.text || "");
   const [customWordCount, setCustomWordCount] = useState(120);
+  const [customMaterialCriterionId, setCustomMaterialCriterionId] = useState("");
+  const [customMaterialLabel, setCustomMaterialLabel] = useState("");
   const [showExportModal, setShowExportModal] = useState(false);
   const [showFollowupPanel, setShowFollowupPanel] = useState(false);
   const [exportSelectedIds, setExportSelectedIds] = useState<Set<StudentId>>(() => new Set());
@@ -321,7 +312,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       teacherNote: draftTeacherNote,
       style: comment.style as "warm" | "formal" | "brief",
       lengthMode: comment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: comment.lengthMode === "custom" ? customWordCount : comment.lengthMode === "long" ? 175 : comment.lengthMode === "standard" ? 125 : 90,
+      targetWordCount: resolveCommentWordCount(comment.lengthMode as "short" | "standard" | "long" | "custom", customWordCount),
       updatedAt: new Date().toISOString(),
       criteriaSummary: summary.criteriaSummary,
       customOptions: summary.customOptions,
@@ -426,7 +417,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       teacherNote,
       style: selectedComment.style as "warm" | "formal" | "brief",
       lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: selectedComment.lengthMode === "custom" ? customWordCount : selectedComment.lengthMode === "long" ? 175 : selectedComment.lengthMode === "standard" ? 125 : 90,
+      targetWordCount: resolveCommentWordCount(selectedComment.lengthMode as "short" | "standard" | "long" | "custom", customWordCount),
       updatedAt: new Date().toISOString(),
     });
     updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
@@ -507,23 +498,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   }
 
   function toggleCriterionOption(criterion: CommentCriterion, optionId: string) {
-    updateSelectedProfile(profile => {
-      const current = new Set(profile.criteriaValues[criterion.id] || []);
-      if (current.has(optionId)) {
-        current.delete(optionId);
-      } else {
-        if (criterion.type === "single") {
-          current.clear();
-        }
-        current.add(optionId);
-      }
-      return {
-        ...profile,
-        criteriaValues: { ...profile.criteriaValues, [criterion.id]: [...current] },
-        status: profile.generatedComment ? "edited" : "draft",
-        updatedAt: new Date().toISOString(),
-      };
-    });
+    updateSelectedProfile(profile => toggleCommentCriterion(profile, criterion, optionId));
   }
 
   function clearCriterion(criterionId: string) {
@@ -537,42 +512,20 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   }
 
   function addStudentCustomOption(criterion: CommentCriterion) {
-    const label = window.prompt(`为「${criterion.label}」添加自定义素材`);
-    if (!label?.trim()) return;
-    const id = makeSafeId(label, "custom");
-    const item = {
-      id,
-      label: label.trim(),
-      linkedTagId: criterion.syncToTags && label.trim().length <= 6 ? `comment_${criterion.id}_custom_${id}` : "",
-      builtIn: false,
-    };
-    updateSelectedProfile(profile => ({
-      ...profile,
-      customOptions: {
-        ...profile.customOptions,
-        [criterion.id]: [...(profile.customOptions[criterion.id] || []), item],
-      },
-      status: profile.generatedComment ? "edited" : "draft",
-      updatedAt: new Date().toISOString(),
-    }));
+    if (!customMaterialLabel.trim()) return;
+    updateSelectedProfile(profile => addCommentCustomOption(profile, criterion, customMaterialLabel));
+    setCustomMaterialLabel("");
+    setCustomMaterialCriterionId("");
   }
 
   function removeStudentCustomOption(criterionId: string, optionId: string) {
-    updateSelectedProfile(profile => ({
-      ...profile,
-      customOptions: {
-        ...profile.customOptions,
-        [criterionId]: (profile.customOptions[criterionId] || []).filter(option => option.id !== optionId),
-      },
-      status: profile.generatedComment ? "edited" : "draft",
-      updatedAt: new Date().toISOString(),
-    }));
+    updateSelectedProfile(profile => removeCommentCustomOption(profile, criterionId, optionId));
   }
 
   function addCriterion() {
     const label = window.prompt("请输入新标准名称");
     if (!label?.trim()) return;
-    const id = makeSafeId(label, "criterion");
+    const id = makeCommentItemId(label, "criterion");
     persistRubric({
       ...rubric,
       criteria: [
@@ -1034,8 +987,9 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                                   return <button key={option.id} type="button" aria-pressed={active} onClick={() => toggleCriterionOption(criterion, option.id)} className={`h-9 rounded-full border px-3.5 text-sm font-semibold transition-[background-color,border-color,color,transform] active:scale-95 ${active ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50"}`}>{option.label}</button>;
                                 })}
                                 {customOptions.map(option => <button key={option.id} type="button" onClick={() => removeStudentCustomOption(criterion.id, option.id)} title="点击移除自定义素材" className="h-9 rounded-full border border-emerald-100 bg-emerald-50 px-3.5 text-sm font-semibold text-emerald-700">{option.label}</button>)}
-                                <button type="button" onClick={() => addStudentCustomOption(criterion)} className="h-9 rounded-full border border-dashed border-gray-300 bg-white px-3.5 text-sm font-semibold text-gray-400 hover:bg-gray-50"><Plus className="mr-1 inline h-3.5 w-3.5" />自定义</button>
+                                <button type="button" onClick={() => { setCustomMaterialCriterionId(criterion.id); setCustomMaterialLabel(""); }} className="h-9 rounded-full border border-dashed border-gray-300 bg-white px-3.5 text-sm font-semibold text-gray-400 hover:bg-gray-50"><Plus className="mr-1 inline h-3.5 w-3.5" />自定义</button>
                               </div>
+                              {customMaterialCriterionId === criterion.id && <div className="mt-2 flex gap-2"><input autoFocus value={customMaterialLabel} onChange={event => setCustomMaterialLabel(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addStudentCustomOption(criterion); if (event.key === "Escape") setCustomMaterialCriterionId(""); }} maxLength={30} placeholder={`补充${criterion.label}素材`} className="h-9 min-w-0 flex-1 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-300"/><button type="button" onClick={() => addStudentCustomOption(criterion)} className="h-9 rounded-[var(--app-radius-sm)] bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">添加</button></div>}
                               {criterionSelectedCount > 0 && <div className="mt-2 flex justify-end"><button type="button" onClick={() => clearCriterion(criterion.id)} className="text-xs text-gray-400 hover:text-red-600">清空本组</button></div>}
                             </div>
                           </div>
@@ -1122,12 +1076,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                   className={`h-full min-h-[160px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
                 />
                 {singleGenerationPhase === "loading" && (
-                  <div className="absolute inset-0 flex flex-col justify-center gap-3 rounded-[var(--app-radius-sm)] border border-violet-100 bg-gradient-to-br from-violet-50/95 via-white to-blue-50/90 px-4" role="status" aria-label="AI 正在生成评语">
-                    {[82, 94, 71, 88, 58].map((width, index) => (
-                      <span key={width} className="ai-siri-loading-bar block h-2.5 rounded-full" style={{ width: `${width}%`, animationDelay: `${index * 90}ms` }} />
-                    ))}
-                    <span className="mt-1 text-xs font-semibold text-violet-600">{batchRunning ? "批量生成中，正在组织评语..." : "正在组织语言与评语结构..."}</span>
-                  </div>
+                  <div className="absolute inset-0"><AiGenerationPanel compact title={batchRunning ? "正在批量生成评语" : "正在生成评语"} steps={["整理学生素材", "组织评语结构", "生成评语草稿"]} /></div>
                 )}
                 {singleGenerationPhase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
               </div>

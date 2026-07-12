@@ -320,12 +320,24 @@ export function ToolDrawer({
   title,
   onClose,
   returnFocusId,
+  widthClassName = "w-[340px]",
+  bodyClassName = "p-4",
+  positionClassName = "absolute",
+  backdropLayerClassName = "z-20",
+  panelLayerClassName = "z-30",
+  footer,
   children,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   returnFocusId?: string;
+  widthClassName?: string;
+  bodyClassName?: string;
+  positionClassName?: "absolute" | "fixed";
+  backdropLayerClassName?: string;
+  panelLayerClassName?: string;
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -352,8 +364,8 @@ export function ToolDrawer({
   if (!open) return null;
   return (
     <>
-      <button type="button" aria-label="关闭工具面板" className="soft-backdrop-enter absolute inset-0 z-20 bg-gray-950/10 backdrop-blur-[1px]" onClick={onClose} />
-      <aside className="tool-drawer-enter absolute inset-y-0 right-0 z-30 flex w-[340px] max-w-[calc(100%-16px)] flex-col border-l border-[var(--app-border)] bg-white shadow-[var(--app-shadow-float)]" aria-label={title}>
+      <button type="button" aria-label="关闭工具面板" className={`soft-backdrop-enter inset-0 bg-gray-950/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
+      <aside className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-16px)] flex-col border-l border-[var(--app-border)] bg-white shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--app-border)] px-4">
           <h2 className="text-base font-bold text-[var(--app-text)]">{title}</h2>
           <button
@@ -367,7 +379,8 @@ export function ToolDrawer({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+        <div className={`min-h-0 flex-1 overflow-y-auto ${bodyClassName}`}>{children}</div>
+        {footer && <div className="shrink-0 border-t border-[var(--app-border)] bg-white p-4">{footer}</div>}
       </aside>
     </>
   );

@@ -27,6 +27,7 @@
 | 姓名跨区域移动 | `animateSelectionTransfer` | 只做淡入、没有目标位置与列表让位的假飞入 |
 | 业务确认、提示与破坏性操作 | `ConfirmDialog` / `useAppDialog` | `window.confirm`、`window.alert`、浏览器原生弹窗或页面内临时拼接的确认条 |
 | AI 生成中状态 | `AiGenerationPanel` | 只放几条模糊横线、无阶段说明，或各业务重新发明一套 loading |
+| AI 评语参数与素材操作 | `commentEditor.ts` 共享规则 | 快捷抽屉和评语工作台分别计算字数、选择素材或拼装请求 |
 
 共享基础组件位于 `frontend-react/src/app/components/ui.tsx`。业务专用但可复用的组件位于同一 `components/` 目录，例如 `StudentPicker.tsx`。共享动效与令牌位于 `frontend-react/src/styles/theme.css`。
 
@@ -114,6 +115,7 @@ Tailwind 的 `gray`、`blue`、`violet`、`red` 可以用于同色阶状态，�
 - `prefers-reduced-motion` 下停止扫描、旋转和脉冲等循环动画，但保留当前阶段文字、结果状态和所有操作能力。
 - AI 输出必须是教师可直接阅读的自然中文。内部 JSON 字段名、英文指标名和模型调试信息不得进入结果卡片；生成端约束与展示端规范化必须同时防护旧缓存和异常响应。
 - AI 请求若使用“学生A”等脱敏占位身份，展示层必须根据本地稳定关联（优先学生 ID）还原为当前真实姓名，旧缓存读取也必须经过同一还原；不得把占位身份直接显示给教师。还原只发生在本地展示层，不以改善文案为由把真实姓名重新加入原本已脱敏的请求。
+- 同一 AI 能力存在快捷入口和完整工作台时，可以采用不同信息密度，但必须共享参数规则、素材操作、缓存、生成状态机和结果保存逻辑；不得只追求视觉相似而保留两套业务实现。
 
 ## 6. UI 开发流程
 

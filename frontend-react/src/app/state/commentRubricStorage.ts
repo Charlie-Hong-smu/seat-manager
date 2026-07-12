@@ -220,7 +220,7 @@ export function saveCommentRubric(rubric: CommentRubric): CommentRubric {
 
 function normalizeTargetWordCount(value: unknown): number {
   const parsed = Number(value);
-  return Math.min(300, Math.max(50, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_TARGET_WORD_COUNT)));
+  return Math.min(999, Math.max(10, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_TARGET_WORD_COUNT)));
 }
 
 function normalizeProfile(value: unknown): StudentCommentProfile {
@@ -267,7 +267,17 @@ export function readStudentCommentProfile(student: AppStudent): StudentCommentPr
   const aiComments = isRecord(student.aiComments) ? student.aiComments : {};
   const draft = isRecord(aiComments.draft) ? aiComments.draft : {};
   const rawProfile = isRecord(aiComments.profile) ? aiComments.profile : {};
-  return normalizeProfile({ ...draft, ...rawProfile });
+  const fromStudent = normalizeProfile({ ...draft, ...rawProfile });
+  const root = readLegacyRootState();
+  const persistedStudent = isRecord(root) && Array.isArray(root.students)
+    ? root.students.find(item => isRecord(item) && String(item.id || "") === student.id)
+    : null;
+  if (!isRecord(persistedStudent)) return fromStudent;
+  const persistedComments = isRecord(persistedStudent.aiComments) ? persistedStudent.aiComments : {};
+  const persistedDraft = isRecord(persistedComments.draft) ? persistedComments.draft : {};
+  const persistedProfile = isRecord(persistedComments.profile) ? persistedComments.profile : {};
+  const fromStorage = normalizeProfile({ ...persistedDraft, ...persistedProfile });
+  return Date.parse(fromStorage.updatedAt || "") > Date.parse(fromStudent.updatedAt || "") ? fromStorage : fromStudent;
 }
 
 export function summarizeCommentProfile(rubric: CommentRubric, profile: StudentCommentProfile): {
