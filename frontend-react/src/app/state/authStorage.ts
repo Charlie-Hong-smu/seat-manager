@@ -31,6 +31,20 @@ export function isAuthenticated(): boolean {
   return Boolean(getStoredProductAuth());
 }
 
+export function enterLocalPreviewSession(): boolean {
+  if (!import.meta.env.DEV || !hasBrowserStorage()) {
+    return false;
+  }
+  const hostname = window.location.hostname;
+  if (hostname !== "127.0.0.1" && hostname !== "localhost") {
+    return false;
+  }
+  clearAuth();
+  window.sessionStorage.setItem(PRODUCT_AUTH_SESSION_TOKEN_KEY, "local-preview-session");
+  window.sessionStorage.setItem(PRODUCT_AUTH_SESSION_EXPIRES_KEY, String(Date.now() + 12 * 60 * 60 * 1000));
+  return true;
+}
+
 /** 退出登录:两种模式的凭据都清掉,保持幂等、互不影响。 */
 export function clearAuth(): void {
   if (!hasBrowserStorage()) {

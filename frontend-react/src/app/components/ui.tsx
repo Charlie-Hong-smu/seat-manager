@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Search, Sparkles, X } from "lucide-react";
+import { createPortal } from "react-dom";
 
 /**
  * 统一按钮组件
@@ -268,6 +269,45 @@ export function SegmentedControl<T extends string>({
   );
 }
 
+export function UnderlineTabs<T extends string>({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  className = "",
+}: {
+  value: T;
+  options: Array<{ value: T; label: string; tone?: "default" | "ai" }>;
+  onChange: (value: T) => void;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+  const activeOption = options.find(option => option.value === value);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const selectedButton = buttonRefs.current.get(value);
+    if (!root || !selectedButton) return;
+    const updateIndicator = () => setIndicator({ left: selectedButton.offsetLeft + 12, width: Math.max(0, selectedButton.offsetWidth - 24), ready: true });
+    updateIndicator();
+    const observer = new ResizeObserver(updateIndicator);
+    observer.observe(root);
+    buttonRefs.current.forEach(button => observer.observe(button));
+    return () => observer.disconnect();
+  }, [options.length, value]);
+
+  return <div ref={rootRef} role="tablist" aria-label={ariaLabel} className={`relative flex items-center gap-1 border-b border-gray-100 ${className}`}>
+    <span aria-hidden="true" className={`pointer-events-none absolute -bottom-px h-0.5 rounded-full transition-[left,width,background-color,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${activeOption?.tone === "ai" ? "bg-violet-600" : "bg-blue-600"}`} style={{ left: indicator.left, width: indicator.width, opacity: indicator.ready ? 1 : 0 }} />
+    {options.map(option => {
+      const selected = option.value === value;
+      return <button key={option.value} ref={node => { if (node) buttonRefs.current.set(option.value, node); else buttonRefs.current.delete(option.value); }} type="button" role="tab" aria-selected={selected} onClick={() => onChange(option.value)} className={`relative px-4 py-2.5 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/30 ${selected ? option.tone === "ai" ? "text-violet-700" : "text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>{option.label}</button>;
+    })}
+  </div>;
+}
+
 /**
  * 统一下拉层动效。组件始终保留在 DOM 中，因此打开和关闭都能完整播放动画。
  * 定位、尺寸和表面样式由调用方通过 className 提供。
@@ -316,6 +356,67 @@ export function AnimatedPopover({
       {children}
     </div>
   );
+}
+
+export function SelectMenu({ value, options, onChange, ariaLabel, placeholder = "请选择", className = "", searchable }: {
+  value: string | number;
+  options: Array<{ value: string | number; label: string; disabled?: boolean }>;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  placeholder?: string;
+  className?: string;
+  searchable?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0, width: 0, maxHeight: 280 });
+  const selected = options.find(option => String(option.value) === String(value));
+  const showSearch = searchable ?? options.length > 8;
+  const filtered = options.filter(option => !search.trim() || option.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const roomBelow = window.innerHeight - rect.bottom - 12;
+      const maxHeight = Math.max(160, Math.min(320, Math.max(roomBelow, rect.top - 12)));
+      const opensUp = roomBelow < 220 && rect.top > roomBelow;
+      setPosition({ left: rect.left, top: opensUp ? Math.max(8, rect.top - maxHeight - 8) : rect.bottom + 8, width: rect.width, maxHeight });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => { window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
+    };
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", key); };
+  }, [open]);
+
+  return <>
+    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-left text-sm text-[var(--app-text)] transition-colors hover:border-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 ${className}`}>
+      <span className={`min-w-0 flex-1 truncate ${selected ? "" : "text-[var(--app-text-muted)]"}`}>{selected?.label || placeholder}</span>
+      <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+    </button>
+    {open && createPortal(<div ref={panelRef} className="app-popover-enter fixed z-[120] overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-2 shadow-[var(--app-shadow-float)]" style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}>
+      {showSearch && <div className="relative mb-2"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索选项" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-[var(--app-surface-muted)] pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:bg-white"/></div>}
+      <div role="listbox" aria-label={ariaLabel} className="max-h-[min(16rem,var(--select-menu-max-height,16rem))] space-y-1 overflow-y-auto">{filtered.map(option => {
+        const active = String(option.value) === String(value);
+        return <button key={String(option.value)} type="button" role="option" aria-selected={active} disabled={option.disabled} onClick={() => { onChange(String(option.value)); setOpen(false); setSearch(""); triggerRef.current?.focus(); }} className={`flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-sm transition-colors disabled:opacity-40 ${active ? "bg-blue-50 font-bold text-blue-700" : "text-gray-700 hover:bg-[var(--app-surface-muted)]"}`}><span className="min-w-0 flex-1 truncate text-left">{option.label}</span>{active && <Check className="h-4 w-4 shrink-0"/>}</button>;
+      })}{!filtered.length && <div className="py-6 text-center text-sm text-[var(--app-text-muted)]">没有匹配选项</div>}</div>
+    </div>, document.body)}
+  </>;
 }
 
 export function ToolDrawer({

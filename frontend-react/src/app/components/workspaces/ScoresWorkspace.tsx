@@ -16,7 +16,7 @@ import type { AiClassTrendResult } from "../../state/aiTrendService";
 import type { AppStudent, GradeExam, SavedGradeExamRecord, ScoreImportDraft } from "../../state/types";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Button, ConfirmDialog, FileDropZone } from "../ui";
+import { AiGenerationPanel, Button, ConfirmDialog, FileDropZone, SelectMenu } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function ScoresWorkspace({
@@ -520,25 +520,12 @@ export function ScoresWorkspace({
 
                   <div className="space-y-3">
                     <label className="block text-xs text-gray-500">姓名列</label>
-                    <select
-                      value={manualMapping.nameCol}
-                      onChange={event => updateManualMapping(mapping => ({ ...mapping, nameCol: Number(event.target.value) }))}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300"
-                    >
-                      {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
+                    <SelectMenu value={manualMapping.nameCol} onChange={value => updateManualMapping(mapping => ({ ...mapping, nameCol: Number(value) }))} ariaLabel="姓名列" className="w-full" options={columnOptions} />
                   </div>
 
                   <div className="space-y-3">
                     <label className="block text-xs text-gray-500">学号列（可选）</label>
-                    <select
-                      value={manualMapping.studentNoCol}
-                      onChange={event => updateManualMapping(mapping => ({ ...mapping, studentNoCol: Number(event.target.value) }))}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300"
-                    >
-                      <option value={-1}>未识别学号</option>
-                      {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
+                    <SelectMenu value={manualMapping.studentNoCol} onChange={value => updateManualMapping(mapping => ({ ...mapping, studentNoCol: Number(value) }))} ariaLabel="学号列" className="w-full" options={[{ value: -1, label: "未识别学号" }, ...columnOptions]} />
                   </div>
 
                   <div className="space-y-2">
@@ -559,27 +546,26 @@ export function ScoresWorkspace({
                     {manualMapping.subjectMappings.map((item, index) => (
                       <div key={`${item.subject}-${index}`} className="space-y-2 rounded-2xl border border-gray-100 bg-gray-50 p-3">
                         <div className="grid grid-cols-[1fr_1.35fr_auto] gap-2">
-                          <select
+                          <SelectMenu
                             value={item.subject}
-                            onChange={event => updateManualMapping(mapping => ({
+                            onChange={value => updateManualMapping(mapping => ({
                               ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, subject: event.target.value } : subjectItem),
+                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, subject: value } : subjectItem),
                             }))}
-                            className="min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-300"
-                          >
-                            {SUBJECT_ORDER.map(subject => <option key={subject} value={subject}>{subject}</option>)}
-                            {!SUBJECT_ORDER.includes(item.subject) && <option value={item.subject}>{item.subject}</option>}
-                          </select>
-                          <select
+                            ariaLabel="科目"
+                            className="w-full"
+                            options={[...SUBJECT_ORDER.map(subject => ({ value: subject, label: subject })), ...(!SUBJECT_ORDER.includes(item.subject) ? [{ value: item.subject, label: item.subject }] : [])]}
+                          />
+                          <SelectMenu
                             value={item.scoreCol}
-                            onChange={event => updateManualMapping(mapping => ({
+                            onChange={value => updateManualMapping(mapping => ({
                               ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, scoreCol: Number(event.target.value) } : subjectItem),
+                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, scoreCol: Number(value) } : subjectItem),
                             }))}
-                            className="min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-300"
-                          >
-                            {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                          </select>
+                            ariaLabel="分数列"
+                            className="w-full"
+                            options={columnOptions}
+                          />
                           <button
                             type="button"
                             onClick={() => updateManualMapping(mapping => ({
@@ -593,28 +579,26 @@ export function ScoresWorkspace({
                           </button>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                          <select
+                          <SelectMenu
                             value={item.rankClassCol}
-                            onChange={event => updateManualMapping(mapping => ({
+                            onChange={value => updateManualMapping(mapping => ({
                               ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, rankClassCol: Number(event.target.value) } : subjectItem),
+                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, rankClassCol: Number(value) } : subjectItem),
                             }))}
-                            className="min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-300"
-                          >
-                            <option value={-1}>班排列（可选）</option>
-                            {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                          </select>
-                          <select
+                            ariaLabel="班级排名列"
+                            className="w-full"
+                            options={[{ value: -1, label: "班排列（可选）" }, ...columnOptions]}
+                          />
+                          <SelectMenu
                             value={item.rankSchoolCol}
-                            onChange={event => updateManualMapping(mapping => ({
+                            onChange={value => updateManualMapping(mapping => ({
                               ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, rankSchoolCol: Number(event.target.value) } : subjectItem),
+                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, rankSchoolCol: Number(value) } : subjectItem),
                             }))}
-                            className="min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-300"
-                          >
-                            <option value={-1}>校排列（可选）</option>
-                            {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                          </select>
+                            ariaLabel="学校排名列"
+                            className="w-full"
+                            options={[{ value: -1, label: "校排列（可选）" }, ...columnOptions]}
+                          />
                         </div>
                       </div>
                     ))}
@@ -622,40 +606,37 @@ export function ScoresWorkspace({
 
                   <div className="grid grid-cols-1 gap-2">
                     <label className="block text-xs text-gray-500">总分与总排名</label>
-                    <select
+                    <SelectMenu
                       value={manualMapping.totalMapping.scoreCol}
-                      onChange={event => updateManualMapping(mapping => ({
+                      onChange={value => updateManualMapping(mapping => ({
                         ...mapping,
-                        totalMapping: { ...mapping.totalMapping, scoreCol: Number(event.target.value) },
+                        totalMapping: { ...mapping.totalMapping, scoreCol: Number(value) },
                       }))}
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300"
-                    >
-                      <option value={-1}>总分列（可选）</option>
-                      {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
+                      ariaLabel="总分列"
+                      className="w-full"
+                      options={[{ value: -1, label: "总分列（可选）" }, ...columnOptions]}
+                    />
                     <div className="grid grid-cols-2 gap-2">
-                      <select
+                      <SelectMenu
                         value={manualMapping.totalMapping.rankClassCol}
-                        onChange={event => updateManualMapping(mapping => ({
+                        onChange={value => updateManualMapping(mapping => ({
                           ...mapping,
-                          totalMapping: { ...mapping.totalMapping, rankClassCol: Number(event.target.value) },
+                          totalMapping: { ...mapping.totalMapping, rankClassCol: Number(value) },
                         }))}
-                        className="min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300"
-                      >
-                        <option value={-1}>总班排（可选）</option>
-                        {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                      <select
+                        ariaLabel="总班级排名列"
+                        className="w-full"
+                        options={[{ value: -1, label: "总班排（可选）" }, ...columnOptions]}
+                      />
+                      <SelectMenu
                         value={manualMapping.totalMapping.rankSchoolCol}
-                        onChange={event => updateManualMapping(mapping => ({
+                        onChange={value => updateManualMapping(mapping => ({
                           ...mapping,
-                          totalMapping: { ...mapping.totalMapping, rankSchoolCol: Number(event.target.value) },
+                          totalMapping: { ...mapping.totalMapping, rankSchoolCol: Number(value) },
                         }))}
-                        className="min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300"
-                      >
-                        <option value={-1}>总校排（可选）</option>
-                        {columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
+                        ariaLabel="总学校排名列"
+                        className="w-full"
+                        options={[{ value: -1, label: "总校排（可选）" }, ...columnOptions]}
+                      />
                     </div>
                   </div>
                 </div>

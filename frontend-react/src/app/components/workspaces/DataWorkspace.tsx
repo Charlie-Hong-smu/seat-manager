@@ -16,7 +16,7 @@ import { readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
 import type { AppStudent, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
-import { Button, FileDropZone, useAppDialog } from "../ui";
+import { Button, FileDropZone, SelectMenu, useAppDialog } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function DataWorkspace({
@@ -353,15 +353,7 @@ export function DataWorkspace({
                   ].map(item => (
                     <div key={item.key} className="space-y-2">
                       <label className="block text-xs text-gray-500">{item.label}</label>
-                      <select
-                        value={rosterMapping[item.key as keyof RosterMapping] as number}
-                        onChange={event => updateRosterMapping(mapping => ({ ...mapping, [item.key]: Number(event.target.value) }))}
-                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300"
-                      >
-                        {!item.required && <option value={-1}>不导入</option>}
-                        {item.required && <option value={-1}>请选择</option>}
-                        {rosterColumnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
+                      <SelectMenu value={rosterMapping[item.key as keyof RosterMapping] as number} onChange={value => updateRosterMapping(mapping => ({ ...mapping, [item.key]: Number(value) }))} ariaLabel={item.label} className="w-full" options={[{ value: -1, label: item.required ? "请选择" : "不导入" }, ...rosterColumnOptions]} />
                     </div>
                   ))}
 

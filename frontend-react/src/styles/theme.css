@@ -152,6 +152,18 @@
   }
 }
 
+@keyframes student-tab-content-enter {
+  from {
+    opacity: 0;
+    transform: translateX(var(--student-tab-enter-x, 14px));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @keyframes grade-toolbar-copy-enter {
   from {
     opacity: 0;
@@ -366,6 +378,18 @@
 
 .view-switch-enter {
   animation: view-switch-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.student-tab-content-enter {
+  animation: student-tab-content-enter 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.student-tab-enter-left {
+  --student-tab-enter-x: -16px;
+}
+
+.student-tab-enter-right {
+  --student-tab-enter-x: 16px;
 }
 
 .grade-toolbar-copy-enter {

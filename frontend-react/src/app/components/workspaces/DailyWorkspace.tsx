@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
-import { AnimatedPopover, Button, SegmentedControl, ToolDrawer } from "../ui";
+import { AnimatedPopover, Button, SegmentedControl, SelectMenu, ToolDrawer } from "../ui";
 import type {
   AppStudent,
   Gender,
@@ -199,9 +199,7 @@ export function DailyWorkspace({
             <input value={name} onChange={event => setName(event.target.value)} className="h-10 w-full rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-300" placeholder="姓名" />
             <div className="grid grid-cols-[1fr_6rem] gap-2">
               <input value={alias} onChange={event => setAlias(event.target.value)} className="h-10 min-w-0 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-300" placeholder="别名 / 拼音（可选）" />
-              <select value={gender} onChange={event => setGender(event.target.value as Gender)} className="h-10 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-2 text-sm outline-none focus:border-blue-300">
-                <option value="">未知</option><option value="男">男</option><option value="女">女</option>
-              </select>
+              <SelectMenu value={gender} onChange={value => setGender(value as Gender)} ariaLabel="学生性别" options={[{ value: "", label: "未知" }, { value: "男", label: "男" }, { value: "女", label: "女" }]} />
             </div>
             <Button className="w-full" disabled={!name.trim()} onClick={addStudent}><Plus className="h-4 w-4" />添加到班级</Button>
           </div>

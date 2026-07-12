@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Lock, BookOpen } from "lucide-react";
 
 import { APP_NAME } from "../config";
-import { authorizeProduct } from "../state/authStorage";
+import { authorizeProduct, enterLocalPreviewSession } from "../state/authStorage";
 
 interface Props {
   onLogin: () => void;
@@ -61,6 +61,8 @@ export function LoginScreen({ onLogin }: Props) {
   const fieldLabel = "产品授权码";
   const placeholder = "请输入授权码";
   const subtitle = "请输入产品授权码后继续使用。";
+  const canEnterLocalPreview = import.meta.env.DEV
+    && (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "linear-gradient(135deg, #f0f4ff 0%, #f5f5f7 50%, #f0f7f0 100%)" }}>
@@ -128,8 +130,22 @@ export function LoginScreen({ onLogin }: Props) {
             {loading ? "验证中…" : "进入"}
           </button>
 
+          {canEnterLocalPreview && (
+            <button
+              type="button"
+              onClick={() => {
+                if (enterLocalPreviewSession()) {
+                  onLogin();
+                }
+              }}
+              className="mt-3 w-full rounded-xl border border-blue-100 bg-blue-50 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+            >
+              进入本地预览
+            </button>
+          )}
+
           <p className="text-center text-xs text-gray-300 mt-5">
-            授权码会绑定本机设备名额
+            {canEnterLocalPreview ? "本地预览不占用设备名额" : "授权码会绑定本机设备名额"}
           </p>
         </div>
       </form>

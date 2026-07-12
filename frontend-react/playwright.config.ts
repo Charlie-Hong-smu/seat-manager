@@ -5,6 +5,7 @@ const port = commercial ? 4174 : 4173;
 const basePath = commercial ? "/" : "/seat-manager/";
 
 export default defineConfig({
+  workers: process.env.CI ? undefined : 1,
   testDir: "./e2e",
   testMatch: commercial ? "commercial.spec.ts" : ["app-state.spec.ts", "pwa.spec.ts"],
   outputDir: "./test-results",
@@ -14,7 +15,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"], channel: "chrome" } },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: {
     command: commercial

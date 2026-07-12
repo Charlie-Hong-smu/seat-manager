@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil } from "lucide-react";
 import {
   CartesianGrid,
@@ -18,7 +18,7 @@ import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
 import type { AppStudent, AttendanceRecord, Dormitory, FollowupTask, Gender, RecordType, StudentId, StudentRecord } from "../state/types";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
-import { AiGenerationPanel, Button, ConfirmDialog, SegmentedControl, useAppDialog } from "./ui";
+import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import {
   buildWeekOptions,
@@ -36,6 +36,16 @@ import {
   type StudentModalRecord,
 } from "./studentModalSelectors";
 
+type StudentDetailTab = "records" | "profile" | "attendance" | "trend" | "followup";
+
+const STUDENT_DETAIL_TABS: Array<{ value: StudentDetailTab; label: string; tone?: "default" | "ai" }> = [
+  { value: "records", label: "奖罚记录" },
+  { value: "profile", label: "档案" },
+  { value: "attendance", label: "出勤" },
+  { value: "trend", label: "成绩" },
+  { value: "followup", label: "AI跟进", tone: "ai" },
+];
+
 interface Props {
   student: AppStudent;
   students: AppStudent[];
@@ -49,7 +59,7 @@ interface Props {
   onOpenDormitories: () => void;
   onOpenAiComment?: () => void;
   seatOrder?: Array<StudentId | null>;
-  initialActiveTab?: "records" | "profile" | "trend" | "followup";
+  initialActiveTab?: StudentDetailTab;
   onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
@@ -76,6 +86,10 @@ export function StudentModal({
   onAttendanceChange,
 }: Props) {
   const appDialog = useAppDialog();
+  const modalHeaderRef = useRef<HTMLDivElement>(null);
+  const modalTabsRef = useRef<HTMLDivElement>(null);
+  const modalContentMeasureRef = useRef<HTMLDivElement>(null);
+  const [modalHeight, setModalHeight] = useState<number>();
   const [nameInput, setNameInput] = useState(student.name);
   const [genderInput, setGenderInput] = useState<Gender>(student.gender);
   const [aliasesInput, setAliasesInput] = useState(student.aliases.join("、"));
@@ -103,7 +117,8 @@ export function StudentModal({
   const [profileStatus, setProfileStatus] = useState("");
   const [profileEditing, setProfileEditing] = useState(false);
   const [dormStatus, setDormStatus] = useState("");
-  const [activeTab, setActiveTab] = useState<"records" | "profile" | "attendance" | "trend" | "followup">(initialActiveTab);
+  const [activeTab, setActiveTab] = useState<StudentDetailTab>(initialActiveTab);
+  const [tabDirection, setTabDirection] = useState<"left" | "right">("right");
   const [dormAssignmentOpen, setDormAssignmentOpen] = useState(false);
   const [dormEventOpen, setDormEventOpen] = useState(false);
   const [pendingDormitoryId, setPendingDormitoryId] = useState(student.dormitoryId || "");
@@ -125,6 +140,14 @@ export function StudentModal({
     setHasAiTrendAuth(hasStoredAiTrendAuth());
     setActiveTab(initialActiveTab);
   }, [initialActiveTab, student]);
+
+  function changeActiveTab(nextTab: StudentDetailTab) {
+    if (nextTab === activeTab) return;
+    const currentIndex = STUDENT_DETAIL_TABS.findIndex(tab => tab.value === activeTab);
+    const nextIndex = STUDENT_DETAIL_TABS.findIndex(tab => tab.value === nextTab);
+    setTabDirection(nextIndex < currentIndex ? "left" : "right");
+    setActiveTab(nextTab);
+  }
 
   useEffect(() => {
     setLocalRecords(student.records.map(r => ({
@@ -367,11 +390,35 @@ export function StudentModal({
     }
   }
 
+  useLayoutEffect(() => {
+    const header = modalHeaderRef.current;
+    const tabs = modalTabsRef.current;
+    const content = modalContentMeasureRef.current;
+    if (!header || !tabs || !content) return;
+    const updateHeight = () => {
+      const viewportLimit = Math.min(768, window.innerHeight - 32);
+      setModalHeight(Math.min(viewportLimit, header.offsetHeight + tabs.offsetHeight + content.scrollHeight));
+    };
+    updateHeight();
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(header);
+    resizeObserver.observe(tabs);
+    resizeObserver.observe(content);
+    const mutationObserver = new MutationObserver(updateHeight);
+    mutationObserver.observe(content, { childList: true, subtree: true, characterData: true });
+    window.addEventListener("resize", updateHeight);
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [activeTab, profileEditing, student.id]);
+
   return (
-    <div className="soft-backdrop-enter fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-12 backdrop-blur-sm">
-      <div className="modal-panel-enter mb-8 w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+    <div className="soft-backdrop-enter fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-white shadow-[var(--app-shadow-float)] transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
         {/* Header */}
-        <div className="flex items-start justify-between p-6 pb-4 border-b border-gray-100">
+        <div ref={modalHeaderRef} className="flex shrink-0 items-start justify-between border-b border-gray-100 p-6 pb-4">
           <div>
             <div className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生</div>
             <h3 className="text-gray-900" style={{ fontSize: "1.25rem" }}>
@@ -381,7 +428,7 @@ export function StudentModal({
           </div>
           <div className="flex items-center gap-2">
             <>
-                <button onClick={() => setActiveTab("followup")} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors" style={{ fontWeight: 700 }}>
+                <button onClick={() => changeActiveTab("followup")} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors" style={{ fontWeight: 700 }}>
                   <Sparkles className="w-3.5 h-3.5" />AI跟进
                 </button>
                 {onOpenAiComment && (
@@ -392,32 +439,23 @@ export function StudentModal({
                 <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 border border-red-200 rounded-xl hover:bg-red-50 transition-colors" style={{ fontWeight: 600 }}>
                   <Trash2 className="w-3.5 h-3.5" />删除学生
                 </button>
-                <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
+                <IconButton label="关闭学生详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
             </>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 border-b border-gray-100 px-6 pt-3">
-          {([["records", "奖罚记录"], ["profile", "档案"], ["attendance", "出勤"], ["trend", "成绩"], ["followup", "AI跟进"]] as Array<["records" | "profile" | "attendance" | "trend" | "followup", string]>).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`relative px-4 py-2.5 text-sm font-semibold transition-colors ${activeTab === key ? key === "followup" ? "text-violet-700" : "text-blue-700" : "text-gray-400 hover:text-gray-600"}`}
-            >
-              {label}
-              {activeTab === key && <span className={`absolute inset-x-3 -bottom-px h-0.5 rounded-full ${key === "followup" ? "bg-violet-600" : "bg-blue-600"}`} />}
-            </button>
-          ))}
+        <div ref={modalTabsRef} className="relative shrink-0 border-b border-gray-100 pr-28">
+          <UnderlineTabs value={activeTab} options={STUDENT_DETAIL_TABS} onChange={changeActiveTab} ariaLabel="学生详情" className="border-b-0 px-6 pt-3" />
+          {activeTab === "profile" && <div className="absolute bottom-2 right-6">{profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存</Button></div> : <Button size="sm" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}</div>}
         </div>
 
-        <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-14rem)]">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={modalContentMeasureRef} key={activeTab} className={`student-tab-content-enter space-y-5 p-6 ${tabDirection === "left" ? "student-tab-enter-left" : "student-tab-enter-right"}`}>
           {activeTab === "profile" && (
-          <div className="border border-gray-100 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+          <div className="rounded-2xl border border-gray-100">
+            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
               <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>学生信息</span>
-              {profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存信息</Button></div> : <Button size="sm" variant="ghost" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}
+              <span className="text-xs text-gray-400">{profileEditing ? "编辑中 · 保存后生效" : "查看模式"}</span>
             </div>
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
@@ -455,7 +493,7 @@ export function StudentModal({
               <div className="rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <span className="text-xs text-blue-700" style={{ fontWeight: 800 }}>联系与住宿信息</span>
-                  <span className="text-xs text-blue-500/70">{profileEditing ? "编辑中 · 保存后生效" : "查看模式 · 仅保存在本机/同步备份中"}</span>
+                  <span className="text-xs text-blue-500/70">仅保存在本机 / 同步备份中</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="space-y-1.5">
@@ -633,13 +671,7 @@ export function StudentModal({
           {/* Week selector + Records */}
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-600" style={{ fontWeight: 600 }}>查看周</span>
-            <select
-              value={selectedWeek}
-              onChange={e => setSelectedWeek(e.target.value)}
-              className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 cursor-pointer"
-            >
-              {weekOptions.map(week => <option key={week.key} value={week.key}>{week.label}</option>)}
-            </select>
+            <SelectMenu value={selectedWeek} onChange={setSelectedWeek} ariaLabel="查看周" className="w-64 bg-gray-50" options={weekOptions.map(week => ({ value: week.key, label: week.label }))} />
           </div>
 
           {filteredRecords.length > 0 ? (
@@ -847,20 +879,14 @@ export function StudentModal({
           )}
 
         </div>
+        </div>
       </div>
 
       {dormAssignmentOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-5 shadow-2xl">
             <div className="text-base text-gray-900" style={{ fontWeight: 900 }}>更换宿舍</div>
-            <select
-              value={pendingDormitoryId}
-              onChange={event => setPendingDormitoryId(event.target.value)}
-              className="mt-4 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300"
-            >
-              <option value="">未分配</option>
-              {dormitories.map(dormitory => <option key={dormitory.id} value={dormitory.id}>{dormitory.name}</option>)}
-            </select>
+            <SelectMenu value={pendingDormitoryId} onChange={setPendingDormitoryId} ariaLabel="选择宿舍" className="mt-4 w-full bg-gray-50" options={[{ value: "", label: "未分配" }, ...dormitories.map(dormitory => ({ value: dormitory.id, label: dormitory.name }))]} />
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button onClick={() => setDormAssignmentOpen(false)} className="rounded-xl border border-gray-200 bg-white py-2 text-sm text-gray-600 hover:bg-gray-50" style={{ fontWeight: 800 }}>取消</button>
               <button onClick={() => handleDormitoryChange(pendingDormitoryId)} className="rounded-xl bg-blue-600 py-2 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>保存</button>
