@@ -22,6 +22,7 @@ export interface SeatManagerController {
   setSeatOrder: Dispatch<SetStateAction<Array<StudentId | null>>>;
   setLockedSeats: Dispatch<SetStateAction<Set<number>>>;
   setSeatSettings: Dispatch<SetStateAction<SeatSettings>>;
+  setSettings: Dispatch<SetStateAction<Record<string, unknown>>>;
   setSeatHistory: Dispatch<SetStateAction<SeatHistorySnapshot[]>>;
   setAttendanceRecords: Dispatch<SetStateAction<AttendanceRecord[]>>;
   setFollowupTasks: Dispatch<SetStateAction<FollowupTask[]>>;
@@ -43,6 +44,7 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
     seatOrder: state.seatOrder,
     lockedSeats: state.lockedSeats,
     seatSettings: state.seatSettings,
+    settings: state.settings,
     dormitories: state.dormitories,
     seatHistory: state.seatHistory,
     fundTransactions: state.fundTransactions,
@@ -72,6 +74,9 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
   const setSeatSettings = useCallback<SeatManagerController["setSeatSettings"]>(update => {
     setState(current => ({ ...current, seatSettings: resolveUpdate(current.seatSettings, update) }));
   }, []);
+  const setSettings = useCallback<SeatManagerController["setSettings"]>(update => {
+    setState(current => ({ ...current, settings: resolveUpdate(current.settings, update) }));
+  }, []);
   const setSeatHistory = useCallback<SeatManagerController["setSeatHistory"]>(update => {
     setState(current => ({ ...current, seatHistory: resolveUpdate(current.seatHistory, update) }));
   }, []);
@@ -80,5 +85,5 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
   const setFollowupTasks = useCallback<SeatManagerController["setFollowupTasks"]>(update => setState(current => ({ ...current, followupTasks: resolveUpdate(current.followupTasks, update) })), []);
   const setDrawSessions = useCallback<SeatManagerController["setDrawSessions"]>(update => setState(current => ({ ...current, drawSessions: resolveUpdate(current.drawSessions, update) })), []);
 
-  return { state, replace, reload, persist, setStudents, setDormitories, setFundTransactions, setSeatOrder, setLockedSeats, setSeatSettings, setSeatHistory, setAttendanceRecords, setFollowupTasks, setDrawSessions };
+  return { state, replace, reload, persist, setStudents, setDormitories, setFundTransactions, setSeatOrder, setLockedSeats, setSeatSettings, setSettings, setSeatHistory, setAttendanceRecords, setFollowupTasks, setDrawSessions };
 }

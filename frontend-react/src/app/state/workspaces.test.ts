@@ -36,9 +36,10 @@ describe("workspace storage", () => {
 
   it("keeps long-lived student profile fields when advancing a term", () => {
     const book = ensureWorkspaceBook();
-    writeCurrentSliceData({ students: [{ id: "s1", name: "甲", studentNo: "01", gender: "男", aliases: [], parentPhone: "138", address: "地址", emergencyContact: "家长", isBoarding: true, records: [{ id: "r", type: "note", note: "旧记录", date: "2026-01-01" }], exams: [] }], seatOrder: [] });
+    writeCurrentSliceData({ students: [{ id: "s1", name: "甲", studentNo: "01", gender: "男", aliases: [], parentPhone: "138", address: "地址", emergencyContact: "家长", isBoarding: true, records: [{ id: "r", type: "note", note: "旧记录", date: "2026-01-01" }], exams: [] }], seatOrder: [], settings: { dormitoryPeriod: { anchorDate: "2026-01-05", unit: "week", intervalCount: 2 } } });
     const next = advanceToNextTerm({ fromSliceId: book.currentSliceId, term: makeTerm({ year: 2026, season: "autumn" }), copyRoster: true });
     const student = next?.data.students as Array<Record<string, unknown>>;
     expect(student[0]).toMatchObject({ studentNo: "01", parentPhone: "138", address: "地址", emergencyContact: "家长", isBoarding: true, records: [] });
+    expect(next?.data.settings).toEqual({ dormitoryPeriod: { anchorDate: "2026-01-05", unit: "week", intervalCount: 2 } });
   });
 });

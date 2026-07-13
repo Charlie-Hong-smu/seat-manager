@@ -1,4 +1,5 @@
 import type { AppStudent, DormEvent, DormEventType, DormPeriodArchive, Dormitory, StudentId, StudentRecord } from "./types";
+import { localDateKey } from "./dormitoryPeriods";
 
 export const DORM_EVENT_PRESETS: Array<{ label: string; score: number; type: DormEventType }> = [
   { label: "晚上讲话", score: -2, type: "punish" },
@@ -27,10 +28,6 @@ function createId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function calculateDormScore(dormitory: Pick<Dormitory, "baseScore" | "events">): number {
   return dormitory.baseScore + dormitory.events.reduce((sum, event) => sum + event.score, 0);
 }
@@ -43,6 +40,52 @@ export function normalizeDormitoryScore(dormitory: Dormitory): Dormitory {
   };
 }
 
+export type DormitoryEventPatch = {
+  reason?: string;
+  score?: number;
+  note?: string;
+  punishment?: string;
+  punishmentDone?: boolean;
+  followupTaskIds?: string[];
+  date?: string;
+};
+
+function applyDormitoryEventPatch(event: DormEvent, eventId: string, patch: DormitoryEventPatch): DormEvent {
+  if (event.id !== eventId) return event;
+  const score = patch.score !== undefined && Number.isFinite(patch.score) ? Math.round(patch.score * 10) / 10 : event.score;
+  return {
+    ...event,
+    reason: patch.reason !== undefined ? patch.reason.trim() || event.reason : event.reason,
+    score,
+    type: score > 0 ? "reward" : score < 0 ? "punish" : "note",
+    note: patch.note !== undefined ? patch.note.trim() : event.note,
+    punishment: patch.punishment !== undefined ? patch.punishment.trim() : event.punishment,
+    punishmentDone: patch.punishmentDone !== undefined ? patch.punishmentDone : event.punishmentDone,
+    followupTaskIds: patch.followupTaskIds !== undefined ? patch.followupTaskIds : event.followupTaskIds,
+    date: patch.date || event.date,
+  };
+}
+
+export function updateDormitoryEventInLedger(dormitory: Dormitory, eventId: string, patch: DormitoryEventPatch): Dormitory {
+  const events = dormitory.events.map(event => applyDormitoryEventPatch(event, eventId, patch));
+  const history = dormitory.history.map(archive => {
+    if (!archive.events.some(event => event.id === eventId)) return archive;
+    const archiveEvents = archive.events.map(event => applyDormitoryEventPatch(event, eventId, patch));
+    return { ...archive, events: archiveEvents, finalScore: archive.baseScore + archiveEvents.reduce((sum, event) => sum + event.score, 0) };
+  });
+  return normalizeDormitoryScore({ ...dormitory, events, history });
+}
+
+export function deleteDormitoryEventFromLedger(dormitory: Dormitory, eventId: string): Dormitory {
+  const history = dormitory.history.map(archive => {
+    const events = archive.events.filter(event => event.id !== eventId);
+    return events.length === archive.events.length
+      ? archive
+      : { ...archive, events, finalScore: archive.baseScore + events.reduce((sum, event) => sum + event.score, 0) };
+  });
+  return normalizeDormitoryScore({ ...dormitory, events: dormitory.events.filter(event => event.id !== eventId), history });
+}
+
 export function createDormitory(name: string, baseScore = 0): Dormitory {
   const trimmedName = name.trim();
   return {
@@ -52,7 +95,7 @@ export function createDormitory(name: string, baseScore = 0): Dormitory {
     baseScore,
     currentScore: baseScore,
     events: [],
-    periodStart: todayString(),
+    periodStart: localDateKey(),
     history: [],
   };
 }
@@ -61,7 +104,7 @@ function formatPeriodLabel(startDate: string, endDate: string): string {
   if (startDate && endDate && startDate !== endDate) {
     return `${startDate} ~ ${endDate}`;
   }
-  return endDate || startDate || todayString();
+  return endDate || startDate || localDateKey();
 }
 
 /**
@@ -70,7 +113,7 @@ function formatPeriodLabel(startDate: string, endDate: string): string {
  */
 export function closeDormitoryPeriod(dormitory: Dormitory, options: { carryOver?: boolean } = {}): Dormitory {
   const finalScore = calculateDormScore(dormitory);
-  const endDate = todayString();
+  const endDate = localDateKey();
   const startDate = dormitory.periodStart || endDate;
   const archive: DormPeriodArchive = {
     id: createId("dorm-period"),
@@ -114,7 +157,7 @@ export function createDormEvent(input: NewDormEventInput, students: AppStudent[]
     note: input.note?.trim() || "",
     punishment: input.punishment?.trim() || "",
     punishmentDone: false,
-    date: input.date || todayString(),
+    date: input.date || localDateKey(),
     createdAt: new Date().toISOString(),
   };
 }
@@ -135,4 +178,3 @@ export function createDormStudentRecord(event: DormEvent, dormitory: Dormitory, 
     date: event.date,
   };
 }
-

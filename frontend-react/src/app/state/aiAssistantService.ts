@@ -7,6 +7,7 @@ import { exportWholeBook, getCurrentSlice, sliceDisplayName } from "./workspaces
 import type { AppStudent, Dormitory, FundTransaction, GradeExam, GradeRow, SeatManagerState, WorkspaceSlice } from "./types";
 import { buildAiAssistantRequestBody } from "./aiAssistantPayload";
 import { parseAiAssistantResponse } from "./aiAssistantResult";
+import { listDormitoryEvents } from "./dormitoryPeriods";
 
 interface MentionedStudentMatch {
   student: AppStudent;
@@ -409,15 +410,17 @@ function buildCandidatePack(title: string, reason: string, students: AppStudent[
 }
 
 function buildDormitoryPack(dormitories: Dormitory[], students: AppStudent[]): AiContextPack | null {
-  const items = dormitories.slice(0, 8).map(dorm => ({
+  const items = dormitories.slice(0, 8).map(dorm => {
+    const events = listDormitoryEvents(dorm).map(entry => entry.event);
+    return {
     name: dorm.name,
-    summary: `当前 ${dorm.currentScore} 分，基础分 ${dorm.baseScore}，成员 ${dorm.memberIds.length} 人`,
+    summary: `共 ${events.length} 条加减分记录，成员 ${dorm.memberIds.length} 人`,
     members: dorm.memberIds.map(id => students.find(student => student.id === id)?.name || "").filter(Boolean).slice(0, 12),
-    events: [...dorm.events]
+    events: events
       .sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`))
       .slice(0, 8)
       .map(event => `${event.date} ${event.type} ${event.score >= 0 ? "+" : ""}${event.score}：${event.reason || event.note}`),
-  }));
+  }; });
   return items.length ? { kind: "dormitory", title: "宿舍明细", reason: "问题涉及宿舍，附带宿舍成员、分数和近期事件。", items } : null;
 }
 
@@ -807,7 +810,7 @@ export function buildAiAssistantBaseContext(input: {
       .map(record => `${record.date} ${record.studentName}：${record.note}`),
   ].filter(Boolean);
   const dormitorySummary = input.dormitories
-    .map(dorm => `${dorm.name} 当前 ${dorm.currentScore} 分，成员 ${dorm.memberIds.length} 人`)
+    .map(dorm => `${dorm.name} 共 ${listDormitoryEvents(dorm).length} 条加减分记录，成员 ${dorm.memberIds.length} 人`)
     .slice(0, 8);
   const income = input.fundTransactions.filter(tx => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
   const expense = input.fundTransactions.filter(tx => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);

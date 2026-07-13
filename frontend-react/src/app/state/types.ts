@@ -57,6 +57,14 @@ export interface Dormitory {
   history: DormPeriodArchive[];
 }
 
+export type DormitoryPeriodMode = "week" | "month" | "custom";
+
+export interface DormitoryPeriodSettings {
+  anchorDate: string;
+  unit: "week" | "month";
+  intervalCount: number;
+}
+
 // ── 班费管理 ──────────────────────────────────────────────────────────────
 export type FundTxType = "income" | "expense";
 

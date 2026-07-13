@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import {
-  CalendarClock,
   Check,
   ChevronDown,
-  History,
   Pencil,
   Plus,
   ListPlus,
@@ -15,11 +13,13 @@ import {
 
 import { DORM_EVENT_PRESETS } from "../state/dormitoryActions";
 import type { NewDormEventInput } from "../state/dormitoryActions";
-import type { AppStudent, DormEvent, Dormitory, FollowupTask, StudentId } from "../state/types";
+import { calculateDormitoryPeriodScore, filterDormitoryEventsByRange, getDormitoryPeriodRange, localDateKey, shiftDormitoryPeriod } from "../state/dormitoryPeriods";
+import type { AppStudent, DormEvent, Dormitory, DormitoryPeriodMode, DormitoryPeriodSettings, FollowupTask, StudentId } from "../state/types";
 import type { FollowupTaskDraft } from "./FollowupTaskDrawer";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
+import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
 import { ConfirmDialog, DatePicker, useAppDialog } from "./ui";
 
 function scoreClass(value: number): string {
@@ -44,49 +44,48 @@ interface Props {
   students: AppStudent[];
   dormitories: Dormitory[];
   onCreateDormitory: (name: string, baseScore: number) => Dormitory;
-  onUpdateDormitory: (dormitoryId: string, patch: Partial<Pick<Dormitory, "name" | "baseScore">>) => void;
   onDeleteDormitory: (dormitoryId: string) => void;
   onAssignStudentDormitory: (studentId: StudentId, dormitoryId?: string) => void;
   onAddDormitoryEvent: (input: NewDormEventInput) => DormEvent | null;
-  onUpdateDormitoryEvent: (dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean; followupTaskIds?: string[] }) => void;
+  onUpdateDormitoryEvent: (dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean; followupTaskIds?: string[]; date?: string }) => void;
   onDeleteDormitoryEvent: (dormId: string, eventId: string) => void;
-  onCloseDormitoryPeriod: (dormId: string, options?: { carryOver?: boolean }) => void;
-  onCloseAllDormitoryPeriods: (options?: { carryOver?: boolean }) => void;
   onSelectStudent: (student: AppStudent) => void;
   followupTasks: FollowupTask[];
   onRequestFollowupTask: (draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) => void;
   onSetLinkedTaskStatus: (taskIds: string[], status: "completed" | "cancelled") => void;
+  periodSettings: DormitoryPeriodSettings;
+  onPeriodSettingsChange: (settings: DormitoryPeriodSettings) => void;
 }
 
 export function DormitoryWorkspace({
   students,
   dormitories,
   onCreateDormitory,
-  onUpdateDormitory,
   onDeleteDormitory,
   onAssignStudentDormitory,
   onAddDormitoryEvent,
   onUpdateDormitoryEvent,
   onDeleteDormitoryEvent,
-  onCloseDormitoryPeriod,
-  onCloseAllDormitoryPeriods,
   onSelectStudent,
   followupTasks,
   onRequestFollowupTask,
   onSetLinkedTaskStatus,
+  periodSettings,
+  onPeriodSettingsChange,
 }: Props) {
   const appDialog = useAppDialog();
   const [selectedDormId, setSelectedDormId] = useState(dormitories[0]?.id || "");
   const [newName, setNewName] = useState("");
-  const [newBaseScore, setNewBaseScore] = useState(0);
   const [memberSearch, setMemberSearch] = useState("");
-  const [carryOver, setCarryOver] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState("");
   const [editReason, setEditReason] = useState("");
   const [editScore, setEditScore] = useState(0);
   const [editNote, setEditNote] = useState("");
   const [editPunishment, setEditPunishment] = useState("");
+  const [editDate, setEditDate] = useState(localDateKey());
+  const [eventDate, setEventDate] = useState(localDateKey());
+  const [periodMode, setPeriodMode] = useState<DormitoryPeriodMode>("week");
+  const [periodAnchor, setPeriodAnchor] = useState(localDateKey());
 
   // 事件录入表单 state
   const [reason, setReason] = useState("");
@@ -132,7 +131,9 @@ export function DormitoryWorkspace({
   const responsibleSelectedRef = useRef<HTMLDivElement>(null);
   const responsibleCandidatesRef = useRef<HTMLDivElement>(null);
 
-  const sortedDormitories = [...dormitories].sort((a, b) => b.currentScore - a.currentScore || a.name.localeCompare(b.name, "zh-Hans-CN"));
+  const periodRange = getDormitoryPeriodRange(periodMode, periodAnchor, periodSettings);
+  const periodScores = new Map(dormitories.map(dormitory => [dormitory.id, calculateDormitoryPeriodScore(dormitory, periodRange)]));
+  const sortedDormitories = [...dormitories].sort((a, b) => (periodScores.get(b.id) || 0) - (periodScores.get(a.id) || 0) || a.name.localeCompare(b.name, "zh-Hans-CN"));
   const selectedDormitory = dormitories.find(dormitory => dormitory.id === selectedDormId) || sortedDormitories[0] || null;
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const memberStudents = selectedDormitory ? selectedDormitory.memberIds.map(id => studentById.get(id)).filter((student): student is AppStudent => Boolean(student)) : [];
@@ -146,8 +147,8 @@ export function DormitoryWorkspace({
   const selectedResponsibleStudents = responsibleIds
     .map(id => memberStudents.find(student => student.id === id))
     .filter((student): student is AppStudent => Boolean(student));
-  const periodDelta = selectedDormitory ? selectedDormitory.currentScore - selectedDormitory.baseScore : 0;
-  const hasPendingEvents = dormitories.some(dormitory => dormitory.events.length > 0);
+  const selectedPeriodEvents = selectedDormitory ? filterDormitoryEventsByRange(selectedDormitory, periodRange) : [];
+  const selectedPeriodScore = selectedDormitory ? periodScores.get(selectedDormitory.id) || 0 : 0;
 
   const activeDormIndex = Math.max(0, sortedDormitories.findIndex(d => d.id === selectedDormitory?.id));
 
@@ -160,7 +161,6 @@ export function DormitoryWorkspace({
   // 切换宿舍时重置编辑状态 + 触发主区域动画
   useEffect(() => {
     setEditingEventId("");
-    setHistoryOpen(false);
     setAnimKey(k => k + 1);
   }, [selectedDormId]);
 
@@ -181,10 +181,9 @@ export function DormitoryWorkspace({
   }
 
   function createDormitory() {
-    const dormitory = onCreateDormitory(newName, newBaseScore);
+    const dormitory = onCreateDormitory(newName, 0);
     setSelectedDormId(dormitory.id);
     setNewName("");
-    setNewBaseScore(0);
   }
 
   function selectPreset(label: string) {
@@ -235,17 +234,18 @@ export function DormitoryWorkspace({
     setPendingDeletePreset("");
   }
 
-  function startEditEvent(eventId: string, reason: string, score: number, note: string, punishment: string) {
+  function startEditEvent(eventId: string, reason: string, score: number, note: string, punishment: string, date: string) {
     setEditingEventId(eventId);
     setEditReason(reason);
     setEditScore(score);
     setEditNote(note);
     setEditPunishment(punishment);
+    setEditDate(date);
   }
 
   function saveEditEvent() {
     if (!selectedDormitory || !editingEventId) return;
-    onUpdateDormitoryEvent(selectedDormitory.id, editingEventId, { reason: editReason, score: editScore, note: editNote, punishment: editPunishment });
+    onUpdateDormitoryEvent(selectedDormitory.id, editingEventId, { reason: editReason, score: editScore, note: editNote, punishment: editPunishment, date: editDate });
     setEditingEventId("");
   }
 
@@ -320,6 +320,7 @@ export function DormitoryWorkspace({
       punishment,
       responsibleStudentIds: responsibleIds.length > 0 ? responsibleIds : undefined,
       recordToStudent: responsibleIds.length > 0 ? recordToStudent : false,
+      date: eventDate,
     });
     if (savedEvent && createFollowup && punishment.trim() && responsibleIds.length) {
       const studentId = responsibleIds[0];
@@ -328,6 +329,7 @@ export function DormitoryWorkspace({
     setNote("");
     setPunishment("");
     setCreateFollowup(false);
+    setEventDate(localDateKey());
   }
 
   async function togglePunishment(event: DormEvent) {
@@ -358,16 +360,36 @@ export function DormitoryWorkspace({
     setResponsibleIds([]);
     setResponsibleSearch("");
     setShowResponsible(false);
+    setEventDate(localDateKey());
+  }
+
+  function changePeriodAnchor(value: string) {
+    if (value === "previous") {
+      setPeriodAnchor(current => shiftDormitoryPeriod(periodMode, current, -1, periodSettings));
+      return;
+    }
+    if (value === "next") {
+      setPeriodAnchor(current => shiftDormitoryPeriod(periodMode, current, 1, periodSettings));
+      return;
+    }
+    setPeriodAnchor(value);
   }
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
+      <DormitoryPeriodToolbar
+        mode={periodMode}
+        onModeChange={setPeriodMode}
+        anchor={periodAnchor}
+        onAnchorChange={changePeriodAnchor}
+        range={periodRange}
+        settings={periodSettings}
+        onSettingsChange={onPeriodSettingsChange}
+      />
       <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr_220px] gap-4 overflow-hidden p-4">
         <DormitoryListPanel
           newName={newName}
           setNewName={setNewName}
-          newBaseScore={newBaseScore}
-          setNewBaseScore={setNewBaseScore}
           createDormitory={createDormitory}
           activeDormIndex={activeDormIndex}
           sortedDormitories={sortedDormitories}
@@ -375,10 +397,7 @@ export function DormitoryWorkspace({
           selectDorm={selectDorm}
           dormitories={dormitories}
           students={students}
-          carryOver={carryOver}
-          setCarryOver={setCarryOver}
-          hasPendingEvents={hasPendingEvents}
-          onCloseAllDormitoryPeriods={onCloseAllDormitoryPeriods}
+          periodScores={periodScores}
         />
 
         {/* 中间：事件账本 + 列表（带切换动画） */}
@@ -398,35 +417,19 @@ export function DormitoryWorkspace({
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    本周期自 {selectedDormitory.periodStart} 起 · 基础分
-                    <input
-                      type="number"
-                      value={selectedDormitory.baseScore}
-                      onChange={event =>
-                        onUpdateDormitory(selectedDormitory.id, { baseScore: Number(event.target.value) || 0 })
-                      }
-                      className="inline w-12 mx-1 rounded-md border border-gray-200 bg-white px-1 py-0.5 text-center text-xs outline-none focus:border-blue-300"
-                    />
-                  </p>
+                  <p className="mt-0.5 text-xs text-gray-400">统计范围：{periodRange.start} 至 {periodRange.end}</p>
                 </div>
                 <div className="flex shrink-0 gap-4">
                   <div className="text-right">
-                    <div className="text-[10px] text-gray-400">当前分</div>
-                    <div className={`text-xl font-bold ${scoreClass(selectedDormitory.currentScore)}`}>
-                      {formatSigned(selectedDormitory.currentScore)}
+                    <div className="text-[10px] text-gray-400">所选周期得分</div>
+                    <div className={`text-xl font-bold ${scoreClass(selectedPeriodScore)}`}>
+                      {formatSigned(selectedPeriodScore)}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] text-gray-400">本周期变化</div>
-                    <div className={`text-xl font-bold ${scoreClass(periodDelta)}`}>
-                      {formatSigned(periodDelta)}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] text-gray-400">本周事件</div>
+                    <div className="text-[10px] text-gray-400">所选周期事件</div>
                     <div className="text-xl font-bold text-gray-900">
-                      {selectedDormitory.events.length}
+                      {selectedPeriodEvents.length}
                     </div>
                   </div>
                 </div>
@@ -511,6 +514,11 @@ export function DormitoryWorkspace({
                           </div>
                         </div>
                       </div>
+
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-bold text-gray-400">发生日期</span>
+                        <DatePicker value={eventDate} onChange={setEventDate} ariaLabel="宿舍事件发生日期" className="w-full" max={localDateKey()} />
+                      </label>
 
                       {/* 备注 */}
                       <input
@@ -645,26 +653,16 @@ export function DormitoryWorkspace({
 
                 {/* 事件列表 */}
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-                    <h3 className="text-sm font-bold text-gray-700">事件记录</h3>
-                    <button
-                      onClick={async () => {
-                        if (await appDialog.confirm({ title: "结算当前宿舍周期？", description: `将结算“${selectedDormitory.name}”当前周期${carryOver ? "，并把分数结转到下一周期" : "，下一周期分数归零"}。已记录事件会归档。`, confirmLabel: "确认结算", variant: "primary" })) onCloseDormitoryPeriod(selectedDormitory.id, { carryOver });
-                      }}
-                      disabled={!selectedDormitory.events.length}
-                      className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
-                    >
-                      <CalendarClock className="h-3 w-3" />
-                      结算本周期
-                    </button>
+                  <div className="px-5 py-3 border-b border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-700">所选周期事件</h3>
                   </div>
-                  {selectedDormitory.events.length === 0 ? (
+                  {selectedPeriodEvents.length === 0 ? (
                     <div className="px-5 py-8 text-center text-sm text-gray-400">
-                      本周期暂无事件
+                      所选周期暂无事件
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-50">
-                      {selectedDormitory.events.map(event =>
+                      {selectedPeriodEvents.map(({ event }) =>
                         editingEventId === event.id ? (
                           <div key={event.id} className="bg-blue-50/40 px-5 py-3 space-y-2">
                             <div className="flex gap-2">
@@ -687,6 +685,7 @@ export function DormitoryWorkspace({
                               className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300"
                               placeholder="备注"
                             />
+                            <DatePicker value={editDate} onChange={setEditDate} ariaLabel="修改宿舍事件日期" className="w-full" max={localDateKey()} />
                             <div className="flex gap-2">
                               <input
                                 value={editPunishment}
@@ -732,7 +731,7 @@ export function DormitoryWorkspace({
                                 <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                   <button
                                     onClick={() =>
-                                      startEditEvent(event.id, event.reason, event.score, event.note, event.punishment || "")
+                                      startEditEvent(event.id, event.reason, event.score, event.note, event.punishment || "", event.date)
                                     }
                                     className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                                   >
@@ -758,7 +757,7 @@ export function DormitoryWorkspace({
                                 <input
                                   type="checkbox"
                                   checked={Boolean(event.punishmentDone)}
-                                  onChange={() => togglePunishment(event)}
+                                  onChange={() => { void togglePunishment(event); }}
                                   className="accent-emerald-600"
                                 />
                                 <span className="font-semibold">处罚</span>
@@ -772,7 +771,7 @@ export function DormitoryWorkspace({
                                 <span className="shrink-0 font-semibold">
                                   {event.punishmentDone ? "已执行" : "待执行"}
                                 </span>
-                                {!event.punishmentDone && (event.responsibleStudentIds?.length || event.responsibleStudentId) && <button type="button" onClick={() => { const ids = event.responsibleStudentIds ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []); const studentId = ids[0]; const linked = followupTasks.find(task => task.studentId === studentId && task.status === "pending" && task.sourceRef?.domain === "dormitory" && task.sourceRef.entityId === event.id); onRequestFollowupTask(linked ? { id: linked.id, studentId: linked.studentId, title: linked.title, type: linked.type, description: linked.description, plannedDate: linked.plannedDate, dueDate: linked.dueDate, source: linked.source, sourceRef: linked.sourceRef } : { studentId, studentIds: ids, title: `宿舍处理：${event.punishment}`, description: `${selectedDormitory.name} · ${event.reason}`, plannedDate: new Date().toISOString().slice(0,10), dueDate: new Date().toISOString().slice(0,10), type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: Array.from(new Set([...(event.followupTaskIds || []), ...taskIds])) })); }} className="ml-1 rounded-lg bg-white px-2 py-1 font-bold text-violet-600 shadow-sm hover:bg-violet-50"><ListPlus className="mr-1 inline h-3 w-3"/>{event.followupTaskIds?.length ? "查看任务" : "转为任务"}</button>}
+                                {!event.punishmentDone && (event.responsibleStudentIds?.length || event.responsibleStudentId) && <button type="button" onClick={() => { const ids = event.responsibleStudentIds ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []); const studentId = ids[0]; const linked = followupTasks.find(task => task.studentId === studentId && task.status === "pending" && task.sourceRef?.domain === "dormitory" && task.sourceRef.entityId === event.id); onRequestFollowupTask(linked ? { id: linked.id, studentId: linked.studentId, title: linked.title, type: linked.type, description: linked.description, plannedDate: linked.plannedDate, dueDate: linked.dueDate, source: linked.source, sourceRef: linked.sourceRef } : { studentId, studentIds: ids, title: `宿舍处理：${event.punishment}`, description: `${selectedDormitory.name} · ${event.reason}`, plannedDate: localDateKey(), dueDate: localDateKey(), type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: Array.from(new Set([...(event.followupTaskIds || []), ...taskIds])) })); }} className="ml-1 rounded-lg bg-white px-2 py-1 font-bold text-violet-600 shadow-sm hover:bg-violet-50"><ListPlus className="mr-1 inline h-3 w-3"/>{event.followupTaskIds?.length ? "查看任务" : "转为任务"}</button>}
                               </div>
                             )}
                           </div>
@@ -782,39 +781,6 @@ export function DormitoryWorkspace({
                   )}
                 </div>
 
-                {/* 历史归档 */}
-                {selectedDormitory.history.length > 0 && (
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <button
-                      onClick={() => setHistoryOpen(v => !v)}
-                      className="flex w-full items-center justify-between px-5 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                    >
-                      <h3 className="text-sm font-bold text-gray-700">周期历史</h3>
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
-                        <History className="h-3.5 w-3.5" />
-                        {historyOpen ? "收起" : `展开 ${selectedDormitory.history.length} 个周期`}
-                        <ChevronDown
-                          className={`h-3.5 w-3.5 transition-transform ${historyOpen ? "rotate-180" : ""}`}
-                        />
-                      </div>
-                    </button>
-                    {historyOpen && (
-                      <div className="divide-y divide-gray-50">
-                        {selectedDormitory.history.map(archive => (
-                          <div
-                            key={archive.id}
-                            className="px-5 py-2.5 flex items-center justify-between text-sm"
-                          >
-                            <span className="text-gray-700">{archive.label}</span>
-                            <span className="text-xs text-gray-400">
-                              {archive.events.length} 个事件 · 最终 {formatSigned(archive.finalScore)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           ) : (

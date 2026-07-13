@@ -33,6 +33,7 @@ import { createFollowupTask, findOpenLinkedTask, getTaskUrgency, todayKey } from
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, inspectStateHealth, type TimelineTarget } from "./state/dataInsights";
 import { useAppDialog } from "./components/ui";
+import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
 
 type AppTab = SidebarTab;
 type StudentAdviceProgress = {
@@ -60,7 +61,8 @@ export default function App() {
   const { students, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, seatOrder, seatSettings } = appState;
   const savedSeatHistory = appState.seatHistory;
   const lockedSeats = new Set(appState.lockedSeats);
-  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatOrder, setSeatSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory } = controller;
+  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatOrder, setSeatSettings, setSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory } = controller;
+  const dormitoryPeriodSettings = normalizeDormitoryPeriodSettings(appState.settings.dormitoryPeriod);
   const { persist: persistState, reload: reloadState, replace: replaceState } = controller;
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [sidebarTab, setSidebarTab] = useState<AppTab>("daily");
@@ -287,6 +289,7 @@ export default function App() {
       seatOrder,
       lockedSeats: appState.lockedSeats,
       seatSettings,
+      settings: appState.settings,
       dormitories,
       seatHistory: nextHistory,
       fundTransactions,
@@ -398,6 +401,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      settings: appState.settings,
       dormitories,
       seatHistory: savedSeatHistory,
     });
@@ -419,6 +423,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      settings: appState.settings,
       dormitories,
       seatHistory: savedSeatHistory,
     });
@@ -436,6 +441,7 @@ export default function App() {
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
+      settings: appState.settings,
       dormitories,
       seatHistory: savedSeatHistory,
     });
@@ -647,14 +653,11 @@ export default function App() {
   });
   const {
     handleCreateDormitory,
-    handleUpdateDormitory,
     handleDeleteDormitory,
     handleAssignStudentDormitory,
     handleAddDormitoryEvent,
     handleUpdateDormEvent,
     handleDeleteDormEvent,
-    handleCloseDormitoryPeriod,
-    handleCloseAllDormitoryPeriods,
   } = useDormitoryActions({ students, dormitories, setStudents, setDormitories });
   const {
     handleAddFundTransaction,
@@ -828,18 +831,17 @@ export default function App() {
               students={students}
               dormitories={dormitories}
               onCreateDormitory={handleCreateDormitory}
-              onUpdateDormitory={handleUpdateDormitory}
               onDeleteDormitory={handleDeleteDormitory}
               onAssignStudentDormitory={handleAssignStudentDormitory}
               onAddDormitoryEvent={handleAddDormitoryEvent}
               onUpdateDormitoryEvent={handleUpdateDormEvent}
               onDeleteDormitoryEvent={handleDeleteDormEvent}
-              onCloseDormitoryPeriod={handleCloseDormitoryPeriod}
-              onCloseAllDormitoryPeriods={handleCloseAllDormitoryPeriods}
               onSelectStudent={student => openStudentDetail(student)}
               followupTasks={followupTasks}
               onRequestFollowupTask={requestFollowupTask}
               onSetLinkedTaskStatus={(taskIds, status) => { const now = new Date().toISOString(); setFollowupTasks(current => current.map(task => taskIds.includes(task.id) ? { ...task, status, updatedAt: now, completedAt: status === "completed" ? now : undefined } : task)); }}
+              periodSettings={dormitoryPeriodSettings}
+              onPeriodSettingsChange={settings => setSettings(current => ({ ...current, dormitoryPeriod: settings }))}
             />
           </div>
         )}

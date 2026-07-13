@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { closeDormitoryPeriod, createDormEvent, createDormitory, createDormStudentRecord, normalizeDormitoryScore, type NewDormEventInput } from "../state/dormitoryActions";
+import { createDormEvent, createDormitory, createDormStudentRecord, deleteDormitoryEventFromLedger, normalizeDormitoryScore, updateDormitoryEventInLedger, type DormitoryEventPatch, type NewDormEventInput } from "../state/dormitoryActions";
 import type { SeatManagerController } from "../state/seatManagerController";
 import type { AppStudent, Dormitory, StudentId } from "../state/types";
 
@@ -13,14 +13,6 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
     const dormitory = createDormitory(name, baseScore);
     setDormitories((current) => [dormitory, ...current]);
     return dormitory;
-  }, [setDormitories]);
-
-  const handleUpdateDormitory = useCallback((dormitoryId: string, patch: Partial<Pick<Dormitory, "name" | "baseScore">>) => {
-    setDormitories((current) => current.map((dormitory) => dormitory.id !== dormitoryId ? dormitory : normalizeDormitoryScore({
-      ...dormitory,
-      name: patch.name !== undefined ? patch.name.trim() || dormitory.name : dormitory.name,
-      baseScore: patch.baseScore !== undefined && Number.isFinite(patch.baseScore) ? patch.baseScore : dormitory.baseScore,
-    })));
   }, [setDormitories]);
 
   const handleDeleteDormitory = useCallback((dormitoryId: string) => {
@@ -55,22 +47,22 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
     return event;
   }, [dormitories, setDormitories, setStudents, students]);
 
-  const handleUpdateDormEvent = useCallback((dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean; followupTaskIds?: string[] }) => {
-    setDormitories((current) => current.map((dormitory) => {
-      if (dormitory.id !== dormId) return dormitory;
-      const events = dormitory.events.map((event) => {
-        if (event.id !== eventId) return event;
-        const nextScore = patch.score !== undefined && Number.isFinite(patch.score) ? Math.round(patch.score * 10) / 10 : event.score;
-        return { ...event, reason: patch.reason !== undefined ? patch.reason.trim() || event.reason : event.reason, score: nextScore, type: nextScore > 0 ? "reward" as const : nextScore < 0 ? "punish" as const : "note" as const, note: patch.note !== undefined ? patch.note.trim() : event.note, punishment: patch.punishment !== undefined ? patch.punishment.trim() : event.punishment, punishmentDone: patch.punishmentDone !== undefined ? patch.punishmentDone : event.punishmentDone, followupTaskIds: patch.followupTaskIds !== undefined ? patch.followupTaskIds : event.followupTaskIds };
-      });
-      return normalizeDormitoryScore({ ...dormitory, events });
-    }));
-  }, [setDormitories]);
+  const handleUpdateDormEvent = useCallback((dormId: string, eventId: string, patch: DormitoryEventPatch) => {
+    setDormitories((current) => current.map((dormitory) => dormitory.id === dormId ? updateDormitoryEventInLedger(dormitory, eventId, patch) : dormitory));
+    if (patch.date) {
+      setStudents((current) => current.map(student => ({
+        ...student,
+        records: student.records.map(record => record.id === `record-${eventId}-${student.id}` || record.id === `record-${eventId}` ? { ...record, date: patch.date || record.date } : record),
+      })));
+    }
+  }, [setDormitories, setStudents]);
 
   const handleDeleteDormEvent = useCallback((dormId: string, eventId: string) => {
-    const target = dormitories.find((dormitory) => dormitory.id === dormId)?.events.find((event) => event.id === eventId);
+    const owner = dormitories.find((dormitory) => dormitory.id === dormId);
+    const target = owner?.events.find((event) => event.id === eventId)
+      || owner?.history.flatMap(archive => archive.events).find((event) => event.id === eventId);
     const responsibleIds = target?.responsibleStudentIds ?? (target?.responsibleStudentId ? [target.responsibleStudentId] : []);
-    setDormitories((current) => current.map((dormitory) => dormitory.id !== dormId ? dormitory : normalizeDormitoryScore({ ...dormitory, events: dormitory.events.filter((event) => event.id !== eventId) })));
+    setDormitories((current) => current.map((dormitory) => dormitory.id === dormId ? deleteDormitoryEventFromLedger(dormitory, eventId) : dormitory));
     if (responsibleIds.length) {
       const idSet = new Set(responsibleIds);
       setStudents((current) => current.map((student) => !idSet.has(student.id) ? student : {
@@ -80,8 +72,5 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
     }
   }, [dormitories, setDormitories, setStudents]);
 
-  const handleCloseDormitoryPeriod = useCallback((dormId: string, options: { carryOver?: boolean } = {}) => setDormitories((current) => current.map((dormitory) => dormitory.id === dormId ? closeDormitoryPeriod(dormitory, options) : dormitory)), [setDormitories]);
-  const handleCloseAllDormitoryPeriods = useCallback((options: { carryOver?: boolean } = {}) => setDormitories((current) => current.map((dormitory) => dormitory.events.length ? closeDormitoryPeriod(dormitory, options) : dormitory)), [setDormitories]);
-
-  return { handleCreateDormitory, handleUpdateDormitory, handleDeleteDormitory, handleAssignStudentDormitory, handleAddDormitoryEvent, handleUpdateDormEvent, handleDeleteDormEvent, handleCloseDormitoryPeriod, handleCloseAllDormitoryPeriods };
+  return { handleCreateDormitory, handleDeleteDormitory, handleAssignStudentDormitory, handleAddDormitoryEvent, handleUpdateDormEvent, handleDeleteDormEvent };
 }

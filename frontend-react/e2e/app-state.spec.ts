@@ -56,6 +56,33 @@ test("preloads the comment workbench and keeps its full-screen background stable
   await expect(dialog).toBeHidden();
 });
 
+test("dormitory periods, custom settings and event dates work together", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /^宿舍/ }).click();
+
+  await expect(page.getByRole("group", { name: "宿舍统计周期" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "宿舍统计日期" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "批量结算" })).toHaveCount(0);
+  await expect(page.getByText("当前结算分")).toHaveCount(0);
+
+  const dormName = page.getByPlaceholder("新宿舍名称");
+  await dormName.fill("E2E 301");
+  await dormName.locator("..").getByRole("button").click();
+  await page.getByRole("button", { name: /卫生优秀/ }).click();
+  await expect(page.getByRole("button", { name: "宿舍事件发生日期" })).toBeVisible();
+  await page.getByRole("button", { name: "保存事件" }).click();
+  await expect(page.getByText("卫生优秀", { exact: true }).last()).toBeVisible();
+
+  await page.getByRole("button", { name: "设置自定义周期" }).click();
+  await page.getByText("每 N 个单位").locator("..").getByRole("spinbutton").fill("3");
+  await page.getByRole("button", { name: "保存周期" }).click();
+  await expect(page.getByRole("group", { name: "宿舍统计周期" }).getByRole("button", { name: "自定义周期" })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
+    return book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId)?.data?.settings?.dormitoryPeriod?.intervalCount;
+  })).toBe(3);
+});
+
 test("roster, exam, cloud sync and workspace switching keep data isolated", async ({ page }) => {
   test.setTimeout(60_000);
   await login(page);

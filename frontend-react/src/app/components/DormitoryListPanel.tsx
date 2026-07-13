@@ -1,7 +1,6 @@
-import { CalendarClock, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppStudent, Dormitory } from "../state/types";
-import { useAppDialog } from "./ui";
 
 const DORM_ITEM_HEIGHT = 48;
 const DORM_ITEM_GAP = 4;
@@ -15,14 +14,11 @@ function formatSigned(value: number): string {
 }
 
 export function DormitoryListPanel({
-  newName, setNewName, newBaseScore, setNewBaseScore, createDormitory, activeDormIndex,
-  sortedDormitories, selectedDormitory, selectDorm, dormitories, students, carryOver,
-  setCarryOver, hasPendingEvents, onCloseAllDormitoryPeriods,
+  newName, setNewName, createDormitory, activeDormIndex,
+  sortedDormitories, selectedDormitory, selectDorm, dormitories, students, periodScores,
 }: {
   newName: string;
   setNewName: Dispatch<SetStateAction<string>>;
-  newBaseScore: number;
-  setNewBaseScore: Dispatch<SetStateAction<number>>;
   createDormitory: () => void;
   activeDormIndex: number;
   sortedDormitories: Dormitory[];
@@ -30,12 +26,8 @@ export function DormitoryListPanel({
   selectDorm: (id: string) => void;
   dormitories: Dormitory[];
   students: AppStudent[];
-  carryOver: boolean;
-  setCarryOver: Dispatch<SetStateAction<boolean>>;
-  hasPendingEvents: boolean;
-  onCloseAllDormitoryPeriods: (options?: { carryOver?: boolean }) => void;
+  periodScores: Map<string, number>;
 }) {
-  const appDialog = useAppDialog();
   return <>
         <aside className="flex flex-col min-h-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 p-3">
@@ -45,13 +37,6 @@ export function DormitoryListPanel({
                 onChange={event => setNewName(event.target.value)}
                 className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm outline-none focus:border-blue-300"
                 placeholder="新宿舍名称"
-              />
-              <input
-                type="number"
-                value={newBaseScore}
-                onChange={event => setNewBaseScore(Number(event.target.value) || 0)}
-                className="w-14 rounded-lg border border-gray-200 bg-gray-50 px-1 py-1.5 text-center text-sm outline-none focus:border-blue-300"
-                placeholder="分"
               />
               <button
                 onClick={createDormitory}
@@ -93,8 +78,8 @@ export function DormitoryListPanel({
                         </div>
                       </div>
                     </div>
-                    <div className={`shrink-0 text-sm font-bold ${active ? "text-white" : scoreClass(dormitory.currentScore)}`}>
-                      {formatSigned(dormitory.currentScore)}
+                    <div className={`shrink-0 text-sm font-bold ${active ? "text-white" : scoreClass(periodScores.get(dormitory.id) || 0)}`}>
+                      {formatSigned(periodScores.get(dormitory.id) || 0)}
                     </div>
                   </button>
                 );
@@ -104,33 +89,11 @@ export function DormitoryListPanel({
               )}
             </div>
           </nav>
-          <div className="border-t border-gray-100 p-3 space-y-2">
+          <div className="border-t border-gray-100 p-3">
             <div className="text-[10px] text-gray-400">
               共 {dormitories.length} 间 · {students.filter(s => s.dormitoryId).length} 名学生
             </div>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              <input
-                type="checkbox"
-                checked={carryOver}
-                onChange={event => setCarryOver(event.target.checked)}
-                className="accent-blue-600"
-              />
-              结转上期分数
-            </label>
-            <button
-              onClick={async () => {
-                if (!hasPendingEvents) return;
-                if (await appDialog.confirm({ title: "结算全部宿舍周期？", description: `将结算所有宿舍的当前周期${carryOver ? "，并把分数结转到下一周期" : "，下一周期分数归零"}。全部已记录事件会归档。`, confirmLabel: "确认一键周清", variant: "primary" })) onCloseAllDormitoryPeriods({ carryOver });
-              }}
-              disabled={!hasPendingEvents}
-              className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"
-            >
-              <CalendarClock className="h-3.5 w-3.5" />
-              一键周清
-            </button>
           </div>
         </aside>
-        {appDialog.dialog}
   </>;
 }
-

@@ -1,4 +1,5 @@
 import type { AppStudent, CommentCriteriaSummary, CommentCustomOptionSummary, Dormitory, StudentCommentDraft, StudentExamSummary } from "./types";
+import { listDormitoryEvents } from "./dormitoryPeriods";
 
 export interface AiStudentExamContext {
   order: number;
@@ -199,7 +200,7 @@ export function buildStudentAiContext(input: {
     weaknesses: sortedLatest.slice(-2).reverse().map(item => item.subject),
     tags,
     records,
-    dormitory: dormitory ? `${dormitory.name} 当前 ${dormitory.currentScore} 分，成员 ${dormitory.memberIds.length} 人` : "",
+    dormitory: dormitory ? `${dormitory.name} 共 ${listDormitoryEvents(dormitory).length} 条加减分记录，成员 ${dormitory.memberIds.length} 人` : "",
     commentProfile: {
       criteriaSummary,
       customOptions,

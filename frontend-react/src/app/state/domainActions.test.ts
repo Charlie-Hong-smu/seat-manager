@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { calcBalance, createFundTransaction, filterFundTransactionsByPeriod, getFundPeriodRange, normalizeFundTransactions, shiftFundPeriod } from "./classFundActions";
-import { calculateDormScore, closeDormitoryPeriod, createDormEvent, createDormStudentRecord } from "./dormitoryActions";
+import { calculateDormScore, closeDormitoryPeriod, createDormEvent, createDormStudentRecord, deleteDormitoryEventFromLedger, updateDormitoryEventInLedger } from "./dormitoryActions";
 import { createStudent, createStudentRecord, updateStudentProfile } from "./studentActions";
 import { createTestStudent } from "./testFixtures";
 
@@ -64,4 +64,19 @@ describe("student, dormitory and fund actions", () => {
     expect(createDormStudentRecord(event, dorm, student.id)).toBeNull();
     expect(closeDormitoryPeriod(dorm).baseScore).toBe(0);
   });
+
+  it("edits and deletes legacy archived events through the unified ledger", () => {
+    const archived = createDormEvent({ dormId: "d1", score: 2, reason: "旧记录", date: "2026-01-03" }, []);
+    const dorm = {
+      id: "d1", name: "101", memberIds: [], baseScore: 0, currentScore: 0, events: [], periodStart: "2026-01-10",
+      history: [{ id: "old", label: "旧周期", startDate: "2026-01-01", endDate: "2026-01-07", baseScore: 0, finalScore: 2, events: [archived] }],
+    };
+    const updated = updateDormitoryEventInLedger(dorm, archived.id, { score: -1, date: "2026-01-04" });
+    expect(updated.history[0].events[0]).toMatchObject({ score: -1, date: "2026-01-04", type: "punish" });
+    expect(updated.history[0].finalScore).toBe(-1);
+    const deleted = deleteDormitoryEventFromLedger(updated, archived.id);
+    expect(deleted.history[0].events).toEqual([]);
+    expect(deleted.history[0].finalScore).toBe(0);
+  });
+
 });

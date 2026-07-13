@@ -18,6 +18,7 @@ import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
 import type { AppStudent, AttendanceRecord, Dormitory, FollowupTask, Gender, RecordType, StudentId, StudentRecord } from "../state/types";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
+import { listDormitoryEvents } from "../state/dormitoryPeriods";
 import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import {
@@ -182,6 +183,9 @@ export function StudentModal({
   }));
   const hasTrendChart = trendData.filter(item => typeof item[effectiveTrendMetric as keyof typeof item] === "number").length >= 2;
   const currentDormitory = dormitories.find(dormitory => dormitory.id === student.dormitoryId) || null;
+  const latestDormitoryEvent = currentDormitory
+    ? listDormitoryEvents(currentDormitory).sort((a, b) => `${b.event.date}-${b.event.createdAt}`.localeCompare(`${a.event.date}-${a.event.createdAt}`))[0]?.event
+    : undefined;
   const preservedManualTagIds = useMemo(
     () => student.manualTagIds.filter(id => !BEHAVIOR_TAG_IDS.has(id)),
     [student.manualTagIds]
@@ -549,11 +553,10 @@ export function StudentModal({
                     <div className="text-xs text-gray-400" style={{ fontWeight: 800 }}>宿舍</div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                       <span className="text-gray-900" style={{ fontWeight: 900 }}>{currentDormitory?.name || "未分配"}</span>
-                      <span className="text-gray-400">当前分 <span className={currentDormitory && currentDormitory.currentScore < 0 ? "text-red-500" : "text-emerald-600"} style={{ fontWeight: 900 }}>{currentDormitory ? `${currentDormitory.currentScore > 0 ? "+" : ""}${currentDormitory.currentScore}` : "—"}</span></span>
                       <span className="text-gray-400">成员 {currentDormitory?.memberIds.length ?? "—"}</span>
                     </div>
                     <div className="mt-1 truncate text-xs text-gray-400">
-                      最近事件：{currentDormitory?.events[0] ? `${currentDormitory.events[0].reason} · ${currentDormitory.events[0].date}` : "暂无"}
+                      最近事件：{latestDormitoryEvent ? `${latestDormitoryEvent.reason} · ${latestDormitoryEvent.date}` : "暂无"}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">

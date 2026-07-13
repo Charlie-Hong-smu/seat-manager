@@ -13,6 +13,7 @@ interface PersistSnapshotInput {
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
   drawSessions?: DrawSession[];
+  settings?: Record<string, unknown>;
 }
 
 interface SaveGradeExamInput extends PersistSnapshotInput {
@@ -58,8 +59,8 @@ function getBaseState(): Record<string, unknown> {
   return isRecord(raw) ? raw : {};
 }
 
-function mergeSeatSettings(baseSettings: unknown, seatSettings?: SeatSettings): Record<string, unknown> {
-  const settings = isRecord(baseSettings) ? { ...baseSettings } : {};
+function mergeSeatSettings(baseSettings: unknown, seatSettings?: SeatSettings, nextSettings?: Record<string, unknown>): Record<string, unknown> {
+  const settings = nextSettings ? { ...nextSettings } : isRecord(baseSettings) ? { ...baseSettings } : {};
   if (!seatSettings) {
     return settings;
   }
@@ -267,7 +268,7 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
   return syncedStudents;
 }
 
-export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions }: PersistSnapshotInput): boolean {
+export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, settings }: PersistSnapshotInput): boolean {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -291,12 +292,12 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSetti
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams: Array.isArray(baseState.savedExams) ? baseState.savedExams : [],
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],
-    settings: mergeSeatSettings(baseState.settings, seatSettings),
+    settings: mergeSeatSettings(baseState.settings, seatSettings, settings),
     commentRubric: baseState.commentRubric || null,
   });
 }
 
-export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, record }: SaveGradeExamInput): SeatManagerState | null {
+export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, settings, record }: SaveGradeExamInput): SeatManagerState | null {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -321,7 +322,7 @@ export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSett
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams,
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],
-    settings: mergeSeatSettings(baseState.settings, seatSettings),
+    settings: mergeSeatSettings(baseState.settings, seatSettings, settings),
     commentRubric: baseState.commentRubric || null,
   };
 
@@ -329,7 +330,7 @@ export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSett
 }
 
 function persistSavedExamRecords(
-  { students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories }: PersistSnapshotInput,
+  { students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, settings }: PersistSnapshotInput,
   savedExams: SavedGradeExamRecord[],
 ): SeatManagerState | null {
   const baseState = getBaseState();
@@ -352,7 +353,7 @@ function persistSavedExamRecords(
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams,
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],
-    settings: mergeSeatSettings(baseState.settings, seatSettings),
+    settings: mergeSeatSettings(baseState.settings, seatSettings, settings),
     commentRubric: baseState.commentRubric || null,
   };
 
