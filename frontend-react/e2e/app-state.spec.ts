@@ -71,7 +71,19 @@ test("dormitory periods, custom settings and event dates work together", async (
   await page.getByRole("button", { name: /卫生优秀/ }).click();
   await expect(page.getByRole("button", { name: "宿舍事件发生日期" })).toBeVisible();
   await page.getByRole("button", { name: "保存事件" }).click();
+  const savedToast = page.getByRole("status").filter({ hasText: "宿舍事件已保存" });
+  await expect(savedToast).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存事件" })).toBeHidden();
+  await expect(page.getByRole("button", { name: /卫生优秀/ }).first()).toHaveAttribute("aria-pressed", "false");
+  await savedToast.getByRole("button", { name: "撤销" }).click();
+  await expect(page.getByText("所选周期暂无事件")).toBeVisible();
+  await page.getByRole("button", { name: /卫生优秀/ }).first().click();
+  await page.getByRole("button", { name: "保存事件" }).click();
   await expect(page.getByText("卫生优秀", { exact: true }).last()).toBeVisible();
+  const secondSavedToast = page.getByRole("status").filter({ hasText: "宿舍事件已保存" });
+  await secondSavedToast.getByRole("button", { name: "关闭提示" }).click();
+  await expect(secondSavedToast).toHaveAttribute("data-phase", "closing");
+  await expect(secondSavedToast).toBeHidden();
 
   await page.getByRole("button", { name: "设置自定义周期" }).click();
   await page.getByText("每 N 个单位").locator("..").getByRole("spinbutton").fill("3");
@@ -81,6 +93,22 @@ test("dormitory periods, custom settings and event dates work together", async (
     const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
     return book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId)?.data?.settings?.dormitoryPeriod?.intervalCount;
   })).toBe(3);
+});
+
+test("creates a class-level followup without a student and supports undo", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /^跟进任务/ }).click();
+
+  await expect(page.getByText("不指定学生")).toBeVisible();
+  await page.getByPlaceholder("跟进事项，例如：确认处罚执行情况").fill("准备下周班会材料");
+  await page.getByRole("button", { name: /创建\s+任务/ }).click();
+
+  await expect(page.getByText("准备下周班会材料", { exact: true })).toBeVisible();
+  await expect(page.getByText(/班级事项 · 截止/)).toBeVisible();
+  const toast = page.getByRole("status").filter({ hasText: "跟进任务已创建" });
+  await expect(toast).toBeVisible();
+  await toast.getByRole("button", { name: "撤销" }).click();
+  await expect(page.getByText("准备下周班会材料", { exact: true })).toHaveCount(0);
 });
 
 test("roster, exam, cloud sync and workspace switching keep data isolated", async ({ page }) => {

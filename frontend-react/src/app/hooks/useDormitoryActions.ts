@@ -58,19 +58,12 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
   }, [setDormitories, setStudents]);
 
   const handleDeleteDormEvent = useCallback((dormId: string, eventId: string) => {
-    const owner = dormitories.find((dormitory) => dormitory.id === dormId);
-    const target = owner?.events.find((event) => event.id === eventId)
-      || owner?.history.flatMap(archive => archive.events).find((event) => event.id === eventId);
-    const responsibleIds = target?.responsibleStudentIds ?? (target?.responsibleStudentId ? [target.responsibleStudentId] : []);
     setDormitories((current) => current.map((dormitory) => dormitory.id === dormId ? deleteDormitoryEventFromLedger(dormitory, eventId) : dormitory));
-    if (responsibleIds.length) {
-      const idSet = new Set(responsibleIds);
-      setStudents((current) => current.map((student) => !idSet.has(student.id) ? student : {
-        ...student,
-        records: student.records.filter((record) => record.id !== `record-${eventId}` && !responsibleIds.some((id) => record.id === `record-${eventId}-${id}`)),
-      }));
-    }
-  }, [dormitories, setDormitories, setStudents]);
+    setStudents((current) => current.map((student) => {
+      const records = student.records.filter((record) => record.id !== `record-${eventId}` && record.id !== `record-${eventId}-${student.id}`);
+      return records.length === student.records.length ? student : { ...student, records };
+    }));
+  }, [setDormitories, setStudents]);
 
   return { handleCreateDormitory, handleDeleteDormitory, handleAssignStudentDormitory, handleAddDormitoryEvent, handleUpdateDormEvent, handleDeleteDormEvent };
 }

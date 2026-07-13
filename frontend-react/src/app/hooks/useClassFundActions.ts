@@ -10,7 +10,12 @@ export function useClassFundActions({ students, setFundTransactions }: {
   const handleAddFundTransaction = useCallback((input: NewFundTxInput) => {
     const tx = createFundTransaction(input, students);
     setFundTransactions((current) => [tx, ...current]);
+    return tx;
   }, [setFundTransactions, students]);
+
+  const handleRemoveCreatedFundTransaction = useCallback((id: string) => {
+    setFundTransactions((current) => current.filter((tx) => tx.id !== id));
+  }, [setFundTransactions]);
 
   const handleUpdateFundTransaction = useCallback((id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds">>) => {
     setFundTransactions((current) => current.map((tx) => {
@@ -41,5 +46,5 @@ export function useClassFundActions({ students, setFundTransactions }: {
 
   const handleClearFundTransactions = useCallback(() => setFundTransactions(current => current.map(tx => ({ ...tx, status: "void", voidedAt: new Date().toISOString(), voidReason: "批量作废" }))), [setFundTransactions]);
 
-  return { handleAddFundTransaction, handleUpdateFundTransaction, handleDeleteFundTransaction, handleClearFundTransactions };
+  return { handleAddFundTransaction, handleRemoveCreatedFundTransaction, handleUpdateFundTransaction, handleDeleteFundTransaction, handleClearFundTransactions };
 }

@@ -100,10 +100,10 @@ export function buildTimeline(state: SeatManagerState, today = new Date().toISOS
   });
   state.followupTasks.forEach(task => items.push(finishItem({
     id: `task-${task.id}`, date: task.updatedAt.slice(0, 10) || task.plannedDate, occurredAt: safeOccurredAt(task.updatedAt.slice(0, 10) || task.plannedDate, task.updatedAt), type: "跟进", title: task.title,
-    studentId: task.studentId, studentName: studentMap.get(task.studentId) || "未知学生",
+    studentId: task.studentId || undefined, studentName: task.studentId ? studentMap.get(task.studentId) || "未知学生" : "班级事项",
     detail: task.status === "completed" ? "已完成" : task.status === "cancelled" ? "已取消" : `截止 ${task.dueDate || "未设置"}`,
     tone: taskTone(task, today), isAi: task.source === "ai",
-    target: { kind: "workspace", workspace: "followups", entityId: task.id, studentId: task.studentId },
+    target: { kind: "workspace", workspace: "followups", entityId: task.id, studentId: task.studentId || undefined },
   })));
   return items.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id));
 }
@@ -124,6 +124,6 @@ export function inspectStateHealth(state: SeatManagerState): HealthIssue[] {
   state.seatOrder.forEach((id, index) => { if (id && !ids.has(id)) issues.push({ id: `seat-${index}`, severity: "critical", title: "座位引用了不存在的学生", detail: `第 ${index + 1} 个座位` }); });
   const dormOwner = new Map<string, string>(); state.dormitories.forEach(dorm => dorm.memberIds.forEach(id => { if (!ids.has(id)) issues.push({ id: `dorm-missing-${dorm.id}-${id}`, severity: "warning", title: "宿舍成员不存在", detail: dorm.name }); const prior = dormOwner.get(id); if (prior && prior !== dorm.name) issues.push({ id: `dorm-duplicate-${id}`, severity: "critical", title: "学生被分配到多个宿舍", detail: `${prior}、${dorm.name}` }); dormOwner.set(id, dorm.name); }));
   state.attendanceRecords.forEach(record => { if (!ids.has(record.studentId)) issues.push({ id: `attendance-orphan-${record.id}`, severity: "warning", title: "出勤记录引用了不存在的学生", detail: record.date }); });
-  state.followupTasks.forEach(task => { if (!ids.has(task.studentId)) issues.push({ id: `task-orphan-${task.id}`, severity: "warning", title: "跟进任务引用了不存在的学生", detail: task.title }); });
+  state.followupTasks.forEach(task => { if (task.studentId && !ids.has(task.studentId)) issues.push({ id: `task-orphan-${task.id}`, severity: "warning", title: "跟进任务引用了不存在的学生", detail: task.title }); });
   return issues;
 }

@@ -151,6 +151,57 @@ export function useAppDialog() {
   };
 }
 
+type ActionToastOptions = {
+  message: string;
+  actionLabel?: string;
+  actionIcon?: ReactNode;
+  onAction?: () => void;
+  duration?: number;
+};
+
+export function ActionToast({ message, actionLabel, actionIcon, onAction, onClose, duration = 4000 }: ActionToastOptions & { onClose: () => void }) {
+  const [phase, setPhase] = useState<"open" | "closing">("open");
+  const closingRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setPhase("closing");
+    closeTimerRef.current = window.setTimeout(onClose, 200);
+  }, [onClose]);
+
+  useEffect(() => {
+    const autoCloseTimer = window.setTimeout(requestClose, duration);
+    return () => window.clearTimeout(autoCloseTimer);
+  }, [duration, requestClose]);
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+  }, []);
+
+  return <div role="status" aria-live="polite" data-phase={phase} className="action-toast fixed bottom-5 left-1/2 z-[100] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl bg-gray-900 px-4 py-3 text-sm text-white shadow-2xl">
+    <span className="min-w-0">{message}</span>
+    {actionLabel && onAction && <button type="button" onClick={() => { onAction(); requestClose(); }} className="flex shrink-0 items-center gap-1 rounded-lg bg-white/10 px-2 py-1 font-bold transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50">{actionIcon}{actionLabel}</button>}
+    <button type="button" onClick={requestClose} aria-label="关闭提示" className="shrink-0 text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"><X className="h-4 w-4"/></button>
+  </div>;
+}
+
+// 短时操作反馈的唯一入口。显式创建、保存或状态更新统一从这里触发。
+// eslint-disable-next-line react-refresh/only-export-components
+export function useActionToast() {
+  const [request, setRequest] = useState<(ActionToastOptions & { id: number }) | null>(null);
+  const show = useCallback((options: string | ActionToastOptions) => {
+    const normalized = typeof options === "string" ? { message: options } : options;
+    setRequest({ ...normalized, id: Date.now() });
+  }, []);
+  const dismiss = useCallback(() => setRequest(null), []);
+
+  return {
+    show,
+    dismiss,
+    toast: request ? <ActionToast key={request.id} {...request} onClose={dismiss} /> : null,
+  };
+}
+
 export function AiGenerationPanel({ title, steps, compact = false }: { title: string; steps: string[]; compact?: boolean }) {
   const [activeStep, setActiveStep] = useState(0);
   useEffect(() => {

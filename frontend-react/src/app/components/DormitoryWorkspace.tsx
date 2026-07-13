@@ -5,6 +5,7 @@ import {
   Pencil,
   Plus,
   ListPlus,
+  RotateCcw,
   Search,
   Settings2,
   Trash2,
@@ -20,7 +21,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { ConfirmDialog, DatePicker, useAppDialog } from "./ui";
+import { ConfirmDialog, DatePicker, useActionToast, useAppDialog } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-emerald-600" : value < 0 ? "text-red-500" : "text-gray-500";
@@ -74,6 +75,7 @@ export function DormitoryWorkspace({
   onPeriodSettingsChange,
 }: Props) {
   const appDialog = useAppDialog();
+  const actionToast = useActionToast();
   const [selectedDormId, setSelectedDormId] = useState(dormitories[0]?.id || "");
   const [newName, setNewName] = useState("");
   const [memberSearch, setMemberSearch] = useState("");
@@ -184,6 +186,13 @@ export function DormitoryWorkspace({
     const dormitory = onCreateDormitory(newName, 0);
     setSelectedDormId(dormitory.id);
     setNewName("");
+    actionToast.show({
+      message: "宿舍已创建",
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => onDeleteDormitory(dormitory.id),
+      duration: 6000,
+    });
   }
 
   function selectPreset(label: string) {
@@ -216,6 +225,10 @@ export function DormitoryWorkspace({
   }
 
   function savePresetManager() {
+    const previousPresets = presets;
+    const previousMemory = scoreMemory;
+    const previousReason = reason;
+    const previousScore = score;
     const normalized = presetDrafts
       .map(preset => ({ ...preset, label: preset.label.trim() }))
       .filter((preset, index, list) => preset.label && list.findIndex(item => item.label === preset.label) === index);
@@ -232,6 +245,13 @@ export function DormitoryWorkspace({
     }
     setPresetManagerOpen(false);
     setPendingDeletePreset("");
+    actionToast.show({
+      message: "事件类型设置已保存",
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => { setPresets(previousPresets); setScoreMemory(previousMemory); setReason(previousReason); setScore(previousScore); },
+      duration: 6000,
+    });
   }
 
   function startEditEvent(eventId: string, reason: string, score: number, note: string, punishment: string, date: string) {
@@ -245,8 +265,16 @@ export function DormitoryWorkspace({
 
   function saveEditEvent() {
     if (!selectedDormitory || !editingEventId) return;
+    const previousEvent = selectedPeriodEvents.find(entry => entry.event.id === editingEventId)?.event;
     onUpdateDormitoryEvent(selectedDormitory.id, editingEventId, { reason: editReason, score: editScore, note: editNote, punishment: editPunishment, date: editDate });
     setEditingEventId("");
+    actionToast.show({
+      message: "宿舍事件修改已保存",
+      actionLabel: previousEvent ? "撤销" : undefined,
+      actionIcon: previousEvent ? <RotateCcw className="h-3.5 w-3.5" /> : undefined,
+      onAction: previousEvent ? () => onUpdateDormitoryEvent(selectedDormitory.id, previousEvent.id, { reason: previousEvent.reason, score: previousEvent.score, note: previousEvent.note, punishment: previousEvent.punishment || "", date: previousEvent.date }) : undefined,
+      duration: 6000,
+    });
   }
 
   function toggleResponsible(studentId: string) {
@@ -322,14 +350,19 @@ export function DormitoryWorkspace({
       recordToStudent: responsibleIds.length > 0 ? recordToStudent : false,
       date: eventDate,
     });
-    if (savedEvent && createFollowup && punishment.trim() && responsibleIds.length) {
+    if (!savedEvent) return;
+    if (createFollowup && punishment.trim() && responsibleIds.length) {
       const studentId = responsibleIds[0];
       onRequestFollowupTask({ studentId, studentIds: responsibleIds, title: `宿舍处理：${punishment.trim()}`, description: `${selectedDormitory.name} · ${reason.trim()}${note.trim() ? ` · ${note.trim()}` : ""}`, plannedDate: new Date().toISOString().slice(0, 10), dueDate: followupDueDate, type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: savedEvent.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, savedEvent.id, { followupTaskIds: taskIds }));
     }
-    setNote("");
-    setPunishment("");
-    setCreateFollowup(false);
-    setEventDate(localDateKey());
+    resetForm();
+    actionToast.show({
+      message: "宿舍事件已保存",
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => onDeleteDormitoryEvent(savedEvent.dormId, savedEvent.id),
+      duration: 6000,
+    });
   }
 
   async function togglePunishment(event: DormEvent) {
@@ -360,6 +393,8 @@ export function DormitoryWorkspace({
     setResponsibleIds([]);
     setResponsibleSearch("");
     setShowResponsible(false);
+    setRecordToStudent(true);
+    setCreateFollowup(false);
     setEventDate(localDateKey());
   }
 
@@ -384,7 +419,11 @@ export function DormitoryWorkspace({
         onAnchorChange={changePeriodAnchor}
         range={periodRange}
         settings={periodSettings}
-        onSettingsChange={onPeriodSettingsChange}
+              onSettingsChange={settings => {
+                const previousSettings = periodSettings;
+                onPeriodSettingsChange(settings);
+                actionToast.show({ message: "宿舍统计周期已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => onPeriodSettingsChange(previousSettings), duration: 6000 });
+              }}
       />
       <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr_220px] gap-4 overflow-hidden p-4">
         <DormitoryListPanel
@@ -916,6 +955,7 @@ export function DormitoryWorkspace({
       <ConfirmDialog open={Boolean(pendingDeleteEvent)} title="删除这条宿舍事件？" description={`将删除“${pendingDeleteEvent?.reason || "当前事件"}”。已完成的关联任务会保留；未完成任务可选择保留或同时取消。`} confirmLabel={(pendingDeleteEvent?.followupTaskIds || []).some(id => followupTasks.some(task => task.id === id && task.status === "pending")) ? "删除并取消未完成任务" : "确认删除事件"} alternateLabel={(pendingDeleteEvent?.followupTaskIds || []).some(id => followupTasks.some(task => task.id === id && task.status === "pending")) ? "删除但保留任务" : undefined} onCancel={() => setPendingDeleteEvent(null)} onAlternate={() => confirmDeleteEvent(false)} onConfirm={() => confirmDeleteEvent(true)} />
       <ConfirmDialog open={Boolean(pendingDeletePreset)} title="删除这个事件类型？" description={`将从预设中移除“${presetDrafts.find(item => item.originalLabel === pendingDeletePreset)?.label || "当前类型"}”，保存类型设置后生效。`} confirmLabel="确认删除类型" onCancel={() => setPendingDeletePreset("")} onConfirm={() => { setPresetDrafts(previous => previous.filter(item => item.originalLabel !== pendingDeletePreset)); setPendingDeletePreset(""); }} />
       {appDialog.dialog}
+      {actionToast.toast}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { RotateCcw } from "lucide-react";
 
 import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/LoginScreen";
@@ -32,7 +33,7 @@ import { useClassFundActions } from "./hooks/useClassFundActions";
 import { createFollowupTask, findOpenLinkedTask, getTaskUrgency, todayKey } from "./state/dailyManagement";
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, inspectStateHealth, type TimelineTarget } from "./state/dataInsights";
-import { useAppDialog } from "./components/ui";
+import { useActionToast, useAppDialog } from "./components/ui";
 import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
 
 type AppTab = SidebarTab;
@@ -55,6 +56,7 @@ const loadScoresWorkspace = () => import("./components/workspaces/ScoresWorkspac
 
 export default function App() {
   const appDialog = useAppDialog();
+  const actionToast = useActionToast();
   const initialState = useSeatManagerState();
   const controller = useSeatManagerController(initialState);
   const appState = controller.state;
@@ -140,6 +142,9 @@ export default function App() {
   }
 
   function confirmFollowupTask(draft: FollowupTaskDraft) {
+    const wasEditing = Boolean(draft.id);
+    const previousTask = draft.id ? followupTasks.find(task => task.id === draft.id) : undefined;
+    const afterSave = followupAfterSave.current;
     let savedIds: string[] = draft.id ? [draft.id] : [];
     if (draft.id) {
       const { studentIds: _studentIds, id: _id, ...patch } = draft;
@@ -150,9 +155,24 @@ export default function App() {
       savedIds = created.map(task => task.id);
       setFollowupTasks(current => [...created, ...current]);
     }
-    followupAfterSave.current?.(savedIds);
+    afterSave?.(savedIds);
     followupAfterSave.current = null;
     setFollowupDraft(null);
+    actionToast.show({
+      message: wasEditing ? "跟进任务修改已保存" : savedIds.length > 1 ? `已创建 ${savedIds.length} 项跟进任务` : "跟进任务已创建",
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => {
+        if (previousTask) {
+          setFollowupTasks(current => current.map(task => task.id === previousTask.id ? previousTask : task));
+          return;
+        }
+        const idSet = new Set(savedIds);
+        setFollowupTasks(current => current.filter(task => !idSet.has(task.id)));
+        afterSave?.([]);
+      },
+      duration: 6000,
+    });
   }
 
   useEffect(() => {
@@ -316,7 +336,16 @@ export default function App() {
       seats: seatOrder.map(id => (id ? studentById.get(id)?.name || "" : "")),
     };
     const nextHistory = [snapshot, ...savedSeatHistory].slice(0, 20);
-    if (persistSeatHistory(nextHistory)) setSelectedHistorySnapshot(snapshot);
+    if (persistSeatHistory(nextHistory)) {
+      setSelectedHistorySnapshot(snapshot);
+      actionToast.show({
+        message: "座位快照已保存",
+        actionLabel: "撤销",
+        actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+        onAction: () => handleDeleteSeatHistory(snapshot.id),
+        duration: 6000,
+      });
+    }
   }
 
   function handleUpdateSeatHistoryNote(id: string, note: string): boolean {
@@ -661,6 +690,7 @@ export default function App() {
   } = useDormitoryActions({ students, dormitories, setStudents, setDormitories });
   const {
     handleAddFundTransaction,
+    handleRemoveCreatedFundTransaction,
     handleUpdateFundTransaction,
     handleDeleteFundTransaction,
     handleClearFundTransactions,
@@ -895,6 +925,7 @@ export default function App() {
               transactions={fundTransactions}
               students={students}
               onAdd={handleAddFundTransaction}
+              onRemoveCreated={handleRemoveCreatedFundTransaction}
               onUpdate={handleUpdateFundTransaction}
               onDelete={handleDeleteFundTransaction}
               onClearAll={handleClearFundTransactions}
@@ -903,6 +934,7 @@ export default function App() {
         )}
       </div>
       {appDialog.dialog}
+      {actionToast.toast}
     </AppShell>
   );
 }

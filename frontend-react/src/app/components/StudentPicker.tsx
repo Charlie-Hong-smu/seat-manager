@@ -22,7 +22,7 @@ export function StudentPicker({ students, value, onChange, label = "选择学生
   </div>;
 }
 
-export function StudentMultiPicker({ students, values, onChange, label = "选择学生" }: { students: AppStudent[]; values: StudentId[]; onChange: (ids: StudentId[]) => void; label?: string }) {
+export function StudentMultiPicker({ students, values, onChange, label = "选择学生", emptyLabel = "请选择学生" }: { students: AppStudent[]; values: StudentId[]; onChange: (ids: StudentId[]) => void; label?: string; emptyLabel?: string }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selectedIds = new Set(values);
@@ -64,7 +64,7 @@ export function StudentMultiPicker({ students, values, onChange, label = "选择
   return <div className="relative">
     <button type="button" aria-expanded={open} onClick={() => setOpen(current => !current)} className="flex h-11 w-full items-center gap-3 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-left transition-colors hover:border-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20">
       <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600"><UserRound className="h-4 w-4" /></span>
-      <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold text-[var(--app-text-muted)]">{label}</span><span className={`block truncate text-sm font-bold ${values.length ? "text-[var(--app-text)]" : "text-gray-400"}`}>{values.length ? `已选 ${values.length} 人` : "请选择学生"}</span></span>
+      <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold text-[var(--app-text-muted)]">{label}</span><span className={`block truncate text-sm font-bold ${values.length ? "text-[var(--app-text)]" : "text-gray-400"}`}>{values.length ? `已选 ${values.length} 人` : emptyLabel}</span></span>
       <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
     </button>
     <div ref={selectedContainerRef} className={`flex flex-wrap gap-1.5 transition-[margin] duration-200 motion-reduce:transition-none ${values.length ? "mt-2" : ""}`}>

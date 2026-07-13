@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTimeline, filterTimeline, inspectStateHealth } from "./dataInsights";
 import { createEmptySeatManagerState } from "./legacyStateAdapter";
 import { createTestStudent } from "./testFixtures";
+import { createFollowupTask } from "./dailyManagement";
 
 describe("data insights", () => {
   it("aggregates timeline and finds broken references", () => {
@@ -33,5 +34,12 @@ describe("data insights", () => {
     const item = buildTimeline(state, "2026-07-11")[0];
     expect(item).toMatchObject({ studentName: "未知学生", type: "出勤", tone: "reminder" });
     expect(filterTimeline([item], { studentId: "missing" })).toHaveLength(1);
+  });
+
+  it("treats followups without a student as class-level tasks", () => {
+    const state = createEmptySeatManagerState();
+    state.followupTasks = [createFollowupTask({ studentId: "", title: "准备班会", dueDate: "2026-07-14" })];
+    expect(buildTimeline(state, "2026-07-13")[0]).toMatchObject({ studentId: undefined, studentName: "班级事项", title: "准备班会" });
+    expect(inspectStateHealth(state)).toEqual([]);
   });
 });

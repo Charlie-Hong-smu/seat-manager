@@ -110,6 +110,7 @@ export type FollowupTaskSource = "manual" | "ai" | "score" | "attendance" | "dor
 
 export interface FollowupTask {
   id: string;
+  /** 空字符串表示不绑定具体学生的班级事项。 */
   studentId: StudentId;
   title: string;
   type: string;

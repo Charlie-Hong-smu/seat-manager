@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, RotateCcw, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 
 import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
 import { FundTransactionForm } from "../FundTransactionForm";
-import { Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl } from "../ui";
+import { Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, useActionToast } from "../ui";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -14,13 +14,15 @@ export function ClassFundWorkspace({
   transactions,
   students,
   onAdd,
+  onRemoveCreated,
   onUpdate,
   onDelete,
   onClearAll,
 }: {
   transactions: FundTransaction[];
   students: AppStudent[];
-  onAdd: (input: NewFundTxInput) => void;
+  onAdd: (input: NewFundTxInput) => FundTransaction;
+  onRemoveCreated: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds">>) => void;
   onDelete: (id: string) => void;
   onClearAll: () => void;
@@ -35,6 +37,7 @@ export function ClassFundWorkspace({
   const [periodAnchor, setPeriodAnchor] = useState(() => new Date().toISOString().slice(0, 10));
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [pendingVoidTransaction, setPendingVoidTransaction] = useState<FundTransaction | null>(null);
+  const actionToast = useActionToast();
 
   const periodTransactions = filterFundTransactionsByPeriod(transactions, periodMode, periodAnchor);
   const periodRange = getFundPeriodRange(periodMode, periodAnchor);
@@ -59,6 +62,7 @@ export function ClassFundWorkspace({
     if (!Number.isFinite(value) || value <= 0) {
       return;
     }
+    const previousTransaction = transactions.find(tx => tx.id === editingId);
     onUpdate(editingId, {
       type: editType,
       amount: Math.abs(value),
@@ -67,6 +71,24 @@ export function ClassFundWorkspace({
       date: editDate,
     });
     setEditingId("");
+    actionToast.show({
+      message: "班费流水修改已保存",
+      actionLabel: previousTransaction ? "撤销" : undefined,
+      actionIcon: previousTransaction ? <RotateCcw className="h-3.5 w-3.5" /> : undefined,
+      onAction: previousTransaction ? () => onUpdate(previousTransaction.id, { type: previousTransaction.type, amount: previousTransaction.amount, category: previousTransaction.category, note: previousTransaction.note, date: previousTransaction.date, relatedStudentIds: previousTransaction.relatedStudentIds }) : undefined,
+      duration: 6000,
+    });
+  }
+
+  function addTransaction(input: NewFundTxInput) {
+    const created = onAdd(input);
+    actionToast.show({
+      message: "班费流水已保存",
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => onRemoveCreated(created.id),
+      duration: 6000,
+    });
   }
 
   function handleClearAll() {
@@ -119,7 +141,7 @@ export function ClassFundWorkspace({
             {/* 左：记一笔 */}
             <div className="surface-enter rounded-2xl border border-gray-100 bg-white p-5 shadow-sm [animation-delay:60ms]">
               <div className="mb-4 text-sm font-semibold text-gray-900">记一笔</div>
-              <FundTransactionForm students={students} onSubmit={onAdd} />
+              <FundTransactionForm students={students} onSubmit={addTransaction} />
             </div>
 
             {/* 右：收支流水 */}
@@ -265,6 +287,7 @@ export function ClassFundWorkspace({
       </div>
       <ConfirmDialog open={confirmClearAll} title="作废全部班费流水？" description={`将把全部 ${transactions.length} 条交易记录标记为已作废。原金额和审计记录会保留，统计默认排除作废项。`} confirmLabel="确认全部作废" onCancel={() => setConfirmClearAll(false)} onConfirm={() => { onClearAll(); setConfirmClearAll(false); }} />
       <ConfirmDialog open={Boolean(pendingVoidTransaction)} title="作废这笔班费流水？" description={`“${pendingVoidTransaction?.category || "当前流水"}”将保留原金额和记录，但不再计入默认统计。`} confirmLabel="确认作废" onCancel={() => setPendingVoidTransaction(null)} onConfirm={() => { if (!pendingVoidTransaction) return; onDelete(pendingVoidTransaction.id); setPendingVoidTransaction(null); }} />
+      {actionToast.toast}
     </div>
   );
 }
