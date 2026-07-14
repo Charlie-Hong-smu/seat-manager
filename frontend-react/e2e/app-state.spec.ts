@@ -205,20 +205,16 @@ test("today workspace routes into homework and persists the teacher ledger", asy
 
   await page.getByRole("button", { name: /^历史/ }).click();
   const timelineCard = page.locator(".history-timeline-card");
-  const timelineHeader = page.locator(".history-timeline-card > div").first();
-  const timelineBody = page.locator(".history-timeline-card > div").nth(1);
-  const [cardBefore, headerBefore, bodyBefore] = await Promise.all([timelineCard.boundingBox(), timelineHeader.boundingBox(), timelineBody.boundingBox()]);
+  const measureTimelineLayout = () => timelineCard.evaluate(card => {
+    const [header, body] = Array.from(card.children) as HTMLElement[];
+    return { headerHeight: header.offsetHeight, bodyOffset: body.offsetTop };
+  });
+  const before = await measureTimelineLayout();
   await page.getByRole("group", { name: "事件类型" }).getByRole("button", { name: "作业", exact: true }).click();
   await expect(page.getByRole("button", { name: "清除筛选", exact: true }).first()).toBeVisible();
-  const [cardAfter, headerAfter, bodyAfter] = await Promise.all([timelineCard.boundingBox(), timelineHeader.boundingBox(), timelineBody.boundingBox()]);
-  expect(cardBefore).not.toBeNull();
-  expect(headerBefore).not.toBeNull();
-  expect(bodyBefore).not.toBeNull();
-  expect(cardAfter).not.toBeNull();
-  expect(headerAfter).not.toBeNull();
-  expect(bodyAfter).not.toBeNull();
-  expect(headerAfter!.height).toBe(headerBefore!.height);
-  expect(bodyAfter!.y - cardAfter!.y).toBe(bodyBefore!.y - cardBefore!.y);
+  const after = await measureTimelineLayout();
+  expect(after.headerHeight).toBe(before.headerHeight);
+  expect(after.bodyOffset).toBe(before.bodyOffset);
 });
 
 test("roster, exam, cloud sync and workspace switching keep data isolated", async ({ page }) => {
