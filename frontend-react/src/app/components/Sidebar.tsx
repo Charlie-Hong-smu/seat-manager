@@ -11,11 +11,12 @@ import {
   Wallet,
   CalendarCheck2,
   ListTodo,
+  SunMedium,
 } from "lucide-react";
 
 import type { AppStudent, Dormitory, GradeExam, StudentId } from "../state/types";
 
-export type SidebarTab = "daily" | "attendance" | "followups" | "dormitories" | "scores" | "ai" | "funds" | "data" | "history";
+export type SidebarTab = "today" | "daily" | "attendance" | "followups" | "dormitories" | "scores" | "ai" | "funds" | "data" | "history";
 
 interface Props {
   activeTab: SidebarTab;
@@ -42,9 +43,10 @@ const NAV_GROUPS: Array<{ label: string; items: NavEntry[] }> = [
   {
     label: "日常管理",
     items: [
-      { key: "daily", label: "日常", icon: <LayoutGrid className="h-[18px] w-[18px]" />, getBadge: ({ students }) => String(students.length) },
+      { key: "today", label: "今日", icon: <SunMedium className="h-[18px] w-[18px]" /> },
+      { key: "daily", label: "座位", icon: <LayoutGrid className="h-[18px] w-[18px]" />, getBadge: ({ students }) => String(students.length) },
       { key: "attendance", label: "出勤", icon: <CalendarCheck2 className="h-[18px] w-[18px]" /> },
-      { key: "followups", label: "跟进任务", icon: <ListTodo className="h-[18px] w-[18px]" />, getBadge: ({ pendingTaskCount }) => pendingTaskCount ? String(pendingTaskCount) : "" },
+      { key: "followups", label: "任务与作业", icon: <ListTodo className="h-[18px] w-[18px]" />, getBadge: ({ pendingTaskCount }) => pendingTaskCount ? String(pendingTaskCount) : "" },
       { key: "dormitories", label: "宿舍", icon: <Home className="h-[18px] w-[18px]" />, getBadge: ({ dormitories }) => String(dormitories.length) },
     ],
   },

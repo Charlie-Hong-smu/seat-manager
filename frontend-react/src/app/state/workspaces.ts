@@ -16,9 +16,14 @@ import type {
   WorkspaceSlice,
   WorkspaceTerm,
 } from "./types";
+import {
+  validateLegacyWorkspaceData,
+  validateWorkspaceBook,
+  type WorkspaceValidationIssue,
+} from "./workspaceValidation";
 
 const LEGACY_STORAGE_KEY = "homeroom-seat-manager-v1";
-const WORKSPACES_KEY = "seat-manager-workspaces-v1";
+export const WORKSPACES_KEY = "seat-manager-workspaces-v1";
 const SCHOOL_STAGE_KEY = "seat-manager-last-school-stage";
 
 function hasStorage(): boolean {
@@ -202,23 +207,38 @@ function readRawLegacy(): Record<string, unknown> | null {
   }
 }
 
-function readBookRaw(): WorkspaceBook | null {
+export class WorkspaceStorageCorruptError extends Error {
+  constructor(public readonly issues: WorkspaceValidationIssue[]) {
+    super("workspace_storage_corrupt");
+  }
+}
+
+export type WorkspaceStorageStatus =
+  | { status: "empty" }
+  | { status: "ready"; book: WorkspaceBook; warnings: string[] }
+  | { status: "corrupt"; raw: string; issues: WorkspaceValidationIssue[] };
+
+export function inspectWorkspaceStorage(): WorkspaceStorageStatus {
   if (!hasStorage()) {
-    return null;
+    return { status: "empty" };
   }
+  const raw = window.localStorage.getItem(WORKSPACES_KEY);
+  if (!raw) return { status: "empty" };
   try {
-    const raw = window.localStorage.getItem(WORKSPACES_KEY);
-    if (!raw) {
-      return null;
-    }
     const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed) || !Array.isArray(parsed.slices)) {
-      return null;
-    }
-    return parsed as unknown as WorkspaceBook;
+    const validation = validateWorkspaceBook(parsed);
+    return validation.ok
+      ? { status: "ready", book: validation.book, warnings: validation.warnings }
+      : { status: "corrupt", raw, issues: validation.issues };
   } catch {
-    return null;
+    return { status: "corrupt", raw, issues: [{ path: "root", message: "本机数据不是有效的 JSON" }] };
   }
+}
+
+function readBookRaw(): WorkspaceBook | null {
+  const status = inspectWorkspaceStorage();
+  if (status.status === "corrupt") throw new WorkspaceStorageCorruptError(status.issues);
+  return status.status === "ready" ? status.book : null;
 }
 
 function writeBook(book: WorkspaceBook): boolean {
@@ -289,6 +309,47 @@ export function ensureWorkspaceBook(): WorkspaceBook {
   };
   writeBook(book);
   return book;
+}
+
+export type PreparedWorkspaceImport = {
+  book: WorkspaceBook;
+  format: "workspace-book" | "legacy-state";
+  warnings: string[];
+};
+
+/** 校验并准备整柜或旧单班数据。这里只读，不会触碰本机存储。 */
+export function prepareWorkspaceImport(payload: unknown): PreparedWorkspaceImport {
+  const bookValidation = validateWorkspaceBook(payload);
+  if (bookValidation.ok) {
+    return { book: bookValidation.book, format: "workspace-book", warnings: bookValidation.warnings };
+  }
+  const legacyValidation = validateLegacyWorkspaceData(payload);
+  if (!legacyValidation.ok) {
+    throw new WorkspaceStorageCorruptError(bookValidation.issues.length ? bookValidation.issues : legacyValidation.issues);
+  }
+  const slice = createSlice({
+    className: "默认班级",
+    term: makeTerm(guessCurrentTerm()),
+    data: legacyValidation.data,
+  });
+  return {
+    book: { version: 1, currentSliceId: slice.id, slices: [slice] },
+    format: "legacy-state",
+    warnings: [],
+  };
+}
+
+/** 已完成校验的数据只执行一次原子 localStorage 写入。 */
+export function importPreparedWorkspace(prepared: PreparedWorkspaceImport): boolean {
+  return writeBook(prepared.book);
+}
+
+/** 仅供损坏数据恢复界面在用户明确确认后创建一个新空柜。 */
+export function resetCorruptWorkspace(): boolean {
+  const status = inspectWorkspaceStorage();
+  if (status.status !== "corrupt") return false;
+  const slice = createSlice({ className: "默认班级", term: makeTerm(guessCurrentTerm()) });
+  return writeBook({ version: 1, currentSliceId: slice.id, slices: [slice] });
 }
 
 export function getCurrentSlice(): WorkspaceSlice {
@@ -594,22 +655,9 @@ export function exportWholeBook(): WorkspaceBook {
 
 /** 云同步恢复用:整柜写入。兼容旧的"单班数据"格式(自动包成一个切片)。 */
 export function importWholeBook(payload: unknown): boolean {
-  // 新格式:本身就是文件柜。
-  if (isRecord(payload) && Array.isArray(payload.slices) && payload.slices.length) {
-    const book = payload as unknown as WorkspaceBook;
-    if (!book.slices.some(slice => slice.id === book.currentSliceId)) {
-      book.currentSliceId = book.slices[0].id;
-    }
-    return writeBook(book);
+  try {
+    return importPreparedWorkspace(prepareWorkspaceImport(payload));
+  } catch {
+    return false;
   }
-  // 旧格式:单班数据(带 students / seatOrder)→ 包成默认切片。
-  if (isRecord(payload) && Array.isArray(payload.students)) {
-    const slice = createSlice({
-      className: "默认班级",
-      term: makeTerm(guessCurrentTerm()),
-      data: payload,
-    });
-    return writeBook({ version: 1, currentSliceId: slice.id, slices: [slice] });
-  }
-  return false;
 }

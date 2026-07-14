@@ -35,10 +35,12 @@ export function DailyWorkspace({
   onOrderSeatsByList,
   onUndoSeatOrder,
   onUpdateSeatSettings,
+  onApplySeatLayout,
   onAddStudent,
   onSelectStudent,
   onOpenStudentFollowup,
   onMoveSeat,
+  onAssignStudentToSeat,
   onToggleLock,
   drawSessions,
   onDrawSessionsChange,
@@ -56,10 +58,12 @@ export function DailyWorkspace({
   onOrderSeatsByList: () => void;
   onUndoSeatOrder: () => void;
   onUpdateSeatSettings: (updater: (current: SeatSettings) => SeatSettings) => void;
+  onApplySeatLayout: (layout: NonNullable<SeatSettings["layout"]>) => void;
   onAddStudent: (name: string, gender: Gender, alias?: string) => void;
   onSelectStudent: (student: AppStudent) => void;
   onOpenStudentFollowup: (student: AppStudent) => void;
   onMoveSeat: (fromIndex: number, toIndex: number) => void;
+  onAssignStudentToSeat: (studentId: StudentId, seatIndex: number) => void;
   onToggleLock: (idx: number) => void;
   drawSessions: DrawSession[];
   onDrawSessionsChange: (sessions: DrawSession[]) => void;
@@ -157,7 +161,7 @@ export function DailyWorkspace({
 
       <div className="min-h-0 flex-1 p-4">
         <div className="h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-4 shadow-[var(--app-shadow-card)]">
-          <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+          <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
         </div>
       </div>
 
@@ -233,8 +237,10 @@ export function DailyWorkspace({
         open={showSeatSettings}
         students={students}
         settings={seatSettings}
+        seatCount={seatOrder.length}
         canUndo={canUndoSeatOrder}
         onUpdate={onUpdateSeatSettings}
+        onApplyLayout={onApplySeatLayout}
         onRandomize={onRandomizeSeats}
         onOrderByList={onOrderSeatsByList}
         onUndo={onUndoSeatOrder}

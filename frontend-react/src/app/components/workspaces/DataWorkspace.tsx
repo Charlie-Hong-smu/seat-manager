@@ -14,7 +14,7 @@ import {
 import { hasStoredAiScoreMappingAuth, suggestRosterMappingWithAi, type AiRosterMappingSuggestion } from "../../state/aiScoreMappingService";
 import { readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
-import type { AppStudent, StudentId } from "../../state/types";
+import type { AppStudent, SeatLayoutV1, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
 import { Button, FileDropZone, SelectMenu, useAppDialog } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
@@ -22,6 +22,7 @@ import { WorkspacePanel as Panel } from "./WorkspacePanel";
 export function DataWorkspace({
   students,
   seatOrder,
+  seatLayout,
   onImportRoster,
   onBeforeBackupExport,
   onBackupImported,
@@ -29,6 +30,7 @@ export function DataWorkspace({
 }: {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
+  seatLayout?: SeatLayoutV1;
   onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
   onBeforeBackupExport: () => void;
   onBackupImported: () => void;
@@ -216,7 +218,7 @@ export function DataWorkspace({
         <div className="surface-enter [animation-delay:60ms]">
         <Panel title="导出" action={<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-600" style={{ fontWeight: 800 }}>导出</span>}>
           <div className="space-y-3">
-            <Button variant="secondary" onClick={() => exportSeatsCsv(students, seatOrder)} className="w-full flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3">
+            <Button variant="secondary" onClick={() => exportSeatsCsv(students, seatOrder, seatLayout)} className="w-full flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3">
               <FileDown className="h-4 w-4" />导出座位表 CSV
             </Button>
             <Button variant="secondary" onClick={exportBackup} className="w-full flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3">

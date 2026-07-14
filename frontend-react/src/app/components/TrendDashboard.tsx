@@ -16,12 +16,12 @@ interface TrendDashboardProps {
 }
 
 const SUBJECT_COLORS: Record<string, string> = {
-  语文: "#3b82f6",
-  数学: "#10b981",
-  英语: "#8b5cf6",
-  物理: "#f59e0b",
-  化学: "#f43f5e",
-  生物: "#06b6d4",
+  语文: "var(--app-chart-blue)",
+  数学: "var(--app-chart-green)",
+  英语: "var(--app-chart-violet)",
+  物理: "var(--app-chart-amber)",
+  化学: "var(--app-chart-rose)",
+  生物: "var(--app-chart-cyan)",
 };
 
 function getSubjectAverage(exam: GradeExam, subject: string): number | null {
@@ -61,11 +61,11 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
         </div>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={trendData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis dataKey="exam" tick={{ fontSize: 13, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-            <YAxis domain={[55, 95]} tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} width={28} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
+            <XAxis dataKey="exam" tick={{ fontSize: 13, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} />
+            <YAxis domain={[55, 95]} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
             <Tooltip
-              contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 13 }}
+              contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }}
               formatter={(value: number, name: string) => [`${value} 分`, name]}
             />
             {subjects.map(sub => (
@@ -73,9 +73,9 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
                 key={`trend-line-${sub}`}
                 type="monotone"
                 dataKey={sub}
-                stroke={SUBJECT_COLORS[sub] || "#64748b"}
+                stroke={SUBJECT_COLORS[sub] || "var(--app-chart-fallback)"}
                 strokeWidth={2}
-                dot={{ r: 4, fill: SUBJECT_COLORS[sub] || "#64748b" }}
+                dot={{ r: 4, fill: SUBJECT_COLORS[sub] || "var(--app-chart-fallback)" }}
                 activeDot={{ r: 6 }}
               />
             ))}
@@ -109,7 +109,7 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
                   <tr key={sub} className="border-t border-gray-50 hover:bg-gray-50/60 transition-colors">
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SUBJECT_COLORS[sub] || "#64748b" }} />
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SUBJECT_COLORS[sub] || "var(--app-chart-fallback)" }} />
                         <span className="text-gray-700" style={{ fontWeight: 600 }}>{sub}</span>
                       </div>
                     </td>

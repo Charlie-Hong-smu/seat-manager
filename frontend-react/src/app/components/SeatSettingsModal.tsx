@@ -3,9 +3,10 @@ import { createPortal } from "react-dom";
 import { ChevronDown, Plus, RotateCcw, Search, Shuffle, Undo2, X } from "lucide-react";
 
 import { COMPLEMENT_RULES } from "../state/seatPlanner";
-import type { AppStudent, ComplementRuleId, SeatSettings, StudentId } from "../state/types";
+import type { AppStudent, ComplementRuleId, SeatLayoutV1, SeatSettings, StudentId } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
-import { AnimatedPopover } from "./ui";
+import { SeatLayoutDesigner } from "./SeatLayoutDesigner";
+import { AnimatedPopover, SegmentedControl, SelectMenu } from "./ui";
 
 interface SeatSettingsModalProps {
   open: boolean;
@@ -13,6 +14,8 @@ interface SeatSettingsModalProps {
   settings: SeatSettings;
   canUndo: boolean;
   onUpdate: (updater: (current: SeatSettings) => SeatSettings) => void;
+  seatCount: number;
+  onApplyLayout: (layout: SeatLayoutV1) => void;
   onRandomize: () => void;
   onOrderByList: () => void;
   onUndo: () => void;
@@ -143,11 +146,14 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   );
 }
 
-export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate, onRandomize, onOrderByList, onUndo, onClose }: SeatSettingsModalProps) {
+export function SeatSettingsModal({ open, students, settings, seatCount, canUndo, onUpdate, onApplyLayout, onRandomize, onOrderByList, onUndo, onClose }: SeatSettingsModalProps) {
+  const [tab, setTab] = useState<"layout" | "rules">("rules");
   const [pairA, setPairA] = useState("");
   const [pairB, setPairB] = useState("");
   const [noPairA, setNoPairA] = useState("");
   const [noPairB, setNoPairB] = useState("");
+  const [lockedScope, setLockedScope] = useState<"neighbor" | "group">("neighbor");
+  const [noScope, setNoScope] = useState<"neighbor" | "group">("neighbor");
   const [frontStudentId, setFrontStudentId] = useState("");
   const frontPickerRef = useRef<HTMLButtonElement>(null);
   const frontSelectedRef = useRef<HTMLDivElement>(null);
@@ -180,6 +186,7 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
   function addPair(kind: "locked" | "no") {
     const a = kind === "locked" ? pairA : noPairA;
     const b = kind === "locked" ? pairB : noPairB;
+    const scope = kind === "locked" ? lockedScope : noScope;
     if (!a || !b || a === b) return;
     const source = kind === "locked" ? lockedInputsRef.current : noInputsRef.current;
     if (!source) return;
@@ -196,7 +203,7 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
           const key = kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs";
           const exists = current.constraints[key].some(pair => (pair.a === a && pair.b === b) || (pair.a === b && pair.b === a));
           if (exists) return current;
-          return { ...current, constraints: { ...current.constraints, [key]: [...current.constraints[key], { a, b }] } };
+          return { ...current, constraints: { ...current.constraints, [key]: [...current.constraints[key], { a, b, scope: scope === "group" ? "group" : undefined }] } };
         });
         if (kind === "locked") { setPairA(""); setPairB(""); } else { setNoPairA(""); setNoPairB(""); }
       },
@@ -254,15 +261,18 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
-      <div className="modal-panel-enter flex max-h-[88vh] w-full max-w-lg flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-labelledby="seat-settings-title" className={`modal-panel-enter flex max-h-[88vh] w-full flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl ${tab === "layout" ? "max-w-5xl" : "max-w-lg"}`}>
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div>
-            <h2 className="text-base font-bold text-gray-900">排座</h2>
+            <h2 id="seat-settings-title" className="text-base font-bold text-gray-900">排座</h2>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
+          <button type="button" aria-label="关闭排座设置" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
         </div>
 
+        <div className="border-b border-gray-100 px-5 py-3"><SegmentedControl value={tab} onChange={value => setTab(value as "layout" | "rules")} ariaLabel="排座设置分类" options={[{ value: "rules", label: "排座规则" }, { value: "layout", label: "布局设计" }]} /></div>
+
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+          {tab === "layout" ? <SeatLayoutDesigner current={settings.layout} seatCount={seatCount} onApply={onApplyLayout} /> : <>
           <Section title="基础规则">
             <div className="space-y-2.5">
               <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -272,6 +282,10 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={settings.keepLockedEmpty} onChange={e => onUpdate(c => ({ ...c, keepLockedEmpty: e.target.checked }))} className="accent-blue-600" />
                 随机排座时保留锁定的空座
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={settings.groupBalanceMode === "neighbor-and-group"} onChange={e => onUpdate(current => ({ ...current, groupBalanceMode: e.target.checked ? "neighbor-and-group" : "off" }))} className="accent-blue-600" />
+                同时优化整组男女与互补构成
               </label>
               <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
                 <span>前排排数（用于"必须前排"）</span>
@@ -310,40 +324,43 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
             )}
           </Section>
 
-          <Section title="固定同桌">
-            <div ref={lockedInputsRef} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+          <Section title="固定搭配">
+            <div ref={lockedInputsRef} className="grid grid-cols-2 gap-2">
               <StudentPicker students={students} value={pairA} onChange={setPairA} placeholder="学生 A" excludeIds={pairB ? [pairB] : []} />
               <StudentPicker students={students} value={pairB} onChange={setPairB} placeholder="学生 B" excludeIds={pairA ? [pairA] : []} />
-              <button onClick={() => addPair("locked")} disabled={!pairA || !pairB || pairA === pairB} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" /></button>
+              <SelectMenu value={lockedScope} onChange={value => setLockedScope(value as "neighbor" | "group")} ariaLabel="固定搭配范围" options={[{ value: "neighbor", label: "必须相邻" }, { value: "group", label: "必须同组" }]} />
+              <button onClick={() => addPair("locked")} disabled={!pairA || !pairB || pairA === pairB} className="flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" />添加</button>
             </div>
             <div ref={lockedSelectedRef} className="mt-2 space-y-1.5">
               {constraints.lockedDeskmatePairs.map(pair => (
                 <div key={`${pair.a}-${pair.b}`} data-selection-motion-id={`locked-${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-sm">
-                  <span className="text-gray-700">{nameById.get(pair.a) || "未知"} <span className="text-emerald-500">＋</span> {nameById.get(pair.b) || "未知"}</span>
+                  <span className="text-gray-700">{nameById.get(pair.a) || "未知"} <span className="text-emerald-500">＋</span> {nameById.get(pair.b) || "未知"} · {pair.scope === "group" ? "同组" : "相邻"}</span>
                   <button onClick={event => removePair("locked", pair.a, pair.b, event.currentTarget.parentElement || event.currentTarget)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}
             </div>
           </Section>
 
-          <Section title="不能同桌">
-            <div ref={noInputsRef} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+          <Section title="避免搭配">
+            <div ref={noInputsRef} className="grid grid-cols-2 gap-2">
               <StudentPicker students={students} value={noPairA} onChange={setNoPairA} placeholder="学生 A" excludeIds={noPairB ? [noPairB] : []} />
               <StudentPicker students={students} value={noPairB} onChange={setNoPairB} placeholder="学生 B" excludeIds={noPairA ? [noPairA] : []} />
-              <button onClick={() => addPair("no")} disabled={!noPairA || !noPairB || noPairA === noPairB} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" /></button>
+              <SelectMenu value={noScope} onChange={value => setNoScope(value as "neighbor" | "group")} ariaLabel="避免搭配范围" options={[{ value: "neighbor", label: "不能相邻" }, { value: "group", label: "不能同组" }]} />
+              <button onClick={() => addPair("no")} disabled={!noPairA || !noPairB || noPairA === noPairB} className="flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" />添加</button>
             </div>
             <div ref={noSelectedRef} className="mt-2 space-y-1.5">
               {constraints.noDeskmatePairs.map(pair => (
                 <div key={`${pair.a}-${pair.b}`} data-selection-motion-id={`no-${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-sm">
-                  <span className="text-gray-700">{nameById.get(pair.a) || "未知"} <span className="text-red-400">✕</span> {nameById.get(pair.b) || "未知"}</span>
+                  <span className="text-gray-700">{nameById.get(pair.a) || "未知"} <span className="text-red-400">✕</span> {nameById.get(pair.b) || "未知"} · {pair.scope === "group" ? "不同组" : "不相邻"}</span>
                   <button onClick={event => removePair("no", pair.a, pair.b, event.currentTarget.parentElement || event.currentTarget)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}
             </div>
           </Section>
+          </>}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-gray-100 px-5 py-3">
+        {tab === "rules" && <div className="flex items-center gap-2 border-t border-gray-100 px-5 py-3">
           <button onClick={() => { onClose(); onRandomize(); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
             <Shuffle className="h-4 w-4" />随机排座
           </button>
@@ -353,7 +370,7 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
           <button onClick={onUndo} disabled={!canUndo} className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:text-gray-300">
             <Undo2 className="h-4 w-4" />撤销
           </button>
-        </div>
+        </div>}
       </div>
     </div>
   );

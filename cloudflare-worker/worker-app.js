@@ -36,6 +36,8 @@ export default {
             generateComment: handleGenerateStudentComment,
             suggestScoreMapping: handleSuggestScoreMapping,
             suggestRosterMapping: handleSuggestRosterMapping,
+            generateWeeklyDraft: handleGenerateWeeklyDraft,
+            analyzeScoreItems: handleAnalyzeScoreItems,
           }),
         },
       });
@@ -128,7 +130,7 @@ async function handleLicenseAdminRoute(request, env, corsHeaders, pathname) {
   }
 
   if (pathname === "/admin/licenses/list") {
-    return handleLicenseAdminList(env, corsHeaders);
+    return handleLicenseAdminList(request, env, corsHeaders);
   }
   if (pathname === "/admin/licenses/upsert") {
     return handleLicenseAdminUpsert(request, env, corsHeaders);
@@ -156,8 +158,19 @@ async function verifyLicenseAdminRequest(request, env) {
   return false;
 }
 
-async function handleLicenseAdminList(env, corsHeaders) {
-  const list = await env.SEAT_MANAGER_KV.list({ prefix: LICENSE_KEY_PREFIX });
+async function handleLicenseAdminList(request, env, corsHeaders) {
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const cursor = toText(body.value?.cursor).trim();
+  if (cursor.length > 1000) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const list = await env.SEAT_MANAGER_KV.list({
+    prefix: LICENSE_KEY_PREFIX,
+    ...(cursor ? { cursor } : {}),
+  });
   const licenseKeys = list.keys
     .map((item) => item.name)
     .filter((key) => key.startsWith(LICENSE_KEY_PREFIX) && !key.endsWith(LICENSE_SYNC_STATE_SUFFIX));
@@ -171,6 +184,7 @@ async function handleLicenseAdminList(env, corsHeaders) {
   return jsonResponse({
     licenses: licenses.filter(Boolean).sort((a, b) => a.licenseId.localeCompare(b.licenseId)),
     partial: Boolean(list.list_complete === false),
+    cursor: list.list_complete === false ? toText(list.cursor) : "",
   }, 200, corsHeaders);
 }
 
@@ -186,14 +200,21 @@ async function handleLicenseAdminUpsert(request, env, corsHeaders) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
   }
   const existing = await loadLicenseRecordByKey(licenseKey, env);
+  const acquisition = normalizeAdminAcquisitionInput(input, existing, licenseId);
+  if (!acquisition.ok) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
   const clearDevices = Boolean(input.clearDevices);
   const now = new Date().toISOString();
   const record = normalizeAdminLicenseInput(input, existing, {
     licenseId,
+    acquisitionChannel: acquisition.channel,
+    acquisitionDetail: acquisition.detail,
+    createdAt: existing?.createdAt || now,
     devices: clearDevices ? [] : existing?.devices || [],
     updatedAt: now,
   });
-  await env.SEAT_MANAGER_KV.put(licenseKey, JSON.stringify(record));
+  await env.SEAT_MANAGER_KV.put(licenseKey, JSON.stringify(serializeLicenseForStorage(record)));
   const saved = await loadLicenseRecordByKey(licenseKey, env);
   return jsonResponse({ license: serializeLicenseForAdmin(saved) }, 200, corsHeaders);
 }
@@ -831,6 +852,62 @@ async function handleStudentFollowup(request, env, corsHeaders) {
   }
 }
 
+async function handleGenerateWeeklyDraft(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+  const verified = await verifyAiRequest(getBearerToken(request), env);
+  if (!verified.ok) return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  const body = await readJsonBody(request, MAX_BODY_BYTES + 8 * 1024);
+  if (!body.ok || !isValidWeeklyDraftPayload(body.value)) return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  const limitResponse = await getAiLimitResponse(env, verified, corsHeaders);
+  if (limitResponse) return limitResponse;
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` },
+      body: JSON.stringify({ model: MODEL, response_format: { type: "json_object" }, stream: false, messages: [
+        { role: "system", content: "你是谨慎的班主任周报与家校沟通助手。只能使用输入 facts 和 localDraft 中已有事实，不能推断家庭、心理或医学情况。班级周报要简洁可执行；个人沟通稿要客观、温和，不贴标签。必须返回 JSON：title、content、highlights、cautions、disclaimer，其中 highlights 和 cautions 是字符串数组。" },
+        { role: "user", content: JSON.stringify(body.value) },
+      ] }),
+    });
+    if (!response.ok) return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    const data = await response.json();
+    const parsed = parseModelJson(data?.choices?.[0]?.message?.content || "");
+    return parsed ? jsonResponse(sanitizeWeeklyDraftResult(parsed), 200, corsHeaders) : jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
+async function handleAnalyzeScoreItems(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+  const verified = await verifyAiRequest(getBearerToken(request), env);
+  if (!verified.ok) return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  const body = await readJsonBody(request, MAX_BODY_BYTES + 12 * 1024);
+  if (!body.ok || !isValidScoreItemPayload(body.value)) return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  const limitResponse = await getAiLimitResponse(env, verified, corsHeaders);
+  if (limitResponse) return limitResponse;
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` },
+      body: JSON.stringify({ model: MODEL, response_format: { type: "json_object" }, stream: false, messages: [
+        { role: "system", content: "你是中小学考试题目分析助手。只根据已计算的题目得分率、知识点和匿名学生 ID 提供教学判断，不编造题干或知识点。必须返回 JSON：overview、weakPoints、teachingSuggestions、followupCandidates、disclaimer。followupCandidates 每项只含 studentId 和 reason，最多 12 人。" },
+        { role: "user", content: JSON.stringify(body.value) },
+      ] }),
+    });
+    if (!response.ok) return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    const data = await response.json();
+    const parsed = parseModelJson(data?.choices?.[0]?.message?.content || "");
+    return parsed ? jsonResponse(sanitizeScoreItemResult(parsed, body.value), 200, corsHeaders) : jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
 async function handleGenerateStudentComment(request, env, corsHeaders) {
   if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
     return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
@@ -957,6 +1034,8 @@ async function loadLicenseRecordByKey(key, env) {
     storageKey: key,
     legacyEnv: false,
     licenseId,
+    acquisitionChannel: normalizeAcquisitionChannel(record.acquisitionChannel, licenseId),
+    acquisitionDetail: normalizeAcquisitionDetail(record.acquisitionDetail),
     allowedEditions: normalizeAllowedEditions(record.allowedEditions),
     status: toText(record.status || "active") || "active",
     expiresAt: toText(record.expiresAt || ""),
@@ -966,6 +1045,8 @@ async function loadLicenseRecordByKey(key, env) {
     aiDailyLimit: normalizeAiDailyLimit(record.aiDailyLimit),
     productCodeSecret: normalizeProductCodeSecret(record.productCodeSecret),
     devices: normalizeLicenseDevices(record.devices),
+    createdAt: normalizeIsoTimestamp(record.createdAt),
+    updatedAt: normalizeIsoTimestamp(record.updatedAt),
   };
 }
 
@@ -988,19 +1069,7 @@ async function bindLicenseDevice(license, deviceId, deviceName, env) {
   }
 
   if (env.SEAT_MANAGER_KV && license.storageKey) {
-    await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
-      licenseId: license.licenseId,
-      allowedEditions: license.allowedEditions,
-      status: license.status,
-      expiresAt: license.expiresAt || "",
-      maxDevices,
-      aiEnabled: Boolean(license.aiEnabled),
-      aiExpiresAt: license.aiExpiresAt || "",
-      aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
-      productCodeSecret: license.productCodeSecret || "",
-      devices,
-      updatedAt: now,
-    }));
+    await persistLicenseRecord(license, env, { maxDevices, devices, updatedAt: now });
   }
   return { ok: true, maxDevices };
 }
@@ -1010,19 +1079,7 @@ async function unbindLicenseDevice(license, deviceId, env) {
   const devices = license.devices.filter((device) => device.id !== deviceId);
   const removed = devices.length !== license.devices.length;
   if (env.SEAT_MANAGER_KV && license.storageKey) {
-    await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
-      licenseId: license.licenseId,
-      allowedEditions: license.allowedEditions,
-      status: license.status,
-      expiresAt: license.expiresAt || "",
-      maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
-      aiEnabled: Boolean(license.aiEnabled),
-      aiExpiresAt: license.aiExpiresAt || "",
-      aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
-      productCodeSecret: license.productCodeSecret || "",
-      devices,
-      updatedAt: now,
-    }));
+    await persistLicenseRecord(license, env, { devices, updatedAt: now });
   }
   return removed;
 }
@@ -1030,19 +1087,7 @@ async function unbindLicenseDevice(license, deviceId, env) {
 async function unbindAllLicenseDevices(license, env) {
   const now = new Date().toISOString();
   if (env.SEAT_MANAGER_KV && license.storageKey) {
-    await env.SEAT_MANAGER_KV.put(license.storageKey, JSON.stringify({
-      licenseId: license.licenseId,
-      allowedEditions: license.allowedEditions,
-      status: license.status,
-      expiresAt: license.expiresAt || "",
-      maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES,
-      aiEnabled: Boolean(license.aiEnabled),
-      aiExpiresAt: license.aiExpiresAt || "",
-      aiDailyLimit: license.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
-      productCodeSecret: license.productCodeSecret || "",
-      devices: [],
-      updatedAt: now,
-    }));
+    await persistLicenseRecord(license, env, { devices: [], updatedAt: now });
   }
 }
 
@@ -1066,6 +1111,8 @@ function getAdminLicenseKeyFromExisting(input) {
 function normalizeAdminLicenseInput(input, existing, fallback) {
   return {
     licenseId: fallback.licenseId,
+    acquisitionChannel: fallback.acquisitionChannel,
+    acquisitionDetail: fallback.acquisitionDetail,
     allowedEditions: normalizeAllowedEditions(input.allowedEditions ?? existing?.allowedEditions),
     status: ["active", "disabled"].includes(input.status) ? input.status : existing?.status || "active",
     expiresAt: normalizeIsoDateInput(input.expiresAt),
@@ -1075,8 +1122,80 @@ function normalizeAdminLicenseInput(input, existing, fallback) {
     aiDailyLimit: normalizeAiDailyLimit(input.aiDailyLimit ?? existing?.aiDailyLimit),
     productCodeSecret: normalizeProductCodeSecret(input.productCodeSecret) || existing?.productCodeSecret || "",
     devices: fallback.devices,
+    createdAt: fallback.createdAt,
     updatedAt: fallback.updatedAt,
   };
+}
+
+const ACQUISITION_CHANNELS = new Set([
+  "xiaohongshu",
+  "wechat",
+  "douyin",
+  "referral",
+  "offline",
+  "other",
+  "unknown",
+]);
+
+function normalizeAdminAcquisitionInput(input, existing, licenseId) {
+  const hasChannel = Object.prototype.hasOwnProperty.call(input, "acquisitionChannel");
+  const requested = toText(input.acquisitionChannel).trim();
+  const channel = hasChannel
+    ? requested
+    : existing?.acquisitionChannel || normalizeAcquisitionChannel("", licenseId);
+  const detail = Object.prototype.hasOwnProperty.call(input, "acquisitionDetail")
+    ? normalizeAcquisitionDetail(input.acquisitionDetail)
+    : existing?.acquisitionDetail || "";
+  const isNewUnknown = !existing && channel === "unknown";
+  const invalidDetail = toText(input.acquisitionDetail).trim().length > 120;
+  if (!ACQUISITION_CHANNELS.has(channel) || isNewUnknown || invalidDetail || (channel === "other" && !detail)) {
+    return { ok: false, channel: "unknown", detail: "" };
+  }
+  return { ok: true, channel, detail };
+}
+
+function normalizeAcquisitionChannel(value, licenseId = "") {
+  const channel = toText(value).trim();
+  if (ACQUISITION_CHANNELS.has(channel)) {
+    return channel;
+  }
+  return /^xhs-/i.test(toText(licenseId).trim()) ? "xiaohongshu" : "unknown";
+}
+
+function normalizeAcquisitionDetail(value) {
+  return toText(value).trim().slice(0, 120);
+}
+
+function normalizeIsoTimestamp(value) {
+  const text = toText(value).trim();
+  return text && Number.isFinite(Date.parse(text)) ? new Date(text).toISOString() : "";
+}
+
+function serializeLicenseForStorage(license, overrides = {}) {
+  const value = { ...license, ...overrides };
+  return {
+    licenseId: value.licenseId,
+    acquisitionChannel: normalizeAcquisitionChannel(value.acquisitionChannel, value.licenseId),
+    acquisitionDetail: normalizeAcquisitionDetail(value.acquisitionDetail),
+    allowedEditions: normalizeAllowedEditions(value.allowedEditions),
+    status: value.status,
+    expiresAt: value.expiresAt || "",
+    maxDevices: value.maxDevices || DEFAULT_MAX_DEVICES,
+    aiEnabled: Boolean(value.aiEnabled),
+    aiExpiresAt: value.aiExpiresAt || "",
+    aiDailyLimit: value.aiDailyLimit || DEFAULT_AI_DAILY_LIMIT,
+    productCodeSecret: value.productCodeSecret || "",
+    devices: normalizeLicenseDevices(value.devices),
+    createdAt: normalizeIsoTimestamp(value.createdAt),
+    updatedAt: normalizeIsoTimestamp(value.updatedAt),
+  };
+}
+
+async function persistLicenseRecord(license, env, overrides = {}) {
+  await env.SEAT_MANAGER_KV.put(
+    license.storageKey,
+    JSON.stringify(serializeLicenseForStorage(license, overrides)),
+  );
 }
 
 function serializeLicenseForAdmin(license) {
@@ -1087,6 +1206,8 @@ function serializeLicenseForAdmin(license) {
     licenseKey: license.storageKey,
     codeHash: license.storageKey.replace(LICENSE_KEY_PREFIX, ""),
     licenseId: license.licenseId,
+    acquisitionChannel: license.acquisitionChannel,
+    acquisitionDetail: license.acquisitionDetail,
     allowedEditions: license.allowedEditions,
     status: license.status,
     expiresAt: license.expiresAt || "",
@@ -1097,6 +1218,8 @@ function serializeLicenseForAdmin(license) {
     productCodeSecret: license.productCodeSecret || "",
     deviceCount: license.devices.length,
     devices: license.devices,
+    createdAt: license.createdAt || "",
+    updatedAt: license.updatedAt || "",
   };
 }
 
@@ -1321,6 +1444,14 @@ function isValidStudentFollowupPayload(payload) {
   );
 }
 
+function isValidWeeklyDraftPayload(payload) {
+  return Boolean(payload && typeof payload === "object" && ["class", "student"].includes(payload.scope) && toText(payload.subjectName) && toText(payload.startDate) && toText(payload.endDate) && Array.isArray(payload.facts) && payload.facts.length > 0 && payload.facts.length <= 20 && payload.facts.every(item => typeof item === "string" && item.length <= 300) && typeof payload.localDraft === "string" && payload.localDraft.length <= 6000);
+}
+
+function isValidScoreItemPayload(payload) {
+  return Boolean(payload && typeof payload === "object" && payload.exam && typeof payload.exam === "object" && toText(payload.exam.id) && Array.isArray(payload.questions) && payload.questions.length > 0 && payload.questions.length <= 100 && payload.questions.every(item => item && typeof item === "object" && toText(item.id) && Number.isFinite(Number(item.rate)) && Number(item.rate) >= 0 && Number(item.rate) <= 100 && Array.isArray(item.weakStudentIds) && item.weakStudentIds.length <= 12));
+}
+
 function getStudentCommentLengthSettings(payload) {
   const mode = toText(payload?.commentLengthMode || "standard");
   const customTarget = Math.round(Number(payload?.targetWordCount));
@@ -1424,6 +1555,21 @@ function sanitizeStudentFollowupResult(result) {
     commentMaterials: toList(result.commentMaterials || result.materials, 6),
     disclaimer: toAssistantPlainText(result.disclaimer, 200) || "AI 跟进建议仅供教师参考，请结合课堂观察判断。"
   };
+}
+
+function sanitizeWeeklyDraftResult(result) {
+  const list = (value, max = 6) => Array.isArray(value) ? value.map(toText).filter(Boolean).slice(0, max) : [];
+  return { title: toText(result.title).slice(0, 80) || "周报", content: toText(result.content).slice(0, 6000), highlights: list(result.highlights), cautions: list(result.cautions), disclaimer: toText(result.disclaimer).slice(0, 300) || "AI 内容仅供教师确认后使用。" };
+}
+
+function sanitizeScoreItemResult(result, payload) {
+  const list = (value, max = 8) => Array.isArray(value) ? value.map(toText).filter(Boolean).slice(0, max) : [];
+  const allowedIds = new Set(payload.questions.flatMap(item => Array.isArray(item.weakStudentIds) ? item.weakStudentIds.map(toText) : []));
+  const followupCandidates = Array.isArray(result.followupCandidates) ? result.followupCandidates.flatMap(item => {
+    const studentId = toText(item?.studentId);
+    return studentId && allowedIds.has(studentId) ? [{ studentId, reason: toText(item?.reason).slice(0, 240) || "题目分析建议跟进" }] : [];
+  }).slice(0, 12) : [];
+  return { overview: toText(result.overview).slice(0, 1600), weakPoints: list(result.weakPoints), teachingSuggestions: list(result.teachingSuggestions), followupCandidates, disclaimer: toText(result.disclaimer).slice(0, 300) || "AI 分析仅供教师参考。" };
 }
 
 function sanitizeScoreMappingResult(result, payload) {

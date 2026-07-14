@@ -24,7 +24,7 @@ import {
 } from "../state/workspaces";
 import { exportPreImportBackup } from "../state/backupStorage";
 import type { TermSeason } from "../state/types";
-import { AnimatedPopover, ConfirmDialog, useAppDialog } from "./ui";
+import { AnimatedPopover, ConfirmDialog, useActionToast, useAppDialog } from "./ui";
 
 interface Props {
   /** 切换 / 新建 / 升学期成功后回调,让上层重新加载当前班级数据。 */
@@ -263,6 +263,7 @@ function getNextTermDefault(current: { term: { year: number; season: TermSeason 
 
 export function WorkspaceSwitcher({ onChanged }: Props) {
   const appDialog = useAppDialog();
+  const actionToast = useActionToast();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("menu");
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
@@ -286,14 +287,16 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
 
   function handleEditClass(input: TermFormResult) {
     if (!editingClassId) return;
-    updateClassInfo(editingClassId, {
+    const saved = updateClassInfo(editingClassId, {
       stage: input.stage,
       gradeNumber: input.gradeNumber || 1,
       classNo: input.classNo,
       customName: input.className,
     });
+    if (!saved) { void appDialog.notice({ title: "保存班级信息失败", description: "本机数据没有改变。请检查浏览器存储空间后重试。" }); return; }
     setRefreshKey(k => k + 1);
     onChanged();
+    actionToast.show({ message: "班级信息已保存" });
     closeAll();
   }
 
@@ -304,6 +307,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
     }
     if (switchSlice(sliceId)) {
       onChanged();
+      actionToast.show({ message: "已切换班级与学期" });
     } else {
       void appDialog.notice({ title: "切换失败", description: "本机数据没有改变。请检查浏览器存储空间后重试。" });
     }
@@ -328,6 +332,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
     if (!created) { void appDialog.notice({ title: "创建班级失败", description: "本机数据没有改变。请先导出备份并检查浏览器存储空间。" }); return; }
     setRefreshKey(k => k + 1);
     onChanged();
+    actionToast.show({ message: "班级已创建" });
     closeAll();
   }
 
@@ -337,6 +342,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
     if (!created) { void appDialog.notice({ title: "创建新学期失败", description: "本机数据没有改变。请先导出备份并检查浏览器存储空间。" }); return; }
     setRefreshKey(k => k + 1);
     onChanged();
+    actionToast.show({ message: "新学期已创建并切换" });
     closeAll();
   }
 
@@ -349,6 +355,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
     setRefreshKey(k => k + 1);
     // 如果删掉的是当前切片，重新加载（deleteSlice 会自动切换到第一个切片）
     onChanged();
+    actionToast.show({ message: "学期已删除" });
   }
 
   return (
@@ -379,6 +386,8 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
                         <School className="w-3 h-3 text-gray-400" />
                         <span className="flex-1 text-xs text-gray-400 truncate" style={{ fontWeight: 700 }}>{view.className}</span>
                         <button
+                          type="button"
+                          aria-label={`编辑 ${view.className} 班级信息`}
                           onClick={e => { e.stopPropagation(); handleOpenEdit(view.classId); }}
                           className="p-1 text-gray-300 hover:text-blue-400 rounded-lg transition-colors"
                           title="编辑班级信息"
@@ -399,6 +408,8 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
                               }`}
                             >
                               <button
+                                type="button"
+                                aria-label={`删除 ${displayName} ${slice.term.label}`}
                                 onClick={() => handleSwitch(slice.id)}
                                 className={`flex-1 flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
                                   slice.id === current.id ? "text-blue-600" : "text-gray-600"
@@ -485,6 +496,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
       </AnimatedPopover>
       <ConfirmDialog open={Boolean(pendingDeleteSlice)} title="删除这个学期？" description={`将删除“${pendingDeleteSlice?.label || "当前学期"}”的学生、成绩、出勤、任务及其他学期数据。删除前会自动导出安全备份，但此操作仍不可直接撤销。`} confirmLabel="确认删除学期" error={deleteError} onCancel={() => { setPendingDeleteSlice(null); setDeleteError(""); }} onConfirm={() => pendingDeleteSlice && handleDeleteSlice(pendingDeleteSlice.id)} />
       {appDialog.dialog}
+      {actionToast.toast}
     </div>
   );
 }

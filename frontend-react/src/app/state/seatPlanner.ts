@@ -1,7 +1,13 @@
 import { TAG_CATALOG } from "./tagCatalog";
 import type { AppStudent, ComplementRuleId, SeatSettings, StudentId } from "./types";
-
-const COLS = 8;
+import {
+  areSeatIndicesInSameGroup,
+  areSeatIndicesNeighbors,
+  getFrontSeatIndices,
+  getNeighborIndexPairs,
+  getSeatPositionLabel as getLayoutSeatPositionLabel,
+  resolveSeatLayout,
+} from "./seatLayout";
 
 export type SeatOrder = Array<StudentId | null>;
 
@@ -104,35 +110,24 @@ function shuffleArray<T>(array: T[]): void {
   }
 }
 
-function getDeskPairsForSeatCount(seatCount: number): Array<[number, number]> {
-  const pairs: Array<[number, number]> = [];
-  const rows = Math.ceil(seatCount / COLS);
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < COLS; col += 2) {
-      const left = row * COLS + col;
-      const right = left + 1;
-      if (right < seatCount) {
-        pairs.push([left, right]);
-      }
-    }
-  }
-  return pairs;
+function getDeskPairsForSeatCount(seatCount: number, settings?: SeatSettings): Array<[number, number]> {
+  return getNeighborIndexPairs(resolveSeatLayout(settings?.layout, seatCount));
 }
 
-function areDeskmatesByIndex(indexA: number, indexB: number): boolean {
+function matchPairScope(indexA: number, indexB: number, settings: SeatSettings, scope: "neighbor" | "group" = "neighbor"): boolean {
   if (indexA < 0 || indexB < 0) {
     return false;
   }
-  const rowA = Math.floor(indexA / COLS);
-  const rowB = Math.floor(indexB / COLS);
-  return rowA === rowB && Math.abs(indexA - indexB) === 1 && Math.floor((indexA % COLS) / 2) === Math.floor((indexB % COLS) / 2);
+  const layout = resolveSeatLayout(settings.layout, Math.max(indexA, indexB) + 1);
+  return scope === "group" ? areSeatIndicesInSameGroup(layout, indexA, indexB) : areSeatIndicesNeighbors(layout, indexA, indexB);
 }
 
-export function getSeatPositionLabel(index: number): string {
+export function getSeatPositionLabel(index: number, settings?: SeatSettings, seatCount = index + 1): string {
   if (index < 0) {
     return "未入座";
   }
-  return `第${Math.floor(index / COLS) + 1}排第${(index % COLS) + 1}列`;
+  if (!settings?.layout) return `第${Math.floor(index / 8) + 1}排第${(index % 8) + 1}列`;
+  return getLayoutSeatPositionLabel(resolveSeatLayout(settings.layout, seatCount), index);
 }
 
 export function getChangedSeatIndices(before: SeatOrder, after: SeatOrder): number[] {
@@ -204,7 +199,8 @@ export function evaluateSeatOrder(students: AppStudent[], order: SeatOrder, sett
   let softPenalty = 0;
   let complementMatchedCount = 0;
 
-  getDeskPairsForSeatCount(order.length).forEach(([left, right]) => {
+  const layout = resolveSeatLayout(settings.layout, order.length);
+  getDeskPairsForSeatCount(order.length, settings).forEach(([left, right]) => {
     const leftId = order[left];
     const rightId = order[right];
     if (!leftId || !rightId) {
@@ -218,8 +214,8 @@ export function evaluateSeatOrder(students: AppStudent[], order: SeatOrder, sett
       rightId,
       leftName: nameById.get(leftId) || "未知",
       rightName: nameById.get(rightId) || "未知",
-      leftSeat: getSeatPositionLabel(left),
-      rightSeat: getSeatPositionLabel(right),
+      leftSeat: getSeatPositionLabel(left, settings, order.length),
+      rightSeat: getSeatPositionLabel(right, settings, order.length),
       leftGender: leftGender || "未知",
       rightGender: rightGender || "未知",
     };
@@ -243,8 +239,8 @@ export function evaluateSeatOrder(students: AppStudent[], order: SeatOrder, sett
           rightId,
           leftName: nameById.get(leftId) || "未知",
           rightName: nameById.get(rightId) || "未知",
-          leftSeat: getSeatPositionLabel(left),
-          rightSeat: getSeatPositionLabel(right),
+          leftSeat: getSeatPositionLabel(left, settings, order.length),
+          rightSeat: getSeatPositionLabel(right, settings, order.length),
           matches,
         });
       }
@@ -257,13 +253,14 @@ export function evaluateSeatOrder(students: AppStudent[], order: SeatOrder, sett
     if (leftIndex === -1 || rightIndex === -1) {
       return;
     }
-    const satisfied = areDeskmatesByIndex(leftIndex, rightIndex);
+    const scope = pair.scope || "neighbor";
+    const satisfied = matchPairScope(leftIndex, rightIndex, settings, scope);
     const detail = {
       type: "安排同桌" as const,
-      label: `${nameById.get(pair.a) || "未知"} 和 ${nameById.get(pair.b) || "未知"} 安排同桌`,
+      label: `${nameById.get(pair.a) || "未知"} 和 ${nameById.get(pair.b) || "未知"} 安排${scope === "group" ? "同组" : "相邻"}`,
       satisfied,
       studentIds: [pair.a, pair.b],
-      seats: [getSeatPositionLabel(leftIndex), getSeatPositionLabel(rightIndex)],
+      seats: [getSeatPositionLabel(leftIndex, settings, order.length), getSeatPositionLabel(rightIndex, settings, order.length)],
     };
     required.push(detail);
     if (!satisfied) {
@@ -277,13 +274,14 @@ export function evaluateSeatOrder(students: AppStudent[], order: SeatOrder, sett
     if (leftIndex === -1 || rightIndex === -1) {
       return;
     }
-    const satisfied = !areDeskmatesByIndex(leftIndex, rightIndex);
+    const scope = pair.scope || "neighbor";
+    const satisfied = !matchPairScope(leftIndex, rightIndex, settings, scope);
     const detail = {
       type: "避免同桌" as const,
-      label: `${nameById.get(pair.a) || "未知"} 不和 ${nameById.get(pair.b) || "未知"} 同桌`,
+      label: `${nameById.get(pair.a) || "未知"} 不和 ${nameById.get(pair.b) || "未知"} ${scope === "group" ? "同组" : "相邻"}`,
       satisfied,
       studentIds: [pair.a, pair.b],
-      seats: [getSeatPositionLabel(leftIndex), getSeatPositionLabel(rightIndex)],
+      seats: [getSeatPositionLabel(leftIndex, settings, order.length), getSeatPositionLabel(rightIndex, settings, order.length)],
     };
     required.push(detail);
     if (!satisfied) {
@@ -292,19 +290,20 @@ export function evaluateSeatOrder(students: AppStudent[], order: SeatOrder, sett
   });
 
   const frontRows = Math.max(1, settings.constraints.frontRows || 2);
+  const frontSeatIndices = getFrontSeatIndices(layout, frontRows);
   settings.constraints.frontRowStudentIds.forEach(studentId => {
     const seatIndex = order.indexOf(studentId);
     if (seatIndex === -1) {
       return;
     }
-    const currentRow = Math.floor(seatIndex / COLS) + 1;
-    const satisfied = Math.floor(seatIndex / COLS) < frontRows;
+    const currentRow = frontSeatIndices.has(seatIndex) ? Math.min(frontRows, 1) : frontRows + 1;
+    const satisfied = frontSeatIndices.has(seatIndex);
     const detail = {
       type: "前排照顾" as const,
       label: `${nameById.get(studentId) || "未知学生"} 坐前 ${frontRows} 排`,
       satisfied,
       studentIds: [studentId],
-      seats: [getSeatPositionLabel(seatIndex)],
+      seats: [getSeatPositionLabel(seatIndex, settings, order.length)],
       currentRow,
       frontRows,
     };
@@ -314,6 +313,22 @@ export function evaluateSeatOrder(students: AppStudent[], order: SeatOrder, sett
       issues.push(`${nameById.get(studentId) || "未知学生"} 没有坐在前 ${frontRows} 排`);
     }
   });
+
+  if (settings.groupBalanceMode === "neighbor-and-group") {
+    layout.groups.forEach(group => {
+      const memberIds = group.seatIds.map(seatId => layout.seats.findIndex(seat => seat.id === seatId)).map(index => order[index]).filter((id): id is StudentId => Boolean(id));
+      const knownGenders = memberIds.map(id => genderById.get(id) || "").filter(Boolean);
+      if (knownGenders.length > 1) {
+        const counts = new Map<string, number>(); knownGenders.forEach(value => counts.set(value, (counts.get(value) || 0) + 1));
+        softPenalty += Math.max(...counts.values()) - Math.min(...counts.values());
+      }
+      if (activeComplementRules.length) {
+        for (let a = 0; a < memberIds.length; a += 1) for (let b = a + 1; b < memberIds.length; b += 1) {
+          if (getComplementMatches(byId.get(memberIds[a]), byId.get(memberIds[b]), activeComplementRules).length) complementMatchedCount += 1;
+        }
+      }
+    });
+  }
 
   return {
     hardViolations: issues.length,
@@ -350,8 +365,15 @@ function generateCandidateOrderFromCurrent(seatOrder: SeatOrder, lockedSeats: Se
   const next = [...seatOrder];
   const movableIds = new Set(movableStudents);
   const lockedPairs = settings.constraints.lockedDeskmatePairs.filter(pair => movableIds.has(pair.a) && movableIds.has(pair.b));
-  const availableDeskPairs = getDeskPairsForSeatCount(total).filter(([left, right]) => movableSet.has(left) && movableSet.has(right));
-  shuffleArray(availableDeskPairs);
+  const layout = resolveSeatLayout(settings.layout, total);
+  const availableDeskPairs = getDeskPairsForSeatCount(total, settings).filter(([left, right]) => movableSet.has(left) && movableSet.has(right));
+  const availableGroupPairs = layout.groups.flatMap(group => {
+    const indices = group.seatIds.map(id => layout.seats.findIndex(seat => seat.id === id)).filter(index => movableSet.has(index));
+    const pairs: Array<[number, number]> = [];
+    for (let a = 0; a < indices.length; a += 1) for (let b = a + 1; b < indices.length; b += 1) pairs.push([indices[a], indices[b]]);
+    return pairs;
+  });
+  shuffleArray(availableDeskPairs); shuffleArray(availableGroupPairs);
 
   const usedIds = new Set<StudentId>();
   const assignedIndices = new Set<number>();
@@ -359,7 +381,8 @@ function generateCandidateOrderFromCurrent(seatOrder: SeatOrder, lockedSeats: Se
     if (usedIds.has(pair.a) || usedIds.has(pair.b)) {
       return;
     }
-    const deskPair = availableDeskPairs.find(([left, right]) => !assignedIndices.has(left) && !assignedIndices.has(right));
+    const candidates = pair.scope === "group" ? availableGroupPairs : availableDeskPairs;
+    const deskPair = candidates.find(([left, right]) => !assignedIndices.has(left) && !assignedIndices.has(right));
     if (!deskPair) {
       return;
     }
@@ -434,7 +457,7 @@ export function getSeatPreviewStats(students: AppStudent[], currentOrder: SeatOr
   let occupiedPairs = 0;
   let mixedGenderPairs = 0;
 
-  getDeskPairsForSeatCount(order.length).forEach(([left, right]) => {
+  getDeskPairsForSeatCount(order.length, settings).forEach(([left, right]) => {
     const leftStudent = order[left] ? studentById.get(order[left] as StudentId) : null;
     const rightStudent = order[right] ? studentById.get(order[right] as StudentId) : null;
     if (!leftStudent || !rightStudent) {
@@ -447,10 +470,11 @@ export function getSeatPreviewStats(students: AppStudent[], currentOrder: SeatOr
   });
 
   const frontRows = Math.max(1, settings.constraints.frontRows || 2);
+  const frontIndices = getFrontSeatIndices(resolveSeatLayout(settings.layout, order.length), frontRows);
   const frontTotal = settings.constraints.frontRowStudentIds.length;
   const frontSatisfied = settings.constraints.frontRowStudentIds.filter(id => {
     const index = order.indexOf(id);
-    return index >= 0 && Math.floor(index / COLS) < frontRows;
+    return index >= 0 && frontIndices.has(index);
   }).length;
   const requiredTotal =
     settings.constraints.lockedDeskmatePairs.length +

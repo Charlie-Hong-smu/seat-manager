@@ -3,15 +3,16 @@ import { placeStudentInFirstEmptySeat, type SeatOrder } from "../state/seatActio
 import type { SeatManagerController } from "../state/seatManagerController";
 import { createStudent, createStudentRecord } from "../state/studentActions";
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
-import type { AppStudent, Gender, StudentId, StudentRecord } from "../state/types";
+import type { AppStudent, Gender, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function useStudentActions({ students, seatOrder, setStudents, setDormitories, setSeatSettings, setAttendanceRecords, setFollowupTasks, commitSeatOrder, closeStudentDetail }: {
+export function useStudentActions({ students, seatOrder, seatLayout, setStudents, setDormitories, setSeatSettings, setAttendanceRecords, setFollowupTasks, commitSeatOrder, closeStudentDetail }: {
   students: AppStudent[];
   seatOrder: SeatOrder;
+  seatLayout?: SeatLayoutV1;
   setStudents: SeatManagerController["setStudents"];
   setDormitories: SeatManagerController["setDormitories"];
   setSeatSettings: SeatManagerController["setSeatSettings"];
@@ -23,8 +24,8 @@ export function useStudentActions({ students, seatOrder, setStudents, setDormito
   const handleAddStudent = useCallback((name: string, gender: Gender, alias?: string) => {
     const student = createStudent({ name, gender, alias });
     setStudents((current) => [...current, student]);
-    commitSeatOrder(placeStudentInFirstEmptySeat(seatOrder, student.id, students.length + 1));
-  }, [commitSeatOrder, seatOrder, setStudents, students.length]);
+    commitSeatOrder(placeStudentInFirstEmptySeat(seatOrder, student.id, students.length + 1, seatLayout));
+  }, [commitSeatOrder, seatLayout, seatOrder, setStudents, students.length]);
 
   const handleUpdateStudent = useCallback((nextStudent: AppStudent) => setStudents((current) => current.map((student) => student.id === nextStudent.id ? nextStudent : student)), [setStudents]);
 

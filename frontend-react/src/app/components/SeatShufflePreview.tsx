@@ -9,6 +9,7 @@ import {
   type SeatEvaluation,
   type ShuffleCandidate,
 } from "../state/seatPlanner";
+import { resolveSeatLayout } from "../state/seatLayout";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
 
 const COLS = 8;
@@ -177,6 +178,7 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
   const settleTimerRef = useRef<number | null>(null);
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const stats = getSeatPreviewStats(students, currentOrder, candidate.order, candidate.evaluation, seatSettings);
+  const layout = useMemo(() => resolveSeatLayout(seatSettings.layout, candidate.order.length), [candidate.order.length, seatSettings.layout]);
   const rows = Math.ceil(candidate.order.length / COLS);
   const changedSet = new Set(getChangedSeatIndices(currentOrder, candidate.order));
 
@@ -372,6 +374,9 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
 
         <div className="grid grid-cols-[1fr_19rem] gap-4 p-5 overflow-auto bg-gray-50">
           <div ref={boardRef} className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 overflow-x-auto ${dragVisual ? "select-none" : ""}`}>
+            {seatSettings.layout ? <div className="relative min-h-[520px] min-w-[760px]" style={{ aspectRatio: `${layout.canvas.width}/${layout.canvas.height}` }}>
+              {layout.seats.map((seat, index) => { const studentId = candidate.order[index] ?? null; const student = studentId ? studentById.get(studentId) : null; const genderColor = student?.gender === "男" ? "bg-blue-400" : student?.gender === "女" ? "bg-pink-400" : "bg-gray-300"; return <button key={seat.id} type="button" data-preview-seat-index={index} data-preview-student-id={student?.id} onPointerDown={event => beginPointerDrag(event, index)} onClick={() => student && onSelectStudent?.(student)} className={`absolute h-14 w-24 -translate-x-1/2 -translate-y-1/2 rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-300 ${student ? "border-gray-200 bg-white" : "border-dashed border-gray-200 bg-gray-50 text-gray-300"} ${changedSet.has(index) ? "ring-2 ring-blue-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-blue-400 bg-blue-50" : ""}`} style={{ left: `${seat.x / layout.canvas.width * 100}%`, top: `${seat.y / layout.canvas.height * 100}%`, transform: seatVisualTransform(index) }} title={getSeatPositionLabel(index, seatSettings, candidate.order.length)}><span className="flex min-w-0 items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${genderColor}`}/><span className="truncate text-sm font-bold text-gray-800">{student?.name || "空"}</span></span><span className="mt-0.5 block text-[10px] text-gray-300">{seat.label}</span></button>; })}
+            </div> :
             <div className="grid gap-2 min-w-[760px]" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}>
               {Array.from({ length: rows }).map((_, row) => (
                 <div key={`row-${row}`} className="col-span-8 grid gap-2 items-center" style={{ gridTemplateColumns: `3.25rem repeat(${COLS}, minmax(0, 1fr))` }}>
@@ -401,7 +406,7 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
                           student ? "bg-white border-gray-200 hover:border-blue-200" : "bg-gray-50 border-dashed border-gray-200 text-gray-300"
                         } ${changedSet.has(index) ? "ring-2 ring-blue-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-blue-400 bg-blue-50/90 shadow-[0_0_0_4px_rgba(59,130,246,0.16),0_12px_28px_rgba(37,99,235,0.14)]" : ""}`}
                         style={{ transform: seatVisualTransform(index), touchAction: "manipulation" }}
-                        title={getSeatPositionLabel(index)}
+                        title={getSeatPositionLabel(index, seatSettings, candidate.order.length)}
                       >
                         <span className="flex items-center gap-1.5 min-w-0">
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderColor}`} />
@@ -413,7 +418,7 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
                   })}
                 </div>
               ))}
-            </div>
+            </div>}
           </div>
 
           <aside className="space-y-3">

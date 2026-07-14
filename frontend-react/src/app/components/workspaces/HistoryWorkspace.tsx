@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Banknote, BedDouble, CalendarCheck2, Check, ClipboardList, GraduationCap, History, Pencil, RotateCcw, Save, Search, Trash2, UserRound, X } from "lucide-react";
+import { Banknote, BedDouble, BookOpenCheck, CalendarCheck2, Check, ClipboardList, GraduationCap, History, MessageSquareText, Pencil, RotateCcw, Save, Search, Trash2, UserRound, X } from "lucide-react";
 import type { AppStudent, SeatHistorySnapshot } from "../../state/types";
 import { filterTimeline, type TimelineItem, type TimelineTarget, type TimelineTone, type TimelineType } from "../../state/dataInsights";
 import { StudentPicker } from "../StudentPicker";
@@ -8,7 +8,7 @@ import { Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, 
 type HistoryView = "activity" | "seats";
 type DateRange = "7" | "30" | "term" | "custom";
 const VIEW_STORAGE_KEY = "seat-manager-history-view-v1";
-const TIMELINE_TYPES: Array<TimelineType | "全部"> = ["全部", "学生记录", "出勤", "跟进", "宿舍", "成绩", "班费"];
+const TIMELINE_TYPES: Array<TimelineType | "全部"> = ["全部", "学生记录", "出勤", "跟进", "作业", "沟通稿", "宿舍", "成绩", "班费"];
 
 function readInitialView(): HistoryView {
   try { return localStorage.getItem(VIEW_STORAGE_KEY) === "seats" ? "seats" : "activity"; } catch { return "activity"; }
@@ -42,7 +42,7 @@ const TONE_CLASS: Record<TimelineTone, string> = {
 };
 
 function TimelineIcon({ type }: { type: TimelineType }) {
-  const icons = { "学生记录": UserRound, "出勤": CalendarCheck2, "跟进": ClipboardList, "宿舍": BedDouble, "成绩": GraduationCap, "班费": Banknote };
+  const icons = { "学生记录": UserRound, "出勤": CalendarCheck2, "跟进": ClipboardList, "作业": BookOpenCheck, "沟通稿": MessageSquareText, "宿舍": BedDouble, "成绩": GraduationCap, "班费": Banknote };
   const Icon = icons[type];
   return <Icon className="h-4 w-4" />;
 }

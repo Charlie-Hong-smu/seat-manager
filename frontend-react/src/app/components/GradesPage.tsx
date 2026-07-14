@@ -28,12 +28,12 @@ import { AnimatedPopover, SegmentedControl } from "./ui";
 import type { AppStudent, GradeExam, GradeRow } from "../state/types";
 
 const DEFAULT_THRESHOLDS = { pass: 60, good: 75, excellent: 90 };
-const SUBJECT_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#06b6d4", "#ec4899", "#6366f1", "#84cc16"];
+const SUBJECT_COLORS = ["var(--app-chart-blue)", "var(--app-chart-violet)", "var(--app-chart-green)", "var(--app-chart-amber)", "var(--app-chart-cyan)", "var(--app-chart-pink)", "var(--app-chart-indigo)", "var(--app-chart-lime)"];
 const GRADE_COLORS = {
-  excellent: "#10b981",
-  good: "#3b82f6",
-  pass: "#f59e0b",
-  fail: "#f43f5e",
+  excellent: "var(--app-chart-green)",
+  good: "var(--app-chart-blue)",
+  pass: "var(--app-chart-amber)",
+  fail: "var(--app-chart-rose)",
 };
 
 type Thresholds = typeof DEFAULT_THRESHOLDS;
@@ -545,10 +545,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                 </p>
                 <ResponsiveContainer width="100%" height={metricKey === "total" ? 200 : 260}>
                   <BarChart data={metricKey === "total" ? subjectAvgData : distributionData} barSize={32}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                    <XAxis dataKey={metricKey === "total" ? "subject" : "label"} tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} interval={0} />
-                    <YAxis domain={metricKey === "total" ? [0, 100] : undefined} allowDecimals={false} tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} width={28} />
-                    <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 13 }} cursor={{ fill: "#f9fafb" }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
+                    <XAxis dataKey={metricKey === "total" ? "subject" : "label"} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={0} />
+                    <YAxis domain={metricKey === "total" ? [0, 100] : undefined} allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} />
                     <Bar key="main-chart-bar" dataKey={metricKey === "total" ? "avg" : "count"} name={metricKey === "total" ? "平均分" : "人数"} radius={[5, 5, 0, 0]}>
                       {(metricKey === "total" ? subjectAvgData : distributionData).map((item, index) => (
                         <Cell key={`main-cell-${index}`} fill={item.fill} />
@@ -564,10 +564,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                   <p className="text-xs text-gray-400 mb-4">{totalThresholdHint}</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={distributionData} barSize={26}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} interval={0} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} width={28} />
-                      <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 13 }} cursor={{ fill: "#f9fafb" }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={0} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
+                      <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} />
                       <Bar dataKey="count" name="人数" radius={[5, 5, 0, 0]}>
                         {distributionData.map((item, index) => <Cell key={`dist-cell-${index}`} fill={item.fill} />)}
                       </Bar>

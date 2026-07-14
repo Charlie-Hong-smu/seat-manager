@@ -29,7 +29,7 @@ import {
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
-import { AiGenerationPanel, SegmentedControl } from "./ui";
+import { AiGenerationPanel, SegmentedControl, useAppDialog } from "./ui";
 import {
   addCommentCustomOption,
   COMMENT_LENGTH_MODES,
@@ -112,6 +112,7 @@ function downloadTextFile(filename: string, content: string, type: string): void
 }
 
 export function CommentWorkbench({ students, transitionState, onClose, onExitComplete, onSelectStudent }: Props) {
+  const appDialog = useAppDialog();
   const initialBatchState = useMemo(() => loadCommentBatchState(students), [students]);
   const initialRubric = useMemo(() => readCommentRubric(), []);
   const [comments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
@@ -524,8 +525,8 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     updateSelectedProfile(profile => removeCommentCustomOption(profile, criterionId, optionId));
   }
 
-  function addCriterion() {
-    const label = window.prompt("请输入新标准名称");
+  async function addCriterion() {
+    const label = await appDialog.prompt({ title: "新建评语标准", description: "输入标准名称，保存后可继续添加选项。", confirmLabel: "新建" });
     if (!label?.trim()) return;
     const id = makeCommentItemId(label, "criterion");
     persistRubric({
@@ -784,7 +785,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           </span>
           <div
             aria-hidden={!showHeaderProgress}
-            inert={!showHeaderProgress}
+            inert={!showHeaderProgress ? true : undefined}
             className={`overflow-hidden transition-[max-width,opacity,transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${showHeaderProgress ? "ml-0 max-w-48 translate-x-0 scale-100 opacity-100" : "pointer-events-none -ml-3 max-w-0 -translate-x-2 scale-95 opacity-0"}`}
           >
             <button
@@ -845,7 +846,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
             </div>
           </div>
 
-          <div aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch"} className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+          <div aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch" ? true : undefined} className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
             <div className="overflow-hidden">
               <div className="flex h-10 items-center justify-between border-b border-[var(--app-border)] px-3">
                 <button type="button" onClick={toggleFilteredBatchSelection} className="flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-blue-700">
@@ -879,7 +880,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                   className={`relative mx-1.5 flex min-h-12 cursor-pointer items-center rounded-[var(--app-radius-sm)] px-2 text-left transition-[background-color,transform] duration-200 hover:bg-blue-50/60 ${active ? "bg-blue-50" : ""}`}
                 >
                   <span className={`absolute inset-y-2 left-0 w-0.5 rounded-full bg-blue-600 transition-opacity ${active ? "opacity-100" : "opacity-0"}`} />
-                  <span aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch"} className={`grid shrink-0 overflow-hidden transition-[width,margin,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "mr-2 w-4 translate-x-0 opacity-100" : "mr-0 w-0 -translate-x-2 opacity-0"}`}>
+                  <span aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch" ? true : undefined} className={`grid shrink-0 overflow-hidden transition-[width,margin,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "mr-2 w-4 translate-x-0 opacity-100" : "mr-0 w-0 -translate-x-2 opacity-0"}`}>
                     <input type="checkbox" checked={batchSelected} onClick={event => event.stopPropagation()} onChange={() => toggleBatchSelection(student.id)} className="h-4 w-4 accent-blue-600" aria-label={`选择 ${student.name} 用于批量生成`} />
                   </span>
                   <span className={`mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-bold ${active ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500"}`}>{student.name.slice(0, 1)}</span>
@@ -894,7 +895,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
             </div>
           </div>
 
-          <div aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch"} className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+          <div aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch" ? true : undefined} className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
             <div className="overflow-hidden">
               <div className="border-t border-[var(--app-border)] bg-gray-50 p-3">
                 <div className="mb-2 flex items-center justify-between text-xs text-gray-500">
@@ -980,7 +981,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                           </span>
                           <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
                         </button>
-                        <div aria-hidden={!open} inert={!open} className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+                        <div aria-hidden={!open} inert={!open ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
                           <div className="overflow-hidden">
                             <div className="border-t border-gray-100 bg-gray-50/40 px-3.5 py-3">
                               <div className="flex flex-wrap gap-2">
@@ -1025,7 +1026,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                 <span className="flex items-center gap-2 text-sm font-semibold text-gray-700"><Settings2 className="h-4 w-4 text-gray-400" />生成设置</span>
                 <span className="flex items-center gap-1 text-xs font-semibold text-gray-500">{selectedLengthLabel}字 · {selectedStyleLabel}<ChevronDown className={`h-4 w-4 transition-transform ${showGenerationSettings ? "rotate-180" : ""}`} /></span>
               </button>
-              <div aria-hidden={!showGenerationSettings} inert={!showGenerationSettings} className={`grid transition-[grid-template-rows,opacity] duration-200 ${showGenerationSettings ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+              <div aria-hidden={!showGenerationSettings} inert={!showGenerationSettings ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ${showGenerationSettings ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
                 <div className="overflow-hidden">
                   <div className="space-y-3 pt-3">
                     <div>
@@ -1057,7 +1058,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                 <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">老师补充说明{selectedComment.needsInfo && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">建议补充</span>}</span>
                 <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showTeacherNote ? "rotate-180" : ""}`} />
               </button>
-              <div aria-hidden={!showTeacherNote} inert={!showTeacherNote} className={`grid transition-[grid-template-rows,opacity] duration-200 ${showTeacherNote ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+              <div aria-hidden={!showTeacherNote} inert={!showTeacherNote ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ${showTeacherNote ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
                 <div className="overflow-hidden">
                   <textarea value={teacherNote} onChange={event => setTeacherNote(event.target.value)} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-5 outline-none focus:border-blue-300 focus:bg-white" />
                   <div className="mt-2 flex justify-end"><button type="button" onClick={saveSelectedTeacherNote} disabled={!hasUnsavedTeacherNote} className={`flex h-8 items-center gap-1.5 rounded-[var(--app-radius-sm)] px-3 text-xs font-semibold ${hasUnsavedTeacherNote ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "bg-gray-50 text-gray-300"}`}><Save className="h-3.5 w-3.5" />暂存说明</button></div>
@@ -1206,6 +1207,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           </div>
         </div>
       )}
+      {appDialog.dialog}
     </div>
   );
 }

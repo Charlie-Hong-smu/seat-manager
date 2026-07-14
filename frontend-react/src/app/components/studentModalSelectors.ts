@@ -5,6 +5,9 @@ export interface StudentModalRecord {
   type: RecordType;
   note: string;
   date: string;
+  score?: number;
+  presetId?: string;
+  createdAt?: string;
 }
 
 export interface WeekOption {

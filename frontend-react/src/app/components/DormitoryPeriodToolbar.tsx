@@ -50,7 +50,7 @@ export function DormitoryPeriodToolbar({
         </div>
         <div
           aria-hidden={!settingsOpen}
-          inert={!settingsOpen}
+          inert={!settingsOpen ? true : undefined}
           className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${settingsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
         >
           <div className="min-h-0 overflow-hidden">

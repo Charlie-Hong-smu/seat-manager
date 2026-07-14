@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bell, CheckCircle2, CircleX, Pencil, Plus, RotateCcw, Search } from "lucide-react";
 import { createFollowupTask, getTaskUrgency, todayKey } from "../../state/dailyManagement";
-import type { AppStudent, FollowupTask, FollowupTaskSource } from "../../state/types";
-import { ActionToast, Button, Card, DatePicker, IconButton, SegmentedControl, useActionToast } from "../ui";
+import type { AppStudent, FollowupTask, FollowupTaskSource, HomeworkAssignment, StudentId } from "../../state/types";
+import { ActionToast, Button, Card, DatePicker, IconButton, SegmentedControl, UnderlineTabs, useActionToast } from "../ui";
+import { HomeworkPanel } from "../HomeworkPanel";
 import { StudentMultiPicker } from "../StudentPicker";
 import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import type { TimelineTarget } from "../../state/dataInsights";
 
 const TYPE_OPTIONS = ["常规跟进", "家校沟通", "行为处理", "学业关注", "出勤关注"];
-const SOURCE_LABEL: Record<FollowupTaskSource, string> = { manual: "手动", ai: "AI 建议", score: "成绩", attendance: "出勤", dormitory: "宿舍" };
+const SOURCE_LABEL: Record<FollowupTaskSource, string> = { manual: "手动", ai: "AI 建议", score: "成绩", attendance: "出勤", dormitory: "宿舍", homework: "作业" };
 
-export function FollowupWorkspace({ students, tasks, onChange, onRequestTask, initialTarget }: { students: AppStudent[]; tasks: FollowupTask[]; onChange: (tasks: FollowupTask[]) => void; onRequestTask: (draft: FollowupTaskDraft) => void; initialTarget?: TimelineTarget }) {
+export function FollowupWorkspace({ students, tasks, homeworkAssignments, subjectCatalog, onChange, onHomeworkChange, onSubjectCatalogChange, onRequestTask, initialTarget, initialMode = "tasks" }: { students: AppStudent[]; tasks: FollowupTask[]; homeworkAssignments: HomeworkAssignment[]; subjectCatalog: string[]; onChange: (tasks: FollowupTask[]) => void; onHomeworkChange: (assignments: HomeworkAssignment[]) => void; onSubjectCatalogChange: (subjects: string[]) => void; onRequestTask: (draft: FollowupTaskDraft) => void; initialTarget?: TimelineTarget; initialMode?: "tasks" | "homework" }) {
+  const [mode, setMode] = useState<"tasks" | "homework">(initialMode);
   const [filter, setFilter] = useState("pending");
   const [search, setSearch] = useState("");
   const [studentIds, setStudentIds] = useState<string[]>([]);
@@ -55,7 +57,16 @@ export function FollowupWorkspace({ students, tasks, onChange, onRequestTask, in
   }
   async function enableNotifications() { if ("Notification" in window && Notification.permission === "default") await Notification.requestPermission(); }
 
+  function createHomeworkFollowups(assignment: HomeworkAssignment, studentIds: StudentId[]) {
+    const created = studentIds.map(studentId => createFollowupTask({ studentId, title: `跟进作业：${assignment.title}`, type: "学业关注", description: assignment.note || "确认作业补交情况", plannedDate: todayKey(), dueDate: assignment.dueDate, source: "homework", sourceRef: { domain: "homework", entityId: assignment.id } }));
+    const existingKeys = new Set(tasks.filter(task => task.status === "pending" && task.sourceRef?.domain === "homework").map(task => `${task.sourceRef?.entityId}:${task.studentId}`));
+    onChange([...created.filter(task => !existingKeys.has(`${assignment.id}:${task.studentId}`)), ...tasks]);
+  }
+
+  if (mode === "homework") return <div className="h-full overflow-y-auto bg-gray-50 p-4"><div className="mx-auto max-w-6xl space-y-4"><UnderlineTabs value={mode} onChange={setMode} ariaLabel="任务与作业" options={[{ value: "tasks", label: "待办" }, { value: "homework", label: "作业" }]}/><HomeworkPanel students={students} assignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={onHomeworkChange} onSubjectCatalogChange={onSubjectCatalogChange} onCreateFollowups={createHomeworkFollowups} initialAssignmentId={initialTarget?.workspace === "followups" ? initialTarget.entityId : undefined}/></div></div>;
+
   return <div className="h-full overflow-y-auto bg-gray-50 p-4"><div className="mx-auto max-w-6xl space-y-4">
+    <UnderlineTabs value={mode} onChange={setMode} ariaLabel="任务与作业" options={[{ value: "tasks", label: "待办" }, { value: "homework", label: "作业" }]}/>
     <Card className="surface-enter" bodyClassName="grid gap-3 p-4 sm:grid-cols-3">{[{ label: "待处理", value: pending.length, tone: "text-blue-600" }, { label: "今日到期", value: today, tone: "text-amber-600" }, { label: "已逾期", value: overdue, tone: "text-red-500" }].map(item => <div key={item.label} className="rounded-[var(--app-radius-sm)] bg-[var(--app-surface-muted)] px-4 py-3"><div className="text-xs text-[var(--app-text-muted)]">{item.label}</div><div className={`mt-1 text-xl font-bold ${item.tone}`}>{item.value}</div></div>)}</Card>
     <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
       <Card title="创建跟进"><div className="space-y-3">

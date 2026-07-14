@@ -223,7 +223,7 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
             <span><strong className="block text-sm text-gray-800">评语素材</strong><span className="mt-0.5 block text-xs text-gray-400">预设 {selectedCount} 项 · 自定义 {customCount} 项 · 学生标签 {visibleTags.length} 项</span></span>
             <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${materialsOpen ? "rotate-180" : ""}`} />
           </button>
-          <div aria-hidden={!materialsOpen} inert={!materialsOpen} className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${materialsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+          <div aria-hidden={!materialsOpen} inert={!materialsOpen ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${materialsOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
             <div className="overflow-hidden"><div className="space-y-4 border-t border-gray-100 p-4">
               <div><div className="mb-2 text-xs font-bold text-gray-500">学生标签（只读参考）</div><div className="flex flex-wrap gap-1.5">{visibleTags.length ? visibleTags.map(tag => <span key={tag} className="rounded-full border border-gray-100 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600">{tag}</span>) : <span className="text-xs text-gray-400">暂无标签</span>}</div></div>
               {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {

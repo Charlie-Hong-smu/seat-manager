@@ -3,6 +3,8 @@ import { calculateDormScore } from "./dormitoryActions";
 import { normalizeFundTransactions } from "./classFundActions";
 import { normalizeAttendanceRecords, normalizeDrawSessions, normalizeFollowupTasks } from "./dailyManagement";
 import { getTagLabels, isAcademicTagLabel } from "./tagCatalog";
+import { normalizeSeatLayout } from "./seatLayout";
+import { createDefaultQuickRecordPresets, createDefaultSchedule, normalizeCommunicationDrafts, normalizeGradeItemAnalysis, normalizeHomeworkAssignments, normalizeQuickRecordPresets, normalizeSchedule } from "./teacherWorkbench";
 import type {
   AppStudent,
   ComplementRuleId,
@@ -92,6 +94,9 @@ function normalizeRecord(value: unknown, index: number): StudentRecord | null {
     type,
     note,
     date,
+    score: toNumber(value.score),
+    presetId: toStringValue(value.presetId) || undefined,
+    createdAt: toStringValue(value.createdAt) || undefined,
   };
 }
 
@@ -253,14 +258,15 @@ function normalizeExam(value: unknown, index: number): StudentExamSummary | null
   };
 }
 
-function getSeatCapacity(studentCount: number, seatOrder: Array<StudentId | null>): number {
+function getSeatCapacity(studentCount: number, seatOrder: Array<StudentId | null>, customCapacity?: number): number {
+  if (customCapacity !== undefined) return Math.max(0, customCapacity);
   const lastAssignedIndex = [...seatOrder].reverse().findIndex(id => id !== null);
   const lastIndex = lastAssignedIndex === -1 ? -1 : seatOrder.length - 1 - lastAssignedIndex;
   const minNeeded = Math.max(studentCount, lastIndex + 1);
   return minNeeded ? Math.ceil(minNeeded / COLS) * COLS : 0;
 }
 
-function normalizeSeatOrder(students: AppStudent[], rawSeatOrder: unknown): Array<StudentId | null> {
+function normalizeSeatOrder(students: AppStudent[], rawSeatOrder: unknown, customCapacity?: number): Array<StudentId | null> {
   const ids = students.map(student => student.id);
   const idSet = new Set(ids);
   const rawOrder = Array.isArray(rawSeatOrder)
@@ -269,7 +275,7 @@ function normalizeSeatOrder(students: AppStudent[], rawSeatOrder: unknown): Arra
         return id && idSet.has(id) ? id : null;
       })
     : [];
-  const total = getSeatCapacity(students.length, rawOrder);
+  const total = getSeatCapacity(students.length, rawOrder, customCapacity);
   const order: Array<StudentId | null> = new Array(total).fill(null);
   const used = new Set<StudentId>();
 
@@ -306,8 +312,8 @@ function normalizeLockedSeats(value: unknown, seatCount: number): number[] {
   return [...unique];
 }
 
-function normalizePairRules(value: unknown, studentIds: Set<StudentId>): Array<{ a: StudentId; b: StudentId }> {
-  return toUnknownArray(value).reduce<Array<{ a: StudentId; b: StudentId }>>((pairs, item) => {
+function normalizePairRules(value: unknown, studentIds: Set<StudentId>): Array<{ a: StudentId; b: StudentId; scope?: "neighbor" | "group" }> {
+  return toUnknownArray(value).reduce<Array<{ a: StudentId; b: StudentId; scope?: "neighbor" | "group" }>>((pairs, item) => {
     if (!isRecord(item)) {
       return pairs;
     }
@@ -318,7 +324,7 @@ function normalizePairRules(value: unknown, studentIds: Set<StudentId>): Array<{
     }
     const exists = pairs.some(pair => (pair.a === a && pair.b === b) || (pair.a === b && pair.b === a));
     if (!exists) {
-      pairs.push({ a, b });
+      pairs.push({ a, b, scope: item.scope === "group" ? "group" : undefined });
     }
     return pairs;
   }, []);
@@ -329,6 +335,7 @@ export function createDefaultSeatSettings(): SeatSettings {
     pairByGender: false,
     keepLockedEmpty: true,
     complementRuleIds: [],
+    groupBalanceMode: "off",
     constraints: {
       lockedDeskmatePairs: [],
       noDeskmatePairs: [],
@@ -353,6 +360,8 @@ function normalizeSeatSettings(settings: Record<string, unknown>, students: AppS
     pairByGender: Boolean(settings.pairByGender),
     keepLockedEmpty: settings.keepLockedEmpty === undefined ? true : Boolean(settings.keepLockedEmpty),
     complementRuleIds: complementIds,
+    groupBalanceMode: settings.groupBalanceMode === "neighbor-and-group" ? "neighbor-and-group" : "off",
+    layout: normalizeSeatLayout(settings.seatLayout),
     constraints: {
       lockedDeskmatePairs: normalizePairRules(rawConstraints.lockedDeskmatePairs, studentIds),
       noDeskmatePairs: normalizePairRules(rawConstraints.noDeskmatePairs, studentIds),
@@ -371,12 +380,13 @@ function normalizeSeatHistory(value: unknown): SeatHistorySnapshot[] {
       if (!isRecord(item)) {
         return null;
       }
-      const seats = toStringArray(item.seats);
+      const seats = Array.isArray(item.seats) ? item.seats.map(seat => typeof seat === "string" || typeof seat === "number" ? String(seat).trim() : "") : [];
       if (!seats.length) {
         return null;
       }
-      const rows = Math.max(1, Math.ceil(seats.length / COLS), Math.trunc(toNumber(item.rows) ?? 0));
-      const seatCount = rows * COLS;
+      const layout = normalizeSeatLayout(item.layout);
+      const rows = layout ? Math.max(1, Math.trunc(toNumber(item.rows) ?? 1)) : Math.max(1, Math.ceil(seats.length / COLS), Math.trunc(toNumber(item.rows) ?? 0));
+      const seatCount = layout?.seats.length || rows * COLS;
       const normalizedSeats = [...seats];
       while (normalizedSeats.length < seatCount) {
         normalizedSeats.push("");
@@ -390,6 +400,7 @@ function normalizeSeatHistory(value: unknown): SeatHistorySnapshot[] {
         note: toStringValue(item.note),
         rows,
         seats: normalizedSeats,
+        layout,
       };
     })
     .filter((item): item is SeatHistorySnapshot => Boolean(item))
@@ -596,6 +607,7 @@ function normalizeSavedExamRecord(record: unknown, index: number, students: AppS
     subjects,
     rows,
     importSource: normalizeImportSource(record.importSource),
+    itemAnalysis: normalizeGradeItemAnalysis(record.itemAnalysis),
   };
 }
 
@@ -705,6 +717,10 @@ export function createMockSeatManagerState(): SeatManagerState {
     attendanceRecords: [],
     followupTasks: [],
     drawSessions: [],
+    schedule: createDefaultSchedule(),
+    homeworkAssignments: [],
+    quickRecordPresets: createDefaultQuickRecordPresets(),
+    communicationDrafts: [],
     seatHistory: [],
     savedExams: EXAMS,
     exams: EXAMS,
@@ -730,6 +746,10 @@ export function createEmptySeatManagerState(): SeatManagerState {
     attendanceRecords: [],
     followupTasks: [],
     drawSessions: [],
+    schedule: createDefaultSchedule(),
+    homeworkAssignments: [],
+    quickRecordPresets: createDefaultQuickRecordPresets(),
+    communicationDrafts: [],
     seatHistory: [],
     savedExams: [],
     exams: [],
@@ -754,7 +774,9 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
   if (!students.length) {
     // raw 是一个真实存在的对象(哪怕是空班级/新学期),就返回空状态,不塞演示数据。
     // 只有 raw 完全不是对象(见上面 isRecord 判断)才回退演示数据 = 真正的首次使用。
-    return createEmptySeatManagerState();
+    const empty = createEmptySeatManagerState();
+    const settings = isRecord(raw.settings) ? raw.settings : {};
+    return { ...empty, settings, seatSettings: normalizeSeatSettings(settings, []), seatHistory: normalizeSeatHistory(raw.seatHistory), schedule: normalizeSchedule(raw.schedule), homeworkAssignments: normalizeHomeworkAssignments(raw.homeworkAssignments), quickRecordPresets: normalizeQuickRecordPresets(raw.quickRecordPresets), communicationDrafts: normalizeCommunicationDrafts(raw.communicationDrafts) };
   }
 
   const studentIds = new Set(students.map(student => student.id));
@@ -777,8 +799,9 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
       ...normalizedStudents.filter(student => student.dormitoryId === dormitory.id).map(student => student.id),
     ])),
   }));
-  const seatOrder = normalizeSeatOrder(normalizedStudents, raw.seatOrder);
   const settings = isRecord(raw.settings) ? raw.settings : {};
+  const seatSettings = normalizeSeatSettings(settings, normalizedStudents);
+  const seatOrder = normalizeSeatOrder(normalizedStudents, raw.seatOrder, seatSettings.layout?.seats.length);
 
   return {
     source: "legacy",
@@ -786,12 +809,16 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     students: normalizedStudents,
     seatOrder,
     lockedSeats: normalizeLockedSeats(raw.lockedSeats, seatOrder.length),
-    seatSettings: normalizeSeatSettings(settings, normalizedStudents),
+    seatSettings,
     dormitories: normalizedDormitories,
     fundTransactions: normalizeFundTransactions(raw.fundTransactions),
     attendanceRecords: normalizeAttendanceRecords(raw.attendanceRecords),
     followupTasks: normalizeFollowupTasks(raw.followupTasks),
     drawSessions: normalizeDrawSessions(raw.drawSessions),
+    schedule: normalizeSchedule(raw.schedule),
+    homeworkAssignments: normalizeHomeworkAssignments(raw.homeworkAssignments),
+    quickRecordPresets: normalizeQuickRecordPresets(raw.quickRecordPresets),
+    communicationDrafts: normalizeCommunicationDrafts(raw.communicationDrafts),
     seatHistory: normalizeSeatHistory(raw.seatHistory),
     savedExams: toUnknownArray(raw.savedExams),
     exams: toUnknownArray(raw.exams),

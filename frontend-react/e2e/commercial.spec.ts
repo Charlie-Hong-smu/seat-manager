@@ -17,6 +17,8 @@ test("commercial login uses the real product-login UI with a test-only mocked re
   await expect(page.getByRole("heading", { name: "班级座位管理器" })).toBeVisible();
   await page.getByPlaceholder("请输入授权码").fill("TEST-ONLY-CODE");
   await page.getByRole("button", { name: "进入" }).click();
+  await expect(page.getByText("今日班务", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
 });
 
@@ -39,7 +41,7 @@ test("commercial login reports an expired license without using a real license r
   await page.goto("./");
   await page.getByPlaceholder("请输入授权码").fill("EXPIRED-LICENSE");
   await page.getByRole("button", { name: "进入" }).click();
-  await expect(page.getByText("授权码不正确，请检查后重试")).toBeVisible();
+  await expect(page.getByText("这个授权码已到期，请联系管理员续期")).toBeVisible();
 });
 
 test("commercial login explains an edition-scoped rejection", async ({ page }) => {

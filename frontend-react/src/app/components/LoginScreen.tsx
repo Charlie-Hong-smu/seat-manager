@@ -28,6 +28,8 @@ export function LoginScreen({ onLogin }: Props) {
         setSecret("");
       } else if (message === "license_device_limit") {
         setError("这个授权码绑定设备已满，请联系我处理");
+      } else if (message === "license_expired") {
+        setError("这个授权码已到期，请联系管理员续期");
       } else if (message === "license_required") {
         setError("请输入产品授权码");
       } else if (message === "license_network_failed") {
@@ -65,11 +67,11 @@ export function LoginScreen({ onLogin }: Props) {
     && (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "linear-gradient(135deg, #f0f4ff 0%, #f5f5f7 50%, #f0f7f0 100%)" }}>
+    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "var(--app-login-background)" }}>
       {/* Decorative blobs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-20" style={{ background: "radial-gradient(circle, #3b82f6 0%, transparent 70%)" }} />
-        <div className="absolute -bottom-32 -left-32 w-80 h-80 rounded-full opacity-15" style={{ background: "radial-gradient(circle, #8b5cf6 0%, transparent 70%)" }} />
+        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-20" style={{ background: "var(--app-login-blue-glow)" }} />
+        <div className="absolute -bottom-32 -left-32 w-80 h-80 rounded-full opacity-15" style={{ background: "var(--app-login-violet-glow)" }} />
       </div>
 
       <form onSubmit={handleSubmit} className="relative w-full max-w-sm">

@@ -8,6 +8,74 @@ export interface StudentRecord {
   type: RecordType;
   note: string;
   date: string;
+  score?: number;
+  presetId?: string;
+  createdAt?: string;
+}
+
+export interface QuickRecordPreset {
+  id: string;
+  label: string;
+  type: RecordType;
+  note: string;
+  score?: number;
+  enabled: boolean;
+  order: number;
+}
+
+export interface SchedulePeriod {
+  id: string;
+  label: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface ScheduleEntry {
+  id: string;
+  weekday: number;
+  periodId: string;
+  subject: string;
+  note?: string;
+}
+
+export interface ClassScheduleV1 {
+  version: 1;
+  periods: SchedulePeriod[];
+  entries: ScheduleEntry[];
+  importSource?: { filename: string; importedAt: string };
+}
+
+export type HomeworkStudentStatus = "unrecorded" | "pending" | "submitted" | "resubmitted" | "excused";
+
+export interface HomeworkStudentState {
+  status: HomeworkStudentStatus;
+  note: string;
+  updatedAt: string;
+}
+
+export interface HomeworkAssignment {
+  id: string;
+  title: string;
+  subject: string;
+  assignedDate: string;
+  dueDate: string;
+  note: string;
+  studentStates: Record<StudentId, HomeworkStudentState>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommunicationDraft {
+  id: string;
+  scope: "class" | "student";
+  studentId?: StudentId;
+  startDate: string;
+  endDate: string;
+  facts: string[];
+  content: string;
+  generatedBy: "local" | "ai";
+  sourceDigest: string;
+  updatedAt: string;
 }
 
 export type DormEventType = "reward" | "punish" | "note";
@@ -106,7 +174,7 @@ export interface AttendanceRecord {
 }
 
 export type FollowupTaskStatus = "pending" | "completed" | "cancelled";
-export type FollowupTaskSource = "manual" | "ai" | "score" | "attendance" | "dormitory";
+export type FollowupTaskSource = "manual" | "ai" | "score" | "attendance" | "dormitory" | "homework";
 
 export interface FollowupTask {
   id: string;
@@ -123,7 +191,7 @@ export interface FollowupTask {
   updatedAt: string;
   completedAt?: string;
   lastNotifiedAt?: string;
-  sourceRef?: { domain: "dormitory" | "attendance" | "ai"; entityId: string };
+  sourceRef?: { domain: "dormitory" | "attendance" | "ai" | "homework" | "score"; entityId: string };
 }
 
 export interface DrawSession {
@@ -167,11 +235,70 @@ export interface GradeExam {
   subjects: string[];
   rows: GradeRow[];
   importSource?: ScoreImportSource;
+  itemAnalysis?: GradeItemAnalysis;
+}
+
+export interface GradeQuestionDefinition {
+  id: string;
+  label: string;
+  subject: string;
+  maxScore: number;
+  description?: string;
+  knowledgePoints: string[];
+  sourceColumn: number;
+}
+
+export interface GradeItemAnalysisRow {
+  studentId?: StudentId;
+  studentName: string;
+  scores: Record<string, number | null>;
+}
+
+export interface GradeItemAnalysis {
+  questions: GradeQuestionDefinition[];
+  rows: GradeItemAnalysisRow[];
+  updatedAt: string;
 }
 
 export interface SeatPairRule {
   a: StudentId;
   b: StudentId;
+  /** 旧规则缺省为相邻；group 表示必须同组或不能同组。 */
+  scope?: "neighbor" | "group";
+}
+
+export type SeatLayoutTemplate = "default-grid" | "grid" | "group-grid" | "round-table" | "freeform";
+export type SeatFrontEdge = "top" | "bottom" | "left" | "right";
+
+export interface SeatLayoutNode {
+  id: string;
+  x: number;
+  y: number;
+  rotation: number;
+  label: string;
+  groupId?: string;
+}
+
+export interface SeatLayoutGroup {
+  id: string;
+  name: string;
+  shape: "columns" | "grid" | "round" | "custom";
+  seatIds: string[];
+}
+
+export interface SeatLayoutEdge {
+  a: string;
+  b: string;
+}
+
+export interface SeatLayoutV1 {
+  version: 1;
+  template: SeatLayoutTemplate;
+  frontEdge: SeatFrontEdge;
+  canvas: { width: number; height: number };
+  seats: SeatLayoutNode[];
+  groups: SeatLayoutGroup[];
+  neighborEdges: SeatLayoutEdge[];
 }
 
 export interface SeatConstraints {
@@ -194,6 +321,10 @@ export interface SeatSettings {
   pairByGender: boolean;
   keepLockedEmpty: boolean;
   complementRuleIds: ComplementRuleId[];
+  /** 默认 off，保持旧版只评价邻座；开启后同时评价整组构成。 */
+  groupBalanceMode: "off" | "neighbor-and-group";
+  /** 缺失时按当前 seatOrder 派生原有 8 列布局。 */
+  layout?: SeatLayoutV1;
   constraints: SeatConstraints;
 }
 
@@ -203,6 +334,7 @@ export interface SeatHistorySnapshot {
   note: string;
   rows: number;
   seats: string[];
+  layout?: SeatLayoutV1;
 }
 
 export interface SavedGradeExamEntry {
@@ -222,6 +354,7 @@ export interface SavedGradeExamRecord {
   subjects: string[];
   entries: SavedGradeExamEntry[];
   importSource?: ScoreImportSource;
+  itemAnalysis?: GradeItemAnalysis;
 }
 
 export interface ScoreImportDraft {
@@ -337,6 +470,10 @@ export interface SeatManagerState {
   attendanceRecords: AttendanceRecord[];
   followupTasks: FollowupTask[];
   drawSessions: DrawSession[];
+  schedule: ClassScheduleV1;
+  homeworkAssignments: HomeworkAssignment[];
+  quickRecordPresets: QuickRecordPreset[];
+  communicationDrafts: CommunicationDraft[];
   seatHistory: SeatHistorySnapshot[];
   savedExams: unknown[];
   exams: unknown[];

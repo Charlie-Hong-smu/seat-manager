@@ -601,18 +601,21 @@
 }
 
 .score-management-toggle {
-  left: 360px;
-  top: 1.65rem;
-  transition: left 440ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  left: calc(1rem + 320px - 2.75rem);
+  top: 1.5rem;
+  transition: left 440ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .score-workspace-grid[data-management-open="false"] .score-management-toggle {
-  left: 1.65rem;
+  left: 1.5rem;
 }
 
-.score-workspace-grid main .grade-dashboard > :first-child > :first-child {
-  padding-left: 3rem;
-  transition: padding-left 440ms cubic-bezier(0.16, 1, 0.3, 1);
+@media (prefers-reduced-motion: reduce) {
+  .score-workspace-grid,
+  .score-management-panel,
+  .score-management-toggle {
+    transition-duration: 0.01ms;
+  }
 }
 
 .daily-toolbar-primary,
@@ -660,6 +663,21 @@
   --app-primary-hover: #1d4ed8;
   --app-ai: #7c3aed;
   --app-danger: #dc2626;
+  --app-chart-blue: #3b82f6;
+  --app-chart-green: #10b981;
+  --app-chart-violet: #8b5cf6;
+  --app-chart-amber: #f59e0b;
+  --app-chart-rose: #f43f5e;
+  --app-chart-cyan: #06b6d4;
+  --app-chart-pink: #ec4899;
+  --app-chart-indigo: #6366f1;
+  --app-chart-lime: #84cc16;
+  --app-chart-grid: #f0f0f0;
+  --app-chart-axis: #9ca3af;
+  --app-chart-fallback: #64748b;
+  --app-login-background: linear-gradient(135deg, #f0f4ff 0%, #f5f5f7 50%, #f0f7f0 100%);
+  --app-login-blue-glow: radial-gradient(circle, #3b82f6 0%, transparent 70%);
+  --app-login-violet-glow: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
   --app-radius-sm: 10px;
   --app-radius-md: 14px;
   --app-radius-lg: 18px;

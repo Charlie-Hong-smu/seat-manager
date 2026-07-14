@@ -13,10 +13,11 @@ import {
   type ScoreMapping,
 } from "../../state/scoreImport";
 import type { AiClassTrendResult } from "../../state/aiTrendService";
-import type { AppStudent, GradeExam, SavedGradeExamRecord, ScoreImportDraft } from "../../state/types";
+import type { AppStudent, GradeExam, GradeItemAnalysis, SavedGradeExamRecord, ScoreImportDraft } from "../../state/types";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, SelectMenu } from "../ui";
+import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, IconButton, SelectMenu, UnderlineTabs } from "../ui";
+import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function ScoresWorkspace({
@@ -31,6 +32,8 @@ export function ScoresWorkspace({
   onGenerateLocalClassAnalysis,
   onGenerateStudentTrendAdvice,
   studentAdviceProgress,
+  onSaveItemAnalysis,
+  onCreateScoreFollowup,
 }: {
   exams: GradeExam[];
   students: AppStudent[];
@@ -50,6 +53,8 @@ export function ScoresWorkspace({
     skipped: number;
     total: number;
   };
+  onSaveItemAnalysis: (examId: string, itemAnalysis: GradeItemAnalysis) => boolean;
+  onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => void;
 }) {
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
   const [scoreRows, setScoreRows] = useState<string[][]>([]);
@@ -75,6 +80,7 @@ export function ScoresWorkspace({
   const [managementOpen, setManagementOpen] = useState(true);
   const [pendingDeleteExam, setPendingDeleteExam] = useState<GradeExam | null>(null);
   const [deleteExamError, setDeleteExamError] = useState("");
+  const [scoreView, setScoreView] = useState<"overview" | "items">("overview");
 
   async function readScoreFile(file?: File) {
     if (!file) return;
@@ -294,20 +300,19 @@ export function ScoresWorkspace({
   return (
     <div className="flex h-full flex-col bg-gray-50">
       <div className="score-workspace-grid relative grid min-h-0 flex-1 overflow-hidden p-4" data-management-open={managementOpen}>
-        <button
-          type="button"
+        <IconButton
+          label={managementOpen ? "收起成绩管理" : "展开成绩管理"}
+          size="sm"
           onClick={() => setManagementOpen(open => !open)}
-          className="score-management-toggle absolute z-20 grid h-9 w-9 place-items-center rounded-xl border border-gray-200 bg-white text-gray-500 shadow-sm transition-[color,background-color,border-color,box-shadow] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
-          aria-label={managementOpen ? "收起成绩管理" : "展开成绩管理"}
           aria-expanded={managementOpen}
-          title={managementOpen ? "收起成绩管理" : "展开成绩管理"}
+          className="score-management-toggle absolute z-20 shadow-sm"
         >
           {managementOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-        </button>
+        </IconButton>
 
         <aside
           aria-hidden={!managementOpen}
-          inert={!managementOpen}
+          inert={!managementOpen ? true : undefined}
           className="score-management-panel min-h-0 w-[320px] space-y-4 overflow-y-auto"
         >
           <Panel title="成绩导入">
@@ -423,7 +428,8 @@ export function ScoresWorkspace({
         </aside>
 
         <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} />
+          <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-white pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
+          {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} /> : <ScoreItemAnalysisPanel exams={exams} students={students} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup}/>}
         </main>
       </div>
       {mappingModalOpen && manualMapping && (

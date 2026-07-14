@@ -63,7 +63,7 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
 
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="min-w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_#f3f4f6]">
+            <thead className="sticky top-0 z-10 bg-white shadow-sm">
               <tr className="text-xs text-gray-400">
                 <th rowSpan={2} className="px-4 py-3 text-left font-semibold w-14">#</th>
                 <th rowSpan={2} className="px-4 py-3 text-left font-semibold min-w-28">姓名</th>

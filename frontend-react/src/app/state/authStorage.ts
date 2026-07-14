@@ -227,6 +227,9 @@ export async function authorizeProduct(productCode: string, remember: boolean): 
     if (error.error === "edition_forbidden") {
       throw new Error("license_wrong_edition");
     }
+    if (error.error === "license_expired") {
+      throw new Error("license_expired");
+    }
     throw new Error("license_unauthorized");
   }
   if (response.status === 409) {

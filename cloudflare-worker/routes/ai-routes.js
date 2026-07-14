@@ -8,5 +8,7 @@ export function createAiPostRoutes(handlers) {
     "/generate-comment": handlers.generateComment,
     "/suggest-score-mapping": handlers.suggestScoreMapping,
     "/suggest-roster-mapping": handlers.suggestRosterMapping,
+    "/generate-weekly-draft": handlers.generateWeeklyDraft,
+    "/analyze-score-items": handlers.analyzeScoreItems,
   };
 }

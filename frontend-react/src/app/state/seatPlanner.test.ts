@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { evaluateSeatOrder, getChangedSeatIndices } from "./seatPlanner";
 import { createDefaultSeatSettings } from "./legacyStateAdapter";
+import { createGroupedSeatLayout } from "./seatLayout";
 import type { AppStudent } from "./types";
 
 function student(id: string, name: string, gender: AppStudent["gender"]): AppStudent {
@@ -20,5 +21,16 @@ describe("seat planner", () => {
     const result = evaluateSeatOrder(students, ["a", "b"], settings);
     expect(result.hardViolations).toBeGreaterThan(0);
     expect(result.details.required.some(item => item.type === "避免同桌" && !item.satisfied)).toBe(true);
+  });
+
+  it("distinguishes neighbor and whole-group constraints", () => {
+    const students = [student("a", "甲", "男"), student("b", "乙", "女"), student("c", "丙", "男"), student("d", "丁", "女")];
+    const settings = createDefaultSeatSettings();
+    settings.layout = createGroupedSeatLayout({ groupCount: 1, groupRows: 2, groupColumns: 2 });
+    settings.constraints.lockedDeskmatePairs = [{ a: "a", b: "d", scope: "group" }];
+    settings.constraints.noDeskmatePairs = [{ a: "a", b: "d" }];
+    const result = evaluateSeatOrder(students, ["a", "b", "c", "d"], settings);
+    expect(result.details.required.find(item => item.label.includes("同组"))?.satisfied).toBe(true);
+    expect(result.details.required.find(item => item.label.includes("不和") && item.label.includes("相邻"))?.satisfied).toBe(true);
   });
 });

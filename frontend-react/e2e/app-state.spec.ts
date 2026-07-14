@@ -14,6 +14,8 @@ async function login(page: import("@playwright/test").Page) {
   await page.goto("./");
   await page.getByPlaceholder("请输入授权码").fill("TEST-ZHANG-CODE");
   await page.getByRole("button", { name: "进入" }).click();
+  await expect(page.getByRole("button", { name: "今日" })).toBeVisible();
+  await page.getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
 }
 
@@ -26,9 +28,66 @@ test("license login and student edits survive a reload", async ({ page }) => {
   await expect(page.getByRole("button", { name: /测试学生/ }).last()).toBeVisible();
 
   await page.reload();
+  await page.getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: /测试学生/ }).last()).toBeVisible();
   const storedBook = await page.evaluate(() => JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null"));
   expect(storedBook.slices[0].data.students.some((student: { name: string }) => student.name === "测试学生")).toBe(true);
+});
+
+test("custom round-table layout persists and keeps overflow students waiting", async ({ page }) => {
+  await login(page);
+
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  for (const name of ["布局学生甲", "布局学生乙", "布局学生丙"]) {
+    await page.getByPlaceholder("姓名", { exact: true }).fill(name);
+    await page.getByRole("button", { name: "添加到班级" }).click();
+  }
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+
+  await page.getByRole("button", { name: "排座", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "排座" });
+  await dialog.getByRole("button", { name: "布局设计" }).click();
+  await dialog.getByRole("button", { name: "座位布局模板" }).click();
+  await page.getByRole("option", { name: "围桌布局" }).click();
+  await dialog.getByRole("spinbutton", { name: "桌数" }).fill("1");
+  await dialog.getByRole("spinbutton", { name: "每桌人数" }).fill("2");
+  await dialog.getByRole("button", { name: "生成布局草稿" }).click();
+  await dialog.getByRole("button", { name: "应用布局" }).click();
+  await dialog.getByRole("button", { name: "关闭排座设置" }).click();
+
+  await expect(page.getByRole("region", { name: "待排学生" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
+    const current = book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId);
+    return current?.data?.settings?.seatLayout?.template;
+  })).toBe("round-table");
+
+  await page.reload();
+  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await expect(page.getByRole("region", { name: "待排学生" })).toBeVisible();
+  await expect(page.getByText("第 1 组", { exact: true })).toBeVisible();
+});
+
+test("corrupt local workspace stays untouched until an explicit recovery", async ({ page }) => {
+  const corruptRaw = "{broken-workspace";
+  await page.addInitScript(raw => localStorage.setItem("seat-manager-workspaces-v1", raw), corruptRaw);
+  await page.route("**/license/auth", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ token: "e2e-recovery-token", expiresAt: Date.now() + 60_000, licenseId: "e2e-recovery", edition: "zhang" }) }));
+  await page.goto("./");
+  await page.getByPlaceholder("请输入授权码").fill("TEST-RECOVERY-CODE");
+  await page.getByRole("button", { name: "进入" }).click();
+  await expect(page.getByRole("heading", { name: "检测到本机工作区数据异常" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(corruptRaw);
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "valid-backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ version: 1, data: { students: [], seatOrder: [] } })),
+  });
+  await page.getByRole("button", { name: "确认恢复" }).click();
+  await expect(page.getByRole("button", { name: "今日" })).toBeVisible();
+  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).not.toBe(corruptRaw);
 });
 
 test("preloads the comment workbench and keeps its full-screen background stable", async ({ page }) => {
@@ -97,7 +156,7 @@ test("dormitory periods, custom settings and event dates work together", async (
 
 test("creates a class-level followup without a student and supports undo", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /^跟进任务/ }).click();
+  await page.getByRole("button", { name: /^任务与作业/ }).click();
 
   await expect(page.getByText("不指定学生")).toBeVisible();
   await page.getByPlaceholder("跟进事项，例如：确认处罚执行情况").fill("准备下周班会材料");
@@ -109,6 +168,40 @@ test("creates a class-level followup without a student and supports undo", async
   await expect(toast).toBeVisible();
   await toast.getByRole("button", { name: "撤销" }).click();
   await expect(page.getByText("准备下周班会材料", { exact: true })).toHaveCount(0);
+});
+
+test("today workspace routes into homework and persists the teacher ledger", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  for (const name of ["作业学生甲", "作业学生乙"]) {
+    await page.getByPlaceholder("姓名", { exact: true }).fill(name);
+    await page.getByRole("button", { name: "添加到班级" }).click();
+  }
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await page.getByRole("button", { name: "今日", exact: true }).click();
+  await expect(page.getByText("今日班务", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "布置作业", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "作业", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.getByPlaceholder("作业名称").fill("E2E 今日作业");
+  await page.getByRole("button", { name: "作业学科" }).click();
+  await page.getByRole("option", { name: "数学", exact: true }).click();
+  await page.getByRole("button", { name: "保存作业", exact: true }).click();
+  await expect(page.getByText("E2E 今日作业", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "待登记 2", exact: true })).toBeVisible();
+  const studentOrderBefore = await page.locator("[data-homework-student-id]").evaluateAll(elements => elements.map(element => element.querySelector("strong")?.textContent));
+  await page.getByRole("button", { name: "作业学生甲当前待登记，点击设为已交", exact: true }).click();
+  await expect(page.getByRole("button", { name: "作业学生甲当前已交，点击设为已交", exact: true })).toBeVisible();
+  await expect(page.getByText("作业学生甲 已设为已交", { exact: true })).toBeVisible();
+  const studentOrderAfter = await page.locator("[data-homework-student-id]").evaluateAll(elements => elements.map(element => element.querySelector("strong")?.textContent));
+  expect(studentOrderAfter).toEqual(studentOrderBefore);
+
+  await page.reload();
+  await page.getByRole("button", { name: /^任务与作业/ }).click();
+  await page.getByRole("tab", { name: "作业", exact: true }).click();
+  await expect(page.getByText("E2E 今日作业", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "待登记 1", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "已交 1", exact: true })).toBeVisible();
 });
 
 test("roster, exam, cloud sync and workspace switching keep data isolated", async ({ page }) => {
@@ -134,6 +227,26 @@ test("roster, exam, cloud sync and workspace switching keep data isolated", asyn
   await page.getByPlaceholder("考试名称").fill("E2E 期中测试");
   await page.getByRole("button", { name: "保存考试" }).click();
   await expect(page.getByText("E2E 期中测试", { exact: true }).first()).toBeVisible();
+
+  const scoreManagementToggle = page.getByRole("button", { name: "收起成绩管理" });
+  const scoreOverviewTab = page.getByRole("tab", { name: "成绩概览" });
+  const [toggleBox, overviewTabBox] = await Promise.all([
+    scoreManagementToggle.boundingBox(),
+    scoreOverviewTab.boundingBox(),
+  ]);
+  expect(toggleBox).not.toBeNull();
+  expect(overviewTabBox).not.toBeNull();
+  expect(toggleBox!.x + toggleBox!.width).toBeLessThanOrEqual(overviewTabBox!.x);
+
+  await page.getByRole("tab", { name: "题目分析" }).click();
+  await expect(page.getByRole("heading", { name: "题目分析怎么用" })).toBeHidden();
+  await page.getByRole("button", { name: "题目分析使用说明" }).click();
+  await expect(page.getByRole("heading", { name: "题目分析怎么用" })).toBeVisible();
+  await expect(page.getByText(/只有学科总分时无法生成/)).toBeVisible();
+  await scoreManagementToggle.click();
+  await expect(page.getByRole("button", { name: "展开成绩管理" })).toBeVisible();
+  await page.getByRole("button", { name: "展开成绩管理" }).click();
+  await scoreOverviewTab.click();
 
   await page.getByRole("button", { name: "云同步" }).click();
   const syncHeading = page.getByRole("heading", { name: "云端备份与恢复" });

@@ -1,6 +1,11 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
-import type { AppStudent, StudentId, WorkspaceBook } from "./types";
-import { exportWholeBook, importWholeBook } from "./workspaces";
+import type { AppStudent, SeatLayoutV1, StudentId, WorkspaceBook } from "./types";
+import {
+  exportWholeBook,
+  importPreparedWorkspace,
+  prepareWorkspaceImport,
+  type PreparedWorkspaceImport,
+} from "./workspaces";
 
 const BACKUP_VERSION = 2;
 const COLS = 8;
@@ -9,6 +14,7 @@ export interface BackupImportPreview {
   version: number;
   data: Record<string, unknown>;
   workspaceBook?: WorkspaceBook;
+  prepared: PreparedWorkspaceImport;
   studentCount: number;
   seatCount: number;
   warning: string;
@@ -61,6 +67,8 @@ export function formatBackupTime(value: string): string {
 
 export function exportBackupJson(): string {
   const exportedAt = new Date().toISOString();
+  const current = getCurrentLegacyState();
+  writeLegacyRootState({ ...current, lastBackupAt: exportedAt });
   const payload = {
     version: BACKUP_VERSION,
     exportedAt,
@@ -91,8 +99,15 @@ export function exportPreImportBackup(): void {
   downloadFile(filename, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
-export function exportSeatsCsv(students: AppStudent[], seatOrder: Array<StudentId | null>): void {
+export function exportSeatsCsv(students: AppStudent[], seatOrder: Array<StudentId | null>, layout?: SeatLayoutV1): void {
   const studentById = new Map(students.map(student => [student.id, student]));
+  if (layout) {
+    const groupById = new Map(layout.groups.map(group => [group.id, group.name]));
+    const rows = [["组别", "座位", "学生", "横坐标", "纵坐标"], ...layout.seats.map((seat, index) => [groupById.get(seat.groupId || "") || "未分组", seat.label, seatOrder[index] ? studentById.get(seatOrder[index] as StudentId)?.name || "" : "", String(seat.x), String(seat.y)])];
+    const content = `\ufeff${rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, "\"\"")}"`).join(",")).join("\n")}`;
+    downloadFile(`座位表_自定义布局_${formatDateForFilename()}.csv`, content, "text/csv;charset=utf-8");
+    return;
+  }
   const lines = [
     ["行", ...Array.from({ length: COLS }, (_, index) => `第${index + 1}列`)],
   ];
@@ -111,13 +126,24 @@ export function exportSeatsCsv(students: AppStudent[], seatOrder: Array<StudentI
 export async function parseBackupFile(file: File): Promise<BackupImportPreview> {
   const parsed = JSON.parse(await file.text()) as unknown;
   const version = isRecord(parsed) && typeof parsed.version === "number" ? parsed.version : 0;
-  const workspaceBook = isRecord(parsed) && isRecord(parsed.workspaceBook) ? parsed.workspaceBook as unknown as WorkspaceBook : undefined;
-  if (workspaceBook?.slices?.length) {
+  const candidate = isRecord(parsed) && parsed.workspaceBook !== undefined
+    ? parsed.workspaceBook
+    : isRecord(parsed) && parsed.data !== undefined
+      ? parsed.data
+      : parsed;
+  let prepared: PreparedWorkspaceImport;
+  try {
+    prepared = prepareWorkspaceImport(candidate);
+  } catch {
+    throw new Error("invalid_backup");
+  }
+  const workspaceBook = prepared.book;
+  if (prepared.format === "workspace-book") {
     const current = workspaceBook.slices.find(slice => slice.id === workspaceBook.currentSliceId) || workspaceBook.slices[0];
     const data = isRecord(current?.data) ? current.data : { students: [], seatOrder: [] };
-    return { version, data, workspaceBook, studentCount: workspaceBook.slices.reduce((sum, slice) => sum + (Array.isArray(slice.data?.students) ? slice.data.students.length : 0), 0), seatCount: Array.isArray(data.seatOrder) ? data.seatOrder.length : 0, warning: "" };
+    return { version, data, workspaceBook, prepared, studentCount: workspaceBook.slices.reduce((sum, slice) => sum + (Array.isArray(slice.data?.students) ? slice.data.students.length : 0), 0), seatCount: Array.isArray(data.seatOrder) ? data.seatOrder.length : 0, warning: prepared.warnings.join(" ") };
   }
-  const data = isRecord(parsed) && parsed.data ? parsed.data : parsed;
+  const data = workspaceBook.slices[0].data;
   if (!isValidLegacyState(data)) {
     throw new Error("invalid_backup");
   }
@@ -126,13 +152,14 @@ export async function parseBackupFile(file: File): Promise<BackupImportPreview> 
   return {
     version,
     data,
+    prepared,
     studentCount,
     seatCount,
     warning: version && ![1, BACKUP_VERSION].includes(version) ? `备份版本 ${version} 与当前版本 ${BACKUP_VERSION} 不同，仍尝试兼容导入。` : "",
   };
 }
 
-export function restoreBackup(preview: BackupImportPreview): boolean {
-  exportPreImportBackup();
-  return preview.workspaceBook ? importWholeBook(preview.workspaceBook) : writeLegacyRootState(preview.data);
+export function restoreBackup(preview: BackupImportPreview, options: { skipSafetyBackup?: boolean } = {}): boolean {
+  if (!options.skipSafetyBackup) exportPreImportBackup();
+  return importPreparedWorkspace(preview.prepared);
 }

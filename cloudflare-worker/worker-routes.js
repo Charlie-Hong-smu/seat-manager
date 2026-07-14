@@ -9,6 +9,8 @@ export const PUBLIC_POST_ROUTES = Object.freeze([
   "/generate-comment",
   "/suggest-score-mapping",
   "/suggest-roster-mapping",
+  "/generate-weekly-draft",
+  "/analyze-score-items",
 ]);
 
 export const PUBLIC_ROUTE_PREFIXES = Object.freeze(["/sync/"]);

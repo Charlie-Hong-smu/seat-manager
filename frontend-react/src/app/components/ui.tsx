@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Search, Sparkles, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
@@ -76,6 +76,68 @@ export function IconButton({
   );
 }
 
+const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+function useModalFocus(open: boolean, onEscape: () => void) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
+  const escapeRef = useRef(onEscape);
+  escapeRef.current = onEscape;
+  useEffect(() => {
+    if (!open) return;
+    restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const panel = panelRef.current;
+    const first = panel?.querySelector<HTMLElement>("[autofocus]") || panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) || panel;
+    window.setTimeout(() => first?.focus(), 0);
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        escapeRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !panel) return;
+      const focusable = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(element => !element.hidden);
+      if (!focusable.length) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      const firstItem = focusable[0];
+      const lastItem = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === firstItem) { event.preventDefault(); lastItem.focus(); }
+      else if (!event.shiftKey && document.activeElement === lastItem) { event.preventDefault(); firstItem.focus(); }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      restoreRef.current?.focus();
+    };
+  }, [open]);
+  return panelRef;
+}
+
+export function ModalShell({ open, title, description, children, footer, onClose, className = "max-w-lg" }: {
+  open: boolean;
+  title: string;
+  description?: string;
+  children: ReactNode;
+  footer?: ReactNode;
+  onClose: () => void;
+  className?: string;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const panelRef = useModalFocus(open, onClose);
+  if (!open) return null;
+  return createPortal(<div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter w-full overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-float)] outline-none ${className}`}>
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-base font-bold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-sm leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
+      <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
+      {footer && <footer className="flex flex-wrap justify-end gap-2 border-t border-[var(--app-border)] p-4">{footer}</footer>}
+    </div>
+  </div>, document.body);
+}
+
 export function ConfirmDialog({
   open,
   title,
@@ -101,20 +163,15 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onAlternate?: () => void;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onCancel]);
+  const titleId = useId();
+  const descriptionId = useId();
+  const panelRef = useModalFocus(open, onCancel);
 
   if (!open) return null;
   return <div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
-    <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-description" className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-5 shadow-[var(--app-shadow-float)]">
-      <h2 id="confirm-dialog-title" className="text-base font-bold text-[var(--app-text)]">{title}</h2>
-      <p id="confirm-dialog-description" className="mt-2 text-sm leading-6 text-[var(--app-text-muted)]">{description}</p>
+    <div ref={panelRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-5 shadow-[var(--app-shadow-float)] outline-none">
+      <h2 id={titleId} className="text-base font-bold text-[var(--app-text)]">{title}</h2>
+      <p id={descriptionId} className="mt-2 text-sm leading-6 text-[var(--app-text-muted)]">{description}</p>
       {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{error}</p>}
       <div className="mt-5 flex flex-wrap justify-end gap-2">{showCancel && <Button variant="ghost" onClick={onCancel}>取消</Button>}{alternateLabel && onAlternate && <Button variant="secondary" onClick={onAlternate}>{alternateLabel}</Button>}<Button autoFocus variant={variant} onClick={onConfirm}>{confirmLabel}</Button></div>
     </div>
@@ -133,10 +190,22 @@ type AppDialogRequest = AppDialogOptions & {
   resolve: (confirmed: boolean) => void;
 };
 
+function PromptDialog({ open, title, description, defaultValue = "", confirmLabel = "保存", onCancel, onConfirm }: {
+  open: boolean; title: string; description: string; defaultValue?: string; confirmLabel?: string;
+  onCancel: () => void; onConfirm: (value: string) => void;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  useEffect(() => { if (open) setValue(defaultValue); }, [defaultValue, open]);
+  return <ModalShell open={open} title={title} description={description} onClose={onCancel} className="max-w-sm" footer={<><Button variant="ghost" onClick={onCancel}>取消</Button><Button onClick={() => onConfirm(value)}>{confirmLabel}</Button></>}>
+    <label className="block text-sm font-semibold text-[var(--app-text-muted)]">名称<input autoFocus value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === "Enter") onConfirm(value); }} className="mt-2 h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 text-[var(--app-text)] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15" /></label>
+  </ModalShell>;
+}
+
 // 与 ConfirmDialog 共置，确保所有业务确认都从唯一设计系统入口创建。
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAppDialog() {
   const [request, setRequest] = useState<AppDialogRequest | null>(null);
+  const [promptRequest, setPromptRequest] = useState<(AppDialogOptions & { defaultValue?: string; resolve: (value: string | null) => void }) | null>(null);
   const open = useCallback((mode: AppDialogRequest["mode"], options: AppDialogOptions) => new Promise<boolean>(resolve => setRequest({ ...options, mode, resolve })), []);
   const close = useCallback((confirmed: boolean) => {
     setRequest(current => {
@@ -147,7 +216,8 @@ export function useAppDialog() {
   return {
     confirm: useCallback((options: AppDialogOptions) => open("confirm", options), [open]),
     notice: useCallback((options: AppDialogOptions) => open("notice", options).then(() => undefined), [open]),
-    dialog: <ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} />,
+    prompt: useCallback((options: AppDialogOptions & { defaultValue?: string }) => new Promise<string | null>(resolve => setPromptRequest({ ...options, resolve })), []),
+    dialog: <><ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} /><PromptDialog open={Boolean(promptRequest)} title={promptRequest?.title || "请输入"} description={promptRequest?.description || ""} defaultValue={promptRequest?.defaultValue} confirmLabel={promptRequest?.confirmLabel} onCancel={() => { promptRequest?.resolve(null); setPromptRequest(null); }} onConfirm={value => { promptRequest?.resolve(value); setPromptRequest(null); }} /></>,
   };
 }
 

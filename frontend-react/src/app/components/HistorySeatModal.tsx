@@ -38,7 +38,7 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
             <h3 className="text-gray-900" style={{ fontSize: "1.25rem", fontWeight: 800 }}>
               {formatTime(snapshot.time)}
             </h3>
-            <p className="text-xs text-gray-400 mt-1">{occupied} 人 · {rows} 排 · 最下方为讲台</p>
+            <p className="text-xs text-gray-400 mt-1">{occupied} 人 · {snapshot.layout ? `${snapshot.layout.groups.length} 个小组 · 自定义布局` : `${rows} 排 · 最下方为讲台`}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => onApply(snapshot)}><RotateCcw className="h-3.5 w-3.5" />应用</Button>
@@ -60,6 +60,7 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
           <div aria-live="polite" className="-mt-3 min-h-5 text-xs">{saveResult === "saved" && <span className="font-semibold text-emerald-600">备注已保存到本机。</span>}{saveResult === "failed" && <span role="alert" className="font-semibold text-red-600">保存失败，请检查本机存储空间后重试。</span>}</div>
 
           <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 overflow-x-auto">
+            {snapshot.layout ? <div className="relative min-h-[520px] min-w-[760px]" style={{ aspectRatio: `${snapshot.layout.canvas.width}/${snapshot.layout.canvas.height}` }}>{snapshot.layout.seats.map((seat, index) => { const name = snapshot.seats[index] || ""; return <div key={seat.id} className={`absolute grid h-12 w-24 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-xl border text-sm font-bold ${name ? "border-gray-200 bg-white text-gray-800" : "border-dashed border-gray-200 bg-gray-100 text-gray-300"}`} style={{ left: `${seat.x / snapshot.layout!.canvas.width * 100}%`, top: `${seat.y / snapshot.layout!.canvas.height * 100}%` }}>{name || "空"}<span className="absolute -bottom-4 text-[10px] font-medium text-gray-400">{seat.label}</span></div>; })}</div> :
             <div className="min-w-[820px] space-y-2">
               <div className="grid grid-cols-[3rem_repeat(8,minmax(4.5rem,1fr))] gap-2">
                 <div />
@@ -88,7 +89,7 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
               ))}
 
               <div className="pt-3 text-center text-xs text-gray-400 border-t border-gray-200">讲台</div>
-            </div>
+            </div>}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
-import type { AppStudent, AttendanceRecord, Dormitory, DrawSession, FollowupTask, FundTransaction, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
+import { normalizeGradeItemAnalysis } from "./teacherWorkbench";
+import type { AppStudent, AttendanceRecord, ClassScheduleV1, CommunicationDraft, Dormitory, DrawSession, FollowupTask, FundTransaction, GradeItemAnalysis, HomeworkAssignment, QuickRecordPreset, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 interface PersistSnapshotInput {
   students: AppStudent[];
@@ -13,6 +14,10 @@ interface PersistSnapshotInput {
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
   drawSessions?: DrawSession[];
+  schedule?: ClassScheduleV1;
+  homeworkAssignments?: HomeworkAssignment[];
+  quickRecordPresets?: QuickRecordPreset[];
+  communicationDrafts?: CommunicationDraft[];
   settings?: Record<string, unknown>;
 }
 
@@ -71,6 +76,14 @@ function mergeSeatSettings(baseSettings: unknown, seatSettings?: SeatSettings, n
     pairByGender: seatSettings.pairByGender,
     keepLockedEmpty: seatSettings.keepLockedEmpty,
     complementRuleIds: [...seatSettings.complementRuleIds],
+    groupBalanceMode: seatSettings.groupBalanceMode,
+    seatLayout: seatSettings.layout ? {
+      ...seatSettings.layout,
+      canvas: { ...seatSettings.layout.canvas },
+      seats: seatSettings.layout.seats.map(seat => ({ ...seat })),
+      groups: seatSettings.layout.groups.map(group => ({ ...group, seatIds: [...group.seatIds] })),
+      neighborEdges: seatSettings.layout.neighborEdges.map(edge => ({ ...edge })),
+    } : undefined,
     constraints: {
       ...constraints,
       lockedDeskmatePairs: seatSettings.constraints.lockedDeskmatePairs.map(pair => ({ ...pair })),
@@ -186,6 +199,7 @@ function normalizeSavedGradeExamRecord(value: unknown): SavedGradeExamRecord | n
     subjects,
     entries,
     importSource: normalizeImportSource(value.importSource),
+    itemAnalysis: normalizeGradeItemAnalysis(value.itemAnalysis),
   };
 }
 
@@ -268,7 +282,7 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
   return syncedStudents;
 }
 
-export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, settings }: PersistSnapshotInput): boolean {
+export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, settings }: PersistSnapshotInput): boolean {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -289,6 +303,10 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSetti
     attendanceRecords: attendanceRecords ?? (Array.isArray(baseState.attendanceRecords) ? baseState.attendanceRecords : []),
     followupTasks: followupTasks ?? (Array.isArray(baseState.followupTasks) ? baseState.followupTasks : []),
     drawSessions: drawSessions ?? (Array.isArray(baseState.drawSessions) ? baseState.drawSessions : []),
+    schedule: schedule ?? baseState.schedule,
+    homeworkAssignments: homeworkAssignments ?? (Array.isArray(baseState.homeworkAssignments) ? baseState.homeworkAssignments : []),
+    quickRecordPresets: quickRecordPresets ?? (Array.isArray(baseState.quickRecordPresets) ? baseState.quickRecordPresets : []),
+    communicationDrafts: communicationDrafts ?? (Array.isArray(baseState.communicationDrafts) ? baseState.communicationDrafts : []),
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams: Array.isArray(baseState.savedExams) ? baseState.savedExams : [],
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],
@@ -384,4 +402,16 @@ export function deleteGradeExamRecord(input: DeleteGradeExamInput): SeatManagerS
   const savedExams = getSavedExamRecords(baseState.savedExams);
   const nextRecords = savedExams.filter(record => record.id !== input.examId);
   return nextRecords.length !== savedExams.length ? persistSavedExamRecords(input, nextRecords) : null;
+}
+
+export function updateGradeExamItemAnalysis(input: PersistSnapshotInput & { examId: string; itemAnalysis: GradeItemAnalysis }): SeatManagerState | null {
+  const baseState = getBaseState();
+  const savedExams = getSavedExamRecords(baseState.savedExams);
+  let changed = false;
+  const nextRecords = savedExams.map(record => {
+    if (record.id !== input.examId) return record;
+    changed = true;
+    return { ...record, itemAnalysis: input.itemAnalysis };
+  });
+  return changed ? persistSavedExamRecords(input, nextRecords) : null;
 }

@@ -21,12 +21,12 @@ import {
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
 import { USES_LICENSE_AUTH } from "./config";
-import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
+import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamItemAnalysis, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { useSeatManagerState } from "./state/store";
 import { useSeatManagerController } from "./state/seatManagerController";
 import { generateClassAiTrend, generateStudentAiTrend, readCachedStudentAiTrend, type AiClassTrendResult } from "./state/aiTrendService";
-import type { AppStudent, GradeExam, SavedGradeExamRecord, SeatHistorySnapshot, SeatSettings, StudentId } from "./state/types";
+import type { AppStudent, GradeExam, GradeItemAnalysis, SavedGradeExamRecord, SeatHistorySnapshot, SeatLayoutV1, SeatSettings, StudentId } from "./state/types";
 import { useStudentActions } from "./hooks/useStudentActions";
 import { useDormitoryActions } from "./hooks/useDormitoryActions";
 import { useClassFundActions } from "./hooks/useClassFundActions";
@@ -35,6 +35,12 @@ import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/Followu
 import { buildTimeline, inspectStateHealth, type TimelineTarget } from "./state/dataInsights";
 import { useActionToast, useAppDialog } from "./components/ui";
 import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
+import { resolveSeatLayout } from "./state/seatLayout";
+import { WorkspaceRecoveryScreen } from "./components/WorkspaceRecoveryScreen";
+import { inspectWorkspaceStorage } from "./state/workspaces";
+import { TodayWorkspace } from "./components/workspaces/TodayWorkspace";
+import { QuickRecordDrawer, type QuickRecordInput } from "./components/QuickRecordDrawer";
+import { normalizeSubjectCatalog } from "./state/teacherWorkbench";
 
 type AppTab = SidebarTab;
 type StudentAdviceProgress = {
@@ -60,14 +66,20 @@ export default function App() {
   const initialState = useSeatManagerState();
   const controller = useSeatManagerController(initialState);
   const appState = controller.state;
-  const { students, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, seatOrder, seatSettings } = appState;
+  const { students, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, seatOrder, seatSettings, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts } = appState;
   const savedSeatHistory = appState.seatHistory;
   const lockedSeats = new Set(appState.lockedSeats);
-  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatOrder, setSeatSettings, setSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory } = controller;
+  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatOrder, setSeatSettings, setSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory, setSchedule, setHomeworkAssignments, setQuickRecordPresets, setCommunicationDrafts } = controller;
   const dormitoryPeriodSettings = normalizeDormitoryPeriodSettings(appState.settings.dormitoryPeriod);
+  const subjectCatalog = normalizeSubjectCatalog(appState.settings.subjectCatalog, [
+    ...schedule.entries.map(entry => entry.subject),
+    ...homeworkAssignments.map(assignment => assignment.subject),
+    ...appState.gradeExams.flatMap(exam => exam.subjects),
+  ]);
   const { persist: persistState, reload: reloadState, replace: replaceState } = controller;
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
-  const [sidebarTab, setSidebarTab] = useState<AppTab>("daily");
+  const [workspaceStorage, setWorkspaceStorage] = useState(() => inspectWorkspaceStorage());
+  const [sidebarTab, setSidebarTab] = useState<AppTab>("today");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1199px)").matches);
   const [selectedStudentId, setSelectedStudentId] = useState<StudentId | null>(null);
   const selectedStudent = students.find(student => student.id === selectedStudentId) || null;
@@ -96,7 +108,16 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "failed" | "quota">("saved");
   const [followupDraft, setFollowupDraft] = useState<FollowupTaskDraft | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<TimelineTarget | null>(null);
+  const [followupMode, setFollowupMode] = useState<"tasks" | "homework">("tasks");
+  const [quickRecordOpen, setQuickRecordOpen] = useState(false);
   const followupAfterSave = useRef<((taskIds: string[]) => void) | null>(null);
+
+  function applyQuickRecord(input: QuickRecordInput) {
+    const previous = students;
+    const now = new Date().toISOString();
+    setStudents(current => current.map(student => input.studentIds.includes(student.id) ? { ...student, records: [{ id: `record-${Date.now()}-${student.id}`, type: input.type, note: input.note, date: todayKey(), score: input.score, presetId: input.presetId, createdAt: now }, ...student.records] } : student));
+    return () => setStudents(previous);
+  }
 
   function requestFollowupTask(draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) {
     if (!draft.id && draft.sourceRef) {
@@ -205,7 +226,7 @@ export default function App() {
       hasMounted.current = true;
       return;
     }
-    if (!loggedIn) {
+    if (!loggedIn || workspaceStorage.status === "corrupt") {
       return;
     }
     setSaveStatus("saving");
@@ -214,7 +235,7 @@ export default function App() {
     else {
       try { const probe = "seat-manager-storage-probe"; localStorage.setItem(probe, "1"); localStorage.removeItem(probe); setSaveStatus("failed"); } catch { setSaveStatus("quota"); }
     }
-  }, [appState, loggedIn, persistState]);
+  }, [appState, loggedIn, persistState, workspaceStorage.status]);
 
   useEffect(() => {
     if (!loggedIn || typeof Notification === "undefined" || Notification.permission !== "granted") return;
@@ -265,6 +286,13 @@ export default function App() {
     }
   }
 
+  function handleAssignStudentToSeat(studentId: StudentId, seatIndex: number) {
+    if (lockedSeats.has(seatIndex) || seatIndex < 0 || seatIndex >= seatOrder.length) return;
+    const next = seatOrder.map(id => id === studentId ? null : id);
+    next[seatIndex] = studentId;
+    commitSeatOrder(next);
+  }
+
   function handleRandomizeSeats() {
     const candidate = buildBestShuffleCandidate(students, seatOrder, lockedSeats, seatSettings);
     if (candidate) {
@@ -289,6 +317,26 @@ export default function App() {
 
   function updateSeatSettings(updater: (current: SeatSettings) => SeatSettings) {
     setSeatSettings(updater);
+  }
+
+  function applySeatLayout(layout: SeatLayoutV1) {
+    const previousLayout = resolveSeatLayout(seatSettings.layout, seatOrder.length);
+    const occupantBySeatId = new Map(previousLayout.seats.map((seat, index) => [seat.id, seatOrder[index] ?? null]));
+    const used = new Set<StudentId>();
+    const nextOrder = layout.seats.map(seat => {
+      const occupant = occupantBySeatId.get(seat.id) || null;
+      if (occupant) used.add(occupant);
+      return occupant;
+    });
+    const remaining = seatOrder.filter((id): id is StudentId => Boolean(id)).filter(id => !used.has(id));
+    nextOrder.forEach((id, index) => { if (!id && remaining.length) nextOrder[index] = remaining.shift() || null; });
+    const lockedSeatIds = new Set([...lockedSeats].map(index => previousLayout.seats[index]?.id).filter((id): id is string => Boolean(id)));
+    const nextLocked = new Set(layout.seats.map((seat, index) => lockedSeatIds.has(seat.id) ? index : -1).filter(index => index >= 0));
+    setSeatHistory(previous => [seatOrder, ...previous].slice(0, 20));
+    setSeatOrder(nextOrder);
+    setLockedSeats(nextLocked);
+    setSeatSettings(current => ({ ...current, layout }));
+    actionToast.show({ message: remaining.length ? `布局已应用，${remaining.length} 名学生进入待排区` : "座位布局已应用" });
   }
 
   function normalizeNameForHistory(name: string): string {
@@ -316,6 +364,10 @@ export default function App() {
       attendanceRecords,
       followupTasks,
       drawSessions,
+      schedule,
+      homeworkAssignments,
+      quickRecordPresets,
+      communicationDrafts,
     });
     setSaveStatus(saved ? "saved" : "failed");
     if (saved) setSavedSeatHistory(nextHistory);
@@ -327,13 +379,14 @@ export default function App() {
       return;
     }
     const studentById = new Map(students.map(student => [student.id, student]));
-    const rows = Math.max(1, Math.ceil(seatOrder.length / 8));
+    const rows = seatSettings.layout ? 1 : Math.max(1, Math.ceil(seatOrder.length / 8));
     const snapshot: SeatHistorySnapshot = {
       id: createSnapshotId(),
       time: new Date().toISOString(),
       note: note.trim(),
       rows,
       seats: seatOrder.map(id => (id ? studentById.get(id)?.name || "" : "")),
+      layout: seatSettings.layout,
     };
     const nextHistory = [snapshot, ...savedSeatHistory].slice(0, 20);
     if (persistSeatHistory(nextHistory)) {
@@ -378,12 +431,16 @@ export default function App() {
       const queue = queues.get(normalizeNameForHistory(name));
       return queue?.shift() || null;
     });
+    if (snapshot.layout) {
+      setSeatSettings(current => ({ ...current, layout: snapshot.layout }));
+      setLockedSeats(current => new Set([...current].filter(index => index < snapshot.layout!.seats.length)));
+    }
     commitSeatOrder(next);
     setSelectedHistorySnapshot(null);
   }
 
   function handleOrderSeatsByList() {
-    commitSeatOrder(buildSeatOrderByStudentList(students));
+    commitSeatOrder(buildSeatOrderByStudentList(students, seatSettings.layout));
   }
 
   function handleUndoSeatOrder() {
@@ -408,6 +465,7 @@ export default function App() {
       return;
     }
     if (!target.workspace) return;
+    if (target.workspace === "followups") setFollowupMode(homeworkAssignments.some(item => item.id === target.entityId) ? "homework" : "tasks");
     setTimelineTarget({ ...target });
     setSidebarTab(target.workspace);
   }
@@ -477,6 +535,13 @@ export default function App() {
     if (!next) {
       return false;
     }
+    replaceState(next);
+    return true;
+  }
+
+  function handleSaveGradeItemAnalysis(examId: string, itemAnalysis: GradeItemAnalysis): boolean {
+    const next = updateGradeExamItemAnalysis({ examId, itemAnalysis, students, seatOrder, lockedSeats: [...lockedSeats], seatSettings, settings: appState.settings, dormitories, seatHistory: savedSeatHistory, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts });
+    if (!next) return false;
     replaceState(next);
     return true;
   }
@@ -669,6 +734,7 @@ export default function App() {
   } = useStudentActions({
     students,
     seatOrder,
+    seatLayout: seatSettings.layout,
     setStudents,
     setDormitories,
     setSeatSettings,
@@ -698,6 +764,14 @@ export default function App() {
 
   if (!loggedIn) {
     return <LoginScreen onLogin={() => setLoggedIn(true)} />;
+  }
+
+  if (workspaceStorage.status === "corrupt") {
+    return <WorkspaceRecoveryScreen storage={workspaceStorage} onRecovered={() => {
+      const next = inspectWorkspaceStorage();
+      setWorkspaceStorage(next);
+      if (next.status === "ready") reloadFromLegacyState();
+    }} />;
   }
 
   return (
@@ -769,11 +843,15 @@ export default function App() {
                 setSelectedStudentId(null);
               }}
               seatOrder={seatOrder}
+              seatLayout={seatSettings.layout}
               initialActiveTab={selectedStudentInitialTab}
               onCreateFollowupTask={input => requestFollowupTask({ ...input, type: "常规跟进", plannedDate: todayKey(), dueDate: todayKey(), source: "ai", sourceRef: { domain: "ai", entityId: `${input.studentId}-${Date.now()}` } })}
               attendanceRecords={attendanceRecords}
               followupTasks={followupTasks}
               onAttendanceChange={setAttendanceRecords}
+              homeworkAssignments={homeworkAssignments}
+              communicationDrafts={communicationDrafts}
+              onCommunicationDraftsChange={setCommunicationDrafts}
             />
           )}
 
@@ -810,6 +888,7 @@ export default function App() {
             />
           )}
           <FollowupTaskDrawer open={Boolean(followupDraft)} students={students} draft={followupDraft} onClose={() => { followupAfterSave.current = null; setFollowupDraft(null); }} onConfirm={confirmFollowupTask} />
+          <QuickRecordDrawer open={quickRecordOpen} students={students} presets={quickRecordPresets} onClose={() => setQuickRecordOpen(false)} onApply={applyQuickRecord} onPresetsChange={setQuickRecordPresets} />
 
           {showInstallHelp && (
             <InstallHelpModal message={installMessage} onClose={() => setShowInstallHelp(false)} />
@@ -828,6 +907,7 @@ export default function App() {
       }
     >
       <div className="h-full">
+        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onDraftsChange={setCommunicationDrafts} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full workspace-tab-enter">
             <DailyWorkspace
@@ -840,10 +920,12 @@ export default function App() {
               onOrderSeatsByList={handleOrderSeatsByList}
               onUndoSeatOrder={handleUndoSeatOrder}
               onUpdateSeatSettings={updateSeatSettings}
+              onApplySeatLayout={applySeatLayout}
               onAddStudent={handleAddStudent}
               onSelectStudent={student => openStudentDetail(student)}
               onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
               onMoveSeat={handleMoveSeat}
+              onAssignStudentToSeat={handleAssignStudentToSeat}
               onToggleLock={toggleLock}
               drawSessions={drawSessions}
               onDrawSessionsChange={setDrawSessions}
@@ -878,11 +960,11 @@ export default function App() {
 
         {sidebarTab === "attendance" && <div className="h-full workspace-tab-enter"><AttendanceWorkspace students={students} records={attendanceRecords} onChange={setAttendanceRecords} onRequestTask={requestFollowupTask} initialTarget={timelineTarget?.workspace === "attendance" ? timelineTarget : undefined} /></div>}
 
-        {sidebarTab === "followups" && <div className="h-full workspace-tab-enter"><FollowupWorkspace students={students} tasks={followupTasks} onChange={setFollowupTasks} onRequestTask={requestFollowupTask} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} /></div>}
+        {sidebarTab === "followups" && <div className="h-full workspace-tab-enter"><FollowupWorkspace key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} initialMode={followupMode} /></div>}
 
         {sidebarTab === "scores" && (
           <div className="h-full workspace-tab-enter">
-            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress }} />
+            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id } }) }} />
           </div>
         )}
 
@@ -895,6 +977,7 @@ export default function App() {
             <DataWorkspace
               students={students}
               seatOrder={seatOrder}
+              seatLayout={seatSettings.layout}
               onImportRoster={handleImportRoster}
               onBeforeBackupExport={saveCurrentLegacySnapshot}
               onBackupImported={reloadFromLegacyState}

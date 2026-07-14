@@ -31,7 +31,7 @@ for (const heading of ["## 1. 产品气质", "## 2. 唯一实现入口", "## 5. 
   requireText(design, heading, "docs/DESIGN_SYSTEM.md");
 }
 
-for (const component of ["Button", "IconButton", "Card", "SegmentedControl", "UnderlineTabs", "SelectMenu", "DatePicker", "AnimatedPopover", "ConfirmDialog", "AiGenerationPanel", "ToolDrawer", "FileDropZone"]) {
+for (const component of ["Button", "IconButton", "Card", "SegmentedControl", "UnderlineTabs", "SelectMenu", "DatePicker", "AnimatedPopover", "ModalShell", "ConfirmDialog", "AiGenerationPanel", "ToolDrawer", "FileDropZone"]) {
   requireText(primitives, `export function ${component}`, "components/ui.tsx");
   requireText(design, `\`${component}\``, "docs/DESIGN_SYSTEM.md");
 }
@@ -54,9 +54,14 @@ async function collectSourceFiles(directory) {
 
 for (const path of await collectSourceFiles(resolve(frontendRoot, "src/app"))) {
   const source = await readFile(path, "utf8");
-  if (/window\.(confirm|alert)\s*\(/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生确认或提示框`);
+  if (/window\.(confirm|alert|prompt)\s*\(/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生确认、提示或输入框`);
   if (/<select(?:\s|>)/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生 select`);
   if (/type=["']date["']/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生日期选择器`);
+  if (/type=["']datetime-local["']/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 仍在使用浏览器原生日期时间选择器`);
+  if (path.endsWith(".tsx") && /#[\da-fA-F]{3,8}\b/.test(source)) failures.push(`${path.replace(frontendRoot, "frontend-react")} 在 TSX 中硬编码了颜色，请改用 theme.css 令牌`);
+  for (const match of source.matchAll(/inert=\{([^}\n]+)\}/g)) {
+    if (!match[1].includes("? true : undefined")) failures.push(`${path.replace(frontendRoot, "frontend-react")} 必须仅在隐藏时输出 inert，显示时传 undefined`);
+  }
 }
 
 requireText(studentPicker, "export function StudentPicker", "components/StudentPicker.tsx");

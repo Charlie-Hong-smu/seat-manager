@@ -16,11 +16,13 @@ import { createStudentRecord, updateStudentProfile } from "../state/studentActio
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
-import type { AppStudent, AttendanceRecord, Dormitory, FollowupTask, Gender, RecordType, StudentId, StudentRecord } from "../state/types";
+import type { AppStudent, AttendanceRecord, CommunicationDraft, Dormitory, FollowupTask, Gender, HomeworkAssignment, RecordType, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
+import { getNeighborIndexPairs, getSeatPositionLabel, resolveSeatLayout } from "../state/seatLayout";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
 import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
+import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
 import {
   buildWeekOptions,
   formatScore,
@@ -44,7 +46,7 @@ const STUDENT_DETAIL_TABS: Array<{ value: StudentDetailTab; label: string; tone?
   { value: "profile", label: "档案" },
   { value: "attendance", label: "出勤" },
   { value: "trend", label: "成绩" },
-  { value: "followup", label: "AI跟进", tone: "ai" },
+  { value: "followup", label: "跟进与沟通" },
 ];
 
 interface Props {
@@ -60,11 +62,15 @@ interface Props {
   onOpenDormitories: () => void;
   onOpenAiComment?: () => void;
   seatOrder?: Array<StudentId | null>;
+  seatLayout?: SeatLayoutV1;
   initialActiveTab?: StudentDetailTab;
   onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
   onAttendanceChange?: (records: AttendanceRecord[]) => void;
+  homeworkAssignments?: HomeworkAssignment[];
+  communicationDrafts?: CommunicationDraft[];
+  onCommunicationDraftsChange?: (drafts: CommunicationDraft[]) => void;
 }
 
 export function StudentModal({
@@ -80,11 +86,15 @@ export function StudentModal({
   onOpenDormitories,
   onOpenAiComment,
   seatOrder = [],
+  seatLayout,
   initialActiveTab = "records",
   onCreateFollowupTask,
   attendanceRecords = [],
   followupTasks = [],
   onAttendanceChange,
+  homeworkAssignments = [],
+  communicationDrafts = [],
+  onCommunicationDraftsChange,
 }: Props) {
   const appDialog = useAppDialog();
   const modalHeaderRef = useRef<HTMLDivElement>(null);
@@ -108,6 +118,9 @@ export function StudentModal({
       type: r.type,
       note: r.note,
       date: r.date,
+      score: r.score,
+      presetId: r.presetId,
+      createdAt: r.createdAt,
     }))
   );
   const [selectedWeek, setSelectedWeek] = useState(() => toLocalDateKey(getWeekStart(new Date())));
@@ -131,6 +144,7 @@ export function StudentModal({
   const [aiTrendAccessCode, setAiTrendAccessCode] = useState("");
   const [rememberAiTrendAuth, setRememberAiTrendAuth] = useState(true);
   const [hasAiTrendAuth, setHasAiTrendAuth] = useState(() => hasStoredAiTrendAuth());
+  const [followupView, setFollowupView] = useState<"advice" | "communication">("advice");
 
   useEffect(() => {
     const cached = readCachedStudentAiTrend(student);
@@ -156,6 +170,9 @@ export function StudentModal({
       type: r.type,
       note: r.note,
       date: r.date,
+      score: r.score,
+      presetId: r.presetId,
+      createdAt: r.createdAt,
     })));
   }, [student.records]);
 
@@ -347,12 +364,11 @@ export function StudentModal({
   };
 
   const seatIndex = seatOrder.findIndex(id => id === student.id);
-  const seatRow = seatIndex >= 0 ? Math.floor(seatIndex / 8) + 1 : null;
-  const seatCol = seatIndex >= 0 ? (seatIndex % 8) + 1 : null;
-  const deskMateIndex = seatIndex >= 0 ? (seatIndex % 2 === 0 ? seatIndex + 1 : seatIndex - 1) : -1;
-  const nearbyIndexes = seatIndex >= 0
-    ? [seatIndex - 8, seatIndex + 8, seatIndex - 1, seatIndex + 1].filter(index => index >= 0 && index < seatOrder.length && index !== deskMateIndex)
-    : [];
+  const resolvedLayout = resolveSeatLayout(seatLayout, seatOrder.length);
+  const neighborIndexes = seatIndex >= 0 ? getNeighborIndexPairs(resolvedLayout).filter(pair => pair.includes(seatIndex)).map(pair => pair[0] === seatIndex ? pair[1] : pair[0]) : [];
+  const deskMateIndex = neighborIndexes[0] ?? -1;
+  const groupId = resolvedLayout.seats[seatIndex]?.groupId;
+  const nearbyIndexes = seatIndex >= 0 ? resolvedLayout.seats.map((seat, index) => seat.groupId && seat.groupId === groupId && index !== seatIndex && index !== deskMateIndex ? index : -1).filter(index => index >= 0) : [];
   const studentById = new Map(students.map(item => [item.id, item]));
   const deskMateName = deskMateIndex >= 0 ? studentById.get(seatOrder[deskMateIndex] || "")?.name || "" : "";
   const nearbyNames = nearbyIndexes
@@ -685,6 +701,7 @@ export function StudentModal({
                     {recordTypeStyle[record.type].label}
                   </span>
                   <span className={`flex-1 text-sm ${recordTypeStyle[record.type].text}`}>{record.note || "(无备注)"}</span>
+                  {record.score !== undefined && <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${record.score > 0 ? "bg-emerald-100 text-emerald-700" : record.score < 0 ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500"}`}>{record.score > 0 ? "+" : ""}{record.score}</span>}
                   <span className="text-xs text-gray-400">{record.date}</span>
                   <button onClick={() => setPendingRecordDelete(record)} aria-label={`删除记录 ${record.note || "无备注"}`} className="p-1 text-gray-300 hover:text-red-500 hover:bg-white/70 rounded-lg transition-colors">
                     <X className="w-3.5 h-3.5" />
@@ -699,12 +716,14 @@ export function StudentModal({
           )}
 
           {activeTab === "followup" && (
-            <AiStudentFollowupPanel
+            <div className="space-y-4">
+            <UnderlineTabs value={followupView} onChange={setFollowupView} ariaLabel="跟进与沟通" options={[{ value: "advice", label: "跟进建议", tone: "ai" }, { value: "communication", label: "周沟通稿" }]} />
+            {followupView === "advice" ? <AiStudentFollowupPanel
               student={student}
               context={{
                 dormitories,
                 seatIndex: seatIndex >= 0 ? seatIndex : null,
-                seatLabel: seatRow && seatCol ? `第${seatRow}排 第${seatCol}列` : "",
+                seatLabel: seatIndex >= 0 ? getSeatPositionLabel(resolvedLayout, seatIndex) : "",
                 deskMateName,
                 nearbyNames,
                 scenario: "detail",
@@ -712,7 +731,8 @@ export function StudentModal({
               onSaveRecord={saveAiFollowupRecord}
               onAppendCommentMaterial={appendAiFollowupMaterial}
               onCreateTask={input => onCreateFollowupTask?.({ studentId: student.id, ...input })}
-            />
+            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} drafts={communicationDrafts} onDraftsChange={drafts => onCommunicationDraftsChange?.(drafts)} />}
+            </div>
           )}
 
           {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-gray-50 p-3 text-center"><div className="text-xl font-black text-gray-800">{item.value}</div><div className="text-xs text-gray-400">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div className="mb-3 text-sm font-bold text-gray-800">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={patch=>onAttendanceChange?.(upsertAttendance(attendanceRecords,{studentId:student.id,date:todayKey(),status:patch.status??current?.status??"normal",late:patch.late??current?.late??false,earlyLeave:patch.earlyLeave??current?.earlyLeave??false,note:current?.note||"",leaveStart:current?.leaveStart,leaveEnd:current?.leaveEnd}))}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3"><span className="text-sm font-bold text-gray-700">{item.date}</span><span className="text-sm text-gray-500">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-sm text-gray-400">暂无出勤异常</p>}</div><div className="rounded-xl bg-violet-50 p-3 text-sm text-violet-700">当前跟进任务 {followupTasks.filter(task=>task.studentId===student.id&&task.status==="pending").length} 项</div></div>; })()}
@@ -735,21 +755,21 @@ export function StudentModal({
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendData} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} width={36} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={36} />
                       <Tooltip
                         labelFormatter={label => String(label || "")}
                         formatter={(value) => [formatScore(typeof value === "number" ? value : null), effectiveTrendMetric === "total" ? "总分" : effectiveTrendMetric]}
-                        contentStyle={{ borderRadius: 12, border: "1px solid #e5e7eb", fontSize: 13 }}
+                        contentStyle={{ borderRadius: 12, border: "1px solid var(--app-border)", fontSize: 13 }}
                       />
                       <Line
                         type="monotone"
                         dataKey={effectiveTrendMetric}
-                        stroke="#2563eb"
+                        stroke="var(--app-primary)"
                         strokeWidth={2.5}
-                        dot={{ r: 3.5, fill: "#2563eb", strokeWidth: 0 }}
-                        activeDot={{ r: 5, fill: "#1d4ed8", stroke: "#dbeafe", strokeWidth: 3 }}
+                        dot={{ r: 3.5, fill: "var(--app-primary)", strokeWidth: 0 }}
+                        activeDot={{ r: 5, fill: "var(--app-primary-hover)", stroke: "var(--app-surface-muted)", strokeWidth: 3 }}
                         connectNulls
                       />
                     </LineChart>
@@ -797,7 +817,7 @@ export function StudentModal({
 
                 {aiTrendBusy && <AiGenerationPanel title="正在生成成绩趋势分析" steps={["整理历次考试", "识别关键变化", "形成教师建议"]} />}
                 {!aiTrendBusy && aiTrendStatus && <p className="text-xs text-violet-600">{aiTrendStatus}</p>}
-                <div aria-hidden={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible} inert={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible} className={`grid transition-[grid-template-rows,opacity,transform] duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${aiTrendResult && !aiTrendBusy && aiTrendResultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
+                <div aria-hidden={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible} inert={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible ? true : undefined} className={`grid transition-[grid-template-rows,opacity,transform] duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${aiTrendResult && !aiTrendBusy && aiTrendResultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
                   <div className="overflow-hidden">
                   {aiTrendResult && <div className="ai-followup-result-enter grid grid-cols-1 gap-2 pb-0.5">
                     {[

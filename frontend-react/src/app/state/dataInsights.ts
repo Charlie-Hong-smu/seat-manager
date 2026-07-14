@@ -1,8 +1,8 @@
 import type { FollowupTask, SeatManagerState, StudentId } from "./types";
 
-export type TimelineType = "学生记录" | "出勤" | "跟进" | "宿舍" | "成绩" | "班费";
+export type TimelineType = "学生记录" | "出勤" | "跟进" | "作业" | "沟通稿" | "宿舍" | "成绩" | "班费";
 export type TimelineTone = "normal" | "reminder" | "danger" | "success" | "muted";
-export type TimelineWorkspace = "attendance" | "followups" | "dormitories" | "scores" | "funds";
+export type TimelineWorkspace = "today" | "attendance" | "followups" | "dormitories" | "scores" | "funds";
 
 export interface TimelineTarget {
   kind: "student" | "workspace";
@@ -105,6 +105,16 @@ export function buildTimeline(state: SeatManagerState, today = new Date().toISOS
     tone: taskTone(task, today), isAi: task.source === "ai",
     target: { kind: "workspace", workspace: "followups", entityId: task.id, studentId: task.studentId || undefined },
   })));
+  state.homeworkAssignments.forEach(assignment => items.push(finishItem({
+    id: `homework-${assignment.id}`, date: assignment.updatedAt.slice(0, 10) || assignment.assignedDate, occurredAt: safeOccurredAt(assignment.updatedAt.slice(0, 10) || assignment.assignedDate, assignment.updatedAt), type: "作业", title: assignment.title,
+    detail: `${assignment.subject || "未分类"} · 截止 ${assignment.dueDate}`, tone: assignment.dueDate < today ? "reminder" : "normal",
+    target: { kind: "workspace", workspace: "followups", entityId: assignment.id },
+  })));
+  state.communicationDrafts.forEach(draft => items.push(finishItem({
+    id: `communication-${draft.id}`, date: draft.updatedAt.slice(0, 10), occurredAt: safeOccurredAt(draft.updatedAt.slice(0, 10), draft.updatedAt), type: "沟通稿", title: draft.scope === "student" ? "个人周沟通稿" : "班级周报",
+    studentId: draft.studentId, studentName: draft.studentId ? studentMap.get(draft.studentId) || "未知学生" : undefined, detail: `${draft.startDate} 至 ${draft.endDate} · ${draft.generatedBy === "ai" ? "AI 润色" : "本地草稿"}`, tone: "normal", isAi: draft.generatedBy === "ai",
+    target: draft.studentId ? { kind: "student", entityId: draft.studentId, studentId: draft.studentId, studentTab: "followup" } : { kind: "workspace", workspace: "today", entityId: draft.id },
+  })));
   return items.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id));
 }
 
@@ -121,9 +131,15 @@ export function inspectStateHealth(state: SeatManagerState): HealthIssue[] {
   const issues: HealthIssue[] = [];
   const ids = new Set<string>(); const numbers = new Map<string, string>();
   state.students.forEach(student => { if (ids.has(student.id)) issues.push({ id: `duplicate-id-${student.id}`, severity: "critical", title: "学生 ID 重复", detail: student.name }); ids.add(student.id); if (student.studentNo) { const prior = numbers.get(student.studentNo); if (prior) issues.push({ id: `duplicate-no-${student.studentNo}`, severity: "warning", title: "学号重复", detail: `${prior}、${student.name}` }); else numbers.set(student.studentNo, student.name); } });
-  state.seatOrder.forEach((id, index) => { if (id && !ids.has(id)) issues.push({ id: `seat-${index}`, severity: "critical", title: "座位引用了不存在的学生", detail: `第 ${index + 1} 个座位` }); });
+  const seated = new Map<string, number>(); state.seatOrder.forEach((id, index) => { if (id && !ids.has(id)) issues.push({ id: `seat-${index}`, severity: "critical", title: "座位引用了不存在的学生", detail: `第 ${index + 1} 个座位` }); if (id) { const prior = seated.get(id); if (prior !== undefined) issues.push({ id: `seat-duplicate-${id}-${index}`, severity: "critical", title: "同一学生占用了多个座位", detail: `第 ${prior + 1}、${index + 1} 个座位` }); else seated.set(id, index); } });
+  state.lockedSeats.forEach(index => { if (!Number.isInteger(index) || index < 0 || index >= state.seatOrder.length) issues.push({ id: `locked-seat-${index}`, severity: "warning", title: "锁定座位超出当前座位范围", detail: `座位索引 ${index}` }); });
   const dormOwner = new Map<string, string>(); state.dormitories.forEach(dorm => dorm.memberIds.forEach(id => { if (!ids.has(id)) issues.push({ id: `dorm-missing-${dorm.id}-${id}`, severity: "warning", title: "宿舍成员不存在", detail: dorm.name }); const prior = dormOwner.get(id); if (prior && prior !== dorm.name) issues.push({ id: `dorm-duplicate-${id}`, severity: "critical", title: "学生被分配到多个宿舍", detail: `${prior}、${dorm.name}` }); dormOwner.set(id, dorm.name); }));
   state.attendanceRecords.forEach(record => { if (!ids.has(record.studentId)) issues.push({ id: `attendance-orphan-${record.id}`, severity: "warning", title: "出勤记录引用了不存在的学生", detail: record.date }); });
   state.followupTasks.forEach(task => { if (task.studentId && !ids.has(task.studentId)) issues.push({ id: `task-orphan-${task.id}`, severity: "warning", title: "跟进任务引用了不存在的学生", detail: task.title }); });
+  state.homeworkAssignments.forEach(assignment => Object.keys(assignment.studentStates).forEach(id => { if (!ids.has(id)) issues.push({ id: `homework-orphan-${assignment.id}-${id}`, severity: "warning", title: "作业引用了不存在的学生", detail: assignment.title }); }));
+  state.drawSessions.forEach(session => session.studentIds.forEach(id => { if (!ids.has(id)) issues.push({ id: `draw-orphan-${session.id}-${id}`, severity: "warning", title: "抽签记录引用了不存在的学生", detail: session.date }); }));
+  state.fundTransactions.forEach(tx => [...(tx.relatedStudentIds || []), ...(tx.relatedStudentId ? [tx.relatedStudentId] : [])].forEach(id => { if (!ids.has(id)) issues.push({ id: `fund-orphan-${tx.id}-${id}`, severity: "warning", title: "班费记录引用了不存在的学生", detail: tx.category }); }));
+  state.dormitories.forEach(dorm => [...dorm.events, ...dorm.history.flatMap(archive => archive.events)].forEach(event => [...(event.responsibleStudentIds || []), ...(event.responsibleStudentId ? [event.responsibleStudentId] : [])].forEach(id => { if (!ids.has(id)) issues.push({ id: `dorm-event-orphan-${event.id}-${id}`, severity: "warning", title: "宿舍事件引用了不存在的学生", detail: `${dorm.name} · ${event.reason}` }); })));
+  state.gradeExams.forEach(exam => exam.rows.forEach(row => { if (row.studentId && !ids.has(row.studentId)) issues.push({ id: `exam-orphan-${exam.id}-${row.id}`, severity: "warning", title: "成绩记录引用了不存在的学生", detail: `${exam.name} · ${row.name}` }); }));
   return issues;
 }

@@ -1,15 +1,15 @@
-import type { AppStudent, StudentId } from "./types";
+import type { AppStudent, SeatLayoutV1, StudentId } from "./types";
 
 const COLS = 8;
 
 export type SeatOrder = Array<StudentId | null>;
 
-export function getSeatCapacityForStudents(studentCount: number): number {
-  return studentCount ? Math.ceil(studentCount / COLS) * COLS : 0;
+export function getSeatCapacityForStudents(studentCount: number, layout?: SeatLayoutV1): number {
+  return layout ? layout.seats.length : studentCount ? Math.ceil(studentCount / COLS) * COLS : 0;
 }
 
-export function buildSeatOrderByStudentList(students: AppStudent[]): SeatOrder {
-  const seatOrder = new Array<StudentId | null>(getSeatCapacityForStudents(students.length)).fill(null);
+export function buildSeatOrderByStudentList(students: AppStudent[], layout?: SeatLayoutV1): SeatOrder {
+  const seatOrder = new Array<StudentId | null>(getSeatCapacityForStudents(students.length, layout)).fill(null);
   students.forEach((student, index) => {
     if (index < seatOrder.length) {
       seatOrder[index] = student.id;
@@ -18,8 +18,8 @@ export function buildSeatOrderByStudentList(students: AppStudent[]): SeatOrder {
   return seatOrder;
 }
 
-export function placeStudentInFirstEmptySeat(seatOrder: SeatOrder, studentId: StudentId, studentCount: number): SeatOrder {
-  const nextCapacity = getSeatCapacityForStudents(studentCount);
+export function placeStudentInFirstEmptySeat(seatOrder: SeatOrder, studentId: StudentId, studentCount: number, layout?: SeatLayoutV1): SeatOrder {
+  const nextCapacity = getSeatCapacityForStudents(studentCount, layout);
   const next = [...seatOrder];
 
   while (next.length < nextCapacity) {

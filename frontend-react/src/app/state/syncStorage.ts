@@ -1,5 +1,5 @@
-import { readLegacyRootState, writeLegacyRootState } from "./storage";
-import { exportWholeBook, importWholeBook } from "./workspaces";
+import { readLegacyRootState } from "./storage";
+import { exportWholeBook, importPreparedWorkspace, prepareWorkspaceImport } from "./workspaces";
 import { exportPreImportBackup } from "./backupStorage";
 import { getProductAuthToken } from "./authStorage";
 import { getWorkerBaseUrl } from "./workerEndpoint";
@@ -183,27 +183,14 @@ export async function restoreStateFromCloud(): Promise<SyncStatus> {
     version?: number;
   }>("/sync/load");
 
-  exportPreImportBackup();
-
-  // 优先恢复整柜；没有整柜时回退到旧格式单班数据。
-  if (cloud.workspaceBook) {
-    if (!importWholeBook(cloud.workspaceBook)) {
-      throw new Error("sync_invalid_data");
-    }
-  } else {
-    // 旧格式：cloud.data 是单个班级的 legacy state
-    if (
-      !cloud.data
-      || typeof cloud.data !== "object"
-      || !Array.isArray((cloud.data as { students?: unknown }).students)
-      || !Array.isArray((cloud.data as { seatOrder?: unknown }).seatOrder)
-    ) {
-      throw new Error("sync_invalid_data");
-    }
-    // importWholeBook 会把旧格式包进默认切片
-    importWholeBook(cloud.data);
-    writeLegacyRootState(cloud.data);
+  let prepared;
+  try {
+    prepared = prepareWorkspaceImport(cloud.workspaceBook ?? cloud.data);
+  } catch {
+    throw new Error("sync_invalid_data");
   }
+  exportPreImportBackup();
+  if (!importPreparedWorkspace(prepared)) throw new Error("sync_invalid_data");
 
   const restoredAt = new Date().toISOString();
   if (hasBrowserStorage()) {

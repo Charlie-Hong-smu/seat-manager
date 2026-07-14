@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AiCommentDrawer } from "./AiCommentDrawer";
 import { StudentModal } from "./StudentModal";
 import type { NewDormEventInput } from "../state/dormitoryActions";
-import type { AppStudent, AttendanceRecord, Dormitory, FollowupTask, StudentId, StudentRecord } from "../state/types";
+import type { AppStudent, AttendanceRecord, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 
 interface StudentDetailProps {
   student: AppStudent;
@@ -17,11 +17,15 @@ interface StudentDetailProps {
   onAddDormitoryEvent: (input: NewDormEventInput) => void;
   onOpenDormitories: () => void;
   seatOrder?: Array<StudentId | null>;
+  seatLayout?: SeatLayoutV1;
   initialActiveTab?: "records" | "profile" | "trend" | "followup";
   onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
   onAttendanceChange?: (records: AttendanceRecord[]) => void;
+  homeworkAssignments?: HomeworkAssignment[];
+  communicationDrafts?: CommunicationDraft[];
+  onCommunicationDraftsChange?: (drafts: CommunicationDraft[]) => void;
 }
 
 export function StudentDetail({
@@ -36,11 +40,15 @@ export function StudentDetail({
   onAddDormitoryEvent,
   onOpenDormitories,
   seatOrder,
+  seatLayout,
   initialActiveTab,
   onCreateFollowupTask,
   attendanceRecords,
   followupTasks,
   onAttendanceChange,
+  homeworkAssignments,
+  communicationDrafts,
+  onCommunicationDraftsChange,
 }: StudentDetailProps) {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
@@ -60,11 +68,15 @@ export function StudentDetail({
         onOpenDormitories={onOpenDormitories}
         onOpenAiComment={() => setAiDrawerOpen(true)}
         seatOrder={seatOrder}
+        seatLayout={seatLayout}
         initialActiveTab={initialActiveTab}
         onCreateFollowupTask={onCreateFollowupTask}
         attendanceRecords={attendanceRecords}
         followupTasks={followupTasks}
         onAttendanceChange={onAttendanceChange}
+        homeworkAssignments={homeworkAssignments}
+        communicationDrafts={communicationDrafts}
+        onCommunicationDraftsChange={onCommunicationDraftsChange}
       />
       <AiCommentDrawer
         open={aiDrawerOpen}
