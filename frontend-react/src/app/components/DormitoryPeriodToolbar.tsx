@@ -28,6 +28,7 @@ export function DormitoryPeriodToolbar({
   useEffect(() => setDraft(settings), [settings]);
 
   function selectMode(nextMode: DormitoryPeriodMode) {
+    if (nextMode !== "custom") setSettingsOpen(false);
     onModeChange(nextMode);
   }
 
@@ -46,7 +47,16 @@ export function DormitoryPeriodToolbar({
           <DatePicker value={anchor} onChange={onAnchorChange} ariaLabel="宿舍统计日期" className="h-9 w-44 bg-[var(--app-surface-muted)]" />
           <IconButton size="sm" label="下一个周期" onClick={() => onAnchorChange("next")}><ChevronRight className="h-4 w-4" /></IconButton>
           <span className="min-w-0 flex-1 text-xs font-bold text-[var(--app-text-muted)]">{range.label}</span>
-          <IconButton size="sm" label="设置自定义周期" active={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Settings2 className="h-4 w-4" /></IconButton>
+          <div
+            data-testid="dormitory-period-settings-entry"
+            aria-hidden={mode !== "custom"}
+            inert={mode !== "custom" ? true : undefined}
+            className={`grid shrink-0 transition-[grid-template-columns,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${mode === "custom" ? "grid-cols-[1fr] translate-x-0 opacity-100" : "pointer-events-none grid-cols-[0fr] translate-x-2 opacity-0"}`}
+          >
+            <div className="min-w-0 overflow-hidden">
+              <IconButton size="sm" label="设置自定义周期" active={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Settings2 className="h-4 w-4" /></IconButton>
+            </div>
+          </div>
         </div>
         <div
           aria-hidden={!settingsOpen}

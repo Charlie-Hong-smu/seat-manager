@@ -144,14 +144,63 @@ test("dormitory periods, custom settings and event dates work together", async (
   await expect(secondSavedToast).toHaveAttribute("data-phase", "closing");
   await expect(secondSavedToast).toBeHidden();
 
-  await page.getByRole("button", { name: "设置自定义周期" }).click();
+  const periodGroup = page.getByRole("group", { name: "宿舍统计周期" });
+  const settingsEntry = page.getByTestId("dormitory-period-settings-entry");
+  const settingsButton = page.getByRole("button", { name: "设置自定义周期" });
+  await expect(settingsButton).toBeHidden();
+  await periodGroup.getByRole("button", { name: "自定义周期" }).click();
+  await expect(settingsButton).toBeVisible();
+  await expect.poll(() => settingsEntry.evaluate(element => getComputedStyle(element).opacity)).toBe("1");
+  expect(await settingsEntry.evaluate(element => getComputedStyle(element).transitionDuration)).toContain("0.3s");
+  await settingsButton.click();
+  await periodGroup.getByRole("button", { name: "本周" }).click();
+  await expect(settingsButton).toBeHidden();
+  await periodGroup.getByRole("button", { name: "自定义周期" }).click();
+  await settingsButton.click();
   await page.getByText("每 N 个单位").locator("..").getByRole("spinbutton").fill("3");
   await page.getByRole("button", { name: "保存周期" }).click();
-  await expect(page.getByRole("group", { name: "宿舍统计周期" }).getByRole("button", { name: "自定义周期" })).toHaveAttribute("aria-pressed", "true");
+  await expect(periodGroup.getByRole("button", { name: "自定义周期" })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => page.evaluate(() => {
     const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
     return book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId)?.data?.settings?.dormitoryPeriod?.intervalCount;
   })).toBe(3);
+});
+
+test("attendance quick registration keeps student order and detailed tools", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  for (const name of ["出勤学生甲", "出勤学生乙", "出勤学生丙"]) {
+    await page.getByPlaceholder("姓名", { exact: true }).fill(name);
+    await page.getByRole("button", { name: "添加到班级" }).click();
+  }
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await page.getByRole("button", { name: "出勤", exact: true }).click();
+
+  const viewGroup = page.getByRole("group", { name: "出勤登记视图" });
+  await expect(viewGroup.getByRole("button", { name: "快速" })).toHaveAttribute("aria-pressed", "true");
+  const studentCards = page.locator("[data-attendance-student-id]");
+  const initialOrder = await studentCards.evaluateAll(elements => elements.map(element => element.getAttribute("data-attendance-student-id")));
+
+  await expect(page.getByText("默认正常", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: /出勤学生甲当前正常，点击设为请假/ }).click();
+  await expect(page.locator('p[aria-live="polite"]').filter({ hasText: "出勤学生甲 已设为请假" })).toHaveText("出勤学生甲 已设为请假");
+  await expect(page.getByRole("button", { name: /出勤学生甲当前请假，点击设为请假/ })).toBeVisible();
+  expect(await studentCards.evaluateAll(elements => elements.map(element => element.getAttribute("data-attendance-student-id")))).toEqual(initialOrder);
+
+  await page.getByRole("group", { name: "快速出勤状态" }).getByRole("button", { name: "迟到" }).click();
+  await page.getByRole("button", { name: /出勤学生乙当前正常，点击设为迟到/ }).click();
+  await expect(page.locator('p[aria-live="polite"]').filter({ hasText: "出勤学生乙 已设为迟到" })).toHaveText("出勤学生乙 已设为迟到");
+  expect(await studentCards.evaluateAll(elements => elements.map(element => element.getAttribute("data-attendance-student-id")))).toEqual(initialOrder);
+
+  await viewGroup.getByRole("button", { name: "详细" }).click();
+  await expect(page.getByRole("checkbox", { name: "选择 出勤学生甲" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "编辑 出勤学生甲 详情" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
+    const current = book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId);
+    const attendance = current?.data?.attendanceRecords || [];
+    return attendance.map((item: { status: string; late?: boolean }) => ({ status: item.status, late: Boolean(item.late) }));
+  })).toEqual(expect.arrayContaining([{ status: "leave", late: false }, { status: "normal", late: true }]));
 });
 
 test("creates a class-level followup without a student and supports undo", async ({ page }) => {
@@ -192,7 +241,9 @@ test("today workspace routes into homework and persists the teacher ledger", asy
   const studentOrderBefore = await page.locator("[data-homework-student-id]").evaluateAll(elements => elements.map(element => element.querySelector("strong")?.textContent));
   await page.getByRole("button", { name: "作业学生甲当前待登记，点击设为已交", exact: true }).click();
   await expect(page.getByRole("button", { name: "作业学生甲当前已交，点击设为已交", exact: true })).toBeVisible();
-  await expect(page.getByText("作业学生甲 已设为已交", { exact: true })).toBeVisible();
+  const registrationToast = page.getByRole("status").filter({ hasText: "作业学生甲 已设为已交" });
+  await expect(registrationToast).toBeVisible();
+  await expect(registrationToast.getByRole("button", { name: "撤销" })).toBeVisible();
   const studentOrderAfter = await page.locator("[data-homework-student-id]").evaluateAll(elements => elements.map(element => element.querySelector("strong")?.textContent));
   expect(studentOrderAfter).toEqual(studentOrderBefore);
 

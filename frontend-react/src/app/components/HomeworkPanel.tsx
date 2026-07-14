@@ -106,10 +106,18 @@ export function HomeworkPanel({ students, assignments, subjectCatalog, onChange,
   }
 
   function markStudent(student: AppStudent) {
+    const previous = assignments;
     const changed = updateStudents([student.id], markStatus);
     if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
     setRecentUpdate({ studentId: student.id, message: changed ? `${student.name} 已设为${STATUS_META[markStatus].label}` : `${student.name} 已是${STATUS_META[markStatus].label}` });
     feedbackTimerRef.current = window.setTimeout(() => setRecentUpdate(null), 1400);
+    if (changed) actionToast.show({
+      message: `${student.name} 已设为${STATUS_META[markStatus].label}`,
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => { onChange(previous); setUndoAssignments(null); setRecentUpdate(null); },
+      duration: 6000,
+    });
   }
 
   function updateStudentNote(studentId: StudentId, studentNote: string) {
@@ -178,13 +186,16 @@ export function HomeworkPanel({ students, assignments, subjectCatalog, onChange,
 
       <Card title={selected ? selected.title : "学生交付状态"} action={selected && pendingIds.length ? <Button size="sm" variant="secondary" onClick={() => onCreateFollowups(selected, pendingIds)}>为未交 {pendingIds.length} 人建跟进</Button> : undefined}>
         {selected ? <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-3 rounded-[var(--app-radius-md)] bg-[var(--app-surface-muted)] p-3">
-            <div className="min-w-36"><div className="text-xs font-bold text-[var(--app-text-muted)]">登记进度</div><div className="mt-1 text-lg font-black text-[var(--app-text)]">{registeredCount} / {students.length}</div></div>
-            <div className="min-w-48 flex-1"><div className="mb-1.5 text-xs font-bold text-[var(--app-text-muted)]">快速登记：点击学生标记为</div><SegmentedControl value={markStatus} onChange={value => setMarkStatus(value as HomeworkStudentStatus)} ariaLabel="快速登记状态" className="w-full overflow-x-auto" options={STATUS_OPTIONS.map(option => ({ value: option.value, label: option.label }))}/></div>
-            <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void markAllSubmitted()}><Check className="h-4 w-4"/>全部已交</Button><Button size="sm" variant="ghost" disabled={!undoAssignments} onClick={undoLastRegistration}><RotateCcw className="h-4 w-4"/>撤销上一步</Button></div>
+          <div className="rounded-[var(--app-radius-md)] bg-[var(--app-surface-muted)] p-3">
+            <div className="mb-2 text-xs font-bold text-[var(--app-text-muted)]">快速登记：点击学生标记为</div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-36 text-sm font-bold text-[var(--app-text)]">登记进度 <span className="ml-1 text-lg font-black">{registeredCount} / {students.length}</span></div>
+              <SegmentedControl value={markStatus} onChange={value => setMarkStatus(value as HomeworkStudentStatus)} ariaLabel="快速登记状态" className="min-w-48 flex-1 overflow-x-auto" options={STATUS_OPTIONS.map(option => ({ value: option.value, label: option.label }))}/>
+              <div className="flex flex-wrap items-center gap-2"><Button size="sm" onClick={() => void markAllSubmitted()}><Check className="h-4 w-4"/>全部已交</Button><Button size="sm" variant="ghost" disabled={!undoAssignments} onClick={undoLastRegistration}><RotateCcw className="h-4 w-4"/>撤销上一步</Button></div>
+            </div>
           </div>
 
-          <div className="flex min-h-6 items-center"><p aria-live="polite" className={`text-xs font-bold transition-colors duration-200 ${recentUpdate ? "text-blue-600" : "text-[var(--app-text-muted)]"}`}>{recentUpdate?.message || "学生始终按班级名单顺序显示；只有主动筛选时才会缩小列表。"}</p></div>
+          <p aria-live="polite" className="sr-only">{recentUpdate?.message || ""}</p>
 
           <div className="flex flex-wrap items-center gap-2">{[{ value: "all" as const, label: "全部", count: students.length }, ...STATUS_OPTIONS.map(option => ({ ...option, count: counts[option.value] }))].map(option => <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setFilter(option.value)} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 ${filter === option.value ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}>{option.label} {option.count}</button>)}<div className="relative ml-auto min-w-48 flex-1 sm:max-w-64"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索学生" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500/10"/></div><SegmentedControl value={viewMode} onChange={value => setViewMode(value as "quick" | "detail")} ariaLabel="作业登记视图" options={[{ value: "quick", label: "快速", icon: <LayoutGrid className="h-4 w-4"/> }, { value: "detail", label: "详细", icon: <List className="h-4 w-4"/> }]}/></div>
 
