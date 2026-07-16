@@ -689,9 +689,7 @@
   --app-chart-grid: #f0f0f0;
   --app-chart-axis: #9ca3af;
   --app-chart-fallback: #64748b;
-  --app-login-background: linear-gradient(135deg, #f0f4ff 0%, #f5f5f7 50%, #f0f7f0 100%);
-  --app-login-blue-glow: radial-gradient(circle, #3b82f6 0%, transparent 70%);
-  --app-login-violet-glow: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
+  --app-login-background: radial-gradient(circle at 50% 44%, #ffffff 0%, #f7f9fd 48%, #edf3ff 100%);
   --app-radius-sm: 10px;
   --app-radius-md: 14px;
   --app-radius-lg: 18px;
@@ -734,6 +732,35 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+}
+
+.login-education-wave {
+  position: absolute;
+  border: 1px solid rgba(147, 197, 253, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.36);
+  transform: rotate(-9deg);
+}
+
+.login-education-wave-one {
+  left: -18%;
+  top: -40%;
+  width: 86%;
+  height: 105%;
+}
+
+.login-education-wave-two {
+  right: -22%;
+  bottom: -48%;
+  width: 92%;
+  height: 105%;
+}
+
+.login-education-icon {
+  position: absolute;
+  color: rgba(59, 130, 246, 0.14);
+  stroke-width: 1.35;
+  filter: drop-shadow(0 12px 24px rgba(37, 99, 235, 0.05));
 }
 
 @media (prefers-reduced-motion: reduce) {
