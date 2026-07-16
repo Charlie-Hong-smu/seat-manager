@@ -209,7 +209,7 @@ test("creates a class-level followup without a student and supports undo", async
 
   await expect(page.getByText("不指定学生")).toBeVisible();
   await page.getByPlaceholder("跟进事项，例如：确认处罚执行情况").fill("准备下周班会材料");
-  await page.getByRole("button", { name: /创建\s+任务/ }).click();
+  await page.getByRole("button", { name: "创建任务", exact: true }).click();
 
   await expect(page.getByText("准备下周班会材料", { exact: true })).toBeVisible();
   await expect(page.getByText(/班级事项 · 截止/)).toBeVisible();
@@ -247,12 +247,25 @@ test("today workspace routes into homework and persists the teacher ledger", asy
   const studentOrderAfter = await page.locator("[data-homework-student-id]").evaluateAll(elements => elements.map(element => element.querySelector("strong")?.textContent));
   expect(studentOrderAfter).toEqual(studentOrderBefore);
 
+  await page.getByRole("group", { name: "快速登记状态" }).getByRole("button", { name: "未交" }).click();
+  await page.getByRole("button", { name: "作业学生乙当前待登记，点击设为未交", exact: true }).click();
+  await page.getByRole("button", { name: "为未交 1 人建跟进" }).click();
+  await page.getByRole("tab", { name: "待办", exact: true }).click();
+  const linkedTask = page.locator("article").filter({ hasText: "跟进作业：E2E 今日作业" });
+  await expect(linkedTask.getByRole("button", { name: "打开作业来源" })).toBeVisible();
+  await linkedTask.getByRole("button", { name: "完成任务" }).click();
+  await expect(page.getByRole("heading", { name: "同步作业状态？" })).toBeVisible();
+  await page.getByRole("button", { name: "同步为已交" }).click();
+  await expect(linkedTask.getByText("处理结果（可选）")).toBeVisible();
+  await page.getByRole("tab", { name: "作业", exact: true }).click();
+  await expect(page.getByRole("button", { name: "作业学生乙当前已交，点击设为已交", exact: true })).toBeVisible();
+
   await page.reload();
   await page.getByRole("button", { name: /^任务与作业/ }).click();
   await page.getByRole("tab", { name: "作业", exact: true }).click();
   await expect(page.getByText("E2E 今日作业", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "待登记 1", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "已交 1", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "待登记 0", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "已交 2", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: /^历史/ }).click();
   const timelineCard = page.locator(".history-timeline-card");

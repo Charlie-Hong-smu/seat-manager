@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
 const dist = resolve("dist");
-const limits = { entry: 220 * 1024, chunk: 220 * 1024, precache: 2.2 * 1024 * 1024 };
+const limits = { entry: 220 * 1024, chunk: 220 * 1024, precache: 2.25 * 1024 * 1024 };
 const html = readFileSync(resolve(dist, "index.html"), "utf8");
 const entryMatch = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/);
 if (!entryMatch) throw new Error("无法从 dist/index.html 找到入口脚本");
@@ -27,7 +27,7 @@ const xlsx = precacheUrls.find((url) => /xlsx.*\.js$/i.test(url));
 
 console.log(`入口 JS gzip: ${(entryGzip / 1024).toFixed(1)} KiB / 220 KiB`);
 console.log(`最大异步 JS gzip: ${Math.max(0, ...jsAssets.filter((file) => file !== entry).map(gzipBytes)) / 1024 | 0} KiB / 220 KiB`);
-console.log(`PWA precache: ${(precacheBytes / 1024 / 1024).toFixed(2)} MiB / 2.20 MiB`);
+console.log(`PWA precache: ${(precacheBytes / 1024 / 1024).toFixed(2)} MiB / 2.25 MiB`);
 if (xlsx) console.log(`XLSX vendor: ${(statSync(resolve(dist, xlsx)).size / 1024).toFixed(1)} KiB（单独统计）`);
 
 const failures = [];

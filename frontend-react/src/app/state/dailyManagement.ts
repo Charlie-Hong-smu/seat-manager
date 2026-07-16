@@ -1,4 +1,4 @@
-import type { AppStudent, AttendanceRecord, AttendanceStatus, DrawSession, FollowupTask, FollowupTaskSource, FollowupTaskStatus, StudentId } from "./types";
+import type { AppStudent, AttendanceRecord, AttendanceStatus, BusinessDomain, DrawSession, FollowupTask, FollowupTaskSource, FollowupTaskStatus, StudentId } from "./types";
 
 function id(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -54,23 +54,29 @@ export function normalizeFollowupTasks(raw: unknown): FollowupTask[] {
     const source: FollowupTaskSource = ["ai", "score", "attendance", "dormitory", "homework"].includes(String(item.source)) ? item.source as FollowupTaskSource : "manual";
     const createdAt = typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString();
     const sourceRef = item.sourceRef && typeof item.sourceRef === "object" && !Array.isArray(item.sourceRef) ? item.sourceRef as Record<string, unknown> : null;
-    return [{ id: typeof item.id === "string" ? item.id : `followup-${index}`, studentId: item.studentId, title: item.title.trim(), type: typeof item.type === "string" ? item.type : "常规跟进", description: typeof item.description === "string" ? item.description : "", plannedDate: typeof item.plannedDate === "string" ? item.plannedDate : "", dueDate: typeof item.dueDate === "string" ? item.dueDate : "", status, source, createdAt, updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : createdAt, completedAt: typeof item.completedAt === "string" ? item.completedAt : undefined, lastNotifiedAt: typeof item.lastNotifiedAt === "string" ? item.lastNotifiedAt : undefined, sourceRef: sourceRef && ["dormitory", "attendance", "ai", "homework", "score"].includes(String(sourceRef.domain)) && typeof sourceRef.entityId === "string" ? { domain: sourceRef.domain as "dormitory" | "attendance" | "ai" | "homework" | "score", entityId: sourceRef.entityId } : undefined }];
+    const domains: BusinessDomain[] = ["student", "attendance", "followup", "homework", "dormitory", "score", "communication", "fund", "seat", "draw", "schedule", "ai"];
+    const normalizedRef = sourceRef && domains.includes(String(sourceRef.domain) as BusinessDomain) && typeof sourceRef.entityId === "string" ? { domain: sourceRef.domain as BusinessDomain, entityId: sourceRef.entityId, subEntityId: typeof sourceRef.subEntityId === "string" ? sourceRef.subEntityId : undefined, studentId: typeof sourceRef.studentId === "string" ? sourceRef.studentId : undefined, date: typeof sourceRef.date === "string" ? sourceRef.date : undefined } : undefined;
+    return [{ id: typeof item.id === "string" ? item.id : `followup-${index}`, studentId: item.studentId, title: item.title.trim(), type: typeof item.type === "string" ? item.type : "常规跟进", description: typeof item.description === "string" ? item.description : "", plannedDate: typeof item.plannedDate === "string" ? item.plannedDate : "", dueDate: typeof item.dueDate === "string" ? item.dueDate : "", status, source, createdAt, updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : createdAt, completedAt: typeof item.completedAt === "string" ? item.completedAt : undefined, lastNotifiedAt: typeof item.lastNotifiedAt === "string" ? item.lastNotifiedAt : undefined, sourceRef: normalizedRef, resolutionNote: typeof item.resolutionNote === "string" ? item.resolutionNote : undefined, resolutionUpdatedAt: typeof item.resolutionUpdatedAt === "string" ? item.resolutionUpdatedAt : undefined, continuedFromTaskId: typeof item.continuedFromTaskId === "string" ? item.continuedFromTaskId : undefined }];
   });
 }
 
-export function createFollowupTask(input: { studentId: StudentId; title: string; type?: string; description?: string; plannedDate?: string; dueDate?: string; source?: FollowupTaskSource; sourceRef?: FollowupTask["sourceRef"] }): FollowupTask {
+export function createFollowupTask(input: { studentId: StudentId; title: string; type?: string; description?: string; plannedDate?: string; dueDate?: string; source?: FollowupTaskSource; sourceRef?: FollowupTask["sourceRef"]; continuedFromTaskId?: string }): FollowupTask {
   const now = new Date().toISOString();
-  return { id: id("followup"), studentId: input.studentId, title: input.title.trim(), type: input.type?.trim() || "常规跟进", description: input.description?.trim() || "", plannedDate: input.plannedDate || todayKey(), dueDate: input.dueDate || input.plannedDate || todayKey(), status: "pending", source: input.source || "manual", sourceRef: input.sourceRef, createdAt: now, updatedAt: now };
+  return { id: id("followup"), studentId: input.studentId, title: input.title.trim(), type: input.type?.trim() || "常规跟进", description: input.description?.trim() || "", plannedDate: input.plannedDate || todayKey(), dueDate: input.dueDate || input.plannedDate || todayKey(), status: "pending", source: input.source || "manual", sourceRef: input.sourceRef, continuedFromTaskId: input.continuedFromTaskId, createdAt: now, updatedAt: now };
 }
 
 export function findOpenLinkedTask(tasks: FollowupTask[], studentId: StudentId, sourceRef: NonNullable<FollowupTask["sourceRef"]>): FollowupTask | undefined {
-  return tasks.find(task => task.studentId === studentId && task.status === "pending" && task.sourceRef?.domain === sourceRef.domain && task.sourceRef.entityId === sourceRef.entityId);
+  return tasks.find(task => task.studentId === studentId
+    && task.status === "pending"
+    && task.sourceRef?.domain === sourceRef.domain
+    && task.sourceRef.entityId === sourceRef.entityId
+    && (task.sourceRef.subEntityId || "") === (sourceRef.subEntityId || ""));
 }
 
 export function batchUpsertAttendance(records: AttendanceRecord[], studentIds: StudentId[], date: string, patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave" | "note" | "leaveStart" | "leaveEnd">>): AttendanceRecord[] {
   return studentIds.reduce((current, studentId) => {
     const existing = current.find(item => item.studentId === studentId && item.date === date);
-    return upsertAttendance(current, { studentId, date, status: patch.status ?? existing?.status ?? "normal", late: patch.late ?? existing?.late ?? false, earlyLeave: patch.earlyLeave ?? existing?.earlyLeave ?? false, note: patch.note ?? existing?.note ?? "", leaveStart: patch.leaveStart ?? existing?.leaveStart, leaveEnd: patch.leaveEnd ?? existing?.leaveEnd });
+    return upsertAttendance(current, { studentId, date, status: patch.status ?? existing?.status ?? "normal", late: patch.late ?? existing?.late ?? false, earlyLeave: patch.earlyLeave ?? existing?.earlyLeave ?? false, note: patch.note ?? existing?.note ?? "", leaveStart: "leaveStart" in patch ? patch.leaveStart : existing?.leaveStart, leaveEnd: "leaveEnd" in patch ? patch.leaveEnd : existing?.leaveEnd });
   }, records);
 }
 

@@ -505,13 +505,21 @@ export function SelectMenu({ value, options, onChange, ariaLabel, placeholder = 
       const roomBelow = window.innerHeight - rect.bottom - 12;
       const maxHeight = Math.max(160, Math.min(320, Math.max(roomBelow, rect.top - 12)));
       const opensUp = roomBelow < 220 && rect.top > roomBelow;
-      setPosition({ left: rect.left, top: opensUp ? Math.max(8, rect.top - maxHeight - 8) : rect.bottom + 8, width: rect.width, maxHeight });
+      const visibleOptionCount = filtered.length || 1;
+      const searchHeight = showSearch ? 46 : 0;
+      const estimatedPanelHeight = Math.min(maxHeight, 16 + searchHeight + visibleOptionCount * 40 + Math.max(0, visibleOptionCount - 1) * 4);
+      const width = Math.min(rect.width, window.innerWidth - 16);
+      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8));
+      const top = opensUp
+        ? Math.max(8, rect.top - estimatedPanelHeight - 8)
+        : Math.min(rect.bottom + 8, window.innerHeight - estimatedPanelHeight - 8);
+      setPosition({ left, top, width, maxHeight });
     };
     update();
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => { window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
-  }, [open]);
+  }, [filtered.length, open, showSearch]);
 
   useEffect(() => {
     if (!open) return;

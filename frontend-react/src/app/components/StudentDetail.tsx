@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AiCommentDrawer } from "./AiCommentDrawer";
 import { StudentModal } from "./StudentModal";
 import type { NewDormEventInput } from "../state/dormitoryActions";
-import type { AppStudent, AttendanceRecord, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
+import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 
 interface StudentDetailProps {
   student: AppStudent;
@@ -26,6 +26,9 @@ interface StudentDetailProps {
   homeworkAssignments?: HomeworkAssignment[];
   communicationDrafts?: CommunicationDraft[];
   onCommunicationDraftsChange?: (drafts: CommunicationDraft[]) => void;
+  onActivity?: (event: ActivityEvent) => void;
+  activityEvents?: ActivityEvent[];
+  onOpenEntity?: (ref: BusinessEntityRef) => void;
 }
 
 export function StudentDetail({
@@ -49,6 +52,9 @@ export function StudentDetail({
   homeworkAssignments,
   communicationDrafts,
   onCommunicationDraftsChange,
+  onActivity,
+  activityEvents,
+  onOpenEntity,
 }: StudentDetailProps) {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
@@ -77,6 +83,9 @@ export function StudentDetail({
         homeworkAssignments={homeworkAssignments}
         communicationDrafts={communicationDrafts}
         onCommunicationDraftsChange={onCommunicationDraftsChange}
+        onActivity={onActivity}
+        activityEvents={activityEvents}
+        onOpenEntity={onOpenEntity}
       />
       <AiCommentDrawer
         open={aiDrawerOpen}

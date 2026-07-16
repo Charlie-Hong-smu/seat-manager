@@ -16,6 +16,11 @@ function getStudentCommentCacheKey(studentId: StudentId): string {
   return `${AI_COMMENT_DRAFT_KEY_PREFIX}:${getCurrentWorkspaceScope()}:${studentId || "unknown"}`;
 }
 
+export function deleteStudentCommentDraft(studentId: StudentId): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  window.localStorage.removeItem(getStudentCommentCacheKey(studentId));
+}
+
 function normalizeLengthMode(value: unknown): CommentLengthMode {
   return typeof value === "string" && VALID_LENGTH_MODES.has(value as CommentLengthMode)
     ? value as CommentLengthMode

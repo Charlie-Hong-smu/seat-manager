@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildItemAnalysisFromWideRows, buildTodayWorkItems, buildWeeklyFacts, getQuestionStats, normalizeHomeworkAssignments, normalizeSubjectCatalog, parseScheduleRows } from "./teacherWorkbench";
+import { buildItemAnalysisFromWideRows, buildTodayWorkItems, buildWeeklyFacts, getQuestionStats, normalizeCommunicationDrafts, normalizeHomeworkAssignments, normalizeSubjectCatalog, parseScheduleRows } from "./teacherWorkbench";
 import { createTestStudent } from "./testFixtures";
 import type { GradeExam } from "./types";
 
@@ -24,6 +24,15 @@ describe("teacher workbench domains", () => {
     expect(homework[0].studentStates.s1.status).toBe("pending");
     expect(homework[0].studentStates.s2.status).toBe("unrecorded");
     expect(normalizeSubjectCatalog(["语文", "信息技术"], ["语文", "体育"])).toEqual(["语文", "信息技术", "体育"]);
+    expect(homework[0].participantStudentIds).toEqual(["s1", "s2"]);
+    expect(homework[0].lifecycle).toBe("active");
+  });
+
+  it("keeps communication delivery lifecycle compatible with old drafts", () => {
+    const oldDraft = normalizeCommunicationDrafts([{ id: "c1", scope: "student", studentId: "s1", startDate: "2026-07-13", endDate: "2026-07-19", facts: [], content: "草稿", generatedBy: "local", sourceDigest: "x", updatedAt: "2026-07-14T08:00:00.000Z" }])[0];
+    const shared = normalizeCommunicationDrafts([{ ...oldDraft, deliveryStatus: "shared", channel: "私聊", sharedAt: "2026-07-14T09:00:00.000Z", deliveryNote: "已确认" }])[0];
+    expect(oldDraft.deliveryStatus).toBe("draft");
+    expect(shared).toMatchObject({ deliveryStatus: "shared", channel: "私聊", deliveryNote: "已确认" });
   });
 
   it("creates local weekly facts without invoking AI", () => {

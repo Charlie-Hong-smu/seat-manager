@@ -3,6 +3,7 @@ import type {
   AttendanceRecord,
   ClassScheduleV1,
   CommunicationDraft,
+  Dormitory,
   FollowupTask,
   GradeExam,
   GradeItemAnalysis,
@@ -14,6 +15,7 @@ import type {
   RecordType,
   StudentId,
 } from "./types";
+import { listDormitoryEvents } from "./dormitoryPeriods";
 
 const HOMEWORK_STATUSES = new Set<HomeworkStudentStatus>(["unrecorded", "pending", "submitted", "resubmitted", "excused"]);
 const RECORD_TYPES = new Set<RecordType>(["reward", "punish", "note"]);
@@ -97,7 +99,9 @@ export function normalizeHomeworkAssignments(value: unknown): HomeworkAssignment
     if (!isRecord(item) || !text(item.title)) return [];
     const studentStates = isRecord(item.studentStates) ? Object.fromEntries(Object.entries(item.studentStates).map(([id, state]) => [id, normalizeHomeworkState(state)])) : {};
     const createdAt = text(item.createdAt) || new Date().toISOString();
-    return [{ id: text(item.id) || `homework-${index}`, title: text(item.title), subject: text(item.subject), assignedDate: text(item.assignedDate), dueDate: text(item.dueDate), note: text(item.note), studentStates, createdAt, updatedAt: text(item.updatedAt) || createdAt }];
+    const lifecycle = item.lifecycle === "closed" || item.lifecycle === "archived" ? item.lifecycle : "active";
+    const participantStudentIds = Array.isArray(item.participantStudentIds) ? item.participantStudentIds.map(text).filter(Boolean) : Object.keys(studentStates);
+    return [{ id: text(item.id) || `homework-${index}`, title: text(item.title), subject: text(item.subject), assignedDate: text(item.assignedDate), dueDate: text(item.dueDate), note: text(item.note), studentStates, lifecycle, participantStudentIds, createdAt, updatedAt: text(item.updatedAt) || createdAt }];
   });
 }
 
@@ -106,7 +110,9 @@ export function normalizeCommunicationDrafts(value: unknown): CommunicationDraft
   return value.flatMap((item, index) => {
     if (!isRecord(item) || !text(item.content)) return [];
     const scope = item.scope === "student" ? "student" : "class";
-    return [{ id: text(item.id) || `communication-${index}`, scope, studentId: scope === "student" ? text(item.studentId) || undefined : undefined, startDate: text(item.startDate), endDate: text(item.endDate), facts: Array.isArray(item.facts) ? item.facts.map(text).filter(Boolean) : [], content: text(item.content), generatedBy: item.generatedBy === "ai" ? "ai" : "local", sourceDigest: text(item.sourceDigest), updatedAt: text(item.updatedAt) || new Date().toISOString() }];
+    const deliveryStatus = item.deliveryStatus === "shared" ? "shared" : "draft";
+    const channel = ["家长群", "私聊", "电话记录", "纸质", "其他"].includes(text(item.channel)) ? text(item.channel) as CommunicationDraft["channel"] : undefined;
+    return [{ id: text(item.id) || `communication-${index}`, scope, studentId: scope === "student" ? text(item.studentId) || undefined : undefined, startDate: text(item.startDate), endDate: text(item.endDate), facts: Array.isArray(item.facts) ? item.facts.map(text).filter(Boolean) : [], content: text(item.content), generatedBy: item.generatedBy === "ai" ? "ai" : "local", sourceDigest: text(item.sourceDigest), deliveryStatus, channel, sharedAt: text(item.sharedAt) || undefined, deliveryNote: text(item.deliveryNote) || undefined, updatedAt: text(item.updatedAt) || new Date().toISOString() }];
   });
 }
 
@@ -144,9 +150,10 @@ export function buildTodayWorkItems(input: { date: string; students: AppStudent[
   const names = new Map(input.students.map(student => [student.id, student.name]));
   const tasks = input.tasks.filter(task => task.status === "pending" && task.dueDate <= input.date).map(task => ({ id: `task:${task.id}`, kind: "task" as const, title: task.title, detail: `${task.studentId ? names.get(task.studentId) || "未知学生" : "班级事项"} · ${task.dueDate < input.date ? "已逾期" : "今日截止"}`, urgency: (task.dueDate < input.date ? 0 : 1) as 0 | 1, entityId: task.id, studentId: task.studentId || undefined }));
   const attendance = input.attendance.filter(item => item.date === input.date && (item.status !== "normal" || item.late || item.earlyLeave)).map(item => ({ id: `attendance:${item.id}`, kind: "attendance" as const, title: `${names.get(item.studentId) || "未知学生"}出勤异常`, detail: [item.status === "leave" ? "请假" : item.status === "absent" ? "缺勤" : "", item.late ? "迟到" : "", item.earlyLeave ? "早退" : ""].filter(Boolean).join(" · "), urgency: 2 as const, entityId: item.id, studentId: item.studentId }));
-  const homework = input.homework.filter(item => item.dueDate <= input.date).flatMap(item => {
-    const pendingIds = input.students.filter(student => (item.studentStates[student.id]?.status || "pending") === "pending").map(student => student.id);
-    const unrecordedIds = input.students.filter(student => item.studentStates[student.id]?.status === "unrecorded").map(student => student.id);
+  const homework = input.homework.filter(item => (item.lifecycle || "active") === "active" && item.dueDate <= input.date).flatMap(item => {
+    const participantIds = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates));
+    const pendingIds = input.students.filter(student => participantIds.has(student.id) && item.studentStates[student.id]?.status === "pending").map(student => student.id);
+    const unrecordedIds = input.students.filter(student => participantIds.has(student.id) && (item.studentStates[student.id]?.status || "unrecorded") === "unrecorded").map(student => student.id);
     const detail = [pendingIds.length ? `${pendingIds.length} 人未交` : "", unrecordedIds.length ? `${unrecordedIds.length} 人待登记` : "", item.dueDate < input.date ? "已逾期" : "今日截止"].filter(Boolean).join(" · ");
     return pendingIds.length || unrecordedIds.length ? [{ id: `homework:${item.id}`, kind: "homework" as const, title: item.title, detail, urgency: (pendingIds.length && item.dueDate < input.date ? 0 : 1) as 0 | 1, entityId: item.id }] : [];
   });
@@ -163,21 +170,27 @@ export function getWeekRange(date = new Date()): { startDate: string; endDate: s
   return { startDate: key(start), endDate: key(end) };
 }
 
-export function buildWeeklyFacts(input: { students: AppStudent[]; attendance: AttendanceRecord[]; tasks: FollowupTask[]; homework: HomeworkAssignment[]; startDate: string; endDate: string; studentId?: StudentId }): string[] {
+export function buildWeeklyFacts(input: { students: AppStudent[]; attendance: AttendanceRecord[]; tasks: FollowupTask[]; homework: HomeworkAssignment[]; dormitories?: Dormitory[]; gradeExams?: GradeExam[]; startDate: string; endDate: string; studentId?: StudentId }): string[] {
   const inRange = (date: string) => date >= input.startDate && date <= input.endDate;
   const studentIds = input.studentId ? new Set([input.studentId]) : new Set(input.students.map(student => student.id));
   const attendance = input.attendance.filter(item => studentIds.has(item.studentId) && inRange(item.date) && (item.status !== "normal" || item.late || item.earlyLeave));
   const completed = input.tasks.filter(item => (!input.studentId || item.studentId === input.studentId) && item.status === "completed" && item.completedAt && inRange(item.completedAt.slice(0, 10))).length;
   const pending = input.tasks.filter(item => (!input.studentId || item.studentId === input.studentId) && item.status === "pending" && item.dueDate <= input.endDate).length;
   const records = input.students.filter(student => studentIds.has(student.id)).flatMap(student => student.records).filter(record => inRange(record.date));
-  const assignments = input.homework.filter(item => inRange(item.assignedDate) || inRange(item.dueDate));
-  const pendingHomework = assignments.reduce((sum, item) => sum + [...studentIds].filter(id => (item.studentStates[id]?.status || "pending") === "pending").length, 0);
-  const unrecordedHomework = assignments.reduce((sum, item) => sum + [...studentIds].filter(id => item.studentStates[id]?.status === "unrecorded").length, 0);
+  const assignments = input.homework.filter(item => (item.lifecycle || "active") !== "archived" && (inRange(item.assignedDate) || inRange(item.dueDate)));
+  const pendingHomework = assignments.reduce((sum, item) => { const participants = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates)); return sum + [...studentIds].filter(id => participants.has(id) && item.studentStates[id]?.status === "pending").length; }, 0);
+  const unrecordedHomework = assignments.reduce((sum, item) => { const participants = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates)); return sum + [...studentIds].filter(id => participants.has(id) && (item.studentStates[id]?.status || "unrecorded") === "unrecorded").length; }, 0);
+  const dormEvents = (input.dormitories || []).flatMap(dormitory => listDormitoryEvents(dormitory).map(item => item.event)).filter(event => inRange(event.date) && (!input.studentId || event.responsibleStudentId === input.studentId || event.responsibleStudentIds?.includes(input.studentId)));
+  const gradeFacts = input.studentId
+    ? input.students.find(student => student.id === input.studentId)?.exams.filter(exam => inRange(exam.date)).map(exam => `${exam.name}${exam.total !== undefined ? ` ${exam.total} 分` : ""}`) || []
+    : (input.gradeExams || []).filter(exam => inRange(exam.date)).map(exam => exam.name);
   return [
     `出勤异常 ${attendance.length} 次`,
     `完成跟进 ${completed} 项，待处理 ${pending} 项`,
     `记录表扬 ${records.filter(item => item.type === "reward").length} 条、提醒 ${records.filter(item => item.type === "punish").length} 条`,
     `本周作业 ${assignments.length} 项，当前未交 ${pendingHomework} 人次、待登记 ${unrecordedHomework} 人次`,
+    `宿舍事件 ${dormEvents.length} 条${dormEvents.filter(event => !event.punishmentDone).length ? `，待处理 ${dormEvents.filter(event => !event.punishmentDone).length} 条` : ""}`,
+    `本周成绩记录 ${gradeFacts.length ? gradeFacts.join("、") : "无新增考试"}`,
   ];
 }
 

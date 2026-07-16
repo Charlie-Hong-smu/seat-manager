@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileDown, FileUp, X } from "lucide-react";
+import { ArchiveRestore, FileDown, FileUp, Trash2, X } from "lucide-react";
 
 import {
   exportBackupJson,
@@ -21,20 +21,26 @@ import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function DataWorkspace({
   students,
+  archivedStudents,
   seatOrder,
   seatLayout,
   onImportRoster,
   onBeforeBackupExport,
   onBackupImported,
   healthIssues = [],
+  onRestoreStudent,
+  onPermanentlyDeleteStudent,
 }: {
   students: AppStudent[];
+  archivedStudents?: AppStudent[];
   seatOrder: Array<StudentId | null>;
   seatLayout?: SeatLayoutV1;
   onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
   onBeforeBackupExport: () => void;
   onBackupImported: () => void;
   healthIssues?: HealthIssue[];
+  onRestoreStudent?: (studentId: StudentId) => void;
+  onPermanentlyDeleteStudent?: (studentId: StudentId) => void;
 }) {
   const appDialog = useAppDialog();
   const [replaceExisting, setReplaceExisting] = useState(true);
@@ -178,6 +184,12 @@ export function DataWorkspace({
     }
   }
 
+  async function permanentlyDelete(student: AppStudent) {
+    if (!onPermanentlyDeleteStudent) return;
+    const confirmed = await appDialog.confirm({ title: `彻底删除“${student.name}”？`, description: "仅在误导入数据时使用。该学生的档案、出勤、任务、沟通稿、作业状态、成绩行和题目行会被删除，并从座位、宿舍、抽签、约束与班费关联中解除。共享财务和宿舍事件本身会保留。此操作无法恢复。", confirmLabel: "彻底删除", variant: "danger" });
+    if (confirmed) onPermanentlyDeleteStudent(student.id);
+  }
+
   const rosterHeaders = rosterRows[0] || [];
   const rosterColumnOptions = rosterHeaders.map((header, index) => ({
     value: index,
@@ -189,6 +201,9 @@ export function DataWorkspace({
     <div className="flex h-full flex-col bg-gray-50">
       <div className="grid gap-4 overflow-y-auto p-4 lg:grid-cols-3">
         <div className="surface-enter lg:col-span-3"><Panel title="数据健康检查" action={<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${healthIssues.some(i => i.severity === "critical") ? "bg-red-50 text-red-600" : healthIssues.length ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"}`}>{healthIssues.length ? `${healthIssues.length} 项问题` : "状态正常"}</span>}><div className="grid gap-2 sm:grid-cols-2">{healthIssues.map(issue => <div key={issue.id} className={`rounded-xl border p-3 ${issue.severity === "critical" ? "border-red-100 bg-red-50" : "border-amber-100 bg-amber-50"}`}><div className="text-sm font-bold text-gray-800">{issue.title}</div><div className="mt-1 text-xs text-gray-500">{issue.detail}</div></div>)}{!healthIssues.length && <p className="text-sm text-gray-500">未发现重复学号、孤立座位、宿舍重复归属或无效学生引用。</p>}</div></Panel></div>
+        <div className="surface-enter lg:col-span-3"><Panel title="归档学生" action={<span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-600">{archivedStudents?.length || 0} 人</span>}>
+          {archivedStudents?.length ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{archivedStudents.map(student => <div key={student.id} className="flex items-center gap-3 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white p-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-gray-100 text-sm font-bold text-gray-600">{student.name.slice(0,1)}</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold text-gray-800">{student.name}</div><div className="text-xs text-gray-400">{student.archivedAt ? `移出于 ${student.archivedAt.slice(0,10)}` : "已移出当前班级"}</div></div><Button size="sm" variant="secondary" onClick={() => onRestoreStudent?.(student.id)}><ArchiveRestore className="h-4 w-4"/>恢复</Button><Button size="sm" variant="danger" onClick={() => void permanentlyDelete(student)} aria-label={`彻底删除 ${student.name}`}><Trash2 className="h-4 w-4"/></Button></div>)}</div> : <p className="text-sm text-[var(--app-text-muted)]">暂无归档学生。学生从班级移出后会保留在这里，可恢复或用于误导入时彻底删除。</p>}
+        </Panel></div>
         <div className="surface-enter">
         <Panel title="导入名单" action={<span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600" style={{ fontWeight: 800 }}>导入</span>}>
           <div className="space-y-3">

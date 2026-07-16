@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeline, filterTimeline, inspectStateHealth } from "./dataInsights";
+import { buildTimeline, businessEntityExists, filterTimeline, inspectStateHealth, targetFromBusinessRef } from "./dataInsights";
+import { createActivityEvent } from "./activityEvents";
 import { createEmptySeatManagerState } from "./legacyStateAdapter";
 import { createTestStudent } from "./testFixtures";
 import { createFollowupTask } from "./dailyManagement";
@@ -41,5 +42,23 @@ describe("data insights", () => {
     state.followupTasks = [createFollowupTask({ studentId: "", title: "准备班会", dueDate: "2026-07-14" })];
     expect(buildTimeline(state, "2026-07-13")[0]).toMatchObject({ studentId: undefined, studentName: "班级事项", title: "准备班会" });
     expect(inspectStateHealth(state)).toEqual([]);
+  });
+
+  it("prioritizes real activity events, filters every related student and keeps precise targets", () => {
+    const state = createEmptySeatManagerState();
+    state.students = [createTestStudent("s1"), createTestStudent("s2", "乙")];
+    state.homeworkAssignments = [{ id: "h1", title: "订正", subject: "数学", assignedDate: "2026-07-14", dueDate: "2026-07-15", note: "", studentStates: {}, createdAt: "2026-07-14T08:00:00.000Z", updatedAt: "2026-07-14T08:00:00.000Z" }];
+    state.activityEvents = [createActivityEvent({ action: "updated", ref: { domain: "homework", entityId: "h1" }, studentIds: ["s1", "s2"], title: "更新作业：订正", detail: "截止日期已调整", occurredAt: "2026-07-14T09:00:00.000Z" })];
+    const timeline = buildTimeline(state);
+    expect(timeline.filter(item => item.type === "作业")).toHaveLength(1);
+    expect(filterTimeline(timeline, { studentId: "s2" })).toHaveLength(1);
+    expect(targetFromBusinessRef({ domain: "score", entityId: "e1", subEntityId: "q2" })).toMatchObject({ workspace: "scores", entityId: "e1", subEntityId: "q2" });
+  });
+
+  it("detects missing question-level sources without rejecting existing ones", () => {
+    const state = createEmptySeatManagerState();
+    state.gradeExams = [{ id: "e1", name: "月考", date: "2026-07-14", subjects: ["数学"], rows: [], itemAnalysis: { questions: [{ id: "q1", label: "第1题", subject: "数学", maxScore: 10, knowledgePoints: [], sourceColumn: 2 }], rows: [], updatedAt: "" } }];
+    expect(businessEntityExists(state, { domain: "score", entityId: "e1", subEntityId: "q1" })).toBe(true);
+    expect(businessEntityExists(state, { domain: "score", entityId: "e1", subEntityId: "q2" })).toBe(false);
   });
 });

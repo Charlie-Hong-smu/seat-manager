@@ -659,9 +659,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                 }}
                                 className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
                                 style={{ fontWeight: 800 }}
-                                title={matchedStudent ? "打开 AI 跟进建议" : "未匹配到学生档案"}
+                                title={matchedStudent ? "查看 AI 建议" : "未匹配到学生档案"}
                               >
-                                <Sparkles className="h-3.5 w-3.5" />跟进
+                                <Sparkles className="h-3.5 w-3.5" />AI 建议
                               </button>
                             </td>
                           </tr>
@@ -715,9 +715,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                 }}
                                 className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
                                 style={{ fontWeight: 800 }}
-                                title={item.matchedStudent ? "打开 AI 跟进建议" : "未匹配到学生档案"}
+                                title={item.matchedStudent ? "查看 AI 建议" : "未匹配到学生档案"}
                               >
-                                <Sparkles className="h-3.5 w-3.5" />跟进
+                                <Sparkles className="h-3.5 w-3.5" />AI 建议
                               </button>
                             </td>
                           </tr>

@@ -17,6 +17,9 @@
 - `state/seatManagerController.ts`：唯一持久业务状态控制器；学生、座位、成绩、宿舍、班费和历史都来自同一个 `SeatManagerState`。
 - `components/workspaces/`：Today、Daily（座位）、Data、History、Scores、ClassFund 的独立页面实现与稳定 barrel；Scores 由 App 按需加载。
 - `state/teacherWorkbench.ts`：课表、作业、今日队列、周报事实和题目得分率的本地纯函数边界；这些计算不依赖 AI。
+- `state/classManagementCommands.ts`：跟进完成与结果、出勤状态清理、学生归档/恢复/彻底删除等跨领域命令；页面不得各自拼接同类级联修改。
+- `state/activityEvents.ts`：`BusinessEntityRef` 与本地不可变动作流水的规范化边界；新动作从升级后开始记录，不反推旧状态历史。
+- `components/FollowupTaskForm.tsx`、`LinkedWorkflow.tsx`、`StudentAttentionSummary.tsx`：跟进表单、来源/关联任务/处理结果和学生关注摘要的共享业务组件。
 - `components/RetryableLazy.tsx`：非首屏模块统一骨架、错误边界和原地重试；重试不刷新页面或重建持久状态控制器。
 - `components/studentModalSelectors.ts`：学生弹窗的日期周、成绩和别名纯派生逻辑。
 - `components/commentBatchStorage.ts`：评语批量队列的兼容存储边界，键保持 `seat-manager-ai-comment-batch-state-v1`。
@@ -59,11 +62,21 @@ React event
 
 `POST /admin/licenses/list` 只接受管理员 Bearer token，并使用可选 `cursor` 分页返回授权记录；授权后台会逐页加载完整列表后在浏览器内计算看板和筛选。渠道和来源明细只存在于管理员接口，不进入产品登录响应或产品 token。
 
-出勤、学生跟进任务、作业、课表、快捷记录预设、沟通草稿和抽签会话属于当前学期切片数据，随整柜备份和手动云同步一起保存。跟进任务允许 `studentId` 为空字符串，表示不绑定具体学生的班级事项；健康检查与班级动态不得把这种记录判为学生引用损坏。评语与 AI 辅助缓存使用当前工作区事实签名隔离，不能把旧事实的结果当作新结果自动写入。
+出勤、学生跟进任务、作业、课表、快捷记录预设、沟通草稿、动作流水和抽签会话属于当前学期切片数据，随整柜备份和手动云同步一起保存。跟进任务允许 `studentId` 为空字符串，表示不绑定具体学生的班级事项；健康检查与班级动态不得把这种记录判为学生引用损坏。评语与 AI 辅助缓存使用当前工作区事实签名隔离，不能把旧事实的结果当作新结果自动写入。
+
+跨领域定位统一使用 `BusinessEntityRef { domain, entityId, subEntityId?, studentId?, date? }`。`subEntityId` 用于成绩题目/知识点等子对象，避免同一考试的不同问题被错误去重；旧 `{ domain, entityId }` 始终可读。所有来源跳转经 `navigateToEntity(ref)` 打开正确工作区、页签、日期和学生，并滚动高亮；来源已删除时保留历史说明但不伪造可用链接。
+
+`activityEvents` 只保存动作时间、引用、全部关联学生、标题和简短结果，不保存状态快照。新建、编辑、状态变化、归档、恢复、分享和删除写入动作流水；短时撤销仍由页面持有旧值，并且必须同时移除本次动作事件。缺失流水的旧数据继续以“旧数据汇总”展示，不把最终状态伪装成过去发生的动作。
+
+跟进任务采用“快速完成 + 可选处理结果”：完成本身不要求填写文字；随后可补结果或基于原来源继续跟进，后续任务以 `continuedFromTaskId` 形成链。作业等来源可同步时必须再次询问老师，拒绝同步不影响任务完成。
 
 “今日”是默认编排页，不是第二套业务存储。它从出勤、`FollowupTask` 和 `HomeworkAssignment` 派生需要处理的事项；完成、编辑和跳转仍回到来源领域。当前 `daily` 内部页面标识继续指向座位工作台，仅导航文案改为“座位”，避免破坏既有入口和测试语义。
 
-作业台账只记录交付状态与简评，不记录分数或学生端提交。新作业为每位学生创建 `unrecorded`（待登记）状态；既有 `pending` 继续表示未交，读取时不得把旧作业迁移成待登记。老师先通过快速登记将学生设为已交、未交、补交或免交，备注和逐人下拉留在详细视图。作业可由老师显式创建带 `sourceRef.domain = homework` 的跟进任务，但作业状态和任务状态不自动互相覆盖。快捷记录继续写入 `StudentRecord`，可选 `score` 只用于记录与统计，不构成独立积分账户。
+作业台账只记录交付状态与简评，不记录分数或学生端提交。新作业以 `participantStudentIds` 固化布置时的活跃学生快照，并为参与者创建 `unrecorded`（待登记）状态；后来加入班级的学生不自动计为未交。旧作业缺少快照时从已有 `studentStates` 推断。既有 `pending` 继续表示未交，读取时不得把旧作业迁移成待登记。作业生命周期为 `active / closed / archived`，支持编辑、结束、归档、恢复与删除；处理前必须说明关联任务并由老师选择保留或取消。作业状态与任务状态不自动互相覆盖，任务完成后只在老师确认时同步为已交。快捷记录继续写入 `StudentRecord`，可选 `score` 只用于记录与统计，不构成独立积分账户。
+
+学生默认使用 `enrollmentStatus: active / archived` 管理在班状态。移出当前班级仅归档：活跃名单、座位、出勤和新作业排除该学生，历史仍可检索并可恢复。“彻底删除”只用于误导入，并级联移除学生自有档案、出勤、任务、沟通稿、作业/成绩行、评语缓存和抽签引用；共享班费与宿舍事件本体保留，只解除该学生关联。
+
+沟通稿以 `deliveryStatus: draft / shared` 表示生命周期，并可记录分享渠道、时间与备注。复制不改变业务状态；标记分享、恢复草稿和保存会进入动作流水，历史可重新打开原稿。周报事实仍由本地生成，并补充成绩记录与宿舍事件摘要，AI 只按需润色。
 
 常用学科目录保存在当前切片 `settings.subjectCatalog`，默认包含语文、数学、英语、物理、化学、生物、历史、政治和地理，并合并课表、历史作业及成绩中已经使用的学科。修改目录名称不重写历史作业；目录继续随既有工作区备份和手动云同步保存，不新增全局存储键。
 
@@ -92,7 +105,7 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 
 `vite-plugin-pwa` 为两种 base 生成 manifest 和 service worker。静态应用壳、哈希资源、图标和本地 XLSX 库进入 precache；API、Worker、同步和第三方请求不缓存。发现新 service worker 时只显示提示，用户点击“立即更新”后才刷新。
 
-Scores、AI Assistant 和 Comment Workbench 是非首屏异步模块；登录、应用壳和默认今日页保持同步加载。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.2 MiB，XLSX vendor 单独报告。
+Scores、AI Assistant 和 Comment Workbench 是非首屏异步模块；登录、应用壳和默认今日页保持同步加载。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.25 MiB，XLSX vendor 单独报告。2026-07 的跨领域闭环增加了离线动作流水、生命周期和共享业务组件后，precache 从 2.20 MiB 小幅上调；入口和异步脚本上限不变，不能以此继续放大首屏。
 
 ## 设计原则
 

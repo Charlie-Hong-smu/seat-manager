@@ -124,7 +124,7 @@ export function DailyWorkspace({
             <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-blue-50 px-2.5 text-xs font-bold text-blue-700">
               <Users className="h-3.5 w-3.5" />{students.length} 人
             </span>
-            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-violet-50 px-2.5 text-xs font-bold text-violet-700">
+            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-cyan-50 px-2.5 text-xs font-bold text-cyan-700">
               <LayoutGrid className="h-3.5 w-3.5" />{seatOrder.length} 座
             </span>
             <button onClick={onOpenAttendance} className="h-8 rounded-xl bg-amber-50 px-2.5 text-xs font-bold text-amber-700">今日异常 {abnormalAttendance}</button>

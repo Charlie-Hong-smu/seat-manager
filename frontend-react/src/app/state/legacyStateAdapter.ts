@@ -1,6 +1,7 @@
 import { EXAMS, INITIAL_SEATS, SAMPLE_RECORDS, STUDENTS } from "../components/mockData";
 import { calculateDormScore } from "./dormitoryActions";
 import { normalizeFundTransactions } from "./classFundActions";
+import { normalizeActivityEvents } from "./activityEvents";
 import { normalizeAttendanceRecords, normalizeDrawSessions, normalizeFollowupTasks } from "./dailyManagement";
 import { getTagLabels, isAcademicTagLabel } from "./tagCatalog";
 import { normalizeSeatLayout } from "./seatLayout";
@@ -465,6 +466,8 @@ function normalizeStudent(value: unknown, index: number, extraTagLabels: Record<
     exams: toUnknownArray(value.exams).map(normalizeExam).filter((item): item is StudentExamSummary => Boolean(item)),
     dormitoryId: toStringValue(value.dormitoryId) || undefined,
     aiComments: value.aiComments,
+    enrollmentStatus: value.enrollmentStatus === "archived" ? "archived" : "active",
+    archivedAt: toStringValue(value.archivedAt) || undefined,
   };
 }
 
@@ -721,6 +724,7 @@ export function createMockSeatManagerState(): SeatManagerState {
     homeworkAssignments: [],
     quickRecordPresets: createDefaultQuickRecordPresets(),
     communicationDrafts: [],
+    activityEvents: [],
     seatHistory: [],
     savedExams: EXAMS,
     exams: EXAMS,
@@ -750,6 +754,7 @@ export function createEmptySeatManagerState(): SeatManagerState {
     homeworkAssignments: [],
     quickRecordPresets: createDefaultQuickRecordPresets(),
     communicationDrafts: [],
+    activityEvents: [],
     seatHistory: [],
     savedExams: [],
     exams: [],
@@ -776,7 +781,7 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     // 只有 raw 完全不是对象(见上面 isRecord 判断)才回退演示数据 = 真正的首次使用。
     const empty = createEmptySeatManagerState();
     const settings = isRecord(raw.settings) ? raw.settings : {};
-    return { ...empty, settings, seatSettings: normalizeSeatSettings(settings, []), seatHistory: normalizeSeatHistory(raw.seatHistory), schedule: normalizeSchedule(raw.schedule), homeworkAssignments: normalizeHomeworkAssignments(raw.homeworkAssignments), quickRecordPresets: normalizeQuickRecordPresets(raw.quickRecordPresets), communicationDrafts: normalizeCommunicationDrafts(raw.communicationDrafts) };
+    return { ...empty, settings, seatSettings: normalizeSeatSettings(settings, []), seatHistory: normalizeSeatHistory(raw.seatHistory), schedule: normalizeSchedule(raw.schedule), homeworkAssignments: normalizeHomeworkAssignments(raw.homeworkAssignments), quickRecordPresets: normalizeQuickRecordPresets(raw.quickRecordPresets), communicationDrafts: normalizeCommunicationDrafts(raw.communicationDrafts), activityEvents: normalizeActivityEvents(raw.activityEvents) };
   }
 
   const studentIds = new Set(students.map(student => student.id));
@@ -819,6 +824,7 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     homeworkAssignments: normalizeHomeworkAssignments(raw.homeworkAssignments),
     quickRecordPresets: normalizeQuickRecordPresets(raw.quickRecordPresets),
     communicationDrafts: normalizeCommunicationDrafts(raw.communicationDrafts),
+    activityEvents: normalizeActivityEvents(raw.activityEvents),
     seatHistory: normalizeSeatHistory(raw.seatHistory),
     savedExams: toUnknownArray(raw.savedExams),
     exams: toUnknownArray(raw.exams),

@@ -52,3 +52,15 @@ export function saveCommentBatchState(state: CommentBatchState): void {
   }
   window.localStorage.setItem(scopedKey(), JSON.stringify(state));
 }
+
+export function removeStudentFromCommentBatch(studentId: StudentId): void {
+  if (!hasBrowserStorage()) return;
+  const raw = window.localStorage.getItem(scopedKey());
+  if (!raw) return;
+  try {
+    const state = JSON.parse(raw) as CommentBatchState;
+    saveCommentBatchState({ ...state, queue: (state.queue || []).filter(id => id !== studentId), failed: (state.failed || []).filter(id => id !== studentId), updatedAt: new Date().toISOString() });
+  } catch {
+    window.localStorage.removeItem(scopedKey());
+  }
+}

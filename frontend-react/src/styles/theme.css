@@ -348,6 +348,12 @@
   }
 }
 
+@keyframes entity-focus-highlight {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+  24% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18); background-color: rgba(239, 246, 255, 0.9); }
+  72% { box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }
+}
+
 .workspace-tab-enter {
   animation: workspace-tab-enter 260ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
 }
@@ -378,6 +384,10 @@
 
 .surface-enter {
   animation: surface-enter 300ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+.entity-focus-highlight {
+  animation: entity-focus-highlight 1.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .modal-panel-enter {
@@ -522,6 +532,10 @@
   .app-popover-motion {
     transform: none;
     transition-duration: 0.01ms;
+  }
+
+  .entity-focus-highlight {
+    animation-duration: 0.01ms;
   }
 }
 

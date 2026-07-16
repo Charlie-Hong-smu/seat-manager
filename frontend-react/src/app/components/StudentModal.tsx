@@ -16,13 +16,15 @@ import { createStudentRecord, updateStudentProfile } from "../state/studentActio
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
-import type { AppStudent, AttendanceRecord, CommunicationDraft, Dormitory, FollowupTask, Gender, HomeworkAssignment, RecordType, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
+import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, Gender, HomeworkAssignment, RecordType, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 import { getNeighborIndexPairs, getSeatPositionLabel, resolveSeatLayout } from "../state/seatLayout";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
+import { normalizeAttendancePatch } from "../state/classManagementCommands";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
 import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
+import { StudentActivityTimeline, StudentAttentionSummary } from "./StudentAttentionSummary";
 import {
   buildWeekOptions,
   formatScore,
@@ -46,7 +48,7 @@ const STUDENT_DETAIL_TABS: Array<{ value: StudentDetailTab; label: string; tone?
   { value: "profile", label: "档案" },
   { value: "attendance", label: "出勤" },
   { value: "trend", label: "成绩" },
-  { value: "followup", label: "跟进与沟通" },
+  { value: "followup", label: "建议与沟通" },
 ];
 
 interface Props {
@@ -71,6 +73,9 @@ interface Props {
   homeworkAssignments?: HomeworkAssignment[];
   communicationDrafts?: CommunicationDraft[];
   onCommunicationDraftsChange?: (drafts: CommunicationDraft[]) => void;
+  onActivity?: (event: ActivityEvent) => void;
+  activityEvents?: ActivityEvent[];
+  onOpenEntity?: (ref: BusinessEntityRef) => void;
 }
 
 export function StudentModal({
@@ -95,6 +100,9 @@ export function StudentModal({
   homeworkAssignments = [],
   communicationDrafts = [],
   onCommunicationDraftsChange,
+  onActivity,
+  activityEvents = [],
+  onOpenEntity,
 }: Props) {
   const appDialog = useAppDialog();
   const modalHeaderRef = useRef<HTMLDivElement>(null);
@@ -203,6 +211,12 @@ export function StudentModal({
   const latestDormitoryEvent = currentDormitory
     ? listDormitoryEvents(currentDormitory).sort((a, b) => `${b.event.date}-${b.event.createdAt}`.localeCompare(`${a.event.date}-${a.event.createdAt}`))[0]?.event
     : undefined;
+  function updateTodayAttendance(patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave">>) {
+    const date = todayKey();
+    const current = attendanceRecords.find(item => item.studentId === student.id && item.date === date);
+    const normalized = patch.status ? normalizeAttendancePatch(current, patch.status) : null;
+    onAttendanceChange?.(upsertAttendance(attendanceRecords, { studentId: student.id, date, status: normalized?.status ?? current?.status ?? "normal", late: patch.late ?? normalized?.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? normalized?.earlyLeave ?? current?.earlyLeave ?? false, note: current?.note || "", leaveStart: patch.status ? normalized?.leaveStart : current?.leaveStart, leaveEnd: patch.status ? normalized?.leaveEnd : current?.leaveEnd }));
+  }
   const preservedManualTagIds = useMemo(
     () => student.manualTagIds.filter(id => !BEHAVIOR_TAG_IDS.has(id)),
     [student.manualTagIds]
@@ -457,7 +471,7 @@ export function StudentModal({
                   </button>
                 )}
                 <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 border border-red-200 rounded-xl hover:bg-red-50 transition-colors" style={{ fontWeight: 600 }}>
-                  <Trash2 className="w-3.5 h-3.5" />删除学生
+                  <Trash2 className="w-3.5 h-3.5" />移出当前班级
                 </button>
                 <IconButton label="关闭学生详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
             </>
@@ -717,6 +731,8 @@ export function StudentModal({
 
           {activeTab === "followup" && (
             <div className="space-y-4">
+            <StudentAttentionSummary student={student} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} onOpenEntity={onOpenEntity}/>
+            <StudentActivityTimeline studentId={student.id} events={activityEvents} onOpenEntity={onOpenEntity}/>
             <UnderlineTabs value={followupView} onChange={setFollowupView} ariaLabel="跟进与沟通" options={[{ value: "advice", label: "跟进建议", tone: "ai" }, { value: "communication", label: "周沟通稿" }]} />
             {followupView === "advice" ? <AiStudentFollowupPanel
               student={student}
@@ -731,11 +747,11 @@ export function StudentModal({
               onSaveRecord={saveAiFollowupRecord}
               onAppendCommentMaterial={appendAiFollowupMaterial}
               onCreateTask={input => onCreateFollowupTask?.({ studentId: student.id, ...input })}
-            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} drafts={communicationDrafts} onDraftsChange={drafts => onCommunicationDraftsChange?.(drafts)} />}
+            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} drafts={communicationDrafts} onDraftsChange={drafts => onCommunicationDraftsChange?.(drafts)} onCreateFollowupTask={onCreateFollowupTask} onActivity={onActivity} />}
             </div>
           )}
 
-          {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-gray-50 p-3 text-center"><div className="text-xl font-black text-gray-800">{item.value}</div><div className="text-xs text-gray-400">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div className="mb-3 text-sm font-bold text-gray-800">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={patch=>onAttendanceChange?.(upsertAttendance(attendanceRecords,{studentId:student.id,date:todayKey(),status:patch.status??current?.status??"normal",late:patch.late??current?.late??false,earlyLeave:patch.earlyLeave??current?.earlyLeave??false,note:current?.note||"",leaveStart:current?.leaveStart,leaveEnd:current?.leaveEnd}))}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3"><span className="text-sm font-bold text-gray-700">{item.date}</span><span className="text-sm text-gray-500">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-sm text-gray-400">暂无出勤异常</p>}</div><div className="rounded-xl bg-violet-50 p-3 text-sm text-violet-700">当前跟进任务 {followupTasks.filter(task=>task.studentId===student.id&&task.status==="pending").length} 项</div></div>; })()}
+          {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-gray-50 p-3 text-center"><div className="text-xl font-black text-gray-800">{item.value}</div><div className="text-xs text-gray-400">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div className="mb-3 text-sm font-bold text-gray-800">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3"><span className="text-sm font-bold text-gray-700">{item.date}</span><span className="text-sm text-gray-500">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-sm text-gray-400">暂无出勤异常</p>}</div><div className="rounded-xl bg-blue-50 p-3 text-sm text-blue-700">当前跟进任务 {followupTasks.filter(task=>task.studentId===student.id&&task.status==="pending").length} 项</div></div>; })()}
 
           {activeTab === "trend" && (
           <div className="space-y-5">
@@ -940,7 +956,7 @@ export function StudentModal({
           </div>
         </div>
       )}
-      <ConfirmDialog open={showDeleteConfirm} title="删除这名学生？" description={`将删除“${student.name}”在当前学期的档案、记录、出勤和跟进数据，并从当前座位及宿舍中移除。删除后无法恢复。`} confirmLabel="确认删除学生" onCancel={() => setShowDeleteConfirm(false)} onConfirm={() => onDeleteStudent(student.id)} />
+      <ConfirmDialog open={showDeleteConfirm} title="将这名学生移出当前班级？" description={`“${student.name}”会从当前名单、座位、宿舍、出勤和新作业中移出，但历史记录、成绩、任务和沟通内容都会保留，可随时从归档学生中恢复。`} confirmLabel="确认移出班级" onCancel={() => setShowDeleteConfirm(false)} onConfirm={() => onDeleteStudent(student.id)} />
       <ConfirmDialog open={Boolean(pendingRecordDelete)} title="删除这条学生记录？" description={`将删除“${pendingRecordDelete?.note || "无备注记录"}”，删除后无法恢复。`} confirmLabel="确认删除记录" onCancel={() => setPendingRecordDelete(null)} onConfirm={() => { if (!pendingRecordDelete) return; deleteRecord(pendingRecordDelete.id); setPendingRecordDelete(null); }} />
       {appDialog.dialog}
     </div>

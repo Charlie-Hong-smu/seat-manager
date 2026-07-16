@@ -1,7 +1,7 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
 import { normalizeGradeItemAnalysis } from "./teacherWorkbench";
-import type { AppStudent, AttendanceRecord, ClassScheduleV1, CommunicationDraft, Dormitory, DrawSession, FollowupTask, FundTransaction, GradeItemAnalysis, HomeworkAssignment, QuickRecordPreset, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
+import type { ActivityEvent, AppStudent, AttendanceRecord, ClassScheduleV1, CommunicationDraft, Dormitory, DrawSession, FollowupTask, FundTransaction, GradeItemAnalysis, HomeworkAssignment, QuickRecordPreset, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 interface PersistSnapshotInput {
   students: AppStudent[];
@@ -18,6 +18,7 @@ interface PersistSnapshotInput {
   homeworkAssignments?: HomeworkAssignment[];
   quickRecordPresets?: QuickRecordPreset[];
   communicationDrafts?: CommunicationDraft[];
+  activityEvents?: ActivityEvent[];
   settings?: Record<string, unknown>;
 }
 
@@ -113,6 +114,8 @@ function toLegacyStudent(student: AppStudent, previous?: Record<string, unknown>
     exams: student.exams,
     dormitoryId: student.dormitoryId,
     aiComments: student.aiComments || previous?.aiComments || {},
+    enrollmentStatus: student.enrollmentStatus || "active",
+    archivedAt: student.archivedAt,
   };
 }
 
@@ -282,7 +285,7 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
   return syncedStudents;
 }
 
-export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, settings }: PersistSnapshotInput): boolean {
+export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents, settings }: PersistSnapshotInput): boolean {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -307,6 +310,7 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSetti
     homeworkAssignments: homeworkAssignments ?? (Array.isArray(baseState.homeworkAssignments) ? baseState.homeworkAssignments : []),
     quickRecordPresets: quickRecordPresets ?? (Array.isArray(baseState.quickRecordPresets) ? baseState.quickRecordPresets : []),
     communicationDrafts: communicationDrafts ?? (Array.isArray(baseState.communicationDrafts) ? baseState.communicationDrafts : []),
+    activityEvents: activityEvents ?? (Array.isArray(baseState.activityEvents) ? baseState.activityEvents : []),
     seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams: Array.isArray(baseState.savedExams) ? baseState.savedExams : [],
     exams: Array.isArray(baseState.exams) ? baseState.exams : [],

@@ -1,6 +1,28 @@
 export type StudentId = string;
 export type Gender = "男" | "女" | "";
 
+export type BusinessDomain = "student" | "attendance" | "followup" | "homework" | "dormitory" | "score" | "communication" | "fund" | "seat" | "draw" | "schedule" | "ai";
+
+export interface BusinessEntityRef {
+  domain: BusinessDomain;
+  entityId: string;
+  subEntityId?: string;
+  studentId?: StudentId;
+  date?: string;
+}
+
+export type ActivityAction = "created" | "updated" | "status_changed" | "archived" | "restored" | "shared" | "deleted";
+
+export interface ActivityEvent {
+  id: string;
+  action: ActivityAction;
+  ref: BusinessEntityRef;
+  studentIds: StudentId[];
+  title: string;
+  detail: string;
+  occurredAt: string;
+}
+
 export type RecordType = "reward" | "punish" | "note";
 
 export interface StudentRecord {
@@ -61,6 +83,8 @@ export interface HomeworkAssignment {
   dueDate: string;
   note: string;
   studentStates: Record<StudentId, HomeworkStudentState>;
+  lifecycle?: "active" | "closed" | "archived";
+  participantStudentIds?: StudentId[];
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +99,10 @@ export interface CommunicationDraft {
   content: string;
   generatedBy: "local" | "ai";
   sourceDigest: string;
+  deliveryStatus?: "draft" | "shared";
+  channel?: "家长群" | "私聊" | "电话记录" | "纸质" | "其他";
+  sharedAt?: string;
+  deliveryNote?: string;
   updatedAt: string;
 }
 
@@ -191,7 +219,10 @@ export interface FollowupTask {
   updatedAt: string;
   completedAt?: string;
   lastNotifiedAt?: string;
-  sourceRef?: { domain: "dormitory" | "attendance" | "ai" | "homework" | "score"; entityId: string };
+  sourceRef?: BusinessEntityRef;
+  resolutionNote?: string;
+  resolutionUpdatedAt?: string;
+  continuedFromTaskId?: string;
 }
 
 export interface DrawSession {
@@ -456,6 +487,8 @@ export interface AppStudent {
   exams: StudentExamSummary[];
   dormitoryId?: string;
   aiComments?: unknown;
+  enrollmentStatus?: "active" | "archived";
+  archivedAt?: string;
 }
 
 export interface SeatManagerState {
@@ -474,6 +507,7 @@ export interface SeatManagerState {
   homeworkAssignments: HomeworkAssignment[];
   quickRecordPresets: QuickRecordPreset[];
   communicationDrafts: CommunicationDraft[];
+  activityEvents: ActivityEvent[];
   seatHistory: SeatHistorySnapshot[];
   savedExams: unknown[];
   exams: unknown[];

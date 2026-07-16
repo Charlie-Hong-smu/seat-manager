@@ -27,5 +27,7 @@ describe("daily management", () => {
     const task = createFollowupTask({ studentId: "s1", title: "处理", source: "dormitory", sourceRef });
     expect(findOpenLinkedTask([task], "s1", sourceRef)?.id).toBe(task.id);
     expect(findOpenLinkedTask([{ ...task, status: "completed" }], "s1", sourceRef)).toBeUndefined();
+    const questionTask = createFollowupTask({ studentId: "s1", title: "第1题", source: "score", sourceRef: { domain: "score", entityId: "exam-1", subEntityId: "q1" } });
+    expect(findOpenLinkedTask([questionTask], "s1", { domain: "score", entityId: "exam-1", subEntityId: "q2" })).toBeUndefined();
   });
 });

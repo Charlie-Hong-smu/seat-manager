@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileUp, PanelLeftClose, PanelLeftOpen, Sparkles, Trash2, X } from "lucide-react";
 
 import { hasStoredAiScoreMappingAuth, suggestScoreMappingWithAi, type AiScoreMappingSuggestion } from "../../state/aiScoreMappingService";
@@ -13,7 +13,8 @@ import {
   type ScoreMapping,
 } from "../../state/scoreImport";
 import type { AiClassTrendResult } from "../../state/aiTrendService";
-import type { AppStudent, GradeExam, GradeItemAnalysis, SavedGradeExamRecord, ScoreImportDraft } from "../../state/types";
+import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuestionDefinition, SavedGradeExamRecord, ScoreImportDraft, StudentId } from "../../state/types";
+import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
 import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, IconButton, SelectMenu, UnderlineTabs } from "../ui";
@@ -34,6 +35,10 @@ export function ScoresWorkspace({
   studentAdviceProgress,
   onSaveItemAnalysis,
   onCreateScoreFollowup,
+  onCreateQuestionFollowups,
+  tasks,
+  initialTarget,
+  onOpenTask,
 }: {
   exams: GradeExam[];
   students: AppStudent[];
@@ -55,6 +60,10 @@ export function ScoresWorkspace({
   };
   onSaveItemAnalysis: (examId: string, itemAnalysis: GradeItemAnalysis) => boolean;
   onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => void;
+  onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => void;
+  tasks: FollowupTask[];
+  initialTarget?: TimelineTarget;
+  onOpenTask?: (taskId: string) => void;
 }) {
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
   const [scoreRows, setScoreRows] = useState<string[][]>([]);
@@ -81,6 +90,9 @@ export function ScoresWorkspace({
   const [pendingDeleteExam, setPendingDeleteExam] = useState<GradeExam | null>(null);
   const [deleteExamError, setDeleteExamError] = useState("");
   const [scoreView, setScoreView] = useState<"overview" | "items">("overview");
+  useEffect(() => {
+    if (initialTarget?.entityId && initialTarget.subEntityId) setScoreView("items");
+  }, [initialTarget]);
 
   async function readScoreFile(file?: File) {
     if (!file) return;
@@ -429,7 +441,7 @@ export function ScoresWorkspace({
 
         <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
           <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-white pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
-          {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} /> : <ScoreItemAnalysisPanel exams={exams} students={students} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup}/>}
+          {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={initialTarget?.entityId} initialQuestionId={initialTarget?.subEntityId}/>}
         </main>
       </div>
       {mappingModalOpen && manualMapping && (
