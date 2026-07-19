@@ -115,6 +115,55 @@ test("preloads the comment workbench and keeps its full-screen background stable
   await expect(dialog).toBeHidden();
 });
 
+test("selected comment text is refined only after teacher confirmation", async ({ page }) => {
+  await page.route("**/refine-comment", async route => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      action: "polish",
+      selectedText: "她能清楚说明解题过程",
+    });
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ replacement: "她能够条理清晰地说明解题思路" }),
+    });
+  });
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("选区测试学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "评语工作台" }).click();
+  const dialog = page.getByRole("dialog", { name: "评语工作台" });
+  const editor = dialog.getByPlaceholder(/也可以选中文字/);
+  const original = "在数学学习中，她能清楚说明解题过程，也愿意尝试不同方法。";
+  await editor.fill(original);
+  await editor.evaluate((element, selectedText) => {
+    const textarea = element as HTMLTextAreaElement;
+    const start = textarea.value.indexOf(selectedText);
+    textarea.focus();
+    textarea.setSelectionRange(start, start + selectedText.length);
+    textarea.dispatchEvent(new Event("select", { bubbles: true }));
+    document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
+  }, "她能清楚说明解题过程");
+
+  await dialog.getByRole("button", { name: "优化表达", exact: true }).click();
+  await expect(dialog.locator(".selection-ai-glass-bar").first()).toBeVisible();
+  await expect(dialog.getByText("正在优化选中文字", { exact: true })).toHaveCount(0);
+  const suggestion = dialog.getByRole("region", { name: "AI 局部修改建议" });
+  await expect(suggestion).toContainText("她能够条理清晰地说明解题思路");
+  await expect(dialog.locator(".selection-ai-inline-old")).toHaveText("她能清楚说明解题过程");
+  await expect(dialog.locator(".selection-ai-inline-new")).toHaveText("她能够条理清晰地说明解题思路");
+  await expect(editor).toHaveValue(original);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("seat-manager-ai-comment-draft:")))).toEqual([]);
+
+  await suggestion.getByRole("button", { name: "应用替换" }).click();
+  await expect(editor).toHaveValue("在数学学习中，她能够条理清晰地说明解题思路，也愿意尝试不同方法。");
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("seat-manager-ai-comment-draft:")))).toEqual([]);
+
+  await dialog.getByTitle("保存").click();
+  expect(await page.evaluate(() => Object.keys(localStorage).some(key => key.startsWith("seat-manager-ai-comment-draft:")))).toBe(true);
+});
+
 test("global AI companion keeps one workspace conversation across pages and small screens", async ({ page }) => {
   let assistantCalls = 0;
   await page.route("**/chat-assistant", async route => {

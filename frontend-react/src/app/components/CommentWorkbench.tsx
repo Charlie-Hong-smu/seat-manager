@@ -19,6 +19,12 @@ import {
   X,
 } from "lucide-react";
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
+import {
+  COMMENT_REFINEMENT_ACTIONS,
+  refineCommentSelection,
+  replaceCommentSelection,
+  type CommentRefinementAction,
+} from "../state/aiCommentRefinementService";
 import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
 import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
@@ -29,7 +35,7 @@ import {
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
-import { AiGenerationPanel, SegmentedControl, useAppDialog } from "./ui";
+import { AiGenerationPanel, Button, SegmentedControl, useAppDialog } from "./ui";
 import {
   addCommentCustomOption,
   COMMENT_LENGTH_MODES,
@@ -59,6 +65,56 @@ interface CommentState {
 type CommentFilterMode = "all" | "pending" | "needsInfo";
 type WorkbenchMode = "single" | "batch";
 type SingleGenerationPhase = "idle" | "loading" | "revealing";
+type RefinementPhase = "idle" | "loading" | "ready";
+
+interface CommentTextSelection {
+  start: number;
+  end: number;
+  text: string;
+  actionLeft: number;
+  actionTop: number;
+  selectionRects: Array<{ left: number; top: number; width: number; height: number }>;
+}
+
+function measureSelectionPosition(textarea: HTMLTextAreaElement, selectionStart: number, selectionEnd: number) {
+  const computed = window.getComputedStyle(textarea);
+  const mirror = document.createElement("div");
+  Object.assign(mirror.style, {
+    position: "fixed",
+    left: "-10000px",
+    top: "0",
+    width: `${textarea.offsetWidth}px`,
+    boxSizing: computed.boxSizing,
+    whiteSpace: "pre-wrap",
+    overflowWrap: "break-word",
+    font: computed.font,
+    letterSpacing: computed.letterSpacing,
+    lineHeight: computed.lineHeight,
+    padding: computed.padding,
+    border: computed.border,
+  });
+  mirror.appendChild(document.createTextNode(textarea.value.slice(0, selectionStart)));
+  const selectedSpan = document.createElement("span");
+  selectedSpan.textContent = textarea.value.slice(selectionStart, selectionEnd) || "\u200b";
+  mirror.appendChild(selectedSpan);
+  document.body.appendChild(mirror);
+  const mirrorRect = mirror.getBoundingClientRect();
+  const selectionRects = Array.from(selectedSpan.getClientRects()).map(rect => ({
+    left: rect.left - mirrorRect.left - textarea.scrollLeft,
+    top: rect.top - mirrorRect.top - textarea.scrollTop,
+    width: Math.max(4, rect.width),
+    height: rect.height,
+  })).filter(rect => rect.top + rect.height > 0 && rect.top < textarea.clientHeight);
+  const anchor = selectionRects[selectionRects.length - 1] || { left: 8, top: 8, width: 4, height: 28 };
+  const rawLeft = anchor.left;
+  const rawTop = anchor.top + anchor.height + 8;
+  mirror.remove();
+  return {
+    left: Math.min(Math.max(8, rawLeft), Math.max(8, textarea.clientWidth - 238)),
+    top: Math.min(Math.max(8, rawTop), Math.max(8, textarea.clientHeight - 42)),
+    selectionRects,
+  };
+}
 
 function buildInitialComments(students: AppStudent[], failedIds: StudentId[] = []): CommentState[] {
   const failedSet = new Set(failedIds);
@@ -141,6 +197,9 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const [aiStatus, setAiStatus] = useState("AI 会使用学生成绩、标签和教师补充评价生成。");
   const [singleGenerationPhase, setSingleGenerationPhase] = useState<SingleGenerationPhase>("idle");
   const [displayedCommentText, setDisplayedCommentText] = useState(() => comments[0]?.text || "");
+  const [commentSelection, setCommentSelection] = useState<CommentTextSelection | null>(null);
+  const [refinementPhase, setRefinementPhase] = useState<RefinementPhase>("idle");
+  const [refinementSuggestion, setRefinementSuggestion] = useState("");
   const [customWordCount, setCustomWordCount] = useState(120);
   const [customMaterialCriterionId, setCustomMaterialCriterionId] = useState("");
   const [customMaterialLabel, setCustomMaterialLabel] = useState("");
@@ -150,6 +209,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const [exportFormat, setExportFormat] = useState<"csv" | "txt">("csv");
   const pauseRequested = useRef(false);
   const workbenchRef = useRef<HTMLDivElement>(null);
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentRevealFrame = useRef<number | null>(null);
   const batchProgress = batchState.total ? Math.round((batchState.done / batchState.total) * 100) : 0;
   const resumableCount = batchState.queue.length + batchState.failed.length;
@@ -210,10 +270,19 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     }
     setSingleGenerationPhase("idle");
     setDisplayedCommentText(selectedComment?.text || "");
+    setCommentSelection(null);
+    setRefinementPhase("idle");
+    setRefinementSuggestion("");
     return () => {
       if (commentRevealFrame.current !== null) window.cancelAnimationFrame(commentRevealFrame.current);
     };
   }, [selectedComment?.text, selectedId]);
+
+  useEffect(() => {
+    setCommentSelection(null);
+    setRefinementPhase("idle");
+    setRefinementSuggestion("");
+  }, [selectedId]);
 
   useEffect(() => {
     if (singleGenerationPhase === "idle") setDisplayedCommentText(selectedComment?.text || "");
@@ -223,6 +292,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     if (event.key === "Escape") {
       event.preventDefault();
       if (showExportModal) setShowExportModal(false);
+      else if (commentSelection || refinementPhase !== "idle") dismissCommentRefinement();
       else onClose();
       return;
     }
@@ -244,6 +314,81 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
 
   function updateComment(id: StudentId, patch: Partial<CommentState>) {
     setComments(prev => prev.map(c => c.studentId === id ? { ...c, ...patch } : c));
+  }
+
+  function dismissCommentRefinement() {
+    setCommentSelection(null);
+    setRefinementPhase("idle");
+    setRefinementSuggestion("");
+  }
+
+  function handleCommentSelection() {
+    const textarea = commentTextareaRef.current;
+    if (!textarea || singleGenerationPhase !== "idle" || refinementPhase === "loading") return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value.slice(start, end);
+    if (start === end || !text.trim()) {
+      dismissCommentRefinement();
+      return;
+    }
+    const position = measureSelectionPosition(textarea, start, end);
+    setCommentSelection({ start, end, text, actionLeft: position.left, actionTop: position.top, selectionRects: position.selectionRects });
+    setRefinementPhase("idle");
+    setRefinementSuggestion("");
+  }
+
+  async function requestCommentRefinement(action: CommentRefinementAction) {
+    if (!selectedStudent || !selectedComment || !commentSelection || refinementPhase === "loading") return;
+    if (commentSelection.text.length > 600) {
+      setAiStatus("一次最多优化 600 个字，请缩小选中文字范围。");
+      return;
+    }
+    setRefinementPhase("loading");
+    setRefinementSuggestion("");
+    const actionLabel = COMMENT_REFINEMENT_ACTIONS.find(item => item.value === action)?.label || "优化表达";
+    setAiStatus(`正在${actionLabel}选中的文字，原文不会被自动替换。`);
+    try {
+      const result = await refineCommentSelection({
+        studentId: selectedStudent.id,
+        action,
+        selectedText: commentSelection.text,
+        contextBefore: selectedComment.text.slice(0, commentSelection.start),
+        contextAfter: selectedComment.text.slice(commentSelection.end),
+        accessCode,
+        remember: rememberAuth,
+      });
+      setRefinementSuggestion(result.replacement);
+      setRefinementPhase("ready");
+      setAiStatus("AI 已给出局部修改建议，请确认后再应用到当前草稿。");
+    } catch (error) {
+      setRefinementPhase("idle");
+      setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
+    }
+  }
+
+  function applyCommentRefinement() {
+    if (!selectedComment || !commentSelection || !refinementSuggestion) return;
+    if (selectedComment.text.slice(commentSelection.start, commentSelection.end) !== commentSelection.text) {
+      setAiStatus("评语内容已经变化，请重新选择要优化的文字。");
+      dismissCommentRefinement();
+      return;
+    }
+    const nextText = replaceCommentSelection(
+      selectedComment.text,
+      commentSelection.start,
+      commentSelection.end,
+      refinementSuggestion,
+    );
+    const caretPosition = commentSelection.start + refinementSuggestion.length;
+    setDisplayedCommentText(nextText);
+    updateComment(selectedId, { text: nextText, generated: Boolean(nextText) });
+    dismissCommentRefinement();
+    setAiStatus("已应用到当前草稿；请继续检查，保存后才会写入评语记录。");
+    window.requestAnimationFrame(() => {
+      commentTextareaRef.current?.focus();
+      commentTextareaRef.current?.setSelectionRange(caretPosition, caretPosition);
+    });
   }
 
   function persistRubric(next: CommentRubric) {
@@ -934,7 +1079,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col px-4 py-4 xl:px-6 xl:py-5">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 xl:px-6 xl:py-5">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-gray-900">评语正文</h3>
@@ -943,21 +1088,86 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               </div>
               <div className="relative min-h-[260px] flex-1 overflow-hidden rounded-[var(--app-radius-sm)]">
                 <textarea
+                  ref={commentTextareaRef}
                   value={displayedCommentText}
                   readOnly={singleGenerationPhase !== "idle"}
+                  onSelect={handleCommentSelection}
                   onChange={event => {
+                    dismissCommentRefinement();
                     setDisplayedCommentText(event.target.value);
                     updateComment(selectedId, { text: event.target.value });
                   }}
-                  placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。"
+                  placeholder="点击「生成评语」后会在这里显示；也可以选中文字，让 AI 局部优化表达。"
+                  aria-describedby="comment-selection-ai-hint"
                   className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-5 py-4 text-[15px] leading-7 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
                 />
+                {commentSelection && singleGenerationPhase === "idle" && refinementPhase === "idle" && (
+                  <div
+                    role="toolbar"
+                    aria-label="AI 优化选中文字"
+                    className="selection-ai-actions absolute z-20 flex items-center gap-1 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white p-1 shadow-[var(--app-shadow-float)]"
+                    style={{ left: commentSelection.actionLeft, top: commentSelection.actionTop }}
+                  >
+                    {COMMENT_REFINEMENT_ACTIONS.map(action => (
+                      <button
+                        key={action.value}
+                        type="button"
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => requestCommentRefinement(action.value)}
+                        className="h-8 rounded-[6px] px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-violet-50 hover:text-violet-700"
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                    <button type="button" aria-label="关闭 AI 选区操作" onMouseDown={event => event.preventDefault()} onClick={dismissCommentRefinement} className="grid h-8 w-8 place-items-center rounded-[6px] text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+                {commentSelection && refinementPhase === "loading" && commentSelection.selectionRects.map((rect, index) => (
+                  <span
+                    key={`${rect.left}-${rect.top}-${index}`}
+                    aria-hidden="true"
+                    className="selection-ai-glass-bar pointer-events-none absolute z-20 rounded-[5px]"
+                    style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+                  />
+                ))}
+                {commentSelection && refinementPhase === "ready" && refinementSuggestion && (
+                  <span
+                    aria-hidden="true"
+                    className="selection-ai-inline-diff pointer-events-none absolute z-20 inline-flex max-w-[calc(100%-24px)] items-center gap-2 overflow-hidden rounded-[6px] border border-blue-100 bg-white/90 px-1.5 py-0.5 text-[15px] leading-7 shadow-sm backdrop-blur-md"
+                    style={{
+                      left: commentSelection.selectionRects[0]?.left ?? 8,
+                      top: commentSelection.selectionRects[0]?.top ?? 8,
+                    }}
+                  >
+                    <span className="selection-ai-inline-old relative shrink-0 text-gray-400">{commentSelection.text}</span>
+                    <span className="selection-ai-inline-new min-w-0 truncate font-medium text-gray-800">{refinementSuggestion}</span>
+                  </span>
+                )}
                 {singleGenerationPhase === "loading" && (
                   <div className="absolute inset-0"><AiGenerationPanel compact title={batchRunning ? "正在批量生成评语" : "正在生成评语"} steps={["整理学生素材", "组织评语结构", "生成评语草稿"]} /></div>
                 )}
                 {singleGenerationPhase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
               </div>
-              <div className="mt-3 rounded-[var(--app-radius-sm)] bg-blue-50/70 px-3 py-2 text-xs leading-5 text-blue-700" role="status">{aiStatus}</div>
+              <p id="comment-selection-ai-hint" className="mt-2 shrink-0 text-xs text-gray-400">选中文字后可使用“优化表达 / 更具体 / 缩短”；AI 只生成建议，不会自动覆盖或保存。</p>
+              {refinementPhase === "ready" && commentSelection && refinementSuggestion && (
+                <section aria-label="AI 局部修改建议" aria-live="polite" className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] border border-violet-200 bg-violet-50/50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-violet-700"><Sparkles className="h-3.5 w-3.5" />AI 局部修改建议</div>
+                    <span className="text-[11px] font-semibold text-violet-400">应用前由教师确认</span>
+                  </div>
+                  <div className="mt-2 grid gap-2 text-sm leading-6 lg:grid-cols-2">
+                    <div className="rounded-[var(--app-radius-sm)] bg-white/80 px-3 py-2 text-gray-500"><span className="mb-1 block text-[11px] font-bold text-gray-400">原文</span>{commentSelection.text}</div>
+                    <div className="rounded-[var(--app-radius-sm)] bg-white px-3 py-2 text-gray-800 shadow-sm"><span className="mb-1 block text-[11px] font-bold text-violet-600">建议</span>{refinementSuggestion}</div>
+                  </div>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button type="button" size="sm" variant="ghost" onClick={dismissCommentRefinement}>保留原文</Button>
+                    <Button type="button" size="sm" onClick={applyCommentRefinement} className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300">应用替换</Button>
+                  </div>
+                </section>
+              )}
+              <div className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] bg-blue-50/70 px-3 py-2 text-xs leading-5 text-blue-700" role="status">{aiStatus}</div>
             </div>
 
             <div className="shrink-0 border-t border-[var(--app-border)] bg-white px-4 py-3 xl:px-6">

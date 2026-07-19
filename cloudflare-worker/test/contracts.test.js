@@ -234,3 +234,29 @@ test("weekly and item analysis routes validate and sanitize structured AI output
     globalThis.fetch = originalFetch;
   }
 });
+
+test("comment refinement validates the selection and returns suggestion text only", async () => {
+  const codeHash = await sha256("COMMENT-REFINE-AI");
+  const key = `seat-manager:license:${codeHash}`;
+  const kv = createKv({ [key]: { licenseId: "teacher-comment-refine", status: "active", maxDevices: 3, aiEnabled: true, aiDailyLimit: 30, devices: [] } });
+  const env = { SEAT_MANAGER_KV: kv, PRODUCT_TOKEN_SECRET: "product-secret", DEEPSEEK_API_KEY: "test-key" };
+  const auth = await worker.fetch(post("/license/auth", { productCode: "COMMENT-REFINE-AI", deviceId: "device-1" }), env);
+  const { token } = await auth.json();
+  assert.equal((await worker.fetch(post("/refine-comment", { action: "polish", selectedText: "", contextBefore: "", contextAfter: "", studentId: "s1" }, token), env)).status, 400);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ choices: [{ message: { content: JSON.stringify({ replacement: "“能够清楚地说明解题思路。”" }) } }] });
+  try {
+    const response = await worker.fetch(post("/refine-comment", {
+      studentId: "s1",
+      action: "polish",
+      selectedText: "能说清楚解题过程",
+      contextBefore: "在数学学习中，",
+      contextAfter: "也愿意尝试不同方法。",
+    }, token), env);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { replacement: "能够清楚地说明解题思路。" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

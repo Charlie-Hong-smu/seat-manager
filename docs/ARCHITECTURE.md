@@ -98,6 +98,7 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 - Zhang 与 Commercial edition 都优先复用产品授权 token；一次授权同时控制软件登录、设备、云同步和 AI 权益。旧独立 AI 使用码只作为后端兼容路径保留，不再是两版前端的正常流程。
 - AI service 负责业务 payload、缓存和返回类型；公共认证由 `AiApiClient` 负责。
 - AI 只能生成建议。写入档案、评语素材或记录必须由老师点击确认。
+- 评语工作台的 `/refine-comment` 只接收当前选区、有限相邻语境和稳定学生 ID，返回单段替换建议；前端不得在响应到达时自动覆盖或持久化，必须由老师先点“应用替换”，再沿用既有保存动作写入草稿。
 - 周报与题目分析采用“本地先算、按需 AI 增强”：`teacherAiService.ts` 按事实签名缓存结果；`/generate-weekly-draft` 和 `/analyze-score-items` 不在页面打开时自动调用。题目分析只向 Worker 发送本地统计、知识点和稳定学生 ID，不发送整个工作簿。
 - Worker 公共路由新增或删除时，必须同时通过 `cloudflare-worker/test/routes.test.js`。
 - AI handler 在 payload 校验后、调用上游前统一经过 `AiRequestContext`/usage 边界：Cloudflare Rate Limiting 负责短窗口保护，KV 负责尽力而为的 UTC 日计数；KV 故障告警后放行。

@@ -34,6 +34,7 @@ export default {
             chatAssistant: handleChatAssistant,
             studentFollowup: handleStudentFollowup,
             generateComment: handleGenerateStudentComment,
+            refineComment: handleRefineStudentComment,
             suggestScoreMapping: handleSuggestScoreMapping,
             suggestRosterMapping: handleSuggestRosterMapping,
             generateWeeklyDraft: handleGenerateWeeklyDraft,
@@ -970,6 +971,53 @@ async function handleGenerateStudentComment(request, env, corsHeaders) {
   }
 }
 
+async function handleRefineStudentComment(request, env, corsHeaders) {
+  if (!env.DEEPSEEK_API_KEY || (!env.TOKEN_SECRET && !env.PRODUCT_TOKEN_SECRET)) {
+    return jsonResponse({ error: "service_unavailable" }, 503, corsHeaders);
+  }
+
+  const verified = await verifyAiRequest(getBearerToken(request), env);
+  if (!verified.ok) return jsonResponse({ error: "unauthorized" }, 401, corsHeaders);
+  const body = await readJsonBody(request, 8 * 1024);
+  if (!body.ok || !isValidCommentRefinementPayload(body.value)) {
+    return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  const limitResponse = await getAiLimitResponse(env, verified, corsHeaders);
+  if (limitResponse) return limitResponse;
+
+  const instructions = {
+    polish: "让表达更自然、准确、温和，保持原意和事实不变。",
+    specific: "只依据原文和相邻语境把动作或表现说得更清楚；没有事实支撑时不得新增例子、成绩或判断。",
+    shorten: "删除重复和空泛表达，用更短的文字保留全部事实与原意。",
+  };
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content: `你是谨慎的班主任评语文字编辑。只改写 selectedText，不改写相邻语境，不添加输入中没有的学生事实，不做心理或医学判断。${instructions[body.value.action]}返回 JSON，唯一字段为 replacement；replacement 只放替换文字，不加引号、说明或 Markdown。`,
+          },
+          { role: "user", content: JSON.stringify(body.value) },
+        ],
+      }),
+    });
+    if (!response.ok) return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+    const data = await response.json();
+    const parsed = parseModelJson(data?.choices?.[0]?.message?.content || "");
+    const replacement = sanitizeCommentRefinementResult(parsed);
+    return replacement ? jsonResponse({ replacement }, 200, corsHeaders) : jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  } catch (error) {
+    return jsonResponse({ error: "ai_unavailable" }, 502, corsHeaders);
+  }
+}
+
 async function readJsonBody(request, maxBytes = MAX_BODY_BYTES) {
   const clone = request.clone();
   const text = await clone.text();
@@ -1424,6 +1472,22 @@ function isValidStudentCommentPayload(payload) {
   );
 }
 
+function isValidCommentRefinementPayload(payload) {
+  return Boolean(
+    payload &&
+    typeof payload === "object" &&
+    toText(payload.studentId) &&
+    ["polish", "specific", "shorten"].includes(payload.action) &&
+    typeof payload.selectedText === "string" &&
+    payload.selectedText.trim().length > 0 &&
+    payload.selectedText.length <= 600 &&
+    typeof payload.contextBefore === "string" &&
+    payload.contextBefore.length <= 600 &&
+    typeof payload.contextAfter === "string" &&
+    payload.contextAfter.length <= 600
+  );
+}
+
 function isValidStudentFollowupPayload(payload) {
   const context = payload?.context;
   const student = context?.student;
@@ -1630,6 +1694,14 @@ function sanitizeStudentCommentResult(result, fallbackMissingInfo = [], lengthSe
     needsMoreInfo: Boolean(result.needsMoreInfo) || !comment,
     missingInfo
   };
+}
+
+function sanitizeCommentRefinementResult(result) {
+  return String(result?.replacement || "")
+    .replace(/^\s*[“\"']|[”\"']\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 800);
 }
 
 function toText(value) {

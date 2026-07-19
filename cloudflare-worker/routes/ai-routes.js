@@ -6,6 +6,7 @@ export function createAiPostRoutes(handlers) {
     "/chat-assistant": handlers.chatAssistant,
     "/student-followup": handlers.studentFollowup,
     "/generate-comment": handlers.generateComment,
+    "/refine-comment": handlers.refineComment,
     "/suggest-score-mapping": handlers.suggestScoreMapping,
     "/suggest-roster-mapping": handlers.suggestRosterMapping,
     "/generate-weekly-draft": handlers.generateWeeklyDraft,

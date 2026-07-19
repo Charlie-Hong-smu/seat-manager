@@ -7,6 +7,7 @@ export const PUBLIC_POST_ROUTES = Object.freeze([
   "/chat-assistant",
   "/student-followup",
   "/generate-comment",
+  "/refine-comment",
   "/suggest-score-mapping",
   "/suggest-roster-mapping",
   "/generate-weekly-draft",
