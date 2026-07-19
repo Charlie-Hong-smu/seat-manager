@@ -45,6 +45,7 @@ import { QuickRecordDrawer, type QuickRecordInput } from "./components/QuickReco
 import { normalizeSubjectCatalog } from "./state/teacherWorkbench";
 import { deleteStudentCommentDraft } from "./state/commentStorage";
 import { removeStudentFromCommentBatch } from "./components/commentBatchStorage";
+import { AiAssistantLauncher } from "./components/AiAssistantLauncher";
 
 type AppTab = SidebarTab;
 type StudentAdviceProgress = {
@@ -61,8 +62,20 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 const loadCommentWorkbench = () => import("./components/CommentWorkbench").then((module) => ({ default: module.CommentWorkbench }));
-const loadAiAssistantWorkspace = () => import("./components/AiAssistantWorkspace").then((module) => ({ default: module.AiAssistantWorkspace }));
+const loadAiAssistantCompanion = () => import("./components/AiAssistantWorkspace").then((module) => ({ default: module.AiAssistantCompanion }));
 const loadScoresWorkspace = () => import("./components/workspaces/ScoresWorkspace").then((module) => ({ default: module.ScoresWorkspace }));
+
+const APP_TAB_LABELS: Record<AppTab, string> = {
+  today: "今日",
+  daily: "座位",
+  attendance: "出勤",
+  followups: "任务与作业",
+  dormitories: "宿舍",
+  scores: "成绩",
+  funds: "班费",
+  data: "名单 / 备份",
+  history: "历史",
+};
 
 export default function App() {
   const appDialog = useAppDialog();
@@ -92,7 +105,9 @@ export default function App() {
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
   const [commentWorkbenchTransition, setCommentWorkbenchTransition] = useState<"preparing" | "open" | "closing">("preparing");
   const [CommentWorkbenchComponent, setCommentWorkbenchComponent] = useState<Awaited<ReturnType<typeof loadCommentWorkbench>>["default"] | null>(null);
-  const [aiWorkspaceMounted, setAiWorkspaceMounted] = useState(false);
+  const [aiCompanionMounted, setAiCompanionMounted] = useState(false);
+  const [aiCompanionOpen, setAiCompanionOpen] = useState(false);
+  const [aiCompanionBusy, setAiCompanionBusy] = useState(false);
   const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
   const [selectedHistorySnapshot, setSelectedHistorySnapshot] = useState<SeatHistorySnapshot | null>(null);
   const [shufflePreview, setShufflePreview] = useState<ShuffleCandidate | null>(null);
@@ -213,8 +228,8 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (sidebarTab === "ai") setAiWorkspaceMounted(true);
-  }, [sidebarTab]);
+    if (!loggedIn) setAiCompanionOpen(false);
+  }, [loggedIn]);
 
   useEffect(() => {
     if (!loggedIn || typeof window === "undefined") return;
@@ -854,6 +869,37 @@ export default function App() {
       }
       overlays={
         <>
+          <AiAssistantLauncher
+            open={aiCompanionOpen}
+            busy={aiCompanionBusy}
+            onOpen={() => {
+              setAiCompanionMounted(true);
+              setAiCompanionOpen(true);
+            }}
+          />
+          {aiCompanionMounted && (
+            <RetryableLazy
+              load={loadAiAssistantCompanion}
+              componentProps={{
+                open: aiCompanionOpen,
+                activeSurfaceLabel: selectedStudent ? `学生档案 · ${selectedStudent.name}` : APP_TAB_LABELS[sidebarTab],
+                students,
+                exams: appState.gradeExams,
+                dormitories,
+                fundTransactions,
+                seatOrder,
+                onClose: () => setAiCompanionOpen(false),
+                onBusyChange: setAiCompanionBusy,
+                onSaveStudentRecord: handleSaveAiAssistantRecord,
+                onAppendCommentMaterial: handleAppendAiAssistantMaterial,
+              }}
+              fallback={
+                <div role="status" aria-label="正在打开 AI 助手" className="fixed inset-x-2 bottom-2 top-16 z-[70] grid place-items-center rounded-[var(--app-radius-lg)] border border-violet-100 bg-white text-sm font-semibold text-violet-600 shadow-[var(--app-shadow-float)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-[72px] sm:w-[420px]">
+                  正在打开 AI 助手…
+                </div>
+              }
+            />
+          )}
           {showCommentWorkbench && (
             CommentWorkbenchComponent
               ? <CommentWorkbenchComponent students={students} transitionState={commentWorkbenchTransition} onClose={closeCommentWorkbench} onExitComplete={finishClosingCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />
@@ -1010,10 +1056,6 @@ export default function App() {
             <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, tasks: followupTasks, initialTarget: timelineTarget?.workspace === "scores" ? timelineTarget : undefined, onOpenTask: (taskId: string) => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId }), onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, studentId } }), onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => requestFollowupTask({ studentId: studentIds[0], studentIds, title: `跟进${exam.name} · ${question.label}`, type: "学业关注", description: question.knowledgePoints.length ? `薄弱知识点：${question.knowledgePoints.join("、")}` : `${question.label}得分低于 60%`, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, subEntityId: question.id } }) }} />
           </div>
         )}
-
-        {aiWorkspaceMounted && <div className={sidebarTab === "ai" ? "h-full workspace-tab-enter" : "hidden"}>
-          <RetryableLazy load={loadAiAssistantWorkspace} componentProps={{ active: sidebarTab === "ai", students, exams: appState.gradeExams, dormitories, fundTransactions, seatOrder, onSaveStudentRecord: handleSaveAiAssistantRecord, onAppendCommentMaterial: handleAppendAiAssistantMaterial }} />
-        </div>}
 
         {sidebarTab === "data" && (
           <div className="h-full workspace-tab-enter">

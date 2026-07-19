@@ -115,6 +115,64 @@ test("preloads the comment workbench and keeps its full-screen background stable
   await expect(dialog).toBeHidden();
 });
 
+test("global AI companion keeps one workspace conversation across pages and small screens", async ({ page }) => {
+  let assistantCalls = 0;
+  await page.route("**/chat-assistant", async route => {
+    assistantCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "这是基于当前班级摘要生成的测试建议。",
+        disclaimer: "请由教师结合实际情况确认后使用。",
+        suggestedPrompts: ["还可以关注哪些学生？"],
+      }),
+    });
+  });
+  await login(page);
+
+  const mainNavigation = page.getByRole("navigation", { name: "主导航" });
+  await expect(mainNavigation.getByRole("button", { name: "AI 助手", exact: true })).toHaveCount(0);
+  const launcher = page.getByRole("button", { name: "打开 AI 助手", exact: true });
+  await expect(launcher).toBeVisible();
+  await launcher.click();
+
+  const companion = page.getByRole("dialog", { name: "AI助手浮窗" });
+  await expect(companion).toBeVisible();
+  await expect(companion).toHaveAttribute("aria-modal", "false");
+  await expect(companion.getByText("当前上下文 · 座位", { exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder("输入 AI 授权码")).toHaveCount(0);
+  expect(assistantCalls).toBe(0);
+
+  const composer = companion.getByPlaceholder("输入问题，Enter 发送，Shift+Enter 换行");
+  await composer.fill("请给我一条测试建议");
+  await companion.getByRole("button", { name: "发送", exact: true }).click();
+  await expect(companion.getByText("这是基于当前班级摘要生成的测试建议。", { exact: true })).toBeVisible();
+  expect(assistantCalls).toBe(1);
+
+  await companion.getByRole("button", { name: "关闭AI助手", exact: true }).click();
+  await expect(companion).toBeHidden();
+  await expect(launcher).toBeFocused();
+  await page.getByRole("button", { name: /^成绩/ }).click();
+  await launcher.click();
+  await expect(companion.getByText("当前上下文 · 成绩", { exact: true })).toBeVisible();
+  await expect(companion.getByText("这是基于当前班级摘要生成的测试建议。", { exact: true })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(companion).toBeHidden();
+  await expect(launcher).toBeFocused();
+
+  await page.setViewportSize({ width: 480, height: 800 });
+  await launcher.click();
+  await expect(companion).toBeVisible();
+  await expect(companion).toHaveAttribute("data-transition-state", "open");
+  const companionBox = await companion.boundingBox();
+  expect(companionBox).not.toBeNull();
+  expect(companionBox!.x).toBeLessThanOrEqual(8);
+  expect(companionBox!.width).toBeGreaterThanOrEqual(464);
+  expect(companionBox!.x + companionBox!.width).toBeLessThanOrEqual(480);
+});
+
 test("dormitory periods, custom settings and event dates work together", async ({ page }) => {
   await login(page);
   await page.getByRole("button", { name: /^宿舍/ }).click();

@@ -7,7 +7,6 @@ import {
   LayoutGrid,
   MessageSquareText,
   PanelsTopLeft,
-  Sparkles,
   Wallet,
   CalendarCheck2,
   ListTodo,
@@ -16,7 +15,7 @@ import {
 
 import type { AppStudent, Dormitory, GradeExam, StudentId } from "../state/types";
 
-export type SidebarTab = "today" | "daily" | "attendance" | "followups" | "dormitories" | "scores" | "ai" | "funds" | "data" | "history";
+export type SidebarTab = "today" | "daily" | "attendance" | "followups" | "dormitories" | "scores" | "funds" | "data" | "history";
 
 interface Props {
   activeTab: SidebarTab;
@@ -54,7 +53,6 @@ const NAV_GROUPS: Array<{ label: string; items: NavEntry[] }> = [
     label: "学情分析",
     items: [
       { key: "scores", label: "成绩", icon: <BarChart2 className="h-[18px] w-[18px]" />, getBadge: ({ gradeExams }) => String(gradeExams.length) },
-      { key: "ai", label: "AI 助手", icon: <Sparkles className="h-[18px] w-[18px]" /> },
       { key: "comments", label: "评语工作台", icon: <MessageSquareText className="h-[18px] w-[18px]" /> },
     ],
   },

@@ -20,6 +20,10 @@ test("commercial login uses the real product-login UI with a test-only mocked re
   await expect(page.getByText("今日班务", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "AI 助手", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "AI助手浮窗" })).toBeVisible();
+  await expect(page.getByPlaceholder("输入 AI 授权码")).toHaveCount(0);
 });
 
 test("commercial login reports rejected and full-device licenses", async ({ page }) => {

@@ -26,6 +26,7 @@
 - `hooks/useStudentActions.ts`、`useDormitoryActions.ts`、`useClassFundActions.ts`：App 使用的三个领域 action 组；不得合并成万能 action hook。
 - `components/DormitoryListPanel.tsx`、`DormitoryMembersPanel.tsx`：宿舍周期/列表与成员交互区；事件账本仍由工作区顶层协调。
 - `state/aiAssistantPayload.ts`、`aiAssistantResult.ts`：AI 助手请求裁剪和上游结果清洗；`aiAssistantService.ts` 保持对外 facade。
+- `components/AiAssistantLauncher.tsx`、`AiAssistantWorkspace.tsx`：全局 AI Companion 的轻量常驻入口与按需加载面板；同一组件状态跨业务页保留对话与草稿，并按工作区 ID 复用既有 `seat-manager-ai-assistant-chat:*` 缓存。
 - `state/aiApiClient.ts`：AI token、商用授权复用、代理/直连 fallback 和公共错误语义。
 - `cloudflare-worker/`：授权、手动同步、AI 和授权管理接口。
 - `cloudflare-worker/worker-routes.js`：浏览器可调用的公共路由契约；Netlify 代理直接复用。
@@ -105,7 +106,7 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 
 `vite-plugin-pwa` 为两种 base 生成 manifest 和 service worker。静态应用壳、哈希资源、图标和本地 XLSX 库进入 precache；API、Worker、同步和第三方请求不缓存。发现新 service worker 时只显示提示，用户点击“立即更新”后才刷新。
 
-Scores、AI Assistant 和 Comment Workbench 是非首屏异步模块；登录、应用壳和默认今日页保持同步加载。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.25 MiB，XLSX vendor 单独报告。2026-07 的跨领域闭环增加了离线动作流水、生命周期和共享业务组件后，precache 从 2.20 MiB 小幅上调；入口和异步脚本上限不变，不能以此继续放大首屏。
+Scores、AI Companion 面板和 Comment Workbench 是非首屏异步模块；AI 浮动入口、登录、应用壳和默认今日页保持同步加载。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.25 MiB，XLSX vendor 单独报告。2026-07 的跨领域闭环增加了离线动作流水、生命周期和共享业务组件后，precache 从 2.20 MiB 小幅上调；入口和异步脚本上限不变，不能以此继续放大首屏。
 
 ## 设计原则
 
