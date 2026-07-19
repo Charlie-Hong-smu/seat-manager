@@ -87,7 +87,7 @@ function SeatCard({
       <div
         data-seat-index={seatIndex}
         data-seat-locked={isLocked ? "true" : "false"}
-        className={`seat-card-enter relative h-full min-h-0 overflow-hidden rounded-xl border-2 border-dashed text-xs text-gray-300 select-none transition-[background-color,border-color,box-shadow,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${isLocked ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50/50 hover:-translate-y-px hover:border-blue-200 hover:bg-blue-50/40"} ${isDropTarget ? "border-blue-400 bg-blue-50/80 shadow-[0_0_0_4px_rgba(59,130,246,0.14)]" : ""}`}
+        className={`seat-card-enter relative h-full min-h-0 overflow-hidden rounded-xl border border-dashed text-xs text-gray-300 select-none transition-[background-color,border-color,box-shadow] duration-200 ${isLocked ? "border-amber-200 bg-amber-50/30" : "border-gray-200/80 bg-transparent hover:border-blue-200 hover:bg-blue-50/30"} ${isDropTarget ? "border-blue-400 bg-blue-50/80 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
         style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms`, transform: visualTransform }}
       >
         <span className={`absolute inset-0 grid place-items-center transition-[opacity,transform] duration-200 ease-out ${cardMode === "compact" ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"}`}>空</span>
@@ -119,9 +119,9 @@ function SeatCard({
       onPointerDown={event => {
         if (!isLocked) onPointerDragStart(event, seatIndex);
       }}
-      className={`seat-card-enter relative h-full min-h-0 w-full overflow-hidden rounded-xl border bg-white text-left group transition-[background-color,border-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-sm cursor-pointer ${
+      className={`seat-card-enter relative h-full min-h-0 w-full overflow-hidden rounded-xl bg-[var(--app-surface-muted)] text-left group ring-1 ring-inset transition-[background-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:bg-white hover:shadow-[var(--app-shadow-card)] cursor-pointer ${
         isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-      } ${isLocked ? "border-amber-300 bg-amber-50/30" : "border-gray-200"} ${isDragging ? "opacity-25 ring-2 ring-blue-200" : ""} ${isDropTarget ? "border-blue-400 bg-blue-50/90 shadow-[0_0_0_4px_rgba(59,130,246,0.16),0_12px_28px_rgba(37,99,235,0.14)]" : ""}`}
+      } ${isLocked ? "bg-amber-50/50 ring-amber-300" : "ring-gray-200/80"} ${isDragging ? "opacity-25 ring-2 ring-blue-200" : ""} ${isDropTarget ? "bg-blue-50/90 ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
       style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms`, transform: visualTransform, touchAction: "manipulation" }}
     >
       {/* Lock toggle */}

@@ -153,7 +153,7 @@ export function Sidebar({
         <span
           data-testid="sidebar-active-indicator"
           aria-hidden="true"
-          className={`pointer-events-none absolute top-0 z-0 rounded-[var(--app-radius-sm)] bg-gray-900 shadow-sm transition-[left,right,height,transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${collapsed ? "left-2 right-2" : "left-3 right-3"} ${activeIndicator.ready ? "opacity-100" : "opacity-0"}`}
+          className={`pointer-events-none absolute top-0 z-0 rounded-[var(--app-radius-sm)] bg-[var(--app-primary)] transition-[left,right,height,transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${collapsed ? "left-2 right-2" : "left-3 right-3"} ${activeIndicator.ready ? "opacity-100" : "opacity-0"}`}
           style={{
             height: activeIndicator.height,
             transform: `translate3d(0, ${activeIndicator.top}px, 0)`,

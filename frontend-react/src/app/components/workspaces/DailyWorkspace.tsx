@@ -121,14 +121,14 @@ export function DailyWorkspace({
       <div className="daily-toolbar flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--app-border)] bg-white px-4 py-3">
         <div className="daily-toolbar-primary flex flex-1 items-center gap-3">
           <div className="flex shrink-0 items-center gap-2">
-            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-blue-50 px-2.5 text-xs font-bold text-blue-700">
+            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-gray-100 px-2.5 text-xs font-bold text-gray-600">
               <Users className="h-3.5 w-3.5" />{students.length} 人
             </span>
-            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-cyan-50 px-2.5 text-xs font-bold text-cyan-700">
+            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-gray-100 px-2.5 text-xs font-bold text-gray-600">
               <LayoutGrid className="h-3.5 w-3.5" />{seatOrder.length} 座
             </span>
-            <button onClick={onOpenAttendance} className="h-8 rounded-xl bg-amber-50 px-2.5 text-xs font-bold text-amber-700">今日异常 {abnormalAttendance}</button>
-            <button onClick={onOpenFollowups} className="h-8 rounded-xl bg-rose-50 px-2.5 text-xs font-bold text-rose-700">待跟进 {dueTasks}</button>
+            <button onClick={onOpenAttendance} className={`h-8 rounded-[var(--app-radius-sm)] px-2.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25 ${abnormalAttendance > 0 ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>今日异常 {abnormalAttendance}</button>
+            <button onClick={onOpenFollowups} className={`h-8 rounded-[var(--app-radius-sm)] px-2.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25 ${dueTasks > 0 ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>待跟进 {dueTasks}</button>
           </div>
 
         </div>
@@ -145,7 +145,7 @@ export function DailyWorkspace({
           />
           <Button size="sm" onClick={() => setShowSeatSettings(true)}>
             <Shuffle className="h-4 w-4" />排座
-            {activeConstraintCount > 0 && <span className="rounded-full bg-white/20 px-1.5 text-[10px]">{activeConstraintCount}</span>}
+            {activeConstraintCount > 0 && <span className="text-[11px] font-medium text-blue-100">· {activeConstraintCount} 条规则</span>}
           </Button>
           <Button size="sm" variant="ghost" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}>
             <Undo2 className="h-4 w-4" />撤销
