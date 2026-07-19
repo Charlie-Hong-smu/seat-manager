@@ -763,7 +763,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
 
   if (!selectedStudent || !selectedComment) {
     return (
-      <div role="dialog" aria-modal="true" aria-label="评语工作台" data-transition-state={transitionState} onAnimationEnd={event => { if (event.target === event.currentTarget && transitionState === "closing") onExitComplete(); }} className="comment-workbench-shell fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-50">
+      <div role="dialog" aria-modal="true" aria-label="评语工作台" data-transition-state={transitionState} onAnimationEnd={event => { if (event.target === event.currentTarget && transitionState === "closing") onExitComplete(); }} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-gray-50">
         <div className="comment-workbench-enter-item shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
           <h2 className="text-gray-900">评语工作台</h2>
           <button aria-label="关闭评语工作台" onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
@@ -776,7 +776,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   }
 
   return (
-    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} data-transition-state={transitionState} onKeyDown={handleWorkbenchKeyDown} onAnimationEnd={event => { if (event.target === event.currentTarget && transitionState === "closing") onExitComplete(); }} className="comment-workbench-shell fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
+    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} data-transition-state={transitionState} onKeyDown={handleWorkbenchKeyDown} onAnimationEnd={event => { if (event.target === event.currentTarget && transitionState === "closing") onExitComplete(); }} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
       <header className="comment-workbench-enter-item flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-white px-4">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="shrink-0 text-base font-bold text-gray-900">评语工作台</h2>
@@ -815,7 +815,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
         </div>
       </header>
 
-      <div className="comment-workbench-enter-item grid min-h-0 flex-1 grid-cols-[184px_minmax(460px,1fr)_340px] overflow-hidden xl:grid-cols-[216px_minmax(460px,1fr)_360px]">
+      <div className="comment-workbench-enter-item grid min-h-0 flex-1 grid-cols-[184px_minmax(520px,1fr)_300px] overflow-hidden xl:grid-cols-[216px_minmax(680px,1fr)_340px]">
         <aside className="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-white">
           <div className="space-y-3 border-b border-[var(--app-border)] p-3">
             <div className="relative grid grid-cols-2 gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1" role="group" aria-label="评语处理模式">
@@ -910,118 +910,85 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           </div>
         </aside>
 
-        <main key={`detail-${selectedId}`} className="comment-detail-enter flex min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--app-bg)] p-3 xl:p-4">
-          <section className="shrink-0 rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-4 shadow-[var(--app-shadow-card)]">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-base font-bold text-white">{selectedInitial}</div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-bold text-gray-900">{selectedStudent.name}</h3>
-                    {selectedStudent.gender && <span className="text-xs font-semibold text-gray-400">{selectedStudent.gender}</span>}
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-bold ${getCommentStatus(selectedComment).badge}`}>{getCommentStatus(selectedComment).label}</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-                    <span>{latestExam?.name || "暂无考试"}</span>
-                    <span>总分 <b className="text-gray-700">{latestExam?.total ?? "—"}</b></span>
-                    <span>{latestExam?.rank ? `第 ${latestExam.rank} 名` : "暂无排名"}</span>
-                    {latestExam && <span>优势 <b className="text-emerald-600">{getBestSubject(latestExam.scores) || "—"}</b> · 待提升 <b className="text-amber-600">{getWeakSubject(latestExam.scores) || "—"}</b></span>}
+        <main key={`editor-${selectedId}`} className="comment-detail-enter min-h-0 min-w-0 bg-[var(--app-bg)] p-3 xl:p-4">
+          <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-card)]">
+            <div className="shrink-0 border-b border-[var(--app-border)] px-4 py-3.5 xl:px-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-base font-bold text-white">{selectedInitial}</div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-bold text-gray-900">{selectedStudent.name} · 学期评语</h3>
+                      {selectedStudent.gender && <span className="text-xs font-semibold text-gray-400">{selectedStudent.gender}</span>}
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-bold ${getCommentStatus(selectedComment).badge}`}>{getCommentStatus(selectedComment).label}</span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                      <span>{latestExam?.name || "暂无考试"}</span>
+                      <span>总分 <b className="text-gray-700">{latestExam?.total ?? "—"}</b></span>
+                      <span>{latestExam?.rank ? `第 ${latestExam.rank} 名` : "暂无排名"}</span>
+                      {latestExam && <span>优势 <b className="text-emerald-600">{getBestSubject(latestExam.scores) || "—"}</b> · 待提升 <b className="text-amber-600">{getWeakSubject(latestExam.scores) || "—"}</b></span>}
+                    </div>
                   </div>
                 </div>
+                <button type="button" onClick={() => onSelectStudent(selectedStudent)} className="h-9 shrink-0 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50">查看详情</button>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button type="button" onClick={() => onSelectStudent(selectedStudent)} className="h-9 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50">查看详情</button>
-                <button type="button" onClick={() => setShowFollowupPanel(value => !value)} className={`flex h-9 items-center gap-1.5 rounded-[var(--app-radius-sm)] px-3 text-sm font-semibold transition-colors ${showFollowupPanel ? "bg-violet-600 text-white" : "border border-violet-100 bg-violet-50 text-violet-700 hover:bg-violet-100"}`}>
-                  <Sparkles className="h-4 w-4" />AI 素材
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col px-4 py-4 xl:px-6 xl:py-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">评语正文</h3>
+                </div>
+                <span className="shrink-0 text-xs tabular-nums text-gray-400">{selectedComment.text.length} 字</span>
+              </div>
+              <div className="relative min-h-[260px] flex-1 overflow-hidden rounded-[var(--app-radius-sm)]">
+                <textarea
+                  value={displayedCommentText}
+                  readOnly={singleGenerationPhase !== "idle"}
+                  onChange={event => {
+                    setDisplayedCommentText(event.target.value);
+                    updateComment(selectedId, { text: event.target.value });
+                  }}
+                  placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。"
+                  className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-5 py-4 text-[15px] leading-7 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
+                />
+                {singleGenerationPhase === "loading" && (
+                  <div className="absolute inset-0"><AiGenerationPanel compact title={batchRunning ? "正在批量生成评语" : "正在生成评语"} steps={["整理学生素材", "组织评语结构", "生成评语草稿"]} /></div>
+                )}
+                {singleGenerationPhase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
+              </div>
+              <div className="mt-3 rounded-[var(--app-radius-sm)] bg-blue-50/70 px-3 py-2 text-xs leading-5 text-blue-700" role="status">{aiStatus}</div>
+            </div>
+
+            <div className="shrink-0 border-t border-[var(--app-border)] bg-white px-4 py-3 xl:px-6">
+              <div className="flex items-center justify-end gap-2">
+                <button type="button" onClick={selectedComment.generated ? saveAndGoNext : generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="flex h-10 min-w-[168px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-blue-600 px-4 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-60">
+                  {selectedComment.generated ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{selectedComment.generated ? "保存并下一位" : "生成评语"}
                 </button>
+                {selectedComment.generated && <button type="button" aria-label="重新生成" title="重新生成" onClick={generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50"><Sparkles className="h-4 w-4" /></button>}
+                <button type="button" onClick={saveSelectedComment} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200" title="保存"><Save className="h-4 w-4" /></button>
+                <button type="button" onClick={() => { if (selectedComment.text) navigator.clipboard.writeText(selectedComment.text).catch(() => {}); }} disabled={!selectedComment.text} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40" title="复制"><Copy className="h-4 w-4" /></button>
               </div>
             </div>
           </section>
-
-          {selectedProfile && (
-            <section className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-card)]">
-              <div className="shrink-0 border-b border-[var(--app-border)] px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-gray-900">评语素材</h3>
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">{selectedCount} 项</span>
-                  </div>
-                  <button type="button" onClick={addCriterion} className="flex h-8 items-center gap-1.5 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50">
-                    <Settings2 className="h-3.5 w-3.5" />新增标准
-                  </button>
-                </div>
-                <div className="mt-3 flex min-h-9 items-center gap-2 rounded-[var(--app-radius-sm)] bg-gray-50 px-3 py-1.5">
-                  <span className="shrink-0 text-xs font-semibold text-gray-500">已选</span>
-                  <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-                    {selectedMaterialLabels.length ? selectedMaterialLabels.slice(0, 6).map((label, index) => <span key={`${label}-${index}`} className="rounded-full border border-blue-100 bg-white px-2 py-0.5 text-xs font-semibold text-blue-700">{label}</span>) : <span className="text-xs text-gray-400">选择下方素材，帮助 AI 生成更具体的评语</span>}
-                    {selectedMaterialLabels.length > 6 && <span className="text-xs font-semibold text-gray-400">+{selectedMaterialLabels.length - 6}</span>}
-                  </div>
-                  {selectedCount > 0 && <button type="button" onClick={clearAllSelectedMaterials} className="shrink-0 text-xs text-gray-400 hover:text-red-600">全部清空</button>}
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                {showFollowupPanel && (
-                  <div className="mb-3 rounded-[var(--app-radius-md)] border border-violet-100 bg-violet-50/40 p-3">
-                    <AiStudentFollowupPanel compact student={selectedStudent} context={{ scenario: "comment", teacherNote, commentDraft: buildDraft(selectedComment, teacherNote) }} onAppendCommentMaterial={appendFollowupMaterialToTeacherNote} />
-                  </div>
-                )}
-                <div className="space-y-2">
-                  {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
-                    const selected = new Set(selectedProfile.criteriaValues[criterion.id] || []);
-                    const customOptions = selectedProfile.customOptions[criterion.id] || [];
-                    const open = expandedCriteria.has(criterion.id);
-                    const criterionSelectedCount = selected.size + customOptions.length;
-                    return (
-                      <article key={criterion.id} className={`overflow-hidden rounded-[var(--app-radius-sm)] border transition-[border-color,box-shadow] duration-200 ${open ? "border-blue-100 shadow-sm" : "border-gray-200"}`}>
-                        <button type="button" aria-expanded={open} onClick={() => toggleCriterionExpanded(criterion.id)} className="flex h-11 w-full items-center justify-between gap-3 bg-white px-3.5 text-left transition-colors hover:bg-gray-50">
-                          <span className="flex items-center gap-2 text-sm font-bold text-gray-800">
-                            {criterion.label}
-                            {criterionSelectedCount > 0 && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">已选 {criterionSelectedCount}</span>}
-                          </span>
-                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
-                        </button>
-                        <div aria-hidden={!open} inert={!open ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
-                          <div className="overflow-hidden">
-                            <div className="border-t border-gray-100 bg-gray-50/40 px-3.5 py-3">
-                              <div className="flex flex-wrap gap-2">
-                                {criterion.options.map(option => {
-                                  const active = selected.has(option.id);
-                                  return <button key={option.id} type="button" aria-pressed={active} onClick={() => toggleCriterionOption(criterion, option.id)} className={`h-9 rounded-full border px-3.5 text-sm font-semibold transition-[background-color,border-color,color,transform] active:scale-95 ${active ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50"}`}>{option.label}</button>;
-                                })}
-                                {customOptions.map(option => <button key={option.id} type="button" onClick={() => removeStudentCustomOption(criterion.id, option.id)} title="点击移除自定义素材" className="h-9 rounded-full border border-emerald-100 bg-emerald-50 px-3.5 text-sm font-semibold text-emerald-700">{option.label}</button>)}
-                                <button type="button" onClick={() => { setCustomMaterialCriterionId(criterion.id); setCustomMaterialLabel(""); }} className="h-9 rounded-full border border-dashed border-gray-300 bg-white px-3.5 text-sm font-semibold text-gray-400 hover:bg-gray-50"><Plus className="mr-1 inline h-3.5 w-3.5" />自定义</button>
-                              </div>
-                              {customMaterialCriterionId === criterion.id && <div className="mt-2 flex gap-2"><input autoFocus value={customMaterialLabel} onChange={event => setCustomMaterialLabel(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addStudentCustomOption(criterion); if (event.key === "Escape") setCustomMaterialCriterionId(""); }} maxLength={30} placeholder={`补充${criterion.label}素材`} className="h-9 min-w-0 flex-1 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-300"/><button type="button" onClick={() => addStudentCustomOption(criterion)} className="h-9 rounded-[var(--app-radius-sm)] bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">添加</button></div>}
-                              {criterionSelectedCount > 0 && <div className="mt-2 flex justify-end"><button type="button" onClick={() => clearCriterion(criterion.id)} className="text-xs text-gray-400 hover:text-red-600">清空本组</button></div>}
-                            </div>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
-          )}
         </main>
 
-        <aside key={`generate-${selectedId}`} className="comment-detail-enter min-h-0 border-l border-[var(--app-border)] bg-gray-50 p-3">
+        <aside key={`tools-${selectedId}`} className="comment-detail-enter min-h-0 border-l border-[var(--app-border)] bg-gray-50 p-3">
           <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-card)]">
-            <div className="shrink-0 border-b border-[var(--app-border)] px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
+            <div className="shrink-0 border-b border-[var(--app-border)] px-3.5 py-3">
+              <div className="flex items-center justify-between gap-2">
                 <div>
-                  <h3 className="text-base font-bold text-gray-900">评语结果</h3>
-                  <p className="mt-0.5 text-xs text-gray-400">可直接编辑生成后的内容</p>
+                  <h3 className="text-base font-bold text-gray-900">素材与 AI</h3>
+                  <p className="mt-0.5 text-xs text-gray-400">为当前评语补充依据</p>
                 </div>
-                <div className="text-right">
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-bold ${getCommentStatus(selectedComment).badge}`}>{getCommentStatus(selectedComment).label}</span>
-                  <div className="mt-1 text-xs tabular-nums text-gray-400">{selectedComment.text.length} 字</div>
-                </div>
+                <button type="button" aria-expanded={showFollowupPanel} onClick={() => setShowFollowupPanel(value => !value)} className={`flex h-8 shrink-0 items-center gap-1 rounded-[var(--app-radius-sm)] px-2.5 text-xs font-semibold transition-colors ${showFollowupPanel ? "bg-violet-600 text-white" : "border border-violet-100 bg-violet-50 text-violet-700 hover:bg-violet-100"}`}>
+                  <Sparkles className="h-3.5 w-3.5" />AI 补充
+                </button>
               </div>
             </div>
 
-            <div className="shrink-0 border-b border-[var(--app-border)] px-3 py-2.5">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="border-b border-[var(--app-border)] px-3 py-2.5">
               <button type="button" aria-expanded={showGenerationSettings} onClick={() => setShowGenerationSettings(value => !value)} className="flex h-10 w-full items-center justify-between rounded-[var(--app-radius-sm)] bg-gray-50 px-3 text-left">
                 <span className="flex items-center gap-2 text-sm font-semibold text-gray-700"><Settings2 className="h-4 w-4 text-gray-400" />生成设置</span>
                 <span className="flex items-center gap-1 text-xs font-semibold text-gray-500">{selectedLengthLabel}字 · {selectedStyleLabel}<ChevronDown className={`h-4 w-4 transition-transform ${showGenerationSettings ? "rotate-180" : ""}`} /></span>
@@ -1043,7 +1010,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               </div>
             </div>
 
-            {!hasAuth && (
+              {!hasAuth && (
               <div className="shrink-0 border-b border-violet-100 bg-violet-50 p-3">
                 <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-violet-700"><Sparkles className="h-3.5 w-3.5" />连接 AI 生成评语</div>
                 <div className="flex items-center gap-2">
@@ -1053,7 +1020,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               </div>
             )}
 
-            <div className="shrink-0 border-b border-[var(--app-border)] px-3 py-2.5">
+              <div className="border-b border-[var(--app-border)] px-3 py-2.5">
               <button type="button" aria-expanded={showTeacherNote} onClick={() => setShowTeacherNote(value => !value)} className="flex h-9 w-full items-center justify-between text-left">
                 <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">老师补充说明{selectedComment.needsInfo && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">建议补充</span>}</span>
                 <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showTeacherNote ? "rotate-180" : ""}`} />
@@ -1066,35 +1033,70 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col p-3">
-              <div className="relative min-h-[160px] flex-1 overflow-hidden rounded-[var(--app-radius-sm)]">
-                <textarea
-                  value={displayedCommentText}
-                  readOnly={singleGenerationPhase !== "idle"}
-                  onChange={event => {
-                    setDisplayedCommentText(event.target.value);
-                    updateComment(selectedId, { text: event.target.value });
-                  }}
-                  placeholder="点击「生成评语」后会在这里显示，可直接编辑修改。"
-                  className={`h-full min-h-[160px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
-                />
-                {singleGenerationPhase === "loading" && (
-                  <div className="absolute inset-0"><AiGenerationPanel compact title={batchRunning ? "正在批量生成评语" : "正在生成评语"} steps={["整理学生素材", "组织评语结构", "生成评语草稿"]} /></div>
-                )}
-                {singleGenerationPhase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
-              </div>
-              <div className="mt-2 rounded-[var(--app-radius-sm)] bg-blue-50/70 px-3 py-2 text-xs leading-5 text-blue-700" role="status">{aiStatus}</div>
-            </div>
+              {showFollowupPanel && (
+                <div className="border-b border-violet-100 bg-violet-50/40 p-3">
+                  <AiStudentFollowupPanel compact student={selectedStudent} context={{ scenario: "comment", teacherNote, commentDraft: buildDraft(selectedComment, teacherNote) }} onAppendCommentMaterial={appendFollowupMaterialToTeacherNote} />
+                </div>
+              )}
 
-            <div className="shrink-0 border-t border-[var(--app-border)] bg-white p-3">
-              <div className={`grid items-center gap-2 ${selectedComment.generated ? "grid-cols-[minmax(0,1fr)_40px_40px_40px]" : "grid-cols-[minmax(0,1fr)_40px_40px]"}`}>
-                <button type="button" onClick={selectedComment.generated ? saveAndGoNext : generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="flex h-10 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-blue-600 px-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-60">
-                  {selectedComment.generated ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{selectedComment.generated ? "保存并下一位" : "生成评语"}
-                </button>
-                {selectedComment.generated && <button type="button" aria-label="重新生成" title="重新生成" onClick={generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="grid h-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50"><Sparkles className="h-4 w-4" /></button>}
-                <button type="button" onClick={saveSelectedComment} className="grid h-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200" title="保存"><Save className="h-4 w-4" /></button>
-                <button type="button" onClick={() => { if (selectedComment.text) navigator.clipboard.writeText(selectedComment.text).catch(() => {}); }} disabled={!selectedComment.text} className="grid h-10 place-items-center rounded-[var(--app-radius-sm)] bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40" title="复制"><Copy className="h-4 w-4" /></button>
-              </div>
+              {selectedProfile && (
+                <div className="p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h3 className="text-sm font-bold text-gray-900">评语素材</h3>
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">{selectedCount} 项</span>
+                    </div>
+                    <button type="button" onClick={addCriterion} className="flex h-8 shrink-0 items-center gap-1 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50">
+                      <Settings2 className="h-3.5 w-3.5" />新增标准
+                    </button>
+                  </div>
+                  <div className="mb-3 rounded-[var(--app-radius-sm)] bg-gray-50 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-gray-500">已选素材</span>
+                      {selectedCount > 0 && <button type="button" onClick={clearAllSelectedMaterials} className="text-xs text-gray-400 hover:text-red-600">全部清空</button>}
+                    </div>
+                    <div className="mt-1.5 flex min-w-0 flex-wrap gap-1.5">
+                      {selectedMaterialLabels.length ? selectedMaterialLabels.slice(0, 3).map((label, index) => <span key={`${label}-${index}`} className="rounded-full border border-blue-100 bg-white px-2 py-0.5 text-xs font-semibold text-blue-700">{label}</span>) : <span className="text-xs leading-5 text-gray-400">选择下方素材，帮助 AI 生成更具体的评语</span>}
+                      {selectedMaterialLabels.length > 3 && <span className="text-xs font-semibold text-gray-400">+{selectedMaterialLabels.length - 3}</span>}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {rubric.criteria.filter(criterion => !criterion.hidden).map(criterion => {
+                      const selected = new Set(selectedProfile.criteriaValues[criterion.id] || []);
+                      const customOptions = selectedProfile.customOptions[criterion.id] || [];
+                      const open = expandedCriteria.has(criterion.id);
+                      const criterionSelectedCount = selected.size + customOptions.length;
+                      return (
+                        <article key={criterion.id} className={`overflow-hidden rounded-[var(--app-radius-sm)] border transition-[border-color,box-shadow] duration-200 ${open ? "border-blue-100 shadow-sm" : "border-gray-200"}`}>
+                          <button type="button" aria-expanded={open} onClick={() => toggleCriterionExpanded(criterion.id)} className="flex h-10 w-full items-center justify-between gap-2 bg-white px-3 text-left transition-colors hover:bg-gray-50">
+                            <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-gray-800">
+                              <span className="truncate">{criterion.label}</span>
+                              {criterionSelectedCount > 0 && <span className="shrink-0 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">{criterionSelectedCount}</span>}
+                            </span>
+                            <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+                          </button>
+                          <div aria-hidden={!open} inert={!open ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+                            <div className="overflow-hidden">
+                              <div className="border-t border-gray-100 bg-gray-50/40 px-3 py-3">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {criterion.options.map(option => {
+                                    const active = selected.has(option.id);
+                                    return <button key={option.id} type="button" aria-pressed={active} onClick={() => toggleCriterionOption(criterion, option.id)} className={`h-8 rounded-full border px-2.5 text-xs font-semibold transition-[background-color,border-color,color,transform] active:scale-95 ${active ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50"}`}>{option.label}</button>;
+                                  })}
+                                  {customOptions.map(option => <button key={option.id} type="button" onClick={() => removeStudentCustomOption(criterion.id, option.id)} title="点击移除自定义素材" className="h-8 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700">{option.label}</button>)}
+                                  <button type="button" onClick={() => { setCustomMaterialCriterionId(criterion.id); setCustomMaterialLabel(""); }} className="h-8 rounded-full border border-dashed border-gray-300 bg-white px-2.5 text-xs font-semibold text-gray-400 hover:bg-gray-50"><Plus className="mr-1 inline h-3 w-3" />自定义</button>
+                                </div>
+                                {customMaterialCriterionId === criterion.id && <div className="mt-2 flex gap-2"><input autoFocus value={customMaterialLabel} onChange={event => setCustomMaterialLabel(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addStudentCustomOption(criterion); if (event.key === "Escape") setCustomMaterialCriterionId(""); }} maxLength={30} placeholder={`补充${criterion.label}素材`} className="h-9 min-w-0 flex-1 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-300"/><button type="button" onClick={() => addStudentCustomOption(criterion)} className="h-9 rounded-[var(--app-radius-sm)] bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">添加</button></div>}
+                                {criterionSelectedCount > 0 && <div className="mt-2 flex justify-end"><button type="button" onClick={() => clearCriterion(criterion.id)} className="text-xs text-gray-400 hover:text-red-600">清空本组</button></div>}
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         </aside>
