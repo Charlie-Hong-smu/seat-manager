@@ -152,15 +152,21 @@ test("selected comment text is refined only after teacher confirmation", async (
   const glassBar = dialog.locator(".selection-ai-glass-bar").first();
   await expect(glassBar).toBeVisible();
   const initialGlassY = (await glassBar.boundingBox())?.y || 0;
-  await editor.evaluate(element => {
+  const scrollDelta = await editor.evaluate(element => {
     const textarea = element as HTMLTextAreaElement;
-    textarea.scrollTop = Math.max(0, textarea.scrollTop - 14);
-    textarea.dispatchEvent(new Event("scroll"));
+    const initialScrollTop = textarea.scrollTop;
+    [18, 42, 20, 64, 56].forEach(offset => {
+      textarea.scrollTop = Math.max(0, initialScrollTop - offset);
+      textarea.dispatchEvent(new Event("scroll"));
+    });
+    return initialScrollTop - textarea.scrollTop;
   });
-  await expect.poll(async () => (await glassBar.boundingBox())?.y || 0).toBeGreaterThan(initialGlassY + 5);
+  const scrolledGlassY = (await glassBar.boundingBox())?.y || 0;
+  expect(Math.abs(scrolledGlassY - initialGlassY - scrollDelta)).toBeLessThan(3);
   await expect(dialog.getByText("正在优化选中文字", { exact: true })).toHaveCount(0);
   const suggestion = dialog.getByRole("region", { name: "AI 局部修改建议" });
   await expect(suggestion).toContainText("她能够条理清晰地说明解题思路");
+  await expect(dialog.locator(".selection-ai-revision-preview")).toContainText("在数学学习中，她能清楚说明解题过程她能够条理清晰地说明解题思路，也愿意尝试不同方法。");
   await expect(dialog.locator(".selection-ai-inline-old")).toHaveText("她能清楚说明解题过程");
   await expect(dialog.locator(".selection-ai-inline-new")).toHaveText("她能够条理清晰地说明解题思路");
   await expect(editor).toHaveValue(original);
