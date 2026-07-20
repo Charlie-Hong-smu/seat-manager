@@ -87,7 +87,7 @@ export default function App() {
   const students = allStudents.filter(student => student.enrollmentStatus !== "archived");
   const savedSeatHistory = appState.seatHistory;
   const lockedSeats = new Set(appState.lockedSeats);
-  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatOrder, setSeatSettings, setSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory, setSchedule, setHomeworkAssignments, setQuickRecordPresets, setCommunicationDrafts, setActivityEvents } = controller;
+  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatOrder, setSeatSettings, setSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory, setSchedule, setHomeworkAssignments, setQuickRecordPresets, setActivityEvents } = controller;
   const dormitoryPeriodSettings = normalizeDormitoryPeriodSettings(appState.settings.dormitoryPeriod);
   const subjectCatalog = normalizeSubjectCatalog(appState.settings.subjectCatalog, [
     ...schedule.entries.map(entry => entry.subject),
@@ -930,14 +930,16 @@ export default function App() {
               seatOrder={seatOrder}
               seatLayout={seatSettings.layout}
               initialActiveTab={selectedStudentInitialTab}
-              onCreateFollowupTask={input => requestFollowupTask({ ...input, type: "常规跟进", plannedDate: todayKey(), dueDate: todayKey(), source: "ai", sourceRef: { domain: "ai", entityId: `${input.studentId}-${Date.now()}` } })}
+              onCreateFollowupTask={input => {
+                setSelectedStudentInitialTab("records");
+                setSelectedStudentId(null);
+                requestFollowupTask({ ...input, type: "常规跟进", plannedDate: todayKey(), dueDate: todayKey(), source: "ai", sourceRef: { domain: "ai", entityId: `${input.studentId}-${Date.now()}` } });
+              }}
               attendanceRecords={attendanceRecords}
               followupTasks={followupTasks}
               onAttendanceChange={setAttendanceRecords}
               homeworkAssignments={homeworkAssignments}
               communicationDrafts={communicationDrafts}
-              onCommunicationDraftsChange={setCommunicationDrafts}
-              onActivity={recordActivity}
               activityEvents={appState.activityEvents}
               onOpenEntity={ref => { setSelectedStudentId(null); navigateToEntity(ref); }}
             />
@@ -995,7 +997,7 @@ export default function App() {
       }
     >
       <div className="h-full">
-        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onDraftsChange={setCommunicationDrafts} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onActivity={recordActivity} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} /></div>}
+        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full workspace-tab-enter">
             <DailyWorkspace

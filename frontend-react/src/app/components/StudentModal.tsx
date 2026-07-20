@@ -72,8 +72,6 @@ interface Props {
   onAttendanceChange?: (records: AttendanceRecord[]) => void;
   homeworkAssignments?: HomeworkAssignment[];
   communicationDrafts?: CommunicationDraft[];
-  onCommunicationDraftsChange?: (drafts: CommunicationDraft[]) => void;
-  onActivity?: (event: ActivityEvent) => void;
   activityEvents?: ActivityEvent[];
   onOpenEntity?: (ref: BusinessEntityRef) => void;
 }
@@ -99,8 +97,6 @@ export function StudentModal({
   onAttendanceChange,
   homeworkAssignments = [],
   communicationDrafts = [],
-  onCommunicationDraftsChange,
-  onActivity,
   activityEvents = [],
   onOpenEntity,
 }: Props) {
@@ -747,7 +743,7 @@ export function StudentModal({
               onSaveRecord={saveAiFollowupRecord}
               onAppendCommentMaterial={appendAiFollowupMaterial}
               onCreateTask={input => onCreateFollowupTask?.({ studentId: student.id, ...input })}
-            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} drafts={communicationDrafts} onDraftsChange={drafts => onCommunicationDraftsChange?.(drafts)} onCreateFollowupTask={onCreateFollowupTask} onActivity={onActivity} />}
+            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} drafts={communicationDrafts} />}
             </div>
           )}
 

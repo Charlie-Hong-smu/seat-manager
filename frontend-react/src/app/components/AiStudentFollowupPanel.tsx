@@ -139,7 +139,7 @@ export function AiStudentFollowupPanel({
     if (!text.trim()) {
       return;
     }
-    if (!await appDialog.confirm({ title: "保存到学生记录？", description: `将把这条 AI 跟进摘要写入 ${student.name} 的学生记录。AI 内容仍应由教师确认后使用。`, confirmLabel: "确认保存", variant: "primary" })) {
+    if (!await appDialog.confirm({ title: "存入学生记录？", description: `将把这条 AI 跟进摘要写入 ${student.name} 的学生记录。AI 内容仍应由教师确认后使用。`, confirmLabel: "确认存入", variant: "primary" })) {
       return;
     }
     onSaveRecord(text);
@@ -151,20 +151,20 @@ export function AiStudentFollowupPanel({
     if (!materialText || !onAppendCommentMaterial) {
       return;
     }
-    if (!await appDialog.confirm({ title: "加入评语素材？", description: `将把 AI 提炼的内容加入 ${student.name} 的评语补充说明，之后仍可继续编辑。`, confirmLabel: "确认加入", variant: "primary" })) {
+    if (!await appDialog.confirm({ title: "加入评语补充说明？", description: `将把 AI 提炼的内容加入 ${student.name} 的评语补充说明，之后仍可继续编辑。`, confirmLabel: "确认加入", variant: "primary" })) {
       return;
     }
     onAppendCommentMaterial(materialText);
     setSavedMaterial(true);
-    setStatus("已加入评语素材。");
+    setStatus("已加入评语补充说明。");
   }
 
   async function createTask() {
     if (!result || !onCreateTask) return;
     const title = result.actions[0] || result.summary || `跟进 ${student.name}`;
-    if (!await appDialog.confirm({ title: "创建跟进任务？", description: `将根据这条 AI 建议为 ${student.name} 预填跟进任务，创建后仍可在任务工作区编辑。`, confirmLabel: "确认创建", variant: "primary" })) return;
+    if (!await appDialog.confirm({ title: "转为待办任务？", description: `将根据这条 AI 建议为 ${student.name} 预填待办任务，请在下一步确认日期和内容。`, confirmLabel: "继续填写", variant: "primary" })) return;
     onCreateTask({ title: title.slice(0, 80), description: buildRecordText(result).slice(0, 800) });
-    setStatus("已创建跟进任务，请到跟进任务工作区确认日期和状态。");
+    setStatus("已打开待办任务表单，请确认内容后创建。");
   }
 
   return <>
@@ -291,7 +291,7 @@ export function AiStudentFollowupPanel({
                 style={{ fontWeight: 850 }}
               >
                 {savedRecord ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                {savedRecord ? "已存记录" : "保存为跟进记录"}
+                {savedRecord ? "已存记录" : "存入学生记录"}
               </button>
               <button
                 onClick={appendMaterial}
@@ -300,10 +300,10 @@ export function AiStudentFollowupPanel({
                 style={{ fontWeight: 850 }}
               >
                 {savedMaterial ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-                {savedMaterial ? "已加素材" : "加入评语素材"}
+                {savedMaterial ? "已加入说明" : "加入评语补充说明"}
               </button>
             </div>
-            {onCreateTask && <button onClick={createTask} className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white text-sm font-bold text-violet-700 hover:bg-violet-50"><PlusCircle className="h-4 w-4" />创建跟进任务</button>}
+            {onCreateTask && <button onClick={createTask} className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white text-sm font-bold text-violet-700 hover:bg-violet-50"><PlusCircle className="h-4 w-4" />转为待办任务</button>}
           </div>}
           </div>
         </div>

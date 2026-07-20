@@ -25,8 +25,6 @@ interface StudentDetailProps {
   onAttendanceChange?: (records: AttendanceRecord[]) => void;
   homeworkAssignments?: HomeworkAssignment[];
   communicationDrafts?: CommunicationDraft[];
-  onCommunicationDraftsChange?: (drafts: CommunicationDraft[]) => void;
-  onActivity?: (event: ActivityEvent) => void;
   activityEvents?: ActivityEvent[];
   onOpenEntity?: (ref: BusinessEntityRef) => void;
 }
@@ -51,8 +49,6 @@ export function StudentDetail({
   onAttendanceChange,
   homeworkAssignments,
   communicationDrafts,
-  onCommunicationDraftsChange,
-  onActivity,
   activityEvents,
   onOpenEntity,
 }: StudentDetailProps) {
@@ -82,8 +78,6 @@ export function StudentDetail({
         onAttendanceChange={onAttendanceChange}
         homeworkAssignments={homeworkAssignments}
         communicationDrafts={communicationDrafts}
-        onCommunicationDraftsChange={onCommunicationDraftsChange}
-        onActivity={onActivity}
         activityEvents={activityEvents}
         onOpenEntity={onOpenEntity}
       />

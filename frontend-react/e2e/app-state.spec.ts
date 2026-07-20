@@ -115,6 +115,84 @@ test("preloads the comment workbench and keeps its full-screen background stable
   await expect(dialog).toBeHidden();
 });
 
+test("AI followup actions use clear labels, center confirmation, and close student detail before task editing", async ({ page }) => {
+  await page.route("**/student-followup", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      summary: "近期学习状态稳定，需要继续关注数学基础。",
+      riskSignals: ["数学基础仍需巩固"],
+      strengths: ["语文表现稳定"],
+      actions: ["与数学老师沟通近期课堂表现"],
+      parentMessageDraft: "家长您好，建议近期共同关注数学基础练习。",
+      commentMaterials: ["学习态度认真，愿意持续改进"],
+      disclaimer: "AI 跟进建议仅供教师参考。",
+    }),
+  }));
+  await login(page);
+
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("跟进测试学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await page.locator('[data-student-id]').filter({ hasText: "跟进测试学生" }).click();
+  await page.getByRole("button", { name: "AI跟进" }).click();
+  await page.getByRole("button", { name: "生成", exact: true }).click();
+
+  await expect(page.getByRole("button", { name: "存入学生记录" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "加入评语补充说明" })).toBeVisible();
+  await page.getByRole("button", { name: "转为待办任务" }).click();
+
+  const confirmation = page.getByRole("alertdialog", { name: "转为待办任务？" });
+  await expect(confirmation).toBeVisible();
+  await confirmation.evaluate(element => Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished)));
+  const box = await confirmation.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(Math.abs((box!.x + box!.width / 2) - viewport!.width / 2)).toBeLessThan(2);
+  expect(Math.abs((box!.y + box!.height / 2) - viewport!.height / 2)).toBeLessThan(2);
+
+  await confirmation.getByRole("button", { name: "继续填写" }).click();
+  await expect(page.getByRole("button", { name: "关闭学生详情" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "创建跟进任务" })).toBeVisible();
+});
+
+test("weekly communication surfaces keep only AI polish and copy actions", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("周沟通测试学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await page.locator('[data-student-id]').filter({ hasText: "周沟通测试学生" }).click();
+  await page.getByRole("button", { name: "AI跟进" }).click();
+  await page.getByRole("tab", { name: "周沟通稿" }).click();
+
+  const studentPolish = page.getByRole("button", { name: "AI 润色" });
+  await expect(studentPolish).toBeVisible();
+  await expect.poll(() => studentPolish.evaluate(button => ({
+    background: getComputedStyle(button).backgroundColor,
+    aiToken: getComputedStyle(document.documentElement).getPropertyValue("--app-ai").trim(),
+    alignment: getComputedStyle(button.parentElement!).justifyContent,
+  }))).toEqual({ background: "rgb(124, 58, 237)", aiToken: "#7c3aed", alignment: "center" });
+  await expect(page.getByRole("button", { name: "复制", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /保存沟通稿|标记已分享|创建后续家校沟通任务/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "分享渠道" })).toHaveCount(0);
+  await page.getByRole("button", { name: "关闭学生详情" }).click();
+
+  await page.getByRole("button", { name: "今日", exact: true }).click();
+  await page.getByRole("button", { name: "本周复盘" }).click();
+  const weeklyDrawer = page.getByRole("complementary", { name: "本周班级复盘" });
+  const classPolish = weeklyDrawer.getByRole("button", { name: "AI 润色" });
+  await expect(classPolish).toBeVisible();
+  await expect.poll(() => classPolish.evaluate(button => ({
+    background: getComputedStyle(button).backgroundColor,
+    alignment: getComputedStyle(button.parentElement!).justifyContent,
+  }))).toEqual({ background: "rgb(124, 58, 237)", alignment: "center" });
+  await expect(weeklyDrawer.getByRole("button", { name: "复制", exact: true })).toBeVisible();
+  await expect(weeklyDrawer.getByRole("button", { name: "保存草稿" })).toHaveCount(0);
+});
+
 test("selected comment text is refined only after teacher confirmation", async ({ page }) => {
   await page.route("**/refine-comment", async route => {
     expect(route.request().postDataJSON()).toMatchObject({

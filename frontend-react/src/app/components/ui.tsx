@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
  * 统一按钮组件
  * variant:
  *  - primary: 蓝色主按钮（常用操作）
+ *  - ai: 紫色 AI 主按钮（显式智能操作）
  *  - secondary: 灰色次要按钮（取消/返回）
  *  - danger: 红色危险按钮（删除）
  *  - ghost: 透明边框按钮（轻操作）
@@ -18,7 +19,7 @@ export function Button({
   children,
   ...props
 }: {
-  variant?: "primary" | "secondary" | "danger" | "ghost";
+  variant?: "primary" | "ai" | "secondary" | "danger" | "ghost";
   size?: "sm" | "md" | "lg";
   disabled?: boolean;
   className?: string;
@@ -32,6 +33,7 @@ export function Button({
 
   const variantClasses = {
     primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",
+    ai: "bg-[var(--app-ai)] text-white hover:bg-violet-700 focus-visible:ring-violet-500/30 disabled:bg-violet-300",
     secondary: "bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400",
     danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
     ghost: "bg-transparent border border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50 disabled:border-gray-100 disabled:text-gray-300",
@@ -168,14 +170,14 @@ export function ConfirmDialog({
   const panelRef = useModalFocus(open, onCancel);
 
   if (!open) return null;
-  return <div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
+  return createPortal(<div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
     <div ref={panelRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-5 shadow-[var(--app-shadow-float)] outline-none">
       <h2 id={titleId} className="text-base font-bold text-[var(--app-text)]">{title}</h2>
       <p id={descriptionId} className="mt-2 text-sm leading-6 text-[var(--app-text-muted)]">{description}</p>
       {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{error}</p>}
       <div className="mt-5 flex flex-wrap justify-end gap-2">{showCancel && <Button variant="ghost" onClick={onCancel}>取消</Button>}{alternateLabel && onAlternate && <Button variant="secondary" onClick={onAlternate}>{alternateLabel}</Button>}<Button autoFocus variant={variant} onClick={onConfirm}>{confirmLabel}</Button></div>
     </div>
-  </div>;
+  </div>, document.body);
 }
 
 type AppDialogOptions = {
