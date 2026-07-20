@@ -189,6 +189,11 @@ export default function App() {
     setCommentWorkbenchTransition("preparing");
   }
 
+  function openStudentDetailFromCommentWorkbench(student: AppStudent) {
+    finishClosingCommentWorkbench();
+    openStudentDetail(student);
+  }
+
   function confirmFollowupTask(draft: FollowupTaskDraft) {
     const wasEditing = Boolean(draft.id);
     const previousTask = draft.id ? followupTasks.find(task => task.id === draft.id) : undefined;
@@ -902,8 +907,8 @@ export default function App() {
           )}
           {showCommentWorkbench && (
             CommentWorkbenchComponent
-              ? <CommentWorkbenchComponent students={students} transitionState={commentWorkbenchTransition} onClose={closeCommentWorkbench} onExitComplete={finishClosingCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />
-              : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, transitionState: commentWorkbenchTransition, onClose: closeCommentWorkbench, onExitComplete: finishClosingCommentWorkbench, onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
+              ? <CommentWorkbenchComponent students={students} transitionState={commentWorkbenchTransition} onClose={closeCommentWorkbench} onExitComplete={finishClosingCommentWorkbench} onSelectStudent={openStudentDetailFromCommentWorkbench} />
+              : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, transitionState: commentWorkbenchTransition, onClose: closeCommentWorkbench, onExitComplete: finishClosingCommentWorkbench, onSelectStudent: openStudentDetailFromCommentWorkbench }} />
           )}
 
           {selectedStudent && (

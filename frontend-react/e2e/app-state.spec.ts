@@ -126,6 +126,7 @@ test("opens student detail from the current comment avatar without a separate de
   await expect(workbench.getByRole("button", { name: "查看 头像详情学生 的学生详情" })).toBeVisible();
   await expect(workbench.getByRole("button", { name: "查看详情", exact: true })).toHaveCount(0);
   await workbench.getByRole("button", { name: "查看 头像详情学生 的学生详情" }).click();
+  await expect(workbench).toBeHidden();
   await expect(page.getByRole("button", { name: "关闭学生详情" })).toBeVisible();
 });
 
