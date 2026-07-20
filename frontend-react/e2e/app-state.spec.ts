@@ -134,7 +134,7 @@ test("selected comment text is refined only after teacher confirmation", async (
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "评语工作台" }).click();
   const dialog = page.getByRole("dialog", { name: "评语工作台" });
-  const editor = dialog.getByPlaceholder(/也可以选中文字/);
+  const editor = dialog.getByRole("textbox", { name: "评语正文编辑器" });
   const contextLines = Array.from({ length: 20 }, (_, index) => `第 ${index + 1} 条课堂观察：能够按要求完成当天任务。`).join("\n");
   const original = `${contextLines}\n在数学学习中，她能清楚说明解题过程，也愿意尝试不同方法。`;
   await editor.fill(original);
@@ -149,37 +149,36 @@ test("selected comment text is refined only after teacher confirmation", async (
   }, "她能清楚说明解题过程");
 
   await dialog.getByRole("button", { name: "优化表达", exact: true }).click();
-  const glassBar = dialog.locator(".selection-ai-glass-bar").first();
+  const glassBar = dialog.locator(".selection-ai-glass-inline");
   await expect(glassBar).toBeVisible();
+  await expect(dialog.getByRole("status", { name: "正在优化选中文字" })).toContainText("在数学学习中，她能清楚说明解题过程，也愿意尝试不同方法。");
   const initialGlassY = (await glassBar.boundingBox())?.y || 0;
-  const scrollDelta = await editor.evaluate(element => {
-    const textarea = element as HTMLTextAreaElement;
-    const initialScrollTop = textarea.scrollTop;
+  const scrollDelta = await glassBar.evaluate(element => {
+    const scroller = element.parentElement?.parentElement;
+    if (!scroller) throw new Error("comment editor scroller is missing");
+    const initialScrollTop = scroller.scrollTop;
     [18, 42, 20, 64, 56].forEach(offset => {
-      textarea.scrollTop = Math.max(0, initialScrollTop - offset);
-      textarea.dispatchEvent(new Event("scroll"));
+      scroller.scrollTop = Math.max(0, initialScrollTop - offset);
+      scroller.dispatchEvent(new Event("scroll"));
     });
-    return initialScrollTop - textarea.scrollTop;
+    return initialScrollTop - scroller.scrollTop;
   });
   const scrolledGlassY = (await glassBar.boundingBox())?.y || 0;
   expect(Math.abs(scrolledGlassY - initialGlassY - scrollDelta)).toBeLessThan(3);
   await expect(dialog.getByText("正在优化选中文字", { exact: true })).toHaveCount(0);
   const suggestion = dialog.getByRole("region", { name: "AI 局部修改建议" });
   await expect(suggestion).toContainText("她能够条理清晰地说明解题思路");
-  await expect(dialog.locator(".selection-ai-revision-preview")).toContainText("在数学学习中，她能清楚说明解题过程她能够条理清晰地说明解题思路，也愿意尝试不同方法。");
+  await expect(dialog.getByRole("status", { name: "AI 修订预览" })).toContainText("在数学学习中，她能清楚说明解题过程她能够条理清晰地说明解题思路，也愿意尝试不同方法。");
   await expect(dialog.locator(".selection-ai-inline-old")).toHaveText("她能清楚说明解题过程");
   await expect(dialog.locator(".selection-ai-inline-new")).toHaveText("她能够条理清晰地说明解题思路");
-  await expect(editor).toHaveValue(original);
-  await editor.evaluate(element => {
-    element.dispatchEvent(new Event("select", { bubbles: true }));
-    document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
-  });
+  await expect(dialog.locator(".selection-ai-inline-old")).toHaveCSS("text-decoration-line", "line-through");
   await page.waitForTimeout(600);
   await expect(suggestion).toBeVisible();
+  await expect(dialog.locator(".selection-ai-inline-old")).toHaveCSS("text-decoration-line", "line-through");
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("seat-manager-ai-comment-draft:")))).toEqual([]);
 
   await suggestion.getByRole("button", { name: "应用替换" }).click();
-  await expect(editor).toHaveValue(original.replace("她能清楚说明解题过程", "她能够条理清晰地说明解题思路"));
+  await expect(dialog.getByRole("textbox", { name: "评语正文编辑器" })).toHaveValue(original.replace("她能清楚说明解题过程", "她能够条理清晰地说明解题思路"));
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("seat-manager-ai-comment-draft:")))).toEqual([]);
 
   await dialog.getByTitle("保存").click();

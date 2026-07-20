@@ -73,10 +73,9 @@ interface CommentTextSelection {
   text: string;
   actionLeft: number;
   actionTop: number;
-  selectionRects: Array<{ left: number; top: number; width: number; height: number }>;
 }
 
-function measureSelectionPosition(textarea: HTMLTextAreaElement, selectionStart: number, selectionEnd: number) {
+function measureTextareaSelection(textarea: HTMLTextAreaElement, selectionStart: number, selectionEnd: number) {
   const computed = window.getComputedStyle(textarea);
   const mirror = document.createElement("div");
   const borderWidth = (Number.parseFloat(computed.borderLeftWidth) || 0) + (Number.parseFloat(computed.borderRightWidth) || 0);
@@ -100,22 +99,20 @@ function measureSelectionPosition(textarea: HTMLTextAreaElement, selectionStart:
   mirror.appendChild(selectedSpan);
   document.body.appendChild(mirror);
   const mirrorRect = mirror.getBoundingClientRect();
-  const selectionRects = Array.from(selectedSpan.getClientRects()).map(rect => ({
-    left: rect.left - mirrorRect.left,
-    top: rect.top - mirrorRect.top,
-    width: Math.max(4, rect.width),
-    height: rect.height,
-  }));
-  const anchor = selectionRects[selectionRects.length - 1] || { left: 8, top: 8, width: 4, height: 28 };
+  const selectedRects = Array.from(selectedSpan.getClientRects());
+  const lastRect = selectedRects[selectedRects.length - 1];
+  const anchor = lastRect
+    ? { left: lastRect.left - mirrorRect.left, top: lastRect.top - mirrorRect.top, height: lastRect.height }
+    : { left: 8, top: 8, height: 28 };
   const viewportLeft = anchor.left - textarea.scrollLeft;
   const belowTop = anchor.top + anchor.height + 8;
   const viewportBelowTop = belowTop - textarea.scrollTop;
-  const actionTop = viewportBelowTop > textarea.clientHeight - 42 ? Math.max(8, anchor.top - 42) : belowTop;
   mirror.remove();
   return {
     left: Math.min(Math.max(8, viewportLeft), Math.max(8, textarea.clientWidth - 238)) + textarea.scrollLeft,
-    top: actionTop,
-    selectionRects,
+    top: viewportBelowTop > textarea.clientHeight - 42
+      ? Math.max(8, anchor.top - 42)
+      : belowTop,
   };
 }
 
@@ -213,7 +210,9 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const pauseRequested = useRef(false);
   const workbenchRef = useRef<HTMLDivElement>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const selectionOverlayRef = useRef<HTMLDivElement>(null);
+  const commentPreviewScrollRef = useRef<HTMLDivElement>(null);
+  const selectionToolbarRef = useRef<HTMLDivElement>(null);
+  const commentScrollPosition = useRef(0);
   const commentRevealFrame = useRef<number | null>(null);
   const batchProgress = batchState.total ? Math.round((batchState.done / batchState.total) * 100) : 0;
   const resumableCount = batchState.queue.length + batchState.failed.length;
@@ -293,11 +292,9 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   }, [selectedComment?.text, singleGenerationPhase]);
 
   useLayoutEffect(() => {
-    const textarea = commentTextareaRef.current;
-    const overlay = selectionOverlayRef.current;
-    if (!textarea || !overlay || !commentSelection) return;
-    overlay.style.transform = `translate3d(${-textarea.scrollLeft}px, ${-textarea.scrollTop}px, 0)`;
-  }, [commentSelection, refinementPhase, refinementSuggestion, singleGenerationPhase]);
+    if (refinementPhase === "idle" || !commentPreviewScrollRef.current) return;
+    commentPreviewScrollRef.current.scrollTop = commentScrollPosition.current;
+  }, [refinementPhase, refinementSuggestion]);
 
   function handleWorkbenchKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -343,18 +340,20 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       if (refinementPhase !== "ready") dismissCommentRefinement();
       return;
     }
-    const position = measureSelectionPosition(textarea, start, end);
+    const position = measureTextareaSelection(textarea, start, end);
     const sameSelection = commentSelection?.start === start && commentSelection.end === end && commentSelection.text === text;
-    setCommentSelection({ start, end, text, actionLeft: position.left, actionTop: position.top, selectionRects: position.selectionRects });
+    setCommentSelection({ start, end, text, actionLeft: position.left, actionTop: position.top });
     if (!sameSelection) {
       setRefinementPhase("idle");
       setRefinementSuggestion("");
     }
   }
 
-  function syncCommentSelectionOverlay(textarea: HTMLTextAreaElement) {
-    if (!selectionOverlayRef.current) return;
-    selectionOverlayRef.current.style.transform = `translate3d(${-textarea.scrollLeft}px, ${-textarea.scrollTop}px, 0)`;
+  function syncSelectionToolbar(textarea: HTMLTextAreaElement) {
+    commentScrollPosition.current = textarea.scrollTop;
+    if (!selectionToolbarRef.current || !commentSelection) return;
+    selectionToolbarRef.current.style.left = `${commentSelection.actionLeft - textarea.scrollLeft}px`;
+    selectionToolbarRef.current.style.top = `${commentSelection.actionTop - textarea.scrollTop}px`;
   }
 
   async function requestCommentRefinement(action: CommentRefinementAction) {
@@ -363,6 +362,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       setAiStatus("一次最多优化 600 个字，请缩小选中文字范围。");
       return;
     }
+    commentScrollPosition.current = commentTextareaRef.current?.scrollTop || 0;
     setRefinementPhase("loading");
     setRefinementSuggestion("");
     const actionLabel = COMMENT_REFINEMENT_ACTIONS.find(item => item.value === action)?.label || "优化表达";
@@ -1106,76 +1106,73 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                 <span className="shrink-0 text-xs tabular-nums text-gray-400">{selectedComment.text.length} 字</span>
               </div>
               <div className="relative min-h-[260px] flex-1 overflow-hidden rounded-[var(--app-radius-sm)]">
-                <textarea
-                  ref={commentTextareaRef}
-                  value={displayedCommentText}
-                  readOnly={singleGenerationPhase !== "idle"}
-                  onSelect={handleCommentSelection}
-                  onScroll={event => syncCommentSelectionOverlay(event.currentTarget)}
-                  onChange={event => {
-                    dismissCommentRefinement();
-                    setDisplayedCommentText(event.target.value);
-                    updateComment(selectedId, { text: event.target.value });
-                  }}
-                  placeholder="点击「生成评语」后会在这里显示；也可以选中文字，让 AI 局部优化表达。"
-                  aria-describedby="comment-selection-ai-hint"
-                  className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-5 py-4 text-[15px] leading-7 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
-                />
-                {commentSelection && commentSelection.selectionRects.length > 0 && singleGenerationPhase === "idle" && (
-                  <div
-                    ref={selectionOverlayRef}
-                    aria-hidden={refinementPhase !== "idle" ? "true" : undefined}
-                    className="pointer-events-none absolute inset-0 z-20 overflow-visible will-change-transform"
-                    style={{
-                      transform: `translate3d(${-(commentTextareaRef.current?.scrollLeft || 0)}px, ${-(commentTextareaRef.current?.scrollTop || 0)}px, 0)`,
+                {refinementPhase === "idle" ? (
+                  <textarea
+                    ref={commentTextareaRef}
+                    value={displayedCommentText}
+                    readOnly={singleGenerationPhase !== "idle"}
+                    onSelect={handleCommentSelection}
+                    onScroll={event => syncSelectionToolbar(event.currentTarget)}
+                    onChange={event => {
+                      dismissCommentRefinement();
+                      setDisplayedCommentText(event.target.value);
+                      updateComment(selectedId, { text: event.target.value });
                     }}
+                    placeholder="点击「生成评语」后会在这里显示；也可以选中文字，让 AI 局部优化表达。"
+                    aria-label="评语正文编辑器"
+                    aria-describedby="comment-selection-ai-hint"
+                    className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-5 py-4 text-[15px] leading-7 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
+                  />
+                ) : commentSelection ? (
+                  <div
+                    ref={commentPreviewScrollRef}
+                    role="status"
+                    aria-label={refinementPhase === "loading" ? "正在优化选中文字" : "AI 修订预览"}
+                    className="h-full min-h-[260px] w-full overflow-auto rounded-[var(--app-radius-sm)] border border-gray-200 bg-white text-[15px] leading-7 text-gray-800"
                   >
-                    {refinementPhase === "idle" && (
-                      <div
-                        role="toolbar"
-                        aria-label="AI 优化选中文字"
-                        className="selection-ai-actions pointer-events-auto absolute flex items-center gap-1 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white p-1 shadow-[var(--app-shadow-float)]"
-                        style={{ left: commentSelection.actionLeft, top: commentSelection.actionTop }}
-                      >
-                        {COMMENT_REFINEMENT_ACTIONS.map(action => (
-                          <button
-                            key={action.value}
-                            type="button"
-                            onMouseDown={event => event.preventDefault()}
-                            onClick={() => requestCommentRefinement(action.value)}
-                            className="h-8 rounded-[6px] px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-violet-50 hover:text-violet-700"
-                          >
-                            {action.label}
-                          </button>
-                        ))}
-                        <button type="button" aria-label="关闭 AI 选区操作" onMouseDown={event => event.preventDefault()} onClick={dismissCommentRefinement} className="grid h-8 w-8 place-items-center rounded-[6px] text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700">
-                          <X className="h-3.5 w-3.5" />
+                    <div className="min-h-full whitespace-pre-wrap break-words px-5 py-4">
+                      {displayedCommentText.slice(0, commentSelection.start)}
+                      {refinementPhase === "loading" ? (
+                        <span className="selection-ai-glass-inline" aria-label="正在优化的文字">{commentSelection.text}</span>
+                      ) : (
+                        <>
+                          <span className="selection-ai-inline-old text-gray-400">{commentSelection.text}</span>
+                          <span className="selection-ai-inline-new ml-1.5 font-medium text-gray-800">{refinementSuggestion}</span>
+                        </>
+                      )}
+                      {displayedCommentText.slice(commentSelection.end)}
+                    </div>
+                  </div>
+                ) : null}
+                {refinementPhase === "idle" && (
+                  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[var(--app-radius-sm)]">
+                  {commentSelection && refinementPhase === "idle" && singleGenerationPhase === "idle" && (
+                    <div
+                      ref={selectionToolbarRef}
+                      role="toolbar"
+                      aria-label="AI 优化选中文字"
+                      className="selection-ai-actions pointer-events-auto absolute z-20 flex items-center gap-1 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white p-1 shadow-[var(--app-shadow-float)]"
+                      style={{
+                        left: commentSelection.actionLeft - (commentTextareaRef.current?.scrollLeft || 0),
+                        top: commentSelection.actionTop - (commentTextareaRef.current?.scrollTop || 0),
+                      }}
+                    >
+                      {COMMENT_REFINEMENT_ACTIONS.map(action => (
+                        <button
+                          key={action.value}
+                          type="button"
+                          onMouseDown={event => event.preventDefault()}
+                          onClick={() => requestCommentRefinement(action.value)}
+                          className="h-8 rounded-[6px] px-2.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-violet-50 hover:text-violet-700"
+                        >
+                          {action.label}
                         </button>
-                      </div>
-                    )}
-                    {refinementPhase === "loading" && commentSelection.selectionRects.map((rect, index) => (
-                      <span
-                        key={`${rect.left}-${rect.top}-${index}`}
-                        aria-hidden="true"
-                        className="selection-ai-glass-bar absolute rounded-[5px]"
-                        style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
-                      />
-                    ))}
-                    {refinementPhase === "ready" && refinementSuggestion && (
-                      <div
-                        aria-hidden="true"
-                        className="selection-ai-revision-preview absolute left-0 top-0 box-border whitespace-pre-wrap break-words border border-transparent bg-white px-5 py-4 text-[15px] leading-7 text-gray-800"
-                        style={{
-                          width: commentTextareaRef.current ? commentTextareaRef.current.clientWidth + 2 : "100%",
-                          minHeight: commentTextareaRef.current?.scrollHeight,
-                        }}
-                      >
-                        {displayedCommentText.slice(0, commentSelection.start)}
-                        <span className="selection-ai-inline-old relative text-gray-400">{commentSelection.text}</span>
-                        <span className="selection-ai-inline-new ml-1.5 font-medium text-gray-800">{refinementSuggestion}</span>
-                        {displayedCommentText.slice(commentSelection.end)}
-                      </div>
-                    )}
+                      ))}
+                      <button type="button" aria-label="关闭 AI 选区操作" onMouseDown={event => event.preventDefault()} onClick={dismissCommentRefinement} className="grid h-8 w-8 place-items-center rounded-[6px] text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                   </div>
                 )}
                 {singleGenerationPhase === "loading" && (
