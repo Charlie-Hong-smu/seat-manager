@@ -210,6 +210,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const pauseRequested = useRef(false);
   const workbenchRef = useRef<HTMLDivElement>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectionGeometryFrame = useRef<number | null>(null);
   const commentRevealFrame = useRef<number | null>(null);
   const batchProgress = batchState.total ? Math.round((batchState.done / batchState.total) * 100) : 0;
   const resumableCount = batchState.queue.length + batchState.failed.length;
@@ -275,6 +276,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     setRefinementSuggestion("");
     return () => {
       if (commentRevealFrame.current !== null) window.cancelAnimationFrame(commentRevealFrame.current);
+      if (selectionGeometryFrame.current !== null) window.cancelAnimationFrame(selectionGeometryFrame.current);
     };
   }, [selectedComment?.text, selectedId]);
 
@@ -329,13 +331,30 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     const end = textarea.selectionEnd;
     const text = textarea.value.slice(start, end);
     if (start === end || !text.trim()) {
-      dismissCommentRefinement();
+      if (refinementPhase !== "ready") dismissCommentRefinement();
       return;
     }
     const position = measureSelectionPosition(textarea, start, end);
+    const sameSelection = commentSelection?.start === start && commentSelection.end === end && commentSelection.text === text;
     setCommentSelection({ start, end, text, actionLeft: position.left, actionTop: position.top, selectionRects: position.selectionRects });
-    setRefinementPhase("idle");
-    setRefinementSuggestion("");
+    if (!sameSelection) {
+      setRefinementPhase("idle");
+      setRefinementSuggestion("");
+    }
+  }
+
+  function refreshCommentSelectionGeometry() {
+    const textarea = commentTextareaRef.current;
+    if (!textarea || !commentSelection || selectionGeometryFrame.current !== null) return;
+    const selection = commentSelection;
+    selectionGeometryFrame.current = window.requestAnimationFrame(() => {
+      selectionGeometryFrame.current = null;
+      const position = measureSelectionPosition(textarea, selection.start, selection.end);
+      setCommentSelection(current => {
+        if (!current || current.start !== selection.start || current.end !== selection.end || current.text !== selection.text) return current;
+        return { ...current, actionLeft: position.left, actionTop: position.top, selectionRects: position.selectionRects };
+      });
+    });
   }
 
   async function requestCommentRefinement(action: CommentRefinementAction) {
@@ -1092,6 +1111,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                   value={displayedCommentText}
                   readOnly={singleGenerationPhase !== "idle"}
                   onSelect={handleCommentSelection}
+                  onScroll={refreshCommentSelectionGeometry}
                   onChange={event => {
                     dismissCommentRefinement();
                     setDisplayedCommentText(event.target.value);
@@ -1101,7 +1121,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                   aria-describedby="comment-selection-ai-hint"
                   className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-5 py-4 text-[15px] leading-7 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
                 />
-                {commentSelection && singleGenerationPhase === "idle" && refinementPhase === "idle" && (
+                {commentSelection && commentSelection.selectionRects.length > 0 && singleGenerationPhase === "idle" && refinementPhase === "idle" && (
                   <div
                     role="toolbar"
                     aria-label="AI 优化选中文字"
@@ -1132,7 +1152,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                     style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
                   />
                 ))}
-                {commentSelection && refinementPhase === "ready" && refinementSuggestion && (
+                {commentSelection && commentSelection.selectionRects.length > 0 && refinementPhase === "ready" && refinementSuggestion && (
                   <span
                     aria-hidden="true"
                     className="selection-ai-inline-diff pointer-events-none absolute z-20 inline-flex max-w-[calc(100%-24px)] items-center gap-2 overflow-hidden rounded-[6px] border border-blue-100 bg-white/90 px-1.5 py-0.5 text-[15px] leading-7 shadow-sm backdrop-blur-md"

@@ -121,7 +121,7 @@ test("selected comment text is refined only after teacher confirmation", async (
       action: "polish",
       selectedText: "她能清楚说明解题过程",
     });
-    await new Promise(resolve => setTimeout(resolve, 250));
+    await new Promise(resolve => setTimeout(resolve, 900));
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -135,29 +135,45 @@ test("selected comment text is refined only after teacher confirmation", async (
   await page.getByRole("button", { name: "评语工作台" }).click();
   const dialog = page.getByRole("dialog", { name: "评语工作台" });
   const editor = dialog.getByPlaceholder(/也可以选中文字/);
-  const original = "在数学学习中，她能清楚说明解题过程，也愿意尝试不同方法。";
+  const contextLines = Array.from({ length: 20 }, (_, index) => `第 ${index + 1} 条课堂观察：能够按要求完成当天任务。`).join("\n");
+  const original = `${contextLines}\n在数学学习中，她能清楚说明解题过程，也愿意尝试不同方法。`;
   await editor.fill(original);
   await editor.evaluate((element, selectedText) => {
     const textarea = element as HTMLTextAreaElement;
     const start = textarea.value.indexOf(selectedText);
     textarea.focus();
     textarea.setSelectionRange(start, start + selectedText.length);
+    textarea.scrollTop = textarea.scrollHeight;
     textarea.dispatchEvent(new Event("select", { bubbles: true }));
     document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
   }, "她能清楚说明解题过程");
 
   await dialog.getByRole("button", { name: "优化表达", exact: true }).click();
-  await expect(dialog.locator(".selection-ai-glass-bar").first()).toBeVisible();
+  const glassBar = dialog.locator(".selection-ai-glass-bar").first();
+  await expect(glassBar).toBeVisible();
+  const initialGlassY = (await glassBar.boundingBox())?.y || 0;
+  await editor.evaluate(element => {
+    const textarea = element as HTMLTextAreaElement;
+    textarea.scrollTop = Math.max(0, textarea.scrollTop - 14);
+    textarea.dispatchEvent(new Event("scroll"));
+  });
+  await expect.poll(async () => (await glassBar.boundingBox())?.y || 0).toBeGreaterThan(initialGlassY + 5);
   await expect(dialog.getByText("正在优化选中文字", { exact: true })).toHaveCount(0);
   const suggestion = dialog.getByRole("region", { name: "AI 局部修改建议" });
   await expect(suggestion).toContainText("她能够条理清晰地说明解题思路");
   await expect(dialog.locator(".selection-ai-inline-old")).toHaveText("她能清楚说明解题过程");
   await expect(dialog.locator(".selection-ai-inline-new")).toHaveText("她能够条理清晰地说明解题思路");
   await expect(editor).toHaveValue(original);
+  await editor.evaluate(element => {
+    element.dispatchEvent(new Event("select", { bubbles: true }));
+    document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
+  });
+  await page.waitForTimeout(600);
+  await expect(suggestion).toBeVisible();
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("seat-manager-ai-comment-draft:")))).toEqual([]);
 
   await suggestion.getByRole("button", { name: "应用替换" }).click();
-  await expect(editor).toHaveValue("在数学学习中，她能够条理清晰地说明解题思路，也愿意尝试不同方法。");
+  await expect(editor).toHaveValue(original.replace("她能清楚说明解题过程", "她能够条理清晰地说明解题思路"));
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("seat-manager-ai-comment-draft:")))).toEqual([]);
 
   await dialog.getByTitle("保存").click();
