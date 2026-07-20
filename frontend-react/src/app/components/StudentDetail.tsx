@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AiCommentDrawer } from "./AiCommentDrawer";
 import { StudentModal } from "./StudentModal";
 import type { NewDormEventInput } from "../state/dormitoryActions";
-import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
+import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreviewFallback, BusinessEntityPreviewModel, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 
 interface StudentDetailProps {
   student: AppStudent;
@@ -28,6 +28,7 @@ interface StudentDetailProps {
   communicationDrafts?: CommunicationDraft[];
   activityEvents?: ActivityEvent[];
   onOpenEntity?: (ref: BusinessEntityRef) => void;
+  resolveEntityPreview: (ref: BusinessEntityRef, fallback?: BusinessEntityPreviewFallback) => BusinessEntityPreviewModel;
 }
 
 export function StudentDetail({
@@ -53,6 +54,7 @@ export function StudentDetail({
   communicationDrafts,
   activityEvents,
   onOpenEntity,
+  resolveEntityPreview,
 }: StudentDetailProps) {
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
@@ -82,6 +84,8 @@ export function StudentDetail({
         communicationDrafts={communicationDrafts}
         activityEvents={activityEvents}
         onOpenEntity={onOpenEntity}
+        resolveEntityPreview={resolveEntityPreview}
+        leavesWorkbench={elevated}
         layerClassName={elevated ? "z-[90]" : "z-[60]"}
       />
       <AiCommentDrawer

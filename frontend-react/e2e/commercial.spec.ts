@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { seedContextPreviewRecords } from "./contextPreviewFixture";
+
 const SUCCESS = {
   token: "e2e-commercial-token",
   expiresAt: Date.now() + 60_000,
@@ -54,4 +56,29 @@ test("commercial login explains an edition-scoped rejection", async ({ page }) =
   await page.getByPlaceholder("请输入授权码").fill("ZHANG-ONLY");
   await page.getByRole("button", { name: "进入" }).click();
   await expect(page.getByText("这个授权码不适用于当前版本，请联系我处理")).toBeVisible();
+});
+
+test("commercial keeps comment context while previewing a student task", async ({ page }) => {
+  await page.route("**/license/auth", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SUCCESS) }));
+  await page.goto("./");
+  await page.getByPlaceholder("请输入授权码").fill("TEST-CONTEXT-PREVIEW");
+  await page.getByRole("button", { name: "进入" }).click();
+  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("商用速览学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await seedContextPreviewRecords(page, "商用速览学生");
+  await page.reload();
+  await page.getByRole("button", { name: "评语工作台" }).click();
+
+  const workbench = page.getByRole("dialog", { name: "评语工作台" });
+  await workbench.getByRole("button", { name: /商用速览学生/ }).first().click();
+  await workbench.getByRole("button", { name: "查看 商用速览学生 的学生详情" }).click();
+  await page.getByRole("tab", { name: "建议与沟通" }).click();
+  const before = await page.getByRole("dialog").count();
+  await page.getByRole("button", { name: /上下文任务甲/ }).first().click();
+  await expect(page.getByRole("region", { name: "上下文任务甲事项速览" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(before);
+  await expect(workbench).toBeVisible();
 });

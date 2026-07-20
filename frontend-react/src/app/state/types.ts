@@ -11,6 +11,33 @@ export interface BusinessEntityRef {
   date?: string;
 }
 
+export type BusinessEntityPreviewAvailability = "available" | "missing" | "unsupported";
+export type BusinessEntityPreviewTone = "default" | "success" | "warning" | "danger" | "muted";
+
+export interface BusinessEntityPreviewFact {
+  label: string;
+  value: string;
+}
+
+export interface BusinessEntityPreviewModel {
+  ref: BusinessEntityRef;
+  domainLabel: string;
+  title: string;
+  subtitle?: string;
+  status?: string;
+  statusTone?: BusinessEntityPreviewTone;
+  facts: BusinessEntityPreviewFact[];
+  description?: string;
+  availability: BusinessEntityPreviewAvailability;
+  navigationLabel?: string;
+}
+
+export interface BusinessEntityPreviewFallback {
+  title: string;
+  detail?: string;
+  occurredAt?: string;
+}
+
 export type ActivityAction = "created" | "updated" | "status_changed" | "archived" | "restored" | "shared" | "deleted";
 
 export interface ActivityEvent {

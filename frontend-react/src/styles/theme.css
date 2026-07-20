@@ -493,6 +493,27 @@
   --student-tab-enter-x: 16px;
 }
 
+.student-context-preview-motion {
+  grid-template-rows: 1fr;
+  margin-top: 0.75rem;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin-top 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease-out,
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.student-context-preview-motion[data-phase="opening"],
+.student-context-preview-motion[data-phase="closing"] {
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+}
+
 .grade-toolbar-copy-enter {
   animation: grade-toolbar-copy-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }

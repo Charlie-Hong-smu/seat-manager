@@ -16,7 +16,7 @@ import { createStudentRecord, updateStudentProfile } from "../state/studentActio
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
-import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, Gender, HomeworkAssignment, RecordType, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
+import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreviewFallback, BusinessEntityPreviewModel, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, Gender, HomeworkAssignment, RecordType, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 import { getNeighborIndexPairs, getSeatPositionLabel, resolveSeatLayout } from "../state/seatLayout";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
 import { normalizeAttendancePatch } from "../state/classManagementCommands";
@@ -24,7 +24,7 @@ import { listDormitoryEvents } from "../state/dormitoryPeriods";
 import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
-import { StudentActivityTimeline, StudentAttentionSummary } from "./StudentAttentionSummary";
+import { StudentActivityTimeline, StudentAttentionSummary, type ContextPreviewRequest } from "./StudentAttentionSummary";
 import {
   buildWeekOptions,
   formatScore,
@@ -74,6 +74,8 @@ interface Props {
   communicationDrafts?: CommunicationDraft[];
   activityEvents?: ActivityEvent[];
   onOpenEntity?: (ref: BusinessEntityRef) => void;
+  resolveEntityPreview: (ref: BusinessEntityRef, fallback?: BusinessEntityPreviewFallback) => BusinessEntityPreviewModel;
+  leavesWorkbench?: boolean;
   layerClassName?: string;
 }
 
@@ -100,6 +102,8 @@ export function StudentModal({
   communicationDrafts = [],
   activityEvents = [],
   onOpenEntity,
+  resolveEntityPreview,
+  leavesWorkbench = false,
   layerClassName = "z-[60]",
 }: Props) {
   const appDialog = useAppDialog();
@@ -151,6 +155,7 @@ export function StudentModal({
   const [rememberAiTrendAuth, setRememberAiTrendAuth] = useState(true);
   const [hasAiTrendAuth, setHasAiTrendAuth] = useState(() => hasStoredAiTrendAuth());
   const [followupView, setFollowupView] = useState<"advice" | "communication">("advice");
+  const [contextPreview, setContextPreview] = useState<ContextPreviewRequest | null>(null);
 
   useEffect(() => {
     const cached = readCachedStudentAiTrend(student);
@@ -160,6 +165,7 @@ export function StudentModal({
     setAiTrendAccessCode("");
     setHasAiTrendAuth(hasStoredAiTrendAuth());
     setActiveTab(initialActiveTab);
+    setContextPreview(null);
   }, [initialActiveTab, student]);
 
   function changeActiveTab(nextTab: StudentDetailTab) {
@@ -167,7 +173,12 @@ export function StudentModal({
     const currentIndex = STUDENT_DETAIL_TABS.findIndex(tab => tab.value === activeTab);
     const nextIndex = STUDENT_DETAIL_TABS.findIndex(tab => tab.value === nextTab);
     setTabDirection(nextIndex < currentIndex ? "left" : "right");
+    setContextPreview(null);
     setActiveTab(nextTab);
+  }
+
+  function toggleContextPreview(request: ContextPreviewRequest) {
+    setContextPreview(current => current?.source === request.source && current.key === request.key ? null : request);
   }
 
   useEffect(() => {
@@ -729,9 +740,28 @@ export function StudentModal({
 
           {activeTab === "followup" && (
             <div className="space-y-4">
-            <StudentAttentionSummary student={student} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} onOpenEntity={onOpenEntity}/>
-            <StudentActivityTimeline studentId={student.id} events={activityEvents} onOpenEntity={onOpenEntity}/>
-            <UnderlineTabs value={followupView} onChange={setFollowupView} ariaLabel="跟进与沟通" options={[{ value: "advice", label: "跟进建议", tone: "ai" }, { value: "communication", label: "周沟通稿" }]} />
+            <StudentAttentionSummary
+              student={student}
+              attendance={attendanceRecords}
+              tasks={followupTasks}
+              homework={homeworkAssignments}
+              dormitories={dormitories}
+              activePreview={contextPreview}
+              onTogglePreview={toggleContextPreview}
+              resolvePreview={resolveEntityPreview}
+              onNavigate={onOpenEntity}
+              leavesWorkbench={leavesWorkbench}
+            />
+            <StudentActivityTimeline
+              studentId={student.id}
+              events={activityEvents}
+              activePreview={contextPreview}
+              onTogglePreview={toggleContextPreview}
+              resolvePreview={resolveEntityPreview}
+              onNavigate={onOpenEntity}
+              leavesWorkbench={leavesWorkbench}
+            />
+            <UnderlineTabs value={followupView} onChange={nextView => { setContextPreview(null); setFollowupView(nextView); }} ariaLabel="跟进与沟通" options={[{ value: "advice", label: "跟进建议", tone: "ai" }, { value: "communication", label: "周沟通稿" }]} />
             {followupView === "advice" ? <AiStudentFollowupPanel
               student={student}
               context={{

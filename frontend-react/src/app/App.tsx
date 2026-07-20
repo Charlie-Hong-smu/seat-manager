@@ -5,6 +5,7 @@ import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar, type SidebarTab } from "./components/Sidebar";
 import { StudentDetail } from "./components/StudentDetail";
+import { resolveBusinessEntityPreview } from "./state/businessEntityPreview";
 import { TopHeader } from "./components/TopHeader";
 import { CloudSyncModal } from "./components/CloudSyncModal";
 import { InstallHelpModal } from "./components/InstallHelpModal";
@@ -942,7 +943,13 @@ export default function App() {
               homeworkAssignments={homeworkAssignments}
               communicationDrafts={communicationDrafts}
               activityEvents={appState.activityEvents}
-              onOpenEntity={ref => { setSelectedStudentId(null); navigateToEntity(ref); }}
+              resolveEntityPreview={(ref, fallback) => resolveBusinessEntityPreview(appState, ref, fallback)}
+              onOpenEntity={ref => {
+                setSelectedStudentInitialTab("records");
+                setSelectedStudentId(null);
+                if (showCommentWorkbench) finishClosingCommentWorkbench();
+                navigateToEntity(ref);
+              }}
             />
           )}
 

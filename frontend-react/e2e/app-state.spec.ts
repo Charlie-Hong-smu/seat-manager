@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 
+import { seedContextPreviewRecords } from "./contextPreviewFixture";
+
 async function login(page: import("@playwright/test").Page) {
   await page.route("**/license/auth", async route => {
     const body = route.request().postDataJSON() as { edition?: string };
@@ -148,6 +150,68 @@ test("opens student detail from the current comment avatar without a separate de
   expect(layers!.detailIsTopmost).toBe(true);
   await closeStudentDetail.click();
   await expect(workbench).toBeVisible();
+});
+
+test("previews attention and timeline records inline without interrupting comment work", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("上下文预览学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await seedContextPreviewRecords(page, "上下文预览学生");
+  await page.reload();
+  await page.getByRole("button", { name: "评语工作台" }).click();
+
+  const workbench = page.getByRole("dialog", { name: "评语工作台" });
+  await workbench.getByRole("button", { name: /上下文预览学生/ }).first().click();
+  const commentEditor = workbench.getByRole("textbox", { name: "评语正文编辑器" });
+  await commentEditor.fill("这段评语草稿必须保留。");
+  await workbench.getByRole("button", { name: "查看 上下文预览学生 的学生详情" }).click();
+  await page.getByRole("tab", { name: "建议与沟通" }).click();
+
+  const dialogCount = await page.getByRole("dialog").count();
+  const taskA = page.getByRole("button", { name: /上下文任务甲/ }).first();
+  const taskB = page.getByRole("button", { name: /上下文任务乙/ }).first();
+  await taskA.focus();
+  await page.keyboard.press("Enter");
+  const taskAPreview = page.getByRole("region", { name: "上下文任务甲事项速览" });
+  await expect(taskAPreview).toBeVisible();
+  await expect(taskA).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("dialog")).toHaveCount(dialogCount);
+  await expect(workbench).toBeVisible();
+  await expect(page.getByRole("button", { name: "关闭学生详情" })).toBeVisible();
+  await page.setViewportSize({ width: 520, height: 800 });
+  const narrowBox = await taskAPreview.boundingBox();
+  expect(narrowBox).not.toBeNull();
+  expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
+  expect(narrowBox!.x + narrowBox!.width).toBeLessThanOrEqual(520);
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  await taskB.click();
+  await expect(page.getByRole("region", { name: "上下文任务甲事项速览" })).toHaveCount(0);
+  const taskBPreview = page.getByRole("region", { name: "上下文任务乙事项速览" });
+  await expect(taskBPreview).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  expect(await taskBPreview.evaluate(element => getComputedStyle(element).transitionDuration)).toContain("0.26s");
+  await taskB.click();
+  await expect(taskBPreview).toHaveAttribute("data-phase", "closing");
+  await expect(page.getByRole("region", { name: "上下文任务乙事项速览" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: /创建上下文任务甲/ }).click();
+  await expect(page.getByRole("region", { name: "上下文任务甲事项速览" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(dialogCount);
+  await page.getByRole("button", { name: "关闭学生详情" }).click();
+  await expect(workbench).toBeVisible();
+  await expect(commentEditor).toHaveValue("这段评语草稿必须保留。");
+
+  await workbench.getByRole("button", { name: "查看 上下文预览学生 的学生详情" }).click();
+  await page.getByRole("tab", { name: "建议与沟通" }).click();
+  await page.getByRole("button", { name: /上下文任务甲/ }).first().click();
+  await page.getByRole("button", { name: "前往任务工作区（离开评语工作台）" }).click();
+  await expect(workbench).toBeHidden();
+  await expect(page.getByRole("button", { name: "关闭学生详情" })).toHaveCount(0);
+  await expect(page.locator('[data-followup-task-id="context-task-a"]')).toBeVisible();
 });
 
 test("AI followup actions use clear labels, center confirmation, and close student detail before task editing", async ({ page }) => {
