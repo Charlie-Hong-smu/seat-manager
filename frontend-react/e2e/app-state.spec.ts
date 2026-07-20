@@ -126,8 +126,28 @@ test("opens student detail from the current comment avatar without a separate de
   await expect(workbench.getByRole("button", { name: "查看 头像详情学生 的学生详情" })).toBeVisible();
   await expect(workbench.getByRole("button", { name: "查看详情", exact: true })).toHaveCount(0);
   await workbench.getByRole("button", { name: "查看 头像详情学生 的学生详情" }).click();
-  await expect(workbench).toBeHidden();
-  await expect(page.getByRole("button", { name: "关闭学生详情" })).toBeVisible();
+  const closeStudentDetail = page.getByRole("button", { name: "关闭学生详情" });
+  await expect(workbench).toBeVisible();
+  await expect(closeStudentDetail).toBeVisible();
+  const layers = await page.evaluate(() => {
+    const workbenchDialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="评语工作台"]');
+    const closeButton = document.querySelector<HTMLElement>('button[aria-label="关闭学生详情"]');
+    const detailOverlay = closeButton?.closest<HTMLElement>('.fixed.inset-0');
+    if (!workbenchDialog || !detailOverlay) return null;
+    const panel = closeButton?.closest<HTMLElement>('.modal-panel-enter');
+    const rect = panel?.getBoundingClientRect();
+    const topElement = rect ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + 12) : null;
+    return {
+      workbench: Number(getComputedStyle(workbenchDialog).zIndex),
+      detail: Number(getComputedStyle(detailOverlay).zIndex),
+      detailIsTopmost: Boolean(topElement && detailOverlay.contains(topElement)),
+    };
+  });
+  expect(layers).not.toBeNull();
+  expect(layers!.detail).toBeGreaterThan(layers!.workbench);
+  expect(layers!.detailIsTopmost).toBe(true);
+  await closeStudentDetail.click();
+  await expect(workbench).toBeVisible();
 });
 
 test("AI followup actions use clear labels, center confirmation, and close student detail before task editing", async ({ page }) => {

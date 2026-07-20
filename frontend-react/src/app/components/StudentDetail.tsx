@@ -7,6 +7,7 @@ import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityRef, Co
 
 interface StudentDetailProps {
   student: AppStudent;
+  elevated?: boolean;
   students: AppStudent[];
   dormitories: Dormitory[];
   onClose: () => void;
@@ -31,6 +32,7 @@ interface StudentDetailProps {
 
 export function StudentDetail({
   student,
+  elevated = false,
   students,
   dormitories,
   onClose,
@@ -80,11 +82,13 @@ export function StudentDetail({
         communicationDrafts={communicationDrafts}
         activityEvents={activityEvents}
         onOpenEntity={onOpenEntity}
+        layerClassName={elevated ? "z-[90]" : "z-[60]"}
       />
       <AiCommentDrawer
         open={aiDrawerOpen}
         student={student}
         onClose={() => setAiDrawerOpen(false)}
+        elevated={elevated}
       />
     </>
   );

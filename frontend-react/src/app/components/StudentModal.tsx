@@ -74,6 +74,7 @@ interface Props {
   communicationDrafts?: CommunicationDraft[];
   activityEvents?: ActivityEvent[];
   onOpenEntity?: (ref: BusinessEntityRef) => void;
+  layerClassName?: string;
 }
 
 export function StudentModal({
@@ -99,6 +100,7 @@ export function StudentModal({
   communicationDrafts = [],
   activityEvents = [],
   onOpenEntity,
+  layerClassName = "z-[60]",
 }: Props) {
   const appDialog = useAppDialog();
   const modalHeaderRef = useRef<HTMLDivElement>(null);
@@ -445,7 +447,7 @@ export function StudentModal({
   }, [activeTab, profileEditing, student.id]);
 
   return (
-    <div className="soft-backdrop-enter fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+    <div className={`soft-backdrop-enter fixed inset-0 ${layerClassName} flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm`}>
       <div style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-white shadow-[var(--app-shadow-float)] transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
         {/* Header */}
         <div ref={modalHeaderRef} className="flex shrink-0 items-start justify-between border-b border-gray-100 p-6 pb-4">

@@ -21,6 +21,7 @@ interface AiCommentDrawerProps {
   open: boolean;
   student: AppStudent;
   onClose: () => void;
+  elevated?: boolean;
 }
 
 type GenerationPhase = "idle" | "loading" | "revealing";
@@ -37,7 +38,7 @@ function getAiErrorMessage(reason: string): string {
   }[reason] || "AI 评语暂时不可用，请稍后重试。";
 }
 
-export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps) {
+export function AiCommentDrawer({ open, student, onClose, elevated = false }: AiCommentDrawerProps) {
   const rubric = useMemo(() => readCommentRubric(), []);
   const [draftState, setDraftState] = useState(() => readStudentCommentDraft(student));
   const [savedText, setSavedText] = useState(() => readStudentCommentProfile(student).generatedComment);
@@ -209,7 +210,7 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
   </div>;
 
   return <>
-    <ToolDrawer open={open} title={`AI 期末评语 · ${student.name}`} onClose={onClose} widthClassName="w-[420px]" bodyClassName="p-4" positionClassName="fixed" backdropLayerClassName="z-[70]" panelLayerClassName="z-[80]" footer={footer}>
+    <ToolDrawer open={open} title={`AI 期末评语 · ${student.name}`} onClose={onClose} widthClassName="w-[420px]" bodyClassName="p-4" positionClassName="fixed" backdropLayerClassName={elevated ? "z-[100]" : "z-[70]"} panelLayerClassName={elevated ? "z-[110]" : "z-[80]"} footer={footer}>
       <div className="space-y-4">
         <section className="overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white">
           <button type="button" aria-expanded={materialsOpen} onClick={() => setMaterialsOpen(value => !value)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/30">
