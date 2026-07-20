@@ -138,6 +138,14 @@ test("selected comment text is refined only after teacher confirmation", async (
   const contextLines = Array.from({ length: 20 }, (_, index) => `第 ${index + 1} 条课堂观察：能够按要求完成当天任务。`).join("\n");
   const original = `${contextLines}\n在数学学习中，她能清楚说明解题过程，也愿意尝试不同方法。`;
   await editor.fill(original);
+  await expect.poll(async () => page.evaluate(() => {
+    const key = Object.keys(localStorage).find(item => item.startsWith("seat-manager-ai-comment-draft:"));
+    return key ? JSON.parse(localStorage.getItem(key) || "{}").generatedComment : "";
+  })).toBe(original);
+  await dialog.getByRole("button", { name: "关闭评语工作台" }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "评语工作台" }).click();
+  await expect(editor).toHaveValue(original);
   await editor.evaluate((element, selectedText) => {
     const textarea = element as HTMLTextAreaElement;
     const start = textarea.value.indexOf(selectedText);
@@ -166,20 +174,29 @@ test("selected comment text is refined only after teacher confirmation", async (
   const scrolledGlassY = (await glassBar.boundingBox())?.y || 0;
   expect(Math.abs(scrolledGlassY - initialGlassY - scrollDelta)).toBeLessThan(3);
   await expect(dialog.getByText("正在优化选中文字", { exact: true })).toHaveCount(0);
-  const suggestion = dialog.getByRole("region", { name: "AI 局部修改建议" });
-  await expect(suggestion).toContainText("她能够条理清晰地说明解题思路");
+  const applyAiChange = dialog.getByRole("button", { name: "应用 AI 修改" });
+  await expect(applyAiChange).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "AI 局部修改建议" })).toHaveCount(0);
+  await expect(dialog.getByText(/选中文字后可使用/)).toHaveCount(0);
   await expect(dialog.getByRole("status", { name: "AI 修订预览" })).toContainText("在数学学习中，她能清楚说明解题过程她能够条理清晰地说明解题思路，也愿意尝试不同方法。");
   await expect(dialog.locator(".selection-ai-inline-old")).toHaveText("她能清楚说明解题过程");
   await expect(dialog.locator(".selection-ai-inline-new")).toHaveText("她能够条理清晰地说明解题思路");
   await expect(dialog.locator(".selection-ai-inline-old")).toHaveCSS("text-decoration-line", "line-through");
   await page.waitForTimeout(600);
-  await expect(suggestion).toBeVisible();
+  await expect(applyAiChange).toBeVisible();
   await expect(dialog.locator(".selection-ai-inline-old")).toHaveCSS("text-decoration-line", "line-through");
-  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("seat-manager-ai-comment-draft:")))).toEqual([]);
+  expect(await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(item => item.startsWith("seat-manager-ai-comment-draft:"));
+    return key ? JSON.parse(localStorage.getItem(key) || "{}").generatedComment : "";
+  })).toBe(original);
 
-  await suggestion.getByRole("button", { name: "应用替换" }).click();
-  await expect(dialog.getByRole("textbox", { name: "评语正文编辑器" })).toHaveValue(original.replace("她能清楚说明解题过程", "她能够条理清晰地说明解题思路"));
-  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("seat-manager-ai-comment-draft:")))).toEqual([]);
+  await applyAiChange.click();
+  const refined = original.replace("她能清楚说明解题过程", "她能够条理清晰地说明解题思路");
+  await expect(dialog.getByRole("textbox", { name: "评语正文编辑器" })).toHaveValue(refined);
+  expect(await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(item => item.startsWith("seat-manager-ai-comment-draft:"));
+    return key ? JSON.parse(localStorage.getItem(key) || "{}").generatedComment : "";
+  })).toBe(refined);
 
   await dialog.getByTitle("保存").click();
   expect(await page.evaluate(() => Object.keys(localStorage).some(key => key.startsWith("seat-manager-ai-comment-draft:")))).toBe(true);

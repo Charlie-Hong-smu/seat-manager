@@ -144,7 +144,7 @@ export function readStudentCommentDraft(student: AppStudent): StudentCommentDraf
   };
 }
 
-export function saveStudentCommentDraft(studentId: StudentId, draft: StudentCommentDraft): StudentCommentDraft {
+export function cacheStudentCommentDraft(studentId: StudentId, draft: StudentCommentDraft): StudentCommentDraft {
   const next = {
     ...draft,
     updatedAt: draft.updatedAt || new Date().toISOString(),
@@ -157,6 +157,12 @@ export function saveStudentCommentDraft(studentId: StudentId, draft: StudentComm
       // Keep the React draft even when browser storage is unavailable.
     }
   }
+
+  return next;
+}
+
+export function saveStudentCommentDraft(studentId: StudentId, draft: StudentCommentDraft): StudentCommentDraft {
+  const next = cacheStudentCommentDraft(studentId, draft);
   saveDraftToLegacyStudent(studentId, next);
 
   return next;

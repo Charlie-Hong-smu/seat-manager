@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import { localizeTrendText, restoreStudentDisplayName } from "./aiTrendService";
-import { normalizeStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "./commentStorage";
+import { cacheStudentCommentDraft, normalizeStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "./commentStorage";
 import { createTestStudent } from "./testFixtures";
 
 describe("AI student context and comment cache", () => {
@@ -49,8 +49,14 @@ describe("AI student context and comment cache", () => {
       updatedAt: "2026-01-02T00:00:00.000Z",
     });
     expect(readStudentCommentDraft(student)).toEqual(saved);
+    const cached = cacheStudentCommentDraft(student.id, {
+      ...saved,
+      generatedComment: "尚未正式保存的输入",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+    });
+    expect(readStudentCommentDraft(student)).toEqual(cached);
     expect(normalizeStudentCommentDraft(null)).toBeNull();
     window.localStorage.setItem("seat-manager-ai-comment-draft:s1", "not-json");
-    expect(readStudentCommentDraft(student).generatedComment).toBe("很好");
+    expect(readStudentCommentDraft(student).generatedComment).toBe("尚未正式保存的输入");
   });
 });

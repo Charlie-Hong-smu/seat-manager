@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Copy, Plus, Save, Sparkles, X } from "lucide-react";
 
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
-import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
+import { cacheStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile, summarizeCommentProfile } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, StudentCommentProfile } from "../state/types";
 import {
@@ -15,7 +15,7 @@ import {
   resolveCommentWordCount,
   toggleCommentCriterion,
 } from "./commentEditor";
-import { AiGenerationPanel, Button, SegmentedControl, ToolDrawer, useAppDialog } from "./ui";
+import { AiGenerationPanel, Button, SegmentedControl, ToolDrawer } from "./ui";
 
 interface AiCommentDrawerProps {
   open: boolean;
@@ -38,10 +38,9 @@ function getAiErrorMessage(reason: string): string {
 }
 
 export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps) {
-  const appDialog = useAppDialog();
   const rubric = useMemo(() => readCommentRubric(), []);
   const [draftState, setDraftState] = useState(() => readStudentCommentDraft(student));
-  const [savedText, setSavedText] = useState(() => readStudentCommentDraft(student).generatedComment);
+  const [savedText, setSavedText] = useState(() => readStudentCommentProfile(student).generatedComment);
   const [commentProfile, setCommentProfile] = useState<StudentCommentProfile>(() => readStudentCommentProfile(student));
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
@@ -56,8 +55,9 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
   useEffect(() => {
     const draft = readStudentCommentDraft(student);
     setDraftState(draft);
-    setSavedText(draft.generatedComment);
-    setCommentProfile(readStudentCommentProfile(student));
+    const profile = readStudentCommentProfile(student);
+    setSavedText(profile.generatedComment);
+    setCommentProfile(profile);
     setHasAuth(hasStoredAiAuth());
     setAccessCode("");
     setStatus("请核对素材，可补充课堂表现后生成。");
@@ -187,17 +187,10 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
     }
   }
 
-  async function requestClose() {
-    if (dirty) {
-      const confirmed = await appDialog.confirm({
-        title: "放弃未保存的修改？",
-        description: `关闭后，${student.name} 当前手动修改的评语草稿不会保留。`,
-        confirmLabel: "放弃修改",
-        variant: "danger",
-      });
-      if (!confirmed) return;
-    }
-    onClose();
+  function updateCachedComment(text: string) {
+    const next = { ...draftState, generatedComment: text, updatedAt: new Date().toISOString() };
+    setDraftState(next);
+    cacheStudentCommentDraft(student.id, next);
   }
 
   function submitCustomOption(criterion: CommentCriterion) {
@@ -216,7 +209,7 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
   </div>;
 
   return <>
-    <ToolDrawer open={open} title={`AI 期末评语 · ${student.name}`} onClose={() => void requestClose()} widthClassName="w-[420px]" bodyClassName="p-4" positionClassName="fixed" backdropLayerClassName="z-[70]" panelLayerClassName="z-[80]" footer={footer}>
+    <ToolDrawer open={open} title={`AI 期末评语 · ${student.name}`} onClose={onClose} widthClassName="w-[420px]" bodyClassName="p-4" positionClassName="fixed" backdropLayerClassName="z-[70]" panelLayerClassName="z-[80]" footer={footer}>
       <div className="space-y-4">
         <section className="overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white">
           <button type="button" aria-expanded={materialsOpen} onClick={() => setMaterialsOpen(value => !value)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/30">
@@ -251,14 +244,13 @@ export function AiCommentDrawer({ open, student, onClose }: AiCommentDrawerProps
 
         {!hasAuth && <section className="rounded-[var(--app-radius-md)] border border-violet-100 bg-violet-50 p-4"><div className="mb-2 text-xs font-bold text-violet-600">AI 授权</div><input type="password" value={accessCode} onChange={event => setAccessCode(event.target.value)} className="h-10 w-full rounded-[var(--app-radius-sm)] border border-violet-100 bg-white px-3 text-sm outline-none focus:border-violet-300" placeholder="输入 AI 授权码"/><label className="mt-2 flex items-center gap-2 text-xs text-violet-700"><input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-violet-600"/>记住授权 30 天</label></section>}
 
-        <section><div className="mb-1.5 flex items-center justify-between"><span className="text-xs font-bold text-gray-500">评语草稿</span><span className={`text-xs font-semibold ${dirty ? "text-amber-600" : "text-emerald-600"}`}>{dirty ? "未保存" : savedText ? "已保存" : "暂无草稿"}</span></div><div className="relative min-h-[210px] overflow-hidden rounded-[var(--app-radius-sm)]">
-          <textarea rows={9} value={draftState.generatedComment} readOnly={phase !== "idle"} onChange={event => setDraftState(current => ({ ...current, generatedComment: event.target.value }))} className={`min-h-[210px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none transition-opacity focus:border-violet-300 focus:bg-white ${phase === "loading" ? "opacity-0" : "opacity-100"}`} placeholder="生成后可在这里继续编辑评语草稿。" />
+        <section><div className="mb-1.5 flex items-center justify-between"><span className="text-xs font-bold text-gray-500">评语草稿</span><span className={`text-xs font-semibold ${dirty ? "text-amber-600" : "text-emerald-600"}`}>{dirty ? "已缓存，未正式保存" : savedText ? "已保存" : "暂无草稿"}</span></div><div className="relative min-h-[210px] overflow-hidden rounded-[var(--app-radius-sm)]">
+          <textarea rows={9} value={draftState.generatedComment} readOnly={phase !== "idle"} onChange={event => updateCachedComment(event.target.value)} className={`min-h-[210px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm leading-6 outline-none transition-opacity focus:border-violet-300 focus:bg-white ${phase === "loading" ? "opacity-0" : "opacity-100"}`} placeholder="生成后可在这里继续编辑评语草稿。" />
           {phase === "loading" && <div className="absolute inset-0"><AiGenerationPanel compact title="正在生成评语" steps={["整理学生素材", "组织评语结构", "生成评语草稿"]} /></div>}
           {phase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
         </div></section>
         <p className="rounded-[var(--app-radius-sm)] bg-violet-50/70 px-3 py-2 text-xs leading-5 text-violet-700" role="status">{status}</p>
       </div>
     </ToolDrawer>
-    {appDialog.dialog}
   </>;
 }

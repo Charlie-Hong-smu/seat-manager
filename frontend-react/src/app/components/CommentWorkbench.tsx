@@ -26,7 +26,7 @@ import {
   type CommentRefinementAction,
 } from "../state/aiCommentRefinementService";
 import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
-import { readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
+import { cacheStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
   readCommentRubric,
   readStudentCommentProfile,
@@ -194,7 +194,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiAuth());
-  const [aiStatus, setAiStatus] = useState("AI 会使用学生成绩、标签和教师补充评价生成。");
+  const [aiStatus, setAiStatus] = useState("");
   const [singleGenerationPhase, setSingleGenerationPhase] = useState<SingleGenerationPhase>("idle");
   const [displayedCommentText, setDisplayedCommentText] = useState(() => comments[0]?.text || "");
   const [commentSelection, setCommentSelection] = useState<CommentTextSelection | null>(null);
@@ -247,9 +247,12 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const latestExam = selectedStudent?.exams[0];
 
   useEffect(() => {
-    if (selectedProfile) {
-      setTeacherNote(selectedProfile.teacherNote);
-      setShowTeacherNote(Boolean(selectedProfile.teacherNote || selectedComment?.needsInfo));
+    if (selectedProfile && selectedStudent) {
+      const recoveredDraft = readStudentCommentDraft(selectedStudent);
+      const draftIsNewer = Date.parse(recoveredDraft.updatedAt || "") > Date.parse(selectedProfile.updatedAt || "");
+      const recoveredTeacherNote = draftIsNewer ? recoveredDraft.teacherNote : selectedProfile.teacherNote;
+      setTeacherNote(recoveredTeacherNote);
+      setShowTeacherNote(Boolean(recoveredTeacherNote || selectedComment?.needsInfo));
       const selectedCriterionIds = Object.entries(selectedProfile.criteriaValues)
         .filter(([, values]) => values.length > 0)
         .map(([criterionId]) => criterionId);
@@ -260,7 +263,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
         setExpandedCriteria(current => new Set([...current, ...selectedCriterionIds, ...customCriterionIds]));
       }
     }
-  }, [selectedComment?.needsInfo, selectedId, selectedProfile]);
+  }, [selectedComment?.needsInfo, selectedId, selectedProfile, selectedStudent]);
 
   useEffect(() => {
     workbenchRef.current?.focus();
@@ -324,6 +327,18 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     setComments(prev => prev.map(c => c.studentId === id ? { ...c, ...patch } : c));
   }
 
+  function cacheSelectedCommentText(text: string, nextTeacherNote = teacherNote) {
+    if (!selectedStudent || !selectedComment) return;
+    cacheStudentCommentDraft(selectedStudent.id, {
+      generatedComment: text,
+      teacherNote: nextTeacherNote,
+      style: selectedComment.style as "warm" | "formal" | "brief",
+      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
+      targetWordCount: resolveCommentWordCount(selectedComment.lengthMode as "short" | "standard" | "long" | "custom", customWordCount),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   function dismissCommentRefinement() {
     setCommentSelection(null);
     setRefinementPhase("idle");
@@ -365,8 +380,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     commentScrollPosition.current = commentTextareaRef.current?.scrollTop || 0;
     setRefinementPhase("loading");
     setRefinementSuggestion("");
-    const actionLabel = COMMENT_REFINEMENT_ACTIONS.find(item => item.value === action)?.label || "优化表达";
-    setAiStatus(`正在${actionLabel}选中的文字，原文不会被自动替换。`);
+    setAiStatus("");
     try {
       const result = await refineCommentSelection({
         studentId: selectedStudent.id,
@@ -379,7 +393,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       });
       setRefinementSuggestion(result.replacement);
       setRefinementPhase("ready");
-      setAiStatus("AI 已给出局部修改建议，请确认后再应用到当前草稿。");
+      setAiStatus("");
     } catch (error) {
       setRefinementPhase("idle");
       setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
@@ -402,6 +416,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     const caretPosition = commentSelection.start + refinementSuggestion.length;
     setDisplayedCommentText(nextText);
     updateComment(selectedId, { text: nextText, generated: Boolean(nextText) });
+    cacheSelectedCommentText(nextText);
     dismissCommentRefinement();
     setAiStatus("已应用到当前草稿；请继续检查，保存后才会写入评语记录。");
     window.requestAnimationFrame(() => {
@@ -524,7 +539,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     if (!selectedStudent || !selectedComment || singleGenerationPhase !== "idle") return;
     setSingleGenerationPhase("loading");
     setDisplayedCommentText("");
-    setAiStatus(`正在生成 ${selectedStudent.name} 的评语...`);
+    setAiStatus("");
     try {
       const draft = buildDraft(selectedComment);
       const result = await generateStudentAiComment(selectedStudent, draft, { accessCode, remember: rememberAuth, force: true });
@@ -555,7 +570,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       }
       setAccessCode("");
       setHasAuth(true);
-      setAiStatus(`已生成 ${selectedStudent.name} 的评语。`);
+      setAiStatus("");
       revealGeneratedComment(result.comment);
     } catch (error) {
       setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
@@ -1117,10 +1132,10 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                       dismissCommentRefinement();
                       setDisplayedCommentText(event.target.value);
                       updateComment(selectedId, { text: event.target.value });
+                      cacheSelectedCommentText(event.target.value);
                     }}
                     placeholder="点击「生成评语」后会在这里显示；也可以选中文字，让 AI 局部优化表达。"
                     aria-label="评语正文编辑器"
-                    aria-describedby="comment-selection-ai-hint"
                     className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-5 py-4 text-[15px] leading-7 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-blue-300 focus:bg-white ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
                   />
                 ) : commentSelection ? (
@@ -1180,24 +1195,12 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                 )}
                 {singleGenerationPhase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
               </div>
-              <p id="comment-selection-ai-hint" className="mt-2 shrink-0 text-xs text-gray-400">选中文字后可使用“优化表达 / 更具体 / 缩短”；AI 只生成建议，不会自动覆盖或保存。</p>
               {refinementPhase === "ready" && commentSelection && refinementSuggestion && (
-                <section aria-label="AI 局部修改建议" aria-live="polite" className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] border border-violet-200 bg-violet-50/50 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-violet-700"><Sparkles className="h-3.5 w-3.5" />AI 局部修改建议</div>
-                    <span className="text-[11px] font-semibold text-violet-400">应用前由教师确认</span>
-                  </div>
-                  <div className="mt-2 grid gap-2 text-sm leading-6 lg:grid-cols-2">
-                    <div className="rounded-[var(--app-radius-sm)] bg-white/80 px-3 py-2 text-gray-500"><span className="mb-1 block text-[11px] font-bold text-gray-400">原文</span>{commentSelection.text}</div>
-                    <div className="rounded-[var(--app-radius-sm)] bg-white px-3 py-2 text-gray-800 shadow-sm"><span className="mb-1 block text-[11px] font-bold text-violet-600">建议</span>{refinementSuggestion}</div>
-                  </div>
-                  <div className="mt-3 flex justify-end gap-2">
-                    <Button type="button" size="sm" variant="ghost" onClick={dismissCommentRefinement}>保留原文</Button>
-                    <Button type="button" size="sm" onClick={applyCommentRefinement} className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300">应用替换</Button>
-                  </div>
-                </section>
+                <div className="mt-3 flex shrink-0 justify-end">
+                  <Button type="button" size="sm" onClick={applyCommentRefinement} className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300">应用 AI 修改</Button>
+                </div>
               )}
-              <div className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] bg-blue-50/70 px-3 py-2 text-xs leading-5 text-blue-700" role="status">{aiStatus}</div>
+              {aiStatus && <div className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] bg-blue-50/70 px-3 py-2 text-xs leading-5 text-blue-700" role="status">{aiStatus}</div>}
             </div>
 
             <div className="shrink-0 border-t border-[var(--app-border)] bg-white px-4 py-3 xl:px-6">
@@ -1267,7 +1270,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               </button>
               <div aria-hidden={!showTeacherNote} inert={!showTeacherNote ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ${showTeacherNote ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
                 <div className="overflow-hidden">
-                  <textarea value={teacherNote} onChange={event => setTeacherNote(event.target.value)} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-5 outline-none focus:border-blue-300 focus:bg-white" />
+                  <textarea value={teacherNote} onChange={event => { setTeacherNote(event.target.value); cacheSelectedCommentText(selectedComment.text, event.target.value); }} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-5 outline-none focus:border-blue-300 focus:bg-white" />
                   <div className="mt-2 flex justify-end"><button type="button" onClick={saveSelectedTeacherNote} disabled={!hasUnsavedTeacherNote} className={`flex h-8 items-center gap-1.5 rounded-[var(--app-radius-sm)] px-3 text-xs font-semibold ${hasUnsavedTeacherNote ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "bg-gray-50 text-gray-300"}`}><Save className="h-3.5 w-3.5" />暂存说明</button></div>
                 </div>
               </div>
