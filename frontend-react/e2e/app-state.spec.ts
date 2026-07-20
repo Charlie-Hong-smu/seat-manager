@@ -115,6 +115,20 @@ test("preloads the comment workbench and keeps its full-screen background stable
   await expect(dialog).toBeHidden();
 });
 
+test("opens student detail from the current comment avatar without a separate detail button", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("头像详情学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "评语工作台" }).click();
+
+  const workbench = page.getByRole("dialog", { name: "评语工作台" });
+  await expect(workbench.getByRole("button", { name: "查看 头像详情学生 的学生详情" })).toBeVisible();
+  await expect(workbench.getByRole("button", { name: "查看详情", exact: true })).toHaveCount(0);
+  await workbench.getByRole("button", { name: "查看 头像详情学生 的学生详情" }).click();
+  await expect(page.getByRole("button", { name: "关闭学生详情" })).toBeVisible();
+});
+
 test("AI followup actions use clear labels, center confirmation, and close student detail before task editing", async ({ page }) => {
   await page.route("**/student-followup", route => route.fulfill({
     status: 200,

@@ -1094,7 +1094,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
             <div className="shrink-0 border-b border-[var(--app-border)] px-4 py-3.5 xl:px-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-base font-bold text-white">{selectedInitial}</div>
+                  <button type="button" aria-label={`查看 ${selectedStudent.name} 的学生详情`} title="查看学生详情" onClick={() => onSelectStudent(selectedStudent)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-base font-bold text-white transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 active:translate-y-0">{selectedInitial}</button>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-lg font-bold text-gray-900">{selectedStudent.name} · 学期评语</h3>
@@ -1109,7 +1109,6 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                     </div>
                   </div>
                 </div>
-                <button type="button" onClick={() => onSelectStudent(selectedStudent)} className="h-9 shrink-0 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50">查看详情</button>
               </div>
             </div>
 
