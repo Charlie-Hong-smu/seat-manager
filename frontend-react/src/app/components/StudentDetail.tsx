@@ -22,6 +22,7 @@ interface StudentDetailProps {
   initialActiveTab?: StudentDetailTab;
   onActiveTabChange?: (tab: StudentDetailTab) => void;
   onNavigate?: (direction: -1 | 1) => void;
+  onSelectStudent?: (studentId: StudentId) => void;
   navPosition?: { index: number; total: number };
   onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
   attendanceRecords?: AttendanceRecord[];
@@ -51,6 +52,7 @@ export function StudentDetail({
   initialActiveTab,
   onActiveTabChange,
   onNavigate,
+  onSelectStudent,
   navPosition,
   onCreateFollowupTask,
   attendanceRecords,
@@ -83,6 +85,7 @@ export function StudentDetail({
         initialActiveTab={initialActiveTab}
         onActiveTabChange={onActiveTabChange}
         onNavigate={onNavigate}
+        onSelectStudent={onSelectStudent}
         navPosition={navPosition}
         onCreateFollowupTask={onCreateFollowupTask}
         attendanceRecords={attendanceRecords}

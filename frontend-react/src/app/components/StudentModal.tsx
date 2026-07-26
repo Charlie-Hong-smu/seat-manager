@@ -17,6 +17,7 @@ import { matchesStudentSearch } from "../state/studentSearch";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
 import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog, useModalFocus } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
+import { StudentPicker } from "./StudentPicker";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
 import { StudentActivityTimeline, StudentAttentionSummary, type ContextPreviewRequest } from "./StudentAttentionSummary";
 import {
@@ -63,6 +64,7 @@ interface Props {
   initialActiveTab?: StudentDetailTab;
   onActiveTabChange?: (tab: StudentDetailTab) => void;
   onNavigate?: (direction: -1 | 1) => void;
+  onSelectStudent?: (studentId: StudentId) => void;
   navPosition?: { index: number; total: number };
   onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
   attendanceRecords?: AttendanceRecord[];
@@ -94,6 +96,7 @@ export function StudentModal({
   initialActiveTab = "records",
   onActiveTabChange,
   onNavigate,
+  onSelectStudent,
   navPosition,
   onCreateFollowupTask,
   attendanceRecords = [],
@@ -196,6 +199,14 @@ export function StudentModal({
     setTabDirection(direction < 0 ? "left" : "right");
     onNavigate?.(direction);
   }, [onNavigate]);
+
+  const selectStudent = useCallback((studentId: StudentId) => {
+    if (studentId === student.id) return;
+    const currentIndex = students.findIndex(item => item.id === student.id);
+    const nextIndex = students.findIndex(item => item.id === studentId);
+    setTabDirection(nextIndex >= 0 && currentIndex >= 0 && nextIndex < currentIndex ? "left" : "right");
+    onSelectStudent?.(studentId);
+  }, [onSelectStudent, student.id, students]);
 
   // ←/→ 逐人切换；输入控件聚焦时不劫持方向键。
   useEffect(() => {
@@ -524,7 +535,8 @@ export function StudentModal({
               <IconButton label="关闭学生详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
             </div>
           </div>
-          <div className="mt-3 flex items-center justify-center gap-1.5">
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                {onSelectStudent && <div className="w-40 shrink-0"><StudentPicker compact students={students} value={student.id} onChange={selectStudent} label="直接选择学生" /></div>}
                 <Button type="button" size="sm" variant="ghost" aria-label="AI跟进" onClick={() => changeActiveTab("followup")} className="shrink-0 whitespace-nowrap border-violet-200 bg-violet-50 px-2 text-violet-700 hover:border-violet-200 hover:bg-violet-100 sm:px-2.5">
                   <Sparkles className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI跟进</span>
                 </Button>

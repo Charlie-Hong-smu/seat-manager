@@ -1035,6 +1035,7 @@ export default function App() {
               initialActiveTab={selectedStudentInitialTab}
               onActiveTabChange={setSelectedStudentInitialTab}
               onNavigate={selectedStudentIndex >= 0 && students.length > 1 ? navigateStudentDetail : undefined}
+              onSelectStudent={students.length > 1 ? setSelectedStudentId : undefined}
               navPosition={selectedStudentIndex >= 0 ? { index: selectedStudentIndex, total: students.length } : undefined}
               onCreateFollowupTask={input => {
                 setSelectedStudentInitialTab("records");
