@@ -67,7 +67,6 @@ export function StudentDetail({
   return (
     <>
       <StudentModal
-        key={student.id}
         student={student}
         students={students}
         dormitories={dormitories}

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { RetryableLazy } from "./RetryableLazy";
@@ -159,6 +159,30 @@ export function StudentModal({
   const [followupView, setFollowupView] = useState<"advice" | "communication">("advice");
   const [contextPreview, setContextPreview] = useState<ContextPreviewRequest | null>(null);
 
+  useLayoutEffect(() => {
+    setNameInput(student.name);
+    setGenderInput(student.gender);
+    setAliasesInput(student.aliases.join("、"));
+    setParentPhoneInput(student.parentPhone || "");
+    setAddressInput(student.address || "");
+    setEmergencyContactInput(student.emergencyContact || "");
+    setIsBoardingInput(student.isBoarding === true);
+    setSelectedBehaviorTags(new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id))));
+    setNoteInput("");
+    setSyncSearch("");
+    setSyncSelected(new Set());
+    setShowDeleteConfirm(false);
+    setPendingRecordDelete(null);
+    setProfileStatus("");
+    setProfileEditing(false);
+    setDormStatus("");
+    setDormAssignmentOpen(false);
+    setDormEventOpen(false);
+    setTrendMetric("total");
+    setActiveTab(initialActiveTab);
+    setContextPreview(null);
+  }, [initialActiveTab, student]);
+
   useEffect(() => {
     const cached = readCachedStudentAiTrend(student);
     setAiTrendResult(cached);
@@ -166,25 +190,27 @@ export function StudentModal({
     setAiTrendStatus(cached ? "已载入上次生成的趋势分析。" : "");
     setAiTrendAccessCode("");
     setHasAiTrendAuth(hasStoredAiTrendAuth());
-    setActiveTab(initialActiveTab);
-    setContextPreview(null);
-  }, [initialActiveTab, student]);
+  }, [student]);
+
+  const navigateStudent = useCallback((direction: -1 | 1) => {
+    setTabDirection(direction < 0 ? "left" : "right");
+    onNavigate?.(direction);
+  }, [onNavigate]);
 
   // ←/→ 逐人切换；输入控件聚焦时不劫持方向键。
   useEffect(() => {
-    const navigate = onNavigate;
-    if (!navigate) return;
+    if (!onNavigate) return;
     function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("button, a, input, textarea, select, [role=tab], [role=menuitem], [contenteditable=true]")) return;
       event.preventDefault();
-      navigate?.(event.key === "ArrowLeft" ? -1 : 1);
+      navigateStudent(event.key === "ArrowLeft" ? -1 : 1);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onNavigate]);
+  }, [navigateStudent, onNavigate]);
 
   function changeActiveTab(nextTab: StudentDetailTab) {
     if (nextTab === activeTab) return;
@@ -480,19 +506,25 @@ export function StudentModal({
     <div className={`soft-backdrop-enter fixed inset-0 ${layerClassName} flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm`}>
       <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-white shadow-[var(--app-shadow-float)] outline-none transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
         {/* Header */}
-        <div ref={modalHeaderRef} className="flex shrink-0 items-center gap-3 border-b border-gray-100 p-5 pb-4">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            {onNavigate && <IconButton label="上一位学生" size="sm" onClick={() => onNavigate(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
-            <div className="min-w-0 flex-1">
-              <div className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
-              <h3 className="truncate text-gray-900" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`} style={{ fontSize: "1.25rem" }}>
-                {student.name}
-                <span className="ml-2 hidden text-gray-400 2xl:inline" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
-              </h3>
+        <div ref={modalHeaderRef} className="shrink-0 border-b border-gray-100 p-5 pb-4">
+          <div className="relative flex min-h-10 items-center justify-between">
+            {onNavigate && <IconButton label="上一位学生" size="sm" onClick={() => navigateStudent(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
+            {!onNavigate && <span className="h-8 w-8" aria-hidden="true" />}
+            <div className="pointer-events-none absolute left-1/2 top-1/2 w-[min(16rem,calc(100%_-_10rem))] -translate-x-1/2 -translate-y-1/2 text-center">
+              <div key={student.id} className={`student-tab-content-enter ${tabDirection === "left" ? "student-tab-enter-left" : "student-tab-enter-right"}`}>
+                <div className="mb-1 text-xs text-gray-400" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
+                <h3 className="truncate text-gray-900" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`} style={{ fontSize: "1.25rem" }}>
+                  {student.name}
+                  <span className="ml-2 hidden text-gray-400 2xl:inline" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
+                </h3>
+              </div>
             </div>
-            {onNavigate && <IconButton label="下一位学生" size="sm" onClick={() => onNavigate(1)}><ChevronRight className="h-4 w-4" /></IconButton>}
+            <div className="ml-auto flex items-center gap-1.5">
+              {onNavigate && <IconButton label="下一位学生" size="sm" onClick={() => navigateStudent(1)}><ChevronRight className="h-4 w-4" /></IconButton>}
+              <IconButton label="关闭学生详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="mt-3 flex items-center justify-center gap-1.5">
                 <Button type="button" size="sm" variant="ghost" aria-label="AI跟进" onClick={() => changeActiveTab("followup")} className="shrink-0 whitespace-nowrap border-violet-200 bg-violet-50 px-2 text-violet-700 hover:border-violet-200 hover:bg-violet-100 sm:px-2.5">
                   <Sparkles className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI跟进</span>
                 </Button>
@@ -504,7 +536,6 @@ export function StudentModal({
                 <Button type="button" size="sm" variant="ghost" aria-label="移出当前班级" onClick={() => setShowDeleteConfirm(true)} className="shrink-0 whitespace-nowrap border-red-200 px-2 text-red-500 hover:border-red-200 hover:bg-red-50 sm:px-2.5">
                   <Trash2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">移出当前班级</span>
                 </Button>
-                <IconButton label="关闭学生详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
           </div>
         </div>
 
@@ -514,7 +545,7 @@ export function StudentModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-        <div ref={modalContentMeasureRef} key={activeTab} className={`student-tab-content-enter space-y-5 p-6 ${tabDirection === "left" ? "student-tab-enter-left" : "student-tab-enter-right"}`}>
+        <div ref={modalContentMeasureRef} key={`${student.id}-${activeTab}`} className={`student-tab-content-enter space-y-5 p-6 ${tabDirection === "left" ? "student-tab-enter-left" : "student-tab-enter-right"}`}>
           {activeTab === "profile" && (
           <div className="rounded-2xl border border-gray-100">
             <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
