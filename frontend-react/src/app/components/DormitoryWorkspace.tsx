@@ -16,6 +16,8 @@ import {
 
 import { DORM_EVENT_PRESETS } from "../state/dormitoryActions";
 import type { NewDormEventInput } from "../state/dormitoryActions";
+import { resolveDormitoryPreferences, type DormitoryPreferences } from "../state/dormitoryPreferences";
+import { matchesStudentSearch } from "../state/studentSearch";
 import { calculateDormitoryPeriodScore, filterDormitoryEventsByRange, getDormitoryPeriodRange, localDateKey, shiftDormitoryPeriod } from "../state/dormitoryPeriods";
 import type { AppStudent, DormEvent, Dormitory, DormitoryPeriodMode, DormitoryPeriodSettings, FollowupTask, StudentId } from "../state/types";
 import type { FollowupTaskDraft } from "./FollowupTaskDrawer";
@@ -24,7 +26,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { ConfirmDialog, DatePicker, useActionToast, useAppDialog } from "./ui";
+import { ConfirmDialog, DatePicker, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-emerald-600" : value < 0 ? "text-red-500" : "text-gray-500";
@@ -48,17 +50,19 @@ interface Props {
   students: AppStudent[];
   dormitories: Dormitory[];
   onCreateDormitory: (name: string, baseScore: number) => Dormitory;
-  onDeleteDormitory: (dormitoryId: string) => void;
+  onDeleteDormitory: (dormitoryId: string) => () => void;
   onAssignStudentDormitory: (studentId: StudentId, dormitoryId?: string) => void;
   onAddDormitoryEvent: (input: NewDormEventInput) => DormEvent | null;
   onUpdateDormitoryEvent: (dormId: string, eventId: string, patch: { reason?: string; score?: number; note?: string; punishment?: string; punishmentDone?: boolean; followupTaskIds?: string[]; date?: string }) => void;
-  onDeleteDormitoryEvent: (dormId: string, eventId: string) => void;
+  onDeleteDormitoryEvent: (dormId: string, eventId: string) => () => void;
   onSelectStudent: (student: AppStudent) => void;
   followupTasks: FollowupTask[];
   onRequestFollowupTask: (draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) => void;
-  onSetLinkedTaskStatus: (taskIds: string[], status: "completed" | "cancelled") => void;
+  onSetLinkedTaskStatus: (taskIds: string[], status: "pending" | "completed" | "cancelled") => void;
   periodSettings: DormitoryPeriodSettings;
   onPeriodSettingsChange: (settings: DormitoryPeriodSettings) => void;
+  preferences: unknown;
+  onPreferencesChange: (preferences: DormitoryPreferences) => void;
   initialTarget?: TimelineTarget;
   onInitialTargetConsumed?: () => void;
 }
@@ -78,6 +82,8 @@ export function DormitoryWorkspace({
   onSetLinkedTaskStatus,
   periodSettings,
   onPeriodSettingsChange,
+  preferences,
+  onPreferencesChange,
   initialTarget,
   onInitialTargetConsumed,
 }: Props) {
@@ -110,28 +116,21 @@ export function DormitoryWorkspace({
   const [followupDueDate, setFollowupDueDate] = useState(() => localDateKey());
 
   // 可变预设事件列表 + 自定义输入
-  const [presets, setPresets] = useState<PresetEvent[]>(() => {
-    try {
-      const saved = localStorage.getItem("dorm-presets");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DORM_EVENT_PRESETS.map(p => ({ label: p.label }));
-  });
+  const initialPreferences = useMemo(
+    () => resolveDormitoryPreferences(preferences, typeof window === "undefined" ? null : window.localStorage),
+    [preferences],
+  );
+  const [presets, setPresets] = useState<PresetEvent[]>(initialPreferences.presets);
   const [customLabel, setCustomLabel] = useState("");
   const [presetManagerOpen, setPresetManagerOpen] = useState(false);
   const [presetDrafts, setPresetDrafts] = useState<PresetDraft[]>([]);
   const [pendingDeletePreset, setPendingDeletePreset] = useState("");
   const [pendingDeleteDormitory, setPendingDeleteDormitory] = useState<Dormitory | null>(null);
   const [pendingDeleteEvent, setPendingDeleteEvent] = useState<DormEvent | null>(null);
+  const presetManagerRef = useModalFocus(presetManagerOpen, () => setPresetManagerOpen(false));
 
   // 分数记忆：记录每个事件标签上次设定的分数
-  const [scoreMemory, setScoreMemory] = useState<Record<string, number>>(() => {
-    try {
-      const saved = localStorage.getItem("dorm-score-memory");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {};
-  });
+  const [scoreMemory, setScoreMemory] = useState<Record<string, number>>(initialPreferences.scoreMemory);
 
   // 切换动画 key
   const [animKey, setAnimKey] = useState(0);
@@ -149,10 +148,10 @@ export function DormitoryWorkspace({
   const memberStudents = selectedDormitory ? selectedDormitory.memberIds.map(id => studentById.get(id)).filter((student): student is AppStudent => Boolean(student)) : [];
   const assignableStudents = students
     .filter(student => !selectedDormitory || student.dormitoryId !== selectedDormitory.id)
-    .filter(student => !memberSearch || student.name.includes(memberSearch) || student.aliases.some(alias => alias.includes(memberSearch)))
+    .filter(student => matchesStudentSearch(student, memberSearch))
     .slice(0, 16);
   const filteredMembers = responsibleSearch.trim()
-    ? memberStudents.filter(student => student.name.includes(responsibleSearch.trim()) || student.aliases.some(alias => alias.includes(responsibleSearch.trim())))
+    ? memberStudents.filter(student => matchesStudentSearch(student, responsibleSearch))
     : memberStudents;
   const selectedResponsibleStudents = responsibleIds
     .map(id => memberStudents.find(student => student.id === id))
@@ -184,15 +183,16 @@ export function DormitoryWorkspace({
     setAnimKey(k => k + 1);
   }, [selectedDormId]);
 
-  // 持久化预设
+  // 每个班级/学期从切片 settings 读取；旧全局键只作为首次迁移源，不再写入。
   useEffect(() => {
-    try { localStorage.setItem("dorm-presets", JSON.stringify(presets)); } catch {}
-  }, [presets]);
+    setPresets(initialPreferences.presets);
+    setScoreMemory(initialPreferences.scoreMemory);
+    if (!preferences || typeof preferences !== "object") onPreferencesChange(initialPreferences);
+  }, [initialPreferences, onPreferencesChange, preferences]);
 
-  // 持久化分数记忆
-  useEffect(() => {
-    try { localStorage.setItem("dorm-score-memory", JSON.stringify(scoreMemory)); } catch {}
-  }, [scoreMemory]);
+  function persistPreferences(nextPresets: PresetEvent[], nextScoreMemory: Record<string, number>) {
+    onPreferencesChange({ version: 1, presets: nextPresets, scoreMemory: nextScoreMemory });
+  }
 
   function selectDorm(id: string) {
     if (id !== selectedDormId) {
@@ -252,8 +252,10 @@ export function DormitoryWorkspace({
       .filter((preset, index, list) => preset.label && list.findIndex(item => item.label === preset.label) === index);
     const nextMemory: Record<string, number> = {};
     normalized.forEach(preset => { nextMemory[preset.label] = preset.score; });
-    setPresets(normalized.map(preset => ({ label: preset.label })));
+    const nextPresets = normalized.map(preset => ({ label: preset.label }));
+    setPresets(nextPresets);
     setScoreMemory(nextMemory);
+    persistPreferences(nextPresets, nextMemory);
     const selectedDraft = normalized.find(preset => preset.originalLabel === reason);
     if (reason && !selectedDraft) {
       setReason("");
@@ -267,7 +269,13 @@ export function DormitoryWorkspace({
       message: "事件类型设置已保存",
       actionLabel: "撤销",
       actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
-      onAction: () => { setPresets(previousPresets); setScoreMemory(previousMemory); setReason(previousReason); setScore(previousScore); },
+      onAction: () => {
+        setPresets(previousPresets);
+        setScoreMemory(previousMemory);
+        persistPreferences(previousPresets, previousMemory);
+        setReason(previousReason);
+        setScore(previousScore);
+      },
       duration: 6000,
     });
   }
@@ -357,7 +365,9 @@ export function DormitoryWorkspace({
   function submitEvent() {
     if (!selectedDormitory || !reason.trim()) return;
     // 记住这次设定的分数
-    setScoreMemory(prev => ({ ...prev, [reason.trim()]: score }));
+    const nextScoreMemory = { ...scoreMemory, [reason.trim()]: score };
+    setScoreMemory(nextScoreMemory);
+    persistPreferences(presets, nextScoreMemory);
     const savedEvent = onAddDormitoryEvent({
       dormId: selectedDormitory.id,
       reason,
@@ -399,8 +409,18 @@ export function DormitoryWorkspace({
     if (!event) return;
     const pendingIds = (event.followupTaskIds || []).filter(id => followupTasks.some(task => task.id === id && task.status === "pending"));
     if (cancelLinkedTasks && pendingIds.length) onSetLinkedTaskStatus(pendingIds, "cancelled");
-    onDeleteDormitoryEvent(event.dormId, event.id);
+    const undoDelete = onDeleteDormitoryEvent(event.dormId, event.id);
     setPendingDeleteEvent(null);
+    actionToast.show({
+      message: `宿舍事件“${event.reason}”已删除`,
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => {
+        undoDelete();
+        if (cancelLinkedTasks && pendingIds.length) onSetLinkedTaskStatus(pendingIds, "pending");
+      },
+      duration: 6000,
+    });
   }
 
   function resetForm() {
@@ -873,7 +893,7 @@ export function DormitoryWorkspace({
             }
           }}
         >
-          <div className="modal-panel-enter flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white bg-white shadow-2xl">
+          <div ref={presetManagerRef} tabIndex={-1} className="modal-panel-enter flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white bg-white shadow-2xl outline-none">
             <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
               <div>
                 <h3 className="text-base font-bold text-gray-900">管理事件类型</h3>
@@ -969,7 +989,13 @@ export function DormitoryWorkspace({
           </div>
         </div>
       )}
-      <ConfirmDialog open={Boolean(pendingDeleteDormitory)} title="删除这个宿舍？" description={`将删除“${pendingDeleteDormitory?.name || "当前宿舍"}”及本周期 ${pendingDeleteDormitory?.events.length || 0} 条事件，${pendingDeleteDormitory?.memberIds.length || 0} 名成员会变为未分配宿舍。此操作无法撤销。`} confirmLabel="确认删除宿舍" onCancel={() => setPendingDeleteDormitory(null)} onConfirm={() => { if (!pendingDeleteDormitory) return; onDeleteDormitory(pendingDeleteDormitory.id); setPendingDeleteDormitory(null); }} />
+      <ConfirmDialog open={Boolean(pendingDeleteDormitory)} title="删除这个宿舍？" description={`将删除“${pendingDeleteDormitory?.name || "当前宿舍"}”及全部事件，${pendingDeleteDormitory?.memberIds.length || 0} 名成员会变为未分配宿舍；操作后可在 6 秒内撤销。`} confirmLabel="确认删除宿舍" onCancel={() => setPendingDeleteDormitory(null)} onConfirm={() => {
+        if (!pendingDeleteDormitory) return;
+        const deleted = pendingDeleteDormitory;
+        const undo = onDeleteDormitory(deleted.id);
+        setPendingDeleteDormitory(null);
+        actionToast.show({ message: `宿舍“${deleted.name}”已删除`, actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: undo, duration: 6000 });
+      }} />
       <ConfirmDialog open={Boolean(pendingDeleteEvent)} title="删除这条宿舍事件？" description={`将删除“${pendingDeleteEvent?.reason || "当前事件"}”。已完成的关联任务会保留；未完成任务可选择保留或同时取消。`} confirmLabel={(pendingDeleteEvent?.followupTaskIds || []).some(id => followupTasks.some(task => task.id === id && task.status === "pending")) ? "删除并取消未完成任务" : "确认删除事件"} alternateLabel={(pendingDeleteEvent?.followupTaskIds || []).some(id => followupTasks.some(task => task.id === id && task.status === "pending")) ? "删除但保留任务" : undefined} onCancel={() => setPendingDeleteEvent(null)} onAlternate={() => confirmDeleteEvent(false)} onConfirm={() => confirmDeleteEvent(true)} />
       <ConfirmDialog open={Boolean(pendingDeletePreset)} title="删除这个事件类型？" description={`将从预设中移除“${presetDrafts.find(item => item.originalLabel === pendingDeletePreset)?.label || "当前类型"}”，保存类型设置后生效。`} confirmLabel="确认删除类型" onCancel={() => setPendingDeletePreset("")} onConfirm={() => { setPresetDrafts(previous => previous.filter(item => item.originalLabel !== pendingDeletePreset)); setPendingDeletePreset(""); }} />
       {appDialog.dialog}

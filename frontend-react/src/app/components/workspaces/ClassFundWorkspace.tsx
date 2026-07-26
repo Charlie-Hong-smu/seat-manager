@@ -1,14 +1,21 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, RotateCcw, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, ListPlus, Pencil, RotateCcw, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 
 import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
+import { buildCsvContent, downloadCsvFile } from "../../state/csv";
+import { todayKey } from "../../state/dailyManagement";
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
+import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import { FundTransactionForm } from "../FundTransactionForm";
-import { Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, useActionToast } from "../ui";
+import { Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, SelectMenu, useActionToast } from "../ui";
 import { toLocalDateKey } from "../../state/dateKey";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function transactionStudentLabel(tx: FundTransaction): string {
+  return (tx.relatedStudentNames?.length ? tx.relatedStudentNames.join("、") : tx.relatedStudentName) || "";
 }
 
 export function ClassFundWorkspace({
@@ -19,14 +26,16 @@ export function ClassFundWorkspace({
   onUpdate,
   onDelete,
   onClearAll,
+  onRequestFollowupTask,
 }: {
   transactions: FundTransaction[];
   students: AppStudent[];
   onAdd: (input: NewFundTxInput) => FundTransaction;
   onRemoveCreated: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds">>) => void;
-  onDelete: (id: string) => void;
-  onClearAll: () => void;
+  onDelete: (id: string) => () => void;
+  onClearAll: () => () => void;
+  onRequestFollowupTask?: (draft: FollowupTaskDraft) => void;
 }) {
   const [editingId, setEditingId] = useState("");
   const [editType, setEditType] = useState<FundTxType>("income");
@@ -38,6 +47,8 @@ export function ClassFundWorkspace({
   const [periodAnchor, setPeriodAnchor] = useState(() => toLocalDateKey());
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [pendingVoidTransaction, setPendingVoidTransaction] = useState<FundTransaction | null>(null);
+  const [view, setView] = useState<"ledger" | "collection">("ledger");
+  const [collectionCategory, setCollectionCategory] = useState("all");
   const actionToast = useActionToast();
 
   const periodTransactions = filterFundTransactionsByPeriod(transactions, periodMode, periodAnchor);
@@ -45,6 +56,49 @@ export function ClassFundWorkspace({
   const balance = calcBalance(periodTransactions);
   const incomeTotal = calcIncomeTotal(periodTransactions);
   const expenseTotal = calcExpenseTotal(periodTransactions);
+  const periodLabel = periodRange?.label || "全部时间";
+
+  // 收缴视图：按学生汇总当前周期内关联到该学生的有效收入。
+  const activeIncome = useMemo(() => periodTransactions.filter(tx => tx.type === "income" && tx.status !== "void"), [periodTransactions]);
+  const incomeCategories = useMemo(() => Array.from(new Set(activeIncome.map(tx => tx.category || "未分类"))), [activeIncome]);
+  const collectionIncome = collectionCategory === "all" ? activeIncome : activeIncome.filter(tx => (tx.category || "未分类") === collectionCategory);
+  const collectionRows = useMemo(() => students
+    .map(student => {
+      const own = collectionIncome.filter(tx => tx.relatedStudentIds?.length
+        ? tx.relatedStudentIds.includes(student.id)
+        : tx.relatedStudentId === student.id || (Boolean(tx.relatedStudentName) && tx.relatedStudentName === student.name));
+      return {
+        student,
+        count: own.length,
+        total: own.reduce((sum, tx) => sum + tx.amount, 0),
+        latest: own.reduce((max, tx) => (tx.date > max ? tx.date : max), ""),
+      };
+    })
+    .sort((a, b) => (a.count === 0 ? 0 : 1) - (b.count === 0 ? 0 : 1) || a.student.name.localeCompare(b.student.name, "zh-Hans-CN")), [collectionIncome, students]);
+  const unpaidStudents = collectionRows.filter(row => row.count === 0).map(row => row.student);
+  const collectionCategoryLabel = collectionCategory === "all" ? "关联收入" : collectionCategory;
+
+  function exportLedgerCsv() {
+    const rows = [
+      ["日期", "类型", "分类", "金额", "状态", "关联学生", "说明"],
+      ...periodTransactions.map(tx => [tx.date, tx.type === "income" ? "收入" : "支出", tx.category || "", tx.amount.toFixed(2), tx.status === "void" ? "已作废" : "有效", transactionStudentLabel(tx), tx.note || ""]),
+    ];
+    downloadCsvFile(`班费流水_${periodLabel.replace(/\s/g, "")}.csv`, buildCsvContent(rows));
+  }
+
+  function createUnpaidFollowups() {
+    if (!onRequestFollowupTask || !unpaidStudents.length) return;
+    onRequestFollowupTask({
+      studentId: unpaidStudents[0].id,
+      studentIds: unpaidStudents.map(student => student.id),
+      title: `班费收缴提醒（${collectionCategoryLabel}）`,
+      type: "常规跟进",
+      description: `${periodLabel}内未登记「${collectionCategoryLabel}」，请确认是否已收取并补记流水。`,
+      plannedDate: todayKey(),
+      dueDate: todayKey(),
+      source: "manual",
+    });
+  }
 
   function startEdit(tx: FundTransaction) {
     setEditingId(tx.id);
@@ -107,6 +161,7 @@ export function ClassFundWorkspace({
           <Card className="surface-enter" bodyClassName="flex flex-wrap items-center gap-3 p-3">
             <SegmentedControl value={periodMode} onChange={setPeriodMode} ariaLabel="班费统计周期" options={[{ value: "all", label: "全部" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }]} />
             {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><DatePicker value={periodAnchor} onChange={setPeriodAnchor} ariaLabel="班费统计日期" className="h-9 w-44 bg-[var(--app-surface-muted)]"/><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-xs font-bold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
+            <SegmentedControl className="ml-auto" value={view} onChange={value => setView(value as "ledger" | "collection")} ariaLabel="班费视图" options={[{ value: "ledger", label: "收支流水" }, { value: "collection", label: "收缴情况" }]} />
           </Card>
           {/* 统计卡：左大余额 + 右两小卡 */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem_12rem]">
@@ -137,8 +192,45 @@ export function ClassFundWorkspace({
             </Card>
           </div>
 
+          {view === "collection" && (
+            <Card className="surface-enter" title="收缴情况" action={
+              <div className="flex items-center gap-2">
+                {incomeCategories.length > 1 && <SelectMenu value={collectionCategory} onChange={value => setCollectionCategory(String(value))} ariaLabel="收缴分类" options={[{ value: "all", label: "全部收入分类" }, ...incomeCategories.map(category => ({ value: category, label: category }))]} />}
+                <Button size="sm" variant="secondary" disabled={!unpaidStudents.length || !onRequestFollowupTask} onClick={createUnpaidFollowups}><ListPlus className="h-4 w-4" />为未交 {unpaidStudents.length} 人建跟进</Button>
+              </div>
+            }>
+              {activeIncome.length === 0 ? (
+                <div className="py-10 text-center text-sm text-gray-400">
+                  {periodLabel}内还没有登记收入。在“收支流水”页记一笔收入并关联学生后，这里会按人统计已交与未交。
+                </div>
+              ) : (
+                <>
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-bold">
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-600">已交 {collectionRows.length - unpaidStudents.length} 人</span>
+                    <span className={`rounded-full px-2.5 py-1 ${unpaidStudents.length ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}>未交 {unpaidStudents.length} 人</span>
+                    <span className="text-[var(--app-text-muted)]">统计口径：{periodLabel} · {collectionCategoryLabel}</span>
+                  </div>
+                  <div className="overflow-hidden rounded-xl border border-gray-100">
+                    <div className="grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500">
+                      <span>学生</span><span>状态</span><span className="text-right">笔数</span><span className="text-right">合计金额</span><span className="text-right">最近登记</span>
+                    </div>
+                    {collectionRows.map(row => (
+                      <div key={row.student.id} className="grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] items-center gap-2 border-b border-gray-50 px-4 py-2.5 text-sm last:border-0">
+                        <span className="truncate font-bold text-gray-800">{row.student.name}</span>
+                        <span>{row.count ? <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold text-emerald-600">已交</span> : <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-bold text-red-500">未交</span>}</span>
+                        <span className="text-right tabular-nums text-gray-500">{row.count || "—"}</span>
+                        <span className="text-right tabular-nums text-gray-800">{row.count ? `¥${formatCurrency(row.total)}` : "—"}</span>
+                        <span className="text-right text-xs text-gray-400">{row.latest || "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </Card>
+          )}
+
           {/* 左右双栏：记一笔 + 收支流水 */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[22rem_1fr]">
+          {view === "ledger" && <div className="grid grid-cols-1 gap-4 lg:grid-cols-[22rem_1fr]">
             {/* 左：记一笔 */}
             <div className="surface-enter rounded-2xl border border-gray-100 bg-white p-5 shadow-sm [animation-delay:60ms]">
               <div className="mb-4 text-sm font-semibold text-gray-900">记一笔</div>
@@ -147,16 +239,21 @@ export function ClassFundWorkspace({
 
             {/* 右：收支流水 */}
             <div className="surface-enter rounded-2xl border border-gray-100 bg-white p-5 shadow-sm [animation-delay:120ms]">
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex items-center justify-between gap-2">
                 <div className="text-sm font-semibold text-gray-900">收支流水</div>
-                {periodMode === "all" && transactions.length > 0 && (
-                  <button
-                    onClick={handleClearAll}
-                    className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs text-red-500 transition-colors hover:bg-red-50"
-                  >
-                    全部作废
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {periodTransactions.length > 0 && (
+                    <Button size="sm" variant="ghost" onClick={exportLedgerCsv}><Download className="h-4 w-4" />导出 CSV</Button>
+                  )}
+                  {periodMode === "all" && transactions.length > 0 && (
+                    <button
+                      onClick={handleClearAll}
+                      className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-xs text-red-500 transition-colors hover:bg-red-50"
+                    >
+                      全部作废
+                    </button>
+                  )}
+                </div>
               </div>
               {periodTransactions.length === 0 ? (
                 <div className="py-10 text-center text-sm text-gray-400">
@@ -283,11 +380,21 @@ export function ClassFundWorkspace({
                 </div>
               )}
             </div>
-          </div>
+          </div>}
         </div>
       </div>
-      <ConfirmDialog open={confirmClearAll} title="作废全部班费流水？" description={`将把全部 ${transactions.length} 条交易记录标记为已作废。原金额和审计记录会保留，统计默认排除作废项。`} confirmLabel="确认全部作废" onCancel={() => setConfirmClearAll(false)} onConfirm={() => { onClearAll(); setConfirmClearAll(false); }} />
-      <ConfirmDialog open={Boolean(pendingVoidTransaction)} title="作废这笔班费流水？" description={`“${pendingVoidTransaction?.category || "当前流水"}”将保留原金额和记录，但不再计入默认统计。`} confirmLabel="确认作废" onCancel={() => setPendingVoidTransaction(null)} onConfirm={() => { if (!pendingVoidTransaction) return; onDelete(pendingVoidTransaction.id); setPendingVoidTransaction(null); }} />
+      <ConfirmDialog open={confirmClearAll} title="作废全部班费流水？" description={`将把全部 ${transactions.length} 条交易记录标记为已作废。原金额和审计记录会保留，统计默认排除作废项；操作后可在 6 秒内撤销。`} confirmLabel="确认全部作废" onCancel={() => setConfirmClearAll(false)} onConfirm={() => {
+        const undo = onClearAll();
+        setConfirmClearAll(false);
+        actionToast.show({ message: "全部班费流水已作废", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: undo, duration: 6000 });
+      }} />
+      <ConfirmDialog open={Boolean(pendingVoidTransaction)} title="作废这笔班费流水？" description={`“${pendingVoidTransaction?.category || "当前流水"}”将保留原金额和记录，但不再计入默认统计；操作后可在 6 秒内撤销。`} confirmLabel="确认作废" onCancel={() => setPendingVoidTransaction(null)} onConfirm={() => {
+        if (!pendingVoidTransaction) return;
+        const transaction = pendingVoidTransaction;
+        const undo = onDelete(transaction.id);
+        setPendingVoidTransaction(null);
+        actionToast.show({ message: `班费流水“${transaction.category || "未分类"}”已作废`, actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: undo, duration: 6000 });
+      }} />
       {actionToast.toast}
     </div>
   );

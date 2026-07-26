@@ -52,6 +52,7 @@ import {
   type CommentBatchState,
 } from "./commentBatchStorage";
 import { toLocalDateKey } from "../state/dateKey";
+import { matchesStudentSearch } from "../state/studentSearch";
 
 interface CommentState {
   studentId: StudentId;
@@ -233,7 +234,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     return students.filter(s => {
       const state = commentByStudentId.get(s.id);
       if (!state) return false;
-      if (filterSearch && !s.name.includes(filterSearch)) return false;
+      if (!matchesStudentSearch(s, filterSearch)) return false;
       if (filterMode === "pending" && state.generated) return false;
       if (filterMode === "needsInfo" && !state.needsInfo) return false;
       return true;

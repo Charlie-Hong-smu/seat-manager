@@ -50,6 +50,26 @@ export function createDefaultQuickRecordPresets(): QuickRecordPreset[] {
   ];
 }
 
+export interface GradeThresholds {
+  pass: number;
+  good: number;
+  excellent: number;
+}
+
+export const DEFAULT_GRADE_THRESHOLDS: GradeThresholds = { pass: 60, good: 75, excellent: 90 };
+
+// 成绩阈值保存在当前切片 settings.gradeThresholds，随备份和手动云同步走。
+export function normalizeGradeThresholds(value: unknown): GradeThresholds {
+  if (!value || typeof value !== "object") return DEFAULT_GRADE_THRESHOLDS;
+  const raw = value as Record<string, unknown>;
+  const clamp = (input: unknown, fallback: number) =>
+    typeof input === "number" && Number.isFinite(input) ? Math.max(0, Math.min(100, Math.round(input))) : fallback;
+  const pass = clamp(raw.pass, DEFAULT_GRADE_THRESHOLDS.pass);
+  const good = Math.max(clamp(raw.good, DEFAULT_GRADE_THRESHOLDS.good), pass);
+  const excellent = Math.max(clamp(raw.excellent, DEFAULT_GRADE_THRESHOLDS.excellent), good);
+  return { pass, good, excellent };
+}
+
 export function normalizeSubjectCatalog(value: unknown, usedSubjects: string[] = []): string[] {
   const configured = Array.isArray(value) ? value.map(text).filter(Boolean) : DEFAULT_SUBJECT_CATALOG;
   const merged = [...configured, ...usedSubjects.map(text).filter(Boolean)];

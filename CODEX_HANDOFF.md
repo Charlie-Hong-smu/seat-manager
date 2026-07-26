@@ -1,6 +1,6 @@
 # Codex 交接入口
 
-更新时间：2026-07-10。
+更新时间：2026-07-26。
 
 本文件只说明当前可依赖的项目状态，不记录单次会话的“待推送”或临时排障进度。
 
@@ -11,7 +11,7 @@
 1. `AGENTS.md`：必须遵守的兼容、安全和验证规则。
 2. `docs/ARCHITECTURE.md`：模块、数据、edition、AI 与 PWA 架构。
 3. `docs/OPERATIONS.md`：本地验证、发布面和排障顺序。
-4. UI 工作再读 `DESIGN.md`；Worker 细节再读 `cloudflare-worker/README.md`。
+4. UI 工作再读 `docs/DESIGN_SYSTEM.md`；Worker 细节再读 `cloudflare-worker/README.md`。
 
 ## 当前事实
 
@@ -22,6 +22,9 @@
 - Worker 公共路由在 `cloudflare-worker/worker-routes.js`，Netlify 代理复用并有契约测试。
 - 工作区页面位于 `components/workspaces/`；Scores、AI Assistant、Comment Workbench 为可重试的非首屏异步模块。
 - App 的学生、宿舍、班费更新分别在 `hooks/use*Actions.ts`；宿舍列表/成员区已是独立组件，AI Assistant payload/result 已从 facade 分离。
+- 学生姓名与别名搜索统一走 `state/studentSearch.ts`，CSV 转义与下载统一走 `state/csv.ts`，页面不要再复制同类逻辑。
+- 成绩阈值与宿舍事件偏好保存在当前切片 `settings`，会随备份和手动云同步迁移；旧宿舍全局键只作为首次兼容读取源。
+- 弹窗焦点约束与状态反馈分别复用 `useModalFocus`、`InlineStatus`；高风险删除优先保留审计记录，并提供短时撤销。
 - Worker 入口只装配 CORS、异常和路由；鉴权、usage 与领域路由分别在 `worker-auth.js`、`worker-usage.js`、`routes/`。
 - GitHub Pages、Commercial Pages 和 Worker workflow 发布前都会运行自动检查。
 

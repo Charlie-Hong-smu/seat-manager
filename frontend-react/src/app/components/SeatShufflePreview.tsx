@@ -11,6 +11,7 @@ import {
 } from "../state/seatPlanner";
 import { resolveSeatLayout } from "../state/seatLayout";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
+import { useModalFocus } from "./ui";
 
 const COLS = 8;
 
@@ -169,6 +170,7 @@ function renderFrontDetails(evaluation: SeatEvaluation) {
 }
 
 export function SeatShufflePreview({ students, currentOrder, candidate, seatSettings, onOrderChange, onRegenerate, onApply, onClose, onSelectStudent }: Props) {
+  const modalRef = useModalFocus(true, onClose);
   const [activeDetail, setActiveDetail] = useState<DetailTab>("required");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragVisual, setDragVisual] = useState<PreviewDragVisual | null>(null);
@@ -360,7 +362,7 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
 
   return (
     <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm">
-      <div className="modal-panel-enter flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white bg-white shadow-2xl">
+      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="随机排座预览" className="modal-panel-enter flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white bg-white shadow-2xl outline-none">
         <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100">
           <div>
             <div className="text-xs text-blue-500 mb-1" style={{ fontWeight: 800 }}>座位调整</div>

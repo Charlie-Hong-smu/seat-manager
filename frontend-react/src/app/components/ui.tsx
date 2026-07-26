@@ -78,9 +78,31 @@ export function IconButton({
   );
 }
 
+export function InlineStatus({ message, tone = "auto", className = "" }: {
+  message: string;
+  tone?: "auto" | "info" | "success" | "error" | "ai";
+  className?: string;
+}) {
+  const resolvedTone = tone === "auto"
+    ? /失败|错误|无法|请先|未改变|不可用/.test(message)
+      ? "error"
+      : /已|完成|成功|恢复/.test(message)
+        ? "success"
+        : "info"
+    : tone;
+  const toneClass = {
+    info: "bg-blue-50 text-blue-700",
+    success: "bg-emerald-50 text-emerald-700",
+    error: "bg-red-50 text-red-700",
+    ai: "bg-violet-50 text-violet-700",
+  }[resolvedTone];
+  return <p role={resolvedTone === "error" ? "alert" : "status"} aria-live="polite" className={`rounded-[var(--app-radius-sm)] px-3 py-2 text-xs font-semibold leading-5 ${toneClass} ${className}`}>{message}</p>;
+}
+
 const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
-function useModalFocus(open: boolean, onEscape: () => void) {
+// eslint-disable-next-line react-refresh/only-export-components
+export function useModalFocus(open: boolean, onEscape: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const escapeRef = useRef(onEscape);

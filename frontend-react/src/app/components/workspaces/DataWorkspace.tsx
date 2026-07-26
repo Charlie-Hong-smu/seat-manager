@@ -17,7 +17,7 @@ import { prefetchXlsxAsset, readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
 import type { AppStudent, SeatLayoutV1, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
-import { Button, FileDropZone, SelectMenu, useAppDialog } from "../ui";
+import { Button, FileDropZone, InlineStatus, SelectMenu, useAppDialog, useModalFocus } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function DataWorkspace({
@@ -60,6 +60,7 @@ export function DataWorkspace({
   const [backupPreview, setBackupPreview] = useState<BackupImportPreview | null>(null);
   const [backupStatus, setBackupStatus] = useState("");
   const [lastBackupAt, setLastBackupAt] = useState(() => getLastBackupAt());
+  const rosterMappingRef = useModalFocus(rosterMappingOpen, () => setRosterMappingOpen(false));
 
   async function importRoster() {
     if (!rosterFile) {
@@ -249,7 +250,7 @@ export function DataWorkspace({
               </button>
             )}
             <Button onClick={importRoster} className="w-full">导入名单</Button>
-            {rosterStatus && <div className="rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-600">{rosterStatus}</div>}
+            {rosterStatus && <InlineStatus message={rosterStatus} className="text-sm" />}
           </div>
         </Panel>
         </div>
@@ -278,14 +279,14 @@ export function DataWorkspace({
             </FileDropZone>
             {backupPreview && <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">{backupPreview.workspaceBook ? `${backupPreview.workspaceBook.slices.length} 个班级学期 · ` : ""}{backupPreview.studentCount} 名学生 · {backupPreview.seatCount} 个座位</div>}
             <Button variant="danger" onClick={restore} className="w-full">恢复备份</Button>
-            {backupStatus && <p className="text-sm text-amber-600">{backupStatus}</p>}
+            {backupStatus && <InlineStatus message={backupStatus} className="text-sm" />}
           </div>
         </Panel>
         </div>
       </div>
       {rosterMappingOpen && rosterMapping && (
         <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-5">
-          <div className="modal-panel-enter flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div ref={rosterMappingRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="名单列映射" className="modal-panel-enter flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none">
             <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
               <div>
                 <h3 className="text-lg text-gray-900" style={{ fontWeight: 900 }}>名单列映射</h3>

@@ -5,12 +5,15 @@ import { Check, Download, LayoutGrid, List, ListPlus, RotateCcw, Search, Setting
 import { batchUpsertAttendance, todayKey, upsertAttendance } from "../../state/dailyManagement";
 import { normalizeAttendancePatch } from "../../state/classManagementCommands";
 import { createActivityEvent } from "../../state/activityEvents";
-import { buildAttendanceCsv } from "../../state/attendanceExport";
+import { buildAttendanceCsv, buildAttendanceRangeCsv } from "../../state/attendanceExport";
+import { getFundPeriodRange } from "../../state/classFundActions";
+import { downloadCsvFile } from "../../state/csv";
+import { matchesStudentSearch } from "../../state/studentSearch";
 import type { ActivityEvent, AppStudent, AttendanceRecord, FollowupTask, StudentId } from "../../state/types";
 import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import type { TimelineTarget } from "../../state/dataInsights";
 import { AttendanceStatusControl } from "../AttendanceStatusControl";
-import { ActionToast, Button, Card, DatePicker, SegmentedControl, useAppDialog } from "../ui";
+import { ActionToast, AnimatedPopover, Button, Card, DatePicker, SegmentedControl, useAppDialog } from "../ui";
 
 type AttendanceQuickStatus = "leave" | "absent" | "late" | "earlyLeave" | "normal";
 
@@ -41,8 +44,13 @@ function attendanceCardStyle(record?: AttendanceRecord) {
 }
 
 function downloadCsv(students: AppStudent[], records: AttendanceRecord[], date: string) {
-  const content = buildAttendanceCsv(students, records, date);
-  const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" })); link.download = `出勤_${date}.csv`; link.click(); URL.revokeObjectURL(link.href);
+  downloadCsvFile(`出勤_${date}.csv`, buildAttendanceCsv(students, records, date));
+}
+
+function downloadRangeCsv(students: AppStudent[], records: AttendanceRecord[], from: string, to: string) {
+  const start = from <= to ? from : to;
+  const end = from <= to ? to : from;
+  downloadCsvFile(`出勤_${start}_${end}.csv`, buildAttendanceRangeCsv(students, records, start, end));
 }
 
 function AttendanceDateTimeFields({ value, label, onChange }: { value: string; label: string; onChange: (value: string) => void }) {
@@ -57,6 +65,9 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
   const [selected, setSelected] = useState<Set<StudentId>>(new Set()); const [editingId, setEditingId] = useState(""); const [undo, setUndo] = useState<AttendanceRecord[] | null>(null);
   const [viewMode, setViewMode] = useState<"quick" | "detail">("quick");
   const [quickStatus, setQuickStatus] = useState<AttendanceQuickStatus>("leave");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFrom, setExportFrom] = useState(() => getFundPeriodRange("week", todayKey())?.start || todayKey());
+  const [exportTo, setExportTo] = useState(todayKey());
   const [recentUpdate, setRecentUpdate] = useState<{ studentId: StudentId; message: string } | null>(null);
   const feedbackTimerRef = useRef<number | null>(null);
   const undoActivityRef = useRef<(() => void) | null>(null);
@@ -75,7 +86,7 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
   const byStudent = useMemo(() => new Map(records.filter(item => item.date === date).map(item => [item.studentId, item])), [date, records]);
   const rows = students.filter(student => {
     const record = byStudent.get(student.id);
-    const matchesSearch = !search || student.name.includes(search) || student.aliases.some(alias => alias.includes(search));
+    const matchesSearch = matchesStudentSearch(student, search);
     const matchesFilter = filter === "all"
       || (filter === "abnormal" ? Boolean(record) : filter === "late" ? Boolean(record?.late) : filter === "earlyLeave" ? Boolean(record?.earlyLeave) : (record?.status || "normal") === filter);
     return matchesSearch && matchesFilter;
@@ -85,6 +96,24 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
   function patchStudent(studentId: string, patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave" | "note" | "leaveStart" | "leaveEnd">>) { const current = byStudent.get(studentId); const normalized = patch.status ? normalizeAttendancePatch(current, patch.status) : null; commit(upsertAttendance(records, { studentId, date, status: normalized?.status ?? current?.status ?? "normal", late: patch.late ?? normalized?.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? normalized?.earlyLeave ?? current?.earlyLeave ?? false, note: patch.note ?? current?.note ?? "", leaveStart: patch.status ? patch.leaveStart ?? normalized?.leaveStart : patch.leaveStart ?? current?.leaveStart, leaveEnd: patch.status ? patch.leaveEnd ?? normalized?.leaveEnd : patch.leaveEnd ?? current?.leaveEnd })); }
   async function batch(patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave" | "leaveStart" | "leaveEnd">>, label: string) { if (!selected.size || !await appDialog.confirm({ title: `批量设置为${label}？`, description: `将覆盖所选 ${selected.size} 名学生在 ${date} 的出勤状态。提交后可通过页面提示短时撤销。`, confirmLabel: `确认设置为${label}`, variant: "primary" })) return; const studentIds = [...selected]; commit(batchUpsertAttendance(records, studentIds, date, patch)); const undoActivity = onActivity?.(createActivityEvent({ action: "status_changed", ref: { domain: "attendance", entityId: `${date}-batch`, date }, studentIds, title: `批量登记出勤：${label}`, detail: `${studentIds.length} 名学生` })); undoActivityRef.current = typeof undoActivity === "function" ? undoActivity : null; setSelected(new Set()); }
   function toggle(id: string) { setSelected(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
+
+  // 全班全勤是最高频场景：一键清掉当日全部异常记录（正常不写记录），可经 toast 撤销。
+  async function markAllNormal() {
+    const todaysRecords = records.filter(item => item.date === date);
+    if (!todaysRecords.length) return;
+    const affectedIds = todaysRecords.map(item => item.studentId);
+    const confirmed = await appDialog.confirm({
+      title: "全部设为正常？",
+      description: `将清除 ${date} 已登记的 ${todaysRecords.length} 条出勤记录（请假、缺勤、迟到、早退），全班按正常出勤计。提交后可通过页面提示短时撤销。`,
+      confirmLabel: "确认全部正常",
+      variant: "primary",
+    });
+    if (!confirmed) return;
+    commit(records.filter(item => item.date !== date));
+    const undoActivity = onActivity?.(createActivityEvent({ action: "status_changed", ref: { domain: "attendance", entityId: `${date}-all-normal`, date }, studentIds: affectedIds, title: "全班设为正常出勤", detail: `清除 ${todaysRecords.length} 条异常记录` }));
+    undoActivityRef.current = typeof undoActivity === "function" ? undoActivity : null;
+    setSelected(new Set());
+  }
 
   function markStudent(student: AppStudent) {
     const current = byStudent.get(student.id);
@@ -122,12 +151,31 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
 
   return <div className="h-full overflow-y-auto bg-gray-50 p-4"><div className="mx-auto max-w-6xl space-y-4">
     <Card className="surface-enter" bodyClassName="grid gap-3 p-4 sm:grid-cols-3">{[{ k:"normal",l:"正常",c:"text-emerald-600"},{k:"leave",l:"请假",c:"text-amber-600"},{k:"absent",l:"缺勤",c:"text-red-500"}].map(item => <div key={item.k} className="rounded-[var(--app-radius-sm)] bg-[var(--app-surface-muted)] px-4 py-3"><div className="text-xs text-[var(--app-text-muted)]">{item.l}</div><div className={`mt-1 text-xl font-bold ${item.c}`}>{counts[item.k as keyof typeof counts]}</div></div>)}</Card>
-    <Card title="每日出勤" action={<Button size="sm" variant="ghost" onClick={() => downloadCsv(students, records, date)}><Download className="h-4 w-4"/>导出</Button>}>
+    <Card title="每日出勤" action={
+      <div className="relative">
+        <Button size="sm" variant="ghost" aria-expanded={exportOpen} onClick={() => setExportOpen(value => !value)}><Download className="h-4 w-4"/>导出</Button>
+        <AnimatedPopover open={exportOpen} className="absolute right-0 top-full z-50 mt-2 w-72 rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-2 shadow-[var(--app-shadow-float)]">
+          <button type="button" onClick={() => { downloadCsv(students, records, date); setExportOpen(false); }} className="flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-sm text-gray-600 transition-colors hover:bg-gray-50">导出当日（{date}）</button>
+          <button type="button" onClick={() => { const range = getFundPeriodRange("week", date); if (range) downloadRangeCsv(students, records, range.start, range.end); setExportOpen(false); }} className="flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-sm text-gray-600 transition-colors hover:bg-gray-50">导出本周（含汇总）</button>
+          <button type="button" onClick={() => { const range = getFundPeriodRange("month", date); if (range) downloadRangeCsv(students, records, range.start, range.end); setExportOpen(false); }} className="flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-sm text-gray-600 transition-colors hover:bg-gray-50">导出本月（含汇总）</button>
+          <div className="mt-1 space-y-2 rounded-[var(--app-radius-sm)] bg-gray-50 p-2.5">
+            <div className="text-xs font-bold text-gray-500">自定义区间</div>
+            <div className="grid grid-cols-2 gap-2">
+              <DatePicker value={exportFrom} onChange={setExportFrom} ariaLabel="导出开始日期" className="w-full bg-white"/>
+              <DatePicker value={exportTo} onChange={setExportTo} ariaLabel="导出结束日期" className="w-full bg-white"/>
+            </div>
+            <Button size="sm" className="w-full" onClick={() => { downloadRangeCsv(students, records, exportFrom, exportTo); setExportOpen(false); }}>导出所选区间</Button>
+          </div>
+        </AnimatedPopover>
+        {exportOpen && <button type="button" aria-label="关闭导出菜单" className="fixed inset-0 z-40 cursor-default" onClick={() => setExportOpen(false)} />}
+      </div>
+    }>
       <div className="mb-3 rounded-[var(--app-radius-md)] bg-[var(--app-surface-muted)] p-3">
         <div className="mb-2 text-xs font-bold text-[var(--app-text-muted)]">快速登记：点击学生标记为</div>
         <div className="flex flex-wrap items-center gap-3">
           <DatePicker value={date} onChange={value => { setDate(value); setSelected(new Set()); setRecentUpdate(null); }} ariaLabel="出勤日期" className="w-44 bg-white"/>
           <SegmentedControl value={quickStatus} onChange={value => setQuickStatus(value as AttendanceQuickStatus)} ariaLabel="快速出勤状态" className="min-w-72 flex-1 overflow-x-auto" options={QUICK_STATUS_OPTIONS}/>
+          <Button size="sm" variant="secondary" disabled={!byStudent.size} onClick={() => void markAllNormal()}><Check className="h-4 w-4"/>全部正常</Button>
           <Button size="sm" variant="ghost" disabled={!undo} onClick={() => { if (!undo) return; onChange(undo); undoActivityRef.current?.(); undoActivityRef.current = null; setUndo(null); }}><RotateCcw className="h-4 w-4"/>撤销上一步</Button>
         </div>
       </div>

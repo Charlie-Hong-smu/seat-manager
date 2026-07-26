@@ -3,8 +3,9 @@ import { createFundTransaction, type NewFundTxInput } from "../state/classFundAc
 import type { SeatManagerController } from "../state/seatManagerController";
 import type { AppStudent, FundTransaction } from "../state/types";
 
-export function useClassFundActions({ students, setFundTransactions }: {
+export function useClassFundActions({ students, fundTransactions, setFundTransactions }: {
   students: AppStudent[];
+  fundTransactions: FundTransaction[];
   setFundTransactions: SeatManagerController["setFundTransactions"];
 }) {
   const handleAddFundTransaction = useCallback((input: NewFundTxInput) => {
@@ -41,10 +42,18 @@ export function useClassFundActions({ students, setFundTransactions }: {
   }, [setFundTransactions, students]);
 
   const handleDeleteFundTransaction = useCallback((id: string) => {
+    const previous = fundTransactions.find(tx => tx.id === id);
     setFundTransactions((current) => current.map((tx) => tx.id === id ? { ...tx, status: "void", voidedAt: new Date().toISOString(), voidReason: "教师手动作废" } : tx));
-  }, [setFundTransactions]);
+    return () => {
+      if (previous) setFundTransactions(current => current.map(tx => tx.id === id ? previous : tx));
+    };
+  }, [fundTransactions, setFundTransactions]);
 
-  const handleClearFundTransactions = useCallback(() => setFundTransactions(current => current.map(tx => ({ ...tx, status: "void", voidedAt: new Date().toISOString(), voidReason: "批量作废" }))), [setFundTransactions]);
+  const handleClearFundTransactions = useCallback(() => {
+    const previousById = new Map(fundTransactions.map(transaction => [transaction.id, transaction]));
+    setFundTransactions(current => current.map(tx => ({ ...tx, status: "void", voidedAt: new Date().toISOString(), voidReason: "批量作废" })));
+    return () => setFundTransactions(current => current.map(transaction => previousById.get(transaction.id) || transaction));
+  }, [fundTransactions, setFundTransactions]);
 
   return { handleAddFundTransaction, handleRemoveCreatedFundTransaction, handleUpdateFundTransaction, handleDeleteFundTransaction, handleClearFundTransactions };
 }

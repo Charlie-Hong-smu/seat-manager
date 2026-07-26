@@ -21,6 +21,7 @@ import type {
   SeatSettings,
   StudentId,
 } from "../../state/types";
+import { matchesStudentSearch } from "../../state/studentSearch";
 import { SeatBoard } from "../SeatBoard";
 import { drawStudents, todayKey } from "../../state/dailyManagement";
 import type { AttendanceRecord, DrawSession, FollowupTask } from "../../state/types";
@@ -92,7 +93,7 @@ export function DailyWorkspace({
       names: session.studentIds.map(id => studentById.get(id)?.name || "已移出学生"),
     }));
   }, [drawSessions, students]);
-  const drawerStudents = students.filter(student => !drawerSearch || student.name.includes(drawerSearch) || student.aliases.some(item => item.includes(drawerSearch))).slice(0, 8);
+  const drawerStudents = students.filter(student => matchesStudentSearch(student, drawerSearch)).slice(0, 8);
   const constraints = seatSettings.constraints;
   const activeConstraintCount = constraints.lockedDeskmatePairs.length
     + constraints.noDeskmatePairs.length

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   ChevronDown,
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { APP_NAME } from "../config";
+import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import type { AppStudent } from "../state/types";
 import { AnimatedPopover, IconButton } from "./ui";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -37,9 +38,14 @@ interface TopHeaderProps {
   onRetrySave?: () => void;
 }
 
-function normalizeSearch(value: string): string {
-  return value.trim().toLocaleLowerCase("zh-Hans-CN").replace(/\s+/g, "");
-}
+// 全局搜索快捷键按平台适配：macOS/iOS 用 ⌘K，Windows/Linux 用 Ctrl+K。
+const IS_APPLE_PLATFORM = typeof navigator !== "undefined"
+  && /mac|iphone|ipad|ipod/i.test(
+    (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform
+      || navigator.platform
+      || "",
+  );
+const SEARCH_SHORTCUT_LABEL = IS_APPLE_PLATFORM ? "⌘K" : "Ctrl K";
 
 export function TopHeader({
   students,
@@ -61,14 +67,37 @@ export function TopHeader({
 }: TopHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
-  const normalizedQuery = normalizeSearch(query);
+  const normalizedQuery = normalizeStudentSearch(query);
   const results = useMemo(() => {
     if (!normalizedQuery) return students.slice(0, 6);
-    return students.filter(student =>
-      [student.name, ...student.aliases].some(name => normalizeSearch(name).includes(normalizedQuery))
-    ).slice(0, 8);
+    return students.filter(student => matchesStudentSearch(student, normalizedQuery)).slice(0, 8);
   }, [normalizedQuery, students]);
+
+  useEffect(() => {
+    function handleShortcut(event: globalThis.KeyboardEvent) {
+      const modifier = IS_APPLE_PLATFORM ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      if (!modifier || event.altKey || event.shiftKey || event.key.toLowerCase() !== "k") return;
+      event.preventDefault();
+      setSearchOpen(current => !current);
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
+  useEffect(() => {
+    if (searchOpen) {
+      const timer = window.setTimeout(() => searchRef.current?.focus(), 0);
+      return () => window.clearTimeout(timer);
+    }
+    setQuery("");
+    setActiveIndex(0);
+  }, [searchOpen]);
+
+  useEffect(() => {
+    setActiveIndex(current => Math.min(current, Math.max(0, results.length - 1)));
+  }, [results.length]);
 
   const accountItems = [
     { key: "install", icon: <Monitor className="h-4 w-4" />, label: "安装到桌面" },
@@ -79,12 +108,10 @@ export function TopHeader({
 
   function openSearch() {
     setSearchOpen(true);
-    window.setTimeout(() => searchRef.current?.focus(), 0);
   }
 
   function closeSearch() {
     setSearchOpen(false);
-    setQuery("");
   }
 
   function chooseStudent(student: AppStudent) {
@@ -115,7 +142,7 @@ export function TopHeader({
             className="flex h-10 w-full items-center rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 pl-9 pr-3 text-left text-sm text-gray-400 transition-colors hover:border-gray-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
           >
             搜索学生姓名或别名
-            <span className="ml-auto rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] text-gray-400">搜索</span>
+            <span className="ml-auto rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] text-gray-400">{SEARCH_SHORTCUT_LABEL}</span>
           </button>
         </div>
 
@@ -172,23 +199,42 @@ export function TopHeader({
               <input
                 ref={searchRef}
                 value={query}
-                onChange={event => setQuery(event.target.value)}
+                role="combobox"
+                aria-expanded={results.length > 0}
+                aria-controls="global-student-search-results"
+                aria-activedescendant={results[activeIndex] ? `global-student-search-option-${results[activeIndex].id}` : undefined}
+                onChange={event => { setQuery(event.target.value); setActiveIndex(0); }}
                 onKeyDown={event => {
                   if (event.key === "Escape") closeSearch();
-                  if (event.key === "Enter" && results.length === 1) chooseStudent(results[0]);
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setActiveIndex(current => Math.min(current + 1, Math.max(0, results.length - 1)));
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setActiveIndex(current => Math.max(current - 1, 0));
+                  }
+                  if (event.key === "Enter") {
+                    const target = results[activeIndex] || (results.length === 1 ? results[0] : undefined);
+                    if (target) chooseStudent(target);
+                  }
                 }}
                 className="h-14 min-w-0 flex-1 bg-transparent text-base text-gray-900 outline-none placeholder:text-gray-400"
                 placeholder="输入学生姓名或别名"
               />
               <button type="button" onClick={closeSearch} className="rounded-lg px-2 py-1 text-xs text-gray-400 hover:bg-gray-100">ESC</button>
             </div>
-            <div className="max-h-80 overflow-y-auto p-2">
-              {results.map(student => (
+            <div id="global-student-search-results" role="listbox" aria-label="学生搜索结果" className="max-h-80 overflow-y-auto p-2">
+              {results.map((student, index) => (
                 <button
                   key={student.id}
+                  id={`global-student-search-option-${student.id}`}
                   type="button"
+                  role="option"
+                  aria-selected={index === activeIndex}
                   onClick={() => chooseStudent(student)}
-                  className="flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2.5 text-left transition-colors hover:bg-blue-50 focus-visible:bg-blue-50 focus-visible:outline-none"
+                  onMouseEnter={() => setActiveIndex(index)}
+                  className={`flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2.5 text-left transition-colors hover:bg-blue-50 focus-visible:bg-blue-50 focus-visible:outline-none ${index === activeIndex ? "bg-blue-50" : ""}`}
                 >
                   <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-50 text-sm font-bold text-blue-600">{student.name.slice(0, 1)}</span>
                   <span className="min-w-0 flex-1">

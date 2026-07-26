@@ -13,7 +13,7 @@ function resolveUpdate<T>(current: T, update: FieldUpdater<T>): T {
 
 export interface SeatManagerController {
   state: SeatManagerState;
-  replace(next: SeatManagerState): void;
+  replace: Dispatch<SetStateAction<SeatManagerState>>;
   reload(): SeatManagerState;
   persist(): boolean;
   setStudents: Dispatch<SetStateAction<AppStudent[]>>;
@@ -37,7 +37,7 @@ export interface SeatManagerController {
 export function useSeatManagerController(initialState: SeatManagerState): SeatManagerController {
   const [state, setState] = useState(initialState);
 
-  const replace = useCallback((next: SeatManagerState) => setState(next), []);
+  const replace = useCallback<SeatManagerController["replace"]>(next => setState(next), []);
   const reload = useCallback(() => {
     const next = createSeatManagerState(readLegacyRootState());
     setState(next);

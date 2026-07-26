@@ -1,6 +1,11 @@
 import type { Page } from "@playwright/test";
 
 export async function seedContextPreviewRecords(page: Page, studentName: string) {
+  await page.waitForFunction(name => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
+    const current = book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId);
+    return current?.data?.students?.some((item: { name: string }) => item.name === name);
+  }, studentName);
   return page.evaluate(name => {
     const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
     const current = book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId);

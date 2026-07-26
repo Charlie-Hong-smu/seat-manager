@@ -17,6 +17,8 @@
 - `state/seatManagerController.ts`：唯一持久业务状态控制器；学生、座位、成绩、宿舍、班费和历史都来自同一个 `SeatManagerState`。
 - `components/workspaces/`：Today、Daily（座位）、Data、History、Scores、ClassFund 的独立页面实现与稳定 barrel；Scores 由 App 按需加载。
 - `state/teacherWorkbench.ts`：课表、作业、今日队列、周报事实和题目得分率的本地纯函数边界；这些计算不依赖 AI。
+- `state/studentSearch.ts`：学生姓名与别名的统一搜索归一化边界；顶栏、成绩、评语、座位、出勤、作业、宿舍和班费选择器复用同一规则。
+- `state/dormitoryPreferences.ts`：宿舍事件类型和默认分数的切片设置规范化与旧全局键只读迁移边界。
 - `state/classManagementCommands.ts`：跟进完成与结果、出勤状态清理、学生归档/恢复/彻底删除等跨领域命令；页面不得各自拼接同类级联修改。
 - `state/activityEvents.ts`：`BusinessEntityRef` 与本地不可变动作流水的规范化边界；新动作从升级后开始记录，不反推旧状态历史。
 - `components/FollowupTaskForm.tsx`、`LinkedWorkflow.tsx`、`StudentAttentionSummary.tsx`：跟进表单、来源/关联任务/处理结果和学生关注摘要的共享业务组件。
@@ -86,6 +88,8 @@ React event
 排座算法不得从数组索引推断自定义布局关系。邻座约束读取 `neighborEdges`，整组约束读取 `groups`，前排约束根据 `frontEdge` 与座位坐标派生；默认布局的输出和旧版八列语义保持不变。布局编辑只生成草稿，必须由老师点击“应用布局”后才写入当前学期数据。
 
 宿舍统计周期配置保存在当前切片的 `settings.dormitoryPeriod`，字段固定为 `anchorDate`、`unit: week | month` 和 `intervalCount`。自然周、自然月和重复自定义周期从当前事件与旧版历史归档事件按真实发生日期派生净加减分；产品不再提供基础分、结转或手动结算。旧 `history` 继续兼容读取，其事件进入统一流水并可正常编辑、删除，但不再产生新的归档。
+
+宿舍事件类型与默认分数保存在当前切片的 `settings.dormitoryPreferences`，随本机整柜备份和手动云同步保存。旧版 `dorm-presets` 与 `dorm-score-memory` 全局键只作为首次读取迁移源，不再写入或删除，避免切换班级/学期时串用设置。成绩及格、良好、优秀阈值保存在当前切片的 `settings.gradeThresholds`，读取时统一限制在 0–100 且保持递增。
 
 ## AI 与网络链路
 

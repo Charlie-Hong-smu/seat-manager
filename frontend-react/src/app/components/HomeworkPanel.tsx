@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInitialTargetEffect } from "../hooks/useInitialTargetEffect";
 import { todayKey } from "../state/dailyManagement";
 import { createActivityEvent } from "../state/activityEvents";
+import { matchesStudentSearch } from "../state/studentSearch";
 import type { ActivityEvent, AppStudent, FollowupTask, HomeworkAssignment, HomeworkStudentStatus, StudentId } from "../state/types";
 import { LinkedTaskBadge } from "./LinkedWorkflow";
 import { Button, Card, DatePicker, SegmentedControl, SelectMenu, ToolDrawer, useActionToast, useAppDialog } from "./ui";
@@ -72,7 +73,7 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
   const studentStates = useMemo(() => new Map(participantStudents.map(student => [student.id, selected?.studentStates[student.id]?.status || "unrecorded"] as const)), [participantStudents, selected]);
   const counts = useMemo(() => Object.fromEntries(STATUS_OPTIONS.map(option => [option.value, participantStudents.filter(student => studentStates.get(student.id) === option.value).length])) as Record<HomeworkStudentStatus, number>, [participantStudents, studentStates]);
   const pendingIds = useMemo(() => selected ? participantStudents.filter(student => studentStates.get(student.id) === "pending").map(student => student.id) : [], [participantStudents, selected, studentStates]);
-  const shownStudents = useMemo(() => participantStudents.filter(student => (!search.trim() || student.name.includes(search.trim()) || student.aliases.some(alias => alias.includes(search.trim()))) && (filter === "all" || studentStates.get(student.id) === filter)), [filter, participantStudents, search, studentStates]);
+  const shownStudents = useMemo(() => participantStudents.filter(student => matchesStudentSearch(student, search) && (filter === "all" || studentStates.get(student.id) === filter)), [filter, participantStudents, search, studentStates]);
   const registeredCount = participantStudents.length - counts.unrecorded;
 
   useEffect(() => () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -25,9 +25,10 @@ import {
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
 import { AnimatedPopover, SegmentedControl } from "./ui";
+import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
+import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholds } from "../state/teacherWorkbench";
 import type { AppStudent, GradeExam, GradeRow } from "../state/types";
 
-const DEFAULT_THRESHOLDS = { pass: 60, good: 75, excellent: 90 };
 const SUBJECT_COLORS = ["var(--app-chart-blue)", "var(--app-chart-violet)", "var(--app-chart-green)", "var(--app-chart-amber)", "var(--app-chart-cyan)", "var(--app-chart-pink)", "var(--app-chart-indigo)", "var(--app-chart-lime)"];
 const GRADE_COLORS = {
   excellent: "var(--app-chart-green)",
@@ -36,13 +37,13 @@ const GRADE_COLORS = {
   fail: "var(--app-chart-rose)",
 };
 
-type Thresholds = typeof DEFAULT_THRESHOLDS;
-
 interface GradesPageProps {
   exams: GradeExam[];
   students: AppStudent[];
   onSelectStudent: (student: AppStudent) => void;
   onOpenStudentFollowup: (student: AppStudent) => void;
+  thresholds?: GradeThresholds;
+  onThresholdsChange?: (next: GradeThresholds) => void;
 }
 
 function getRowTotal(row: GradeRow): number | null {
@@ -131,7 +132,7 @@ function getTrendFollowupReason(student: AppStudent): { reason: string; score: n
   return { reason: reasons.slice(0, 2).join(" · "), score, diff: totalDiff };
 }
 
-function getGradeLabel(avg: number | null, thresholds: Thresholds) {
+function getGradeLabel(avg: number | null, thresholds: GradeThresholds) {
   if (avg === null) return "缺考";
   if (avg >= thresholds.excellent) return "优秀";
   if (avg >= thresholds.good) return "良好";
@@ -160,7 +161,7 @@ function normalizeName(value: string): string {
   return value.replace(/\s+/g, "").toLocaleLowerCase("zh-Hans-CN");
 }
 
-function getBandKey(value: number | null, thresholds: Thresholds): "excellent" | "good" | "pass" | "fail" | "missing" {
+function getBandKey(value: number | null, thresholds: GradeThresholds): "excellent" | "good" | "pass" | "fail" | "missing" {
   if (value === null) return "missing";
   if (value >= thresholds.excellent) return "excellent";
   if (value >= thresholds.good) return "good";
@@ -201,7 +202,7 @@ function StatCard({ icon, label, value, sub, accent }: {
 const EMPTY_SUBJECTS: string[] = [];
 const EMPTY_ROWS: GradeExam["rows"] = [];
 
-export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFollowup }: GradesPageProps) {
+export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFollowup, thresholds: thresholdsProp, onThresholdsChange }: GradesPageProps) {
   const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id || "");
   const [selectedSubject, setSelectedSubject] = useState("total");
   const [examOpen, setExamOpen] = useState(false);
@@ -212,7 +213,14 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const [sortAsc, setSortAsc] = useState(false);
   const [thresholdOpen, setThresholdOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
+  // 阈值受控优先（App 持久化到切片 settings）；无外部来源时退回本地状态。
+  const [localThresholds, setLocalThresholds] = useState(DEFAULT_GRADE_THRESHOLDS);
+  const thresholds = thresholdsProp ?? localThresholds;
+  const setThresholds = (updater: (current: GradeThresholds) => GradeThresholds) => {
+    const next = updater(thresholds);
+    if (onThresholdsChange) onThresholdsChange(next);
+    else setLocalThresholds(next);
+  };
 
   const selectedExam = exams.find(exam => exam.id === selectedExamId) || exams[0];
   const subjects = selectedExam?.subjects || EMPTY_SUBJECTS;
@@ -238,6 +246,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     });
     return lookup;
   }, [students]);
+  const rowMatchesSearch = useCallback((row: GradeRow) => {
+    const student = (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name));
+    return student ? matchesStudentSearch(student, searchQuery) : normalizeStudentSearch(row.name).includes(normalizeStudentSearch(searchQuery));
+  }, [searchQuery, studentById, studentByName]);
 
   useEffect(() => {
     if (exams.length && !exams.some(exam => exam.id === selectedExamId)) {
@@ -281,12 +293,12 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const subjectThresholdHint = `单科阈值：及格≥${thresholds.pass} / 良好≥${thresholds.good} / 优秀≥${thresholds.excellent}`;
 
   const filtered = useMemo(() => [...rowsWithMetrics]
-    .filter(row => row.name.includes(searchQuery))
+    .filter(rowMatchesSearch)
     .sort((a, b) => {
       const av = sortKey === "name" ? a.name : sortKey === "total" ? a.totalScore : a.scores[sortKey]?.score ?? null;
       const bv = sortKey === "name" ? b.name : sortKey === "total" ? b.totalScore : b.scores[sortKey]?.score ?? null;
       return compareValues(av, bv, sortAsc);
-    }), [rowsWithMetrics, searchQuery, sortAsc, sortKey]);
+    }), [rowMatchesSearch, rowsWithMetrics, sortAsc, sortKey]);
 
   const totals = rowsWithMetrics
     .map(row => row.totalScore)
@@ -328,14 +340,14 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     })),
   ];
   const subjectRankingRows = useMemo(() => [...rowsWithMetrics]
-    .filter(row => row.name.includes(searchQuery))
+    .filter(rowMatchesSearch)
     .map(row => ({
       row,
       value: getMetricValue(row, metricKey),
       matchedStudent: (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null,
     }))
     .filter(item => typeof item.value === "number" && Number.isFinite(item.value))
-    .sort((a, b) => compareValues(a.value, b.value, false)), [metricKey, rowsWithMetrics, searchQuery, studentById, studentByName]);
+    .sort((a, b) => compareValues(a.value, b.value, false)), [metricKey, rowMatchesSearch, rowsWithMetrics, studentById, studentByName]);
   const trendFollowupCandidates = useMemo(() => students
     .map(student => {
       const signal = getTrendFollowupReason(student);
@@ -353,7 +365,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     }
   };
 
-  const updateThreshold = (key: keyof Thresholds, value: number) => {
+  const updateThreshold = (key: keyof GradeThresholds, value: number) => {
     setThresholds(current => {
       const next = { ...current, [key]: Math.max(0, Math.min(100, value || 0)) };
       if (key === "excellent" && next.excellent <= next.good) next.good = Math.max(0, next.excellent - 1);
@@ -476,7 +488,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                     ["pass", "及格"],
                     ["good", "良好"],
                     ["excellent", "优秀"],
-                  ]) as Array<[keyof Thresholds, string]>).map(([key, label]) => (
+                  ]) as Array<[keyof GradeThresholds, string]>).map(([key, label]) => (
                     <label key={key} className="space-y-1.5 text-xs text-gray-500" style={{ fontWeight: 700 }}>
                       <span>{label}</span>
                       <input

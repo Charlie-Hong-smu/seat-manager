@@ -122,6 +122,8 @@ test("opens student detail from the current comment avatar without a separate de
   await page.getByRole("button", { name: /新增学生/ }).click();
   await page.getByPlaceholder("姓名", { exact: true }).fill("头像详情学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("详情下一位学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "评语工作台" }).click();
 
   const workbench = page.getByRole("dialog", { name: "评语工作台" });
@@ -131,6 +133,17 @@ test("opens student detail from the current comment avatar without a separate de
   const closeStudentDetail = page.getByRole("button", { name: "关闭学生详情" });
   await expect(workbench).toBeVisible();
   await expect(closeStudentDetail).toBeVisible();
+  const currentStudentDialog = page.getByRole("dialog", { name: "头像详情学生学生详情" });
+  const followupTab = currentStudentDialog.getByRole("tab", { name: "建议与沟通" });
+  await followupTab.click();
+  await expect(followupTab).toHaveAttribute("aria-selected", "true");
+  await currentStudentDialog.getByRole("button", { name: "下一位学生", exact: true }).click();
+  const nextStudentDialog = page.getByRole("dialog", { name: "详情下一位学生学生详情" });
+  await expect(nextStudentDialog).toBeVisible();
+  await expect(nextStudentDialog.getByRole("tab", { name: "建议与沟通" })).toHaveAttribute("aria-selected", "true");
+  await nextStudentDialog.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("dialog", { name: "头像详情学生学生详情" })).toBeVisible();
   const layers = await page.evaluate(() => {
     const workbenchDialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="评语工作台"]');
     const closeButton = document.querySelector<HTMLElement>('button[aria-label="关闭学生详情"]');
@@ -171,8 +184,8 @@ test("previews attention and timeline records inline without interrupting commen
   await page.getByRole("tab", { name: "建议与沟通" }).click();
 
   const dialogCount = await page.getByRole("dialog").count();
-  const taskA = page.getByRole("button", { name: /上下文任务甲/ }).first();
-  const taskB = page.getByRole("button", { name: /上下文任务乙/ }).first();
+  const taskA = page.getByRole("button", { name: "上下文任务甲事项速览", exact: true });
+  const taskB = page.getByRole("button", { name: "上下文任务乙事项速览", exact: true });
   await taskA.focus();
   await page.keyboard.press("Enter");
   const taskAPreview = page.getByRole("region", { name: "上下文任务甲事项速览" });
@@ -198,7 +211,7 @@ test("previews attention and timeline records inline without interrupting commen
   await expect(taskBPreview).toHaveAttribute("data-phase", "closing");
   await expect(page.getByRole("region", { name: "上下文任务乙事项速览" })).toHaveCount(0);
 
-  await page.getByRole("button", { name: /创建上下文任务甲/ }).click();
+  await page.getByRole("button", { name: "创建上下文任务甲事项速览", exact: true }).click();
   await expect(page.getByRole("region", { name: "上下文任务甲事项速览" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(dialogCount);
   await page.getByRole("button", { name: "关闭学生详情" }).click();
@@ -207,7 +220,7 @@ test("previews attention and timeline records inline without interrupting commen
 
   await workbench.getByRole("button", { name: "查看 上下文预览学生 的学生详情" }).click();
   await page.getByRole("tab", { name: "建议与沟通" }).click();
-  await page.getByRole("button", { name: /上下文任务甲/ }).first().click();
+  await page.getByRole("button", { name: "上下文任务甲事项速览", exact: true }).click();
   await page.getByRole("button", { name: "前往任务工作区（离开评语工作台）" }).click();
   await expect(workbench).toBeHidden();
   await expect(page.getByRole("button", { name: "关闭学生详情" })).toHaveCount(0);
@@ -615,7 +628,7 @@ test("roster, exam, cloud sync and workspace switching keep data isolated", asyn
   });
   await expect(page.getByText(/已读取 2 行名单/)).toBeVisible();
   await page.getByRole("button", { name: "导入名单" }).click();
-  await expect(page.getByText(/导入成功：2 名学生/)).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "导入完成：新增 2 名，当前在班 2 名学生" })).toBeVisible();
 
   await page.getByRole("button", { name: /^成绩/ }).click();
   await page.locator('input[type="file"]').first().setInputFiles({

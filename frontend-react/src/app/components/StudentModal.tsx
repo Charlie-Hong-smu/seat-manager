@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil } from "lucide-react";
+import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { RetryableLazy } from "./RetryableLazy";
 import { type NewDormEventInput } from "../state/dormitoryActions";
@@ -13,8 +13,9 @@ import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreview
 import { getNeighborIndexPairs, getSeatPositionLabel, resolveSeatLayout } from "../state/seatLayout";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
 import { normalizeAttendancePatch } from "../state/classManagementCommands";
+import { matchesStudentSearch } from "../state/studentSearch";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
-import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog } from "./ui";
+import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog, useModalFocus } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
 import { StudentActivityTimeline, StudentAttentionSummary, type ContextPreviewRequest } from "./StudentAttentionSummary";
@@ -35,7 +36,7 @@ import {
 
 const loadStudentTrendChart = () => import("./StudentTrendChart");
 
-type StudentDetailTab = "records" | "profile" | "attendance" | "trend" | "followup";
+export type StudentDetailTab = "records" | "profile" | "attendance" | "trend" | "followup";
 
 const STUDENT_DETAIL_TABS: Array<{ value: StudentDetailTab; label: string; tone?: "default" | "ai" }> = [
   { value: "records", label: "奖罚记录" },
@@ -60,6 +61,9 @@ interface Props {
   seatOrder?: Array<StudentId | null>;
   seatLayout?: SeatLayoutV1;
   initialActiveTab?: StudentDetailTab;
+  onActiveTabChange?: (tab: StudentDetailTab) => void;
+  onNavigate?: (direction: -1 | 1) => void;
+  navPosition?: { index: number; total: number };
   onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
@@ -88,6 +92,9 @@ export function StudentModal({
   seatOrder = [],
   seatLayout,
   initialActiveTab = "records",
+  onActiveTabChange,
+  onNavigate,
+  navPosition,
   onCreateFollowupTask,
   attendanceRecords = [],
   followupTasks = [],
@@ -100,6 +107,7 @@ export function StudentModal({
   leavesWorkbench = false,
   layerClassName = "z-[60]",
 }: Props) {
+  const modalPanelRef = useModalFocus(true, onClose);
   const appDialog = useAppDialog();
   const modalHeaderRef = useRef<HTMLDivElement>(null);
   const modalTabsRef = useRef<HTMLDivElement>(null);
@@ -162,12 +170,29 @@ export function StudentModal({
     setContextPreview(null);
   }, [initialActiveTab, student]);
 
+  // ←/→ 逐人切换；输入控件聚焦时不劫持方向键。
+  useEffect(() => {
+    const navigate = onNavigate;
+    if (!navigate) return;
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest("button, a, input, textarea, select, [role=tab], [role=menuitem], [contenteditable=true]")) return;
+      event.preventDefault();
+      navigate?.(event.key === "ArrowLeft" ? -1 : 1);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onNavigate]);
+
   function changeActiveTab(nextTab: StudentDetailTab) {
     if (nextTab === activeTab) return;
     const currentIndex = STUDENT_DETAIL_TABS.findIndex(tab => tab.value === activeTab);
     const nextIndex = STUDENT_DETAIL_TABS.findIndex(tab => tab.value === nextTab);
     setTabDirection(nextIndex < currentIndex ? "left" : "right");
     setContextPreview(null);
+    onActiveTabChange?.(nextTab);
     setActiveTab(nextTab);
   }
 
@@ -364,7 +389,7 @@ export function StudentModal({
     setProfileStatus("AI 跟进素材已加入评语补充说明。");
   }
 
-  const syncCandidates = students.filter(s => s.id !== student.id && s.name.includes(syncSearch));
+  const syncCandidates = students.filter(s => s.id !== student.id && matchesStudentSearch(s, syncSearch));
 
   function toggleSync(id: StudentId) {
     setSyncSelected(prev => {
@@ -453,15 +478,19 @@ export function StudentModal({
 
   return (
     <div className={`soft-backdrop-enter fixed inset-0 ${layerClassName} flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm`}>
-      <div style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-white shadow-[var(--app-shadow-float)] transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
+      <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-white shadow-[var(--app-shadow-float)] outline-none transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
         {/* Header */}
         <div ref={modalHeaderRef} className="flex shrink-0 items-start justify-between border-b border-gray-100 p-6 pb-4">
-          <div>
-            <div className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生</div>
-            <h3 className="text-gray-900" style={{ fontSize: "1.25rem" }}>
-              {student.name}
-              <span className="text-gray-400 ml-2" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
-            </h3>
+          <div className="flex min-w-0 items-center gap-3">
+            {onNavigate && <IconButton label="上一位学生" size="sm" onClick={() => onNavigate(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
+            <div className="min-w-0">
+              <div className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
+              <h3 className="truncate text-gray-900" style={{ fontSize: "1.25rem" }}>
+                {student.name}
+                <span className="text-gray-400 ml-2" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
+              </h3>
+            </div>
+            {onNavigate && <IconButton label="下一位学生" size="sm" onClick={() => onNavigate(1)}><ChevronRight className="h-4 w-4" /></IconButton>}
           </div>
           <div className="flex items-center gap-2">
             <>

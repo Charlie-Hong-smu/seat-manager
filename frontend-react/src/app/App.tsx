@@ -5,6 +5,7 @@ import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar, type SidebarTab } from "./components/Sidebar";
 import { StudentDetail } from "./components/StudentDetail";
+import type { StudentDetailTab } from "./components/StudentModal";
 import { resolveBusinessEntityPreview } from "./state/businessEntityPreview";
 import { TopHeader } from "./components/TopHeader";
 import { CloudSyncModal } from "./components/CloudSyncModal";
@@ -35,7 +36,7 @@ import { createFollowupTask, findOpenLinkedTask, getTaskUrgency, todayKey } from
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, businessEntityExists, inspectStateHealth, targetFromBusinessRef, type TimelineTarget } from "./state/dataInsights";
 import { createActivityEvent } from "./state/activityEvents";
-import { archiveStudent, permanentlyDeleteStudent, restoreStudent } from "./state/classManagementCommands";
+import { archiveStudent, completeFollowupTask, permanentlyDeleteStudent, restoreStudent } from "./state/classManagementCommands";
 import { useActionToast, useAppDialog } from "./components/ui";
 import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
 import { resolveSeatLayout } from "./state/seatLayout";
@@ -43,7 +44,7 @@ import { WorkspaceRecoveryScreen } from "./components/WorkspaceRecoveryScreen";
 import { getCurrentWorkspaceScope, inspectWorkspaceStorage } from "./state/workspaces";
 import { TodayWorkspace } from "./components/workspaces/TodayWorkspace";
 import { QuickRecordDrawer, type QuickRecordInput } from "./components/QuickRecordDrawer";
-import { normalizeSubjectCatalog } from "./state/teacherWorkbench";
+import { normalizeGradeThresholds, normalizeSubjectCatalog, type GradeThresholds } from "./state/teacherWorkbench";
 import { deleteStudentCommentDraft } from "./state/commentStorage";
 import { removeStudentFromCommentBatch } from "./components/commentBatchStorage";
 import { AiAssistantLauncher } from "./components/AiAssistantLauncher";
@@ -95,6 +96,7 @@ export default function App() {
     ...homeworkAssignments.map(assignment => assignment.subject),
     ...appState.gradeExams.flatMap(exam => exam.subjects),
   ]);
+  const gradeThresholds = normalizeGradeThresholds(appState.settings.gradeThresholds);
   const { persist: persistState, reload: reloadState, replace: replaceState } = controller;
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [workspaceStorage, setWorkspaceStorage] = useState(() => inspectWorkspaceStorage());
@@ -102,7 +104,7 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1199px)").matches);
   const [selectedStudentId, setSelectedStudentId] = useState<StudentId | null>(null);
   const selectedStudent = allStudents.find(student => student.id === selectedStudentId) || null;
-  const [selectedStudentInitialTab, setSelectedStudentInitialTab] = useState<"records" | "profile" | "trend" | "followup">("records");
+  const [selectedStudentInitialTab, setSelectedStudentInitialTab] = useState<StudentDetailTab>("records");
   const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
   const [commentWorkbenchTransition, setCommentWorkbenchTransition] = useState<"preparing" | "open" | "closing">("preparing");
   const [CommentWorkbenchComponent, setCommentWorkbenchComponent] = useState<Awaited<ReturnType<typeof loadCommentWorkbench>>["default"] | null>(null);
@@ -161,6 +163,24 @@ export default function App() {
     }
     followupAfterSave.current = afterSave || null;
     setFollowupDraft(draft);
+  }
+
+  function handleCompleteTodayTask(taskId: string) {
+    const task = followupTasks.find(item => item.id === taskId);
+    if (!task || task.status !== "pending") return;
+    const result = completeFollowupTask(task);
+    setFollowupTasks(current => current.map(item => (item.id === taskId ? result.task : item)));
+    const removeActivity = recordActivity(result.event);
+    actionToast.show({
+      message: `已完成跟进：${task.title}`,
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => {
+        setFollowupTasks(current => current.map(item => (item.id === taskId ? task : item)));
+        removeActivity();
+      },
+      duration: 6000,
+    });
   }
 
   async function openCommentWorkbench() {
@@ -511,10 +531,20 @@ export default function App() {
     });
   }
 
-  function openStudentDetail(student: AppStudent, initialTab: "records" | "profile" | "trend" | "followup" = "records") {
+  function openStudentDetail(student: AppStudent, initialTab: StudentDetailTab = "records") {
     setSelectedStudentInitialTab(initialTab);
     setSelectedStudentId(student.id);
   }
+
+  // 学生详情内按名单顺序逐人切换；保持当前页签，方便逐人过档案或成绩。
+  function navigateStudentDetail(direction: -1 | 1) {
+    if (!selectedStudentId || students.length < 2) return;
+    const index = students.findIndex(item => item.id === selectedStudentId);
+    if (index < 0) return;
+    setSelectedStudentId(students[(index + direction + students.length) % students.length].id);
+  }
+
+  const selectedStudentIndex = selectedStudentId ? students.findIndex(item => item.id === selectedStudentId) : -1;
 
   function consumeTimelineTarget() {
     setTimelineTarget(null);
@@ -591,7 +621,26 @@ export default function App() {
     return true;
   }
 
-  function handleDeleteGradeExam(examId: string): boolean {
+  function handleDeleteGradeExam(examId: string): (() => void) | null {
+    const exam = appState.gradeExams.find(item => item.id === examId);
+    const storedRecord = appState.savedExams.find(item => item !== null && typeof item === "object" && "id" in item && item.id === examId) as SavedGradeExamRecord | undefined;
+    const deletedRecord = storedRecord || (exam ? {
+      id: exam.id,
+      name: exam.name,
+      date: exam.date,
+      savedAt: exam.savedAt || new Date().toISOString(),
+      studentCount: exam.rows.length,
+      subjectCount: exam.subjects.length,
+      subjects: exam.subjects,
+      entries: exam.rows.map(row => ({
+        name: row.name,
+        studentNo: row.studentNo,
+        scores: row.scores,
+        total: { score: row.total, rankClass: row.rankClass, rankSchool: row.rankSchool },
+      })),
+      importSource: exam.importSource,
+      itemAnalysis: exam.itemAnalysis,
+    } satisfies SavedGradeExamRecord : undefined);
     const next = deleteGradeExamRecord({
       examId,
       students: allStudents,
@@ -603,10 +652,29 @@ export default function App() {
       seatHistory: savedSeatHistory,
     });
     if (!next) {
-      return false;
+      return null;
     }
     replaceState(next);
-    return true;
+    if (!deletedRecord) return null;
+    return () => replaceState(current => saveGradeExamRecord({
+      record: deletedRecord,
+      students: current.students,
+      seatOrder: current.seatOrder,
+      lockedSeats: current.lockedSeats,
+      seatSettings: current.seatSettings,
+      settings: current.settings,
+      dormitories: current.dormitories,
+      seatHistory: current.seatHistory,
+      fundTransactions: current.fundTransactions,
+      attendanceRecords: current.attendanceRecords,
+      followupTasks: current.followupTasks,
+      drawSessions: current.drawSessions,
+      schedule: current.schedule,
+      homeworkAssignments: current.homeworkAssignments,
+      quickRecordPresets: current.quickRecordPresets,
+      communicationDrafts: current.communicationDrafts,
+      activityEvents: current.activityEvents,
+    }) || current);
   }
 
   function handleSaveGradeItemAnalysis(examId: string, itemAnalysis: GradeItemAnalysis): boolean {
@@ -846,7 +914,7 @@ export default function App() {
     handleUpdateFundTransaction,
     handleDeleteFundTransaction,
     handleClearFundTransactions,
-  } = useClassFundActions({ students, setFundTransactions });
+  } = useClassFundActions({ students, fundTransactions, setFundTransactions });
 
   if (!loggedIn) {
     return <LoginScreen onLogin={() => setLoggedIn(true)} />;
@@ -965,6 +1033,9 @@ export default function App() {
               seatOrder={seatOrder}
               seatLayout={seatSettings.layout}
               initialActiveTab={selectedStudentInitialTab}
+              onActiveTabChange={setSelectedStudentInitialTab}
+              onNavigate={selectedStudentIndex >= 0 && students.length > 1 ? navigateStudentDetail : undefined}
+              navPosition={selectedStudentIndex >= 0 ? { index: selectedStudentIndex, total: students.length } : undefined}
               onCreateFollowupTask={input => {
                 setSelectedStudentInitialTab("records");
                 setSelectedStudentId(null);
@@ -1038,7 +1109,7 @@ export default function App() {
       }
     >
       <div className="h-full">
-        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
+        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full workspace-tab-enter">
             <DailyWorkspace
@@ -1085,6 +1156,8 @@ export default function App() {
               onSetLinkedTaskStatus={(taskIds, status) => { const now = new Date().toISOString(); setFollowupTasks(current => current.map(task => taskIds.includes(task.id) ? { ...task, status, updatedAt: now, completedAt: status === "completed" ? now : undefined } : task)); }}
               periodSettings={dormitoryPeriodSettings}
               onPeriodSettingsChange={settings => setSettings(current => ({ ...current, dormitoryPeriod: settings }))}
+              preferences={appState.settings.dormitoryPreferences}
+              onPreferencesChange={preferences => setSettings(current => ({ ...current, dormitoryPreferences: preferences }))}
               initialTarget={timelineTarget?.workspace === "dormitories" ? timelineTarget : undefined}
               onInitialTargetConsumed={consumeTimelineTarget}
             />
@@ -1097,7 +1170,7 @@ export default function App() {
 
         {sidebarTab === "scores" && (
           <div className="h-full workspace-tab-enter">
-            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, tasks: followupTasks, initialTarget: timelineTarget?.workspace === "scores" ? timelineTarget : undefined, onInitialTargetConsumed: consumeTimelineTarget, onOpenTask: (taskId: string) => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId }), onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, studentId } }), onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => requestFollowupTask({ studentId: studentIds[0], studentIds, title: `跟进${exam.name} · ${question.label}`, type: "学业关注", description: question.knowledgePoints.length ? `薄弱知识点：${question.knowledgePoints.join("、")}` : `${question.label}得分低于 60%`, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, subEntityId: question.id } }) }} />
+            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, tasks: followupTasks, gradeThresholds, onGradeThresholdsChange: (next: GradeThresholds) => setSettings(current => ({ ...current, gradeThresholds: next })), initialTarget: timelineTarget?.workspace === "scores" ? timelineTarget : undefined, onInitialTargetConsumed: consumeTimelineTarget, onOpenTask: (taskId: string) => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId }), onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, studentId } }), onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => requestFollowupTask({ studentId: studentIds[0], studentIds, title: `跟进${exam.name} · ${question.label}`, type: "学业关注", description: question.knowledgePoints.length ? `薄弱知识点：${question.knowledgePoints.join("、")}` : `${question.label}得分低于 60%`, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, subEntityId: question.id } }) }} />
           </div>
         )}
 
@@ -1144,6 +1217,7 @@ export default function App() {
               onUpdate={handleUpdateFundTransaction}
               onDelete={handleDeleteFundTransaction}
               onClearAll={handleClearFundTransactions}
+              onRequestFollowupTask={requestFollowupTask}
             />
           </div>
         )}

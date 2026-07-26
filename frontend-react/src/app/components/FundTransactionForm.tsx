@@ -2,6 +2,7 @@ import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 
 import { FUND_EXPENSE_PRESETS, FUND_INCOME_PRESETS, type NewFundTxInput } from "../state/classFundActions";
+import { matchesStudentSearch } from "../state/studentSearch";
 import type { AppStudent, FundTxType } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { DatePicker } from "./ui";
@@ -95,7 +96,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
   }
 
   const filteredStudents = studentSearch.trim()
-    ? students.filter(s => s.name.includes(studentSearch.trim()) || s.aliases.some(a => a.includes(studentSearch.trim())))
+    ? students.filter(student => matchesStudentSearch(student, studentSearch))
     : students;
 
   const selectedRelatedStudents = relatedIds

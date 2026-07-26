@@ -77,7 +77,7 @@ test("commercial keeps comment context while previewing a student task", async (
   await workbench.getByRole("button", { name: "查看 商用速览学生 的学生详情" }).click();
   await page.getByRole("tab", { name: "建议与沟通" }).click();
   const before = await page.getByRole("dialog").count();
-  await page.getByRole("button", { name: /上下文任务甲/ }).first().click();
+  await page.getByRole("button", { name: "上下文任务甲事项速览", exact: true }).click();
   await expect(page.getByRole("region", { name: "上下文任务甲事项速览" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(before);
   await expect(workbench).toBeVisible();

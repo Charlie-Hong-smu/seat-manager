@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { AiCommentDrawer } from "./AiCommentDrawer";
-import { StudentModal } from "./StudentModal";
+import { StudentModal, type StudentDetailTab } from "./StudentModal";
 import type { NewDormEventInput } from "../state/dormitoryActions";
 import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreviewFallback, BusinessEntityPreviewModel, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 
@@ -19,7 +19,10 @@ interface StudentDetailProps {
   onOpenDormitories: () => void;
   seatOrder?: Array<StudentId | null>;
   seatLayout?: SeatLayoutV1;
-  initialActiveTab?: "records" | "profile" | "trend" | "followup";
+  initialActiveTab?: StudentDetailTab;
+  onActiveTabChange?: (tab: StudentDetailTab) => void;
+  onNavigate?: (direction: -1 | 1) => void;
+  navPosition?: { index: number; total: number };
   onCreateFollowupTask?: (input: { studentId: StudentId; title: string; description: string }) => void;
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
@@ -46,6 +49,9 @@ export function StudentDetail({
   seatOrder,
   seatLayout,
   initialActiveTab,
+  onActiveTabChange,
+  onNavigate,
+  navPosition,
   onCreateFollowupTask,
   attendanceRecords,
   followupTasks,
@@ -76,6 +82,9 @@ export function StudentDetail({
         seatOrder={seatOrder}
         seatLayout={seatLayout}
         initialActiveTab={initialActiveTab}
+        onActiveTabChange={onActiveTabChange}
+        onNavigate={onNavigate}
+        navPosition={navPosition}
         onCreateFollowupTask={onCreateFollowupTask}
         attendanceRecords={attendanceRecords}
         followupTasks={followupTasks}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildItemAnalysisFromWideRows, buildTodayWorkItems, buildWeeklyFacts, getQuestionStats, normalizeCommunicationDrafts, normalizeHomeworkAssignments, normalizeSubjectCatalog, parseScheduleRows } from "./teacherWorkbench";
+import { buildItemAnalysisFromWideRows, buildTodayWorkItems, buildWeeklyFacts, getQuestionStats, normalizeCommunicationDrafts, normalizeGradeThresholds, normalizeHomeworkAssignments, normalizeSubjectCatalog, parseScheduleRows } from "./teacherWorkbench";
 import { createTestStudent } from "./testFixtures";
 import type { GradeExam } from "./types";
 
@@ -47,5 +47,14 @@ describe("teacher workbench domains", () => {
     const stats = getQuestionStats(analysis);
     expect(analysis.questions).toHaveLength(2);
     expect(stats.find(item => item.question.label === "第1题")?.weakStudentIds).toEqual(["s1"]);
+  });
+
+  it("normalizes persisted grade thresholds into ordered percentages", () => {
+    expect(normalizeGradeThresholds({ pass: 61.4, good: 55, excellent: 120 })).toEqual({
+      pass: 61,
+      good: 61,
+      excellent: 100,
+    });
+    expect(normalizeGradeThresholds(null)).toEqual({ pass: 60, good: 75, excellent: 90 });
   });
 });

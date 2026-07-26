@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { ChevronDown, Plus, RotateCcw, Search, Shuffle, Undo2, X } from "lucide-react";
 
 import { COMPLEMENT_RULES } from "../state/seatPlanner";
+import { matchesStudentSearch } from "../state/studentSearch";
 import type { AppStudent, ComplementRuleId, SeatLayoutV1, SeatSettings, StudentId } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { SeatLayoutDesigner } from "./SeatLayoutDesigner";
-import { AnimatedPopover, SegmentedControl, SelectMenu } from "./ui";
+import { AnimatedPopover, SegmentedControl, SelectMenu, useModalFocus } from "./ui";
 
 interface SeatSettingsModalProps {
   open: boolean;
@@ -41,7 +42,7 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds, but
   const exclude = new Set(excludeIds || []);
   const filtered = students
     .filter(student => !exclude.has(student.id))
-    .filter(student => !query || student.name.includes(query) || student.aliases.some(alias => alias.includes(query)))
+    .filter(student => matchesStudentSearch(student, query))
     .slice(0, 60);
 
   useEffect(() => {
@@ -147,6 +148,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 }
 
 export function SeatSettingsModal({ open, students, settings, seatCount, canUndo, onUpdate, onApplyLayout, onRandomize, onOrderByList, onUndo, onClose }: SeatSettingsModalProps) {
+  const modalRef = useModalFocus(open, onClose);
   const [tab, setTab] = useState<"layout" | "rules">("rules");
   const [pairA, setPairA] = useState("");
   const [pairB, setPairB] = useState("");
@@ -261,7 +263,7 @@ export function SeatSettingsModal({ open, students, settings, seatCount, canUndo
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="seat-settings-title" className={`modal-panel-enter flex max-h-[88vh] w-full flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl ${tab === "layout" ? "max-w-5xl" : "max-w-lg"}`}>
+      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="seat-settings-title" className={`modal-panel-enter flex max-h-[88vh] w-full flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl outline-none ${tab === "layout" ? "max-w-5xl" : "max-w-lg"}`}>
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div>
             <h2 id="seat-settings-title" className="text-base font-bold text-gray-900">排座</h2>

@@ -6,9 +6,9 @@ import { generateAiWeeklyDraft } from "../../state/teacherAiService";
 import { buildLocalWeeklyDraft, buildTodayWorkItems, buildWeeklyFacts, getWeekRange, parseScheduleRows } from "../../state/teacherWorkbench";
 import { readRowsFromFile } from "../../state/scoreImport";
 import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, CommunicationDraft, Dormitory, FollowupTask, GradeExam, HomeworkAssignment } from "../../state/types";
-import { AiGenerationPanel, Button, Card, FileDropZone, ToolDrawer } from "../ui";
+import { AiGenerationPanel, Button, Card, FileDropZone, IconButton, InlineStatus, ToolDrawer } from "../ui";
 
-export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, initialDraftId, onInitialDraftConsumed }: {
+export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, initialDraftId, onInitialDraftConsumed }: {
   students: AppStudent[];
   attendance: AttendanceRecord[];
   tasks: FollowupTask[];
@@ -24,6 +24,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   onOpenHomework: () => void;
   onOpenQuickRecord: () => void;
   onOpenEntity?: (ref: BusinessEntityRef) => void;
+  onCompleteTask?: (taskId: string) => void;
   initialDraftId?: string;
   onInitialDraftConsumed?: () => void;
 }) {
@@ -36,6 +37,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   const [aiBusy, setAiBusy] = useState(false);
   const [weeklyStatus, setWeeklyStatus] = useState("");
   const [queueOpen, setQueueOpen] = useState(false);
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const items = useMemo(() => buildTodayWorkItems({ date: today, students, attendance, tasks, homework }), [attendance, homework, students, tasks, today]);
   const todayEntries = schedule.entries.filter(item => item.weekday === weekday).sort((a, b) => schedule.periods.findIndex(period => period.id === a.periodId) - schedule.periods.findIndex(period => period.id === b.periodId));
   const abnormalCount = attendance.filter(item => item.date === today && (item.status !== "normal" || item.late || item.earlyLeave)).length;
@@ -58,6 +60,39 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
       return;
     }
     (item.kind === "attendance" ? onOpenAttendance : item.kind === "homework" ? onOpenHomework : onOpenTasks)();
+  }
+
+  // 跟进任务就地完成：先做 180ms 收起补位，再交给来源领域写状态（可经 toast 撤销）。
+  function completeItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
+    if (!onCompleteTask || item.kind !== "task") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onCompleteTask(item.entityId);
+      return;
+    }
+    setCompletingIds(current => new Set(current).add(item.id));
+    window.setTimeout(() => {
+      onCompleteTask(item.entityId);
+      setCompletingIds(current => { const next = new Set(current); next.delete(item.id); return next; });
+    }, 180);
+  }
+
+  function renderQueueItem(item: ReturnType<typeof buildTodayWorkItems>[number], onOpen: () => void) {
+    const collapsing = completingIds.has(item.id);
+    return (
+      <div key={item.id} className={`overflow-hidden transition-[max-height,opacity,margin] duration-200 ease-out motion-reduce:transition-none ${collapsing ? "-mb-2 max-h-0 opacity-0" : "max-h-28"}`}>
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-xl border border-gray-100 px-3 py-3 text-left hover:border-blue-100 hover:bg-blue-50/40">
+            <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${item.urgency === 0 ? "bg-red-500" : item.urgency === 1 ? "bg-amber-500" : "bg-blue-500"}`}/>
+            <span className="min-w-0 flex-1"><strong className="block truncate text-sm text-gray-800">{item.title}</strong><span className="mt-1 block text-xs text-gray-400">{item.detail}</span></span>
+          </button>
+          {item.kind === "task" && onCompleteTask && (
+            <IconButton label={`完成跟进：${item.title}`} onClick={() => completeItem(item)} className="shrink-0 border-emerald-100 bg-emerald-50 text-emerald-600">
+              <CheckCircle2 className="h-4 w-4"/>
+            </IconButton>
+          )}
+        </div>
+      </div>
+    );
   }
 
   function openWeekly() {
@@ -91,12 +126,12 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
     </Card>
     <div className="grid gap-3 sm:grid-cols-3">{[{ label: "出勤异常", value: abnormalCount, action: onOpenAttendance, tone: "text-amber-600" }, { label: "到期待办", value: dueTaskCount, action: onOpenTasks, tone: "text-rose-600" }, { label: "到期作业", value: dueHomework, action: onOpenHomework, tone: "text-blue-600" }].map(item => <button type="button" key={item.label} onClick={item.action} className="rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-4 text-left shadow-[var(--app-shadow-card)] transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-md motion-reduce:transition-none"><div className="text-xs font-bold text-gray-400">{item.label}</div><div className={`mt-1 text-2xl font-black ${item.tone}`}>{item.value}</div></button>)}</div>
     <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-      <Card title="需要处理" action={<button type="button" onClick={() => setQueueOpen(true)} className="text-xs font-bold text-blue-600">查看全部</button>}><div className="space-y-2">{items.slice(0, 8).map(item => <button type="button" key={item.id} onClick={() => openItem(item)} className="flex w-full items-start gap-3 rounded-xl border border-gray-100 px-3 py-3 text-left hover:border-blue-100 hover:bg-blue-50/40"><span className={`mt-1.5 h-2.5 w-2.5 rounded-full ${item.urgency === 0 ? "bg-red-500" : item.urgency === 1 ? "bg-amber-500" : "bg-blue-500"}`}/><span className="min-w-0 flex-1"><strong className="block truncate text-sm text-gray-800">{item.title}</strong><span className="mt-1 block text-xs text-gray-400">{item.detail}</span></span></button>)}{!items.length && <div className="py-12 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-emerald-500"/><p className="mt-2 text-sm text-gray-400">今天没有待处理事项</p></div>}</div></Card>
+      <Card title="需要处理" action={<button type="button" onClick={() => setQueueOpen(true)} className="text-xs font-bold text-blue-600">查看全部</button>}><div className="space-y-2">{items.slice(0, 8).map(item => renderQueueItem(item, () => openItem(item)))}{!items.length && <div className="py-12 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-emerald-500"/><p className="mt-2 text-sm text-gray-400">今天没有待处理事项</p></div>}</div></Card>
       <Card title="快捷处理"><div className="grid grid-cols-2 gap-2">{[{ label: "快捷记录", icon: <UserRoundCheck className="h-5 w-5"/>, action: onOpenQuickRecord }, { label: "登记出勤", icon: <CheckCircle2 className="h-5 w-5"/>, action: onOpenAttendance }, { label: "新建任务", icon: <ClipboardList className="h-5 w-5"/>, action: onOpenTasks }, { label: "布置作业", icon: <BookOpenCheck className="h-5 w-5"/>, action: onOpenHomework }].map(item => <button type="button" key={item.label} aria-label={item.label} onClick={item.action} className="grid min-h-24 place-items-center rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm font-bold text-gray-700 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-700"><span className="grid gap-2 place-items-center">{item.icon}{item.label}</span></button>)}</div></Card>
     </div>
   </div>
-  <ToolDrawer open={scheduleOpen} title="课表管理" onClose={() => setScheduleOpen(false)}><div className="space-y-4"><FileDropZone accept=".xlsx,.xls,.xlsm,.csv,.tsv" onChange={file => void importSchedule(file)}><FileSpreadsheet className="h-7 w-7 text-blue-500"/><strong className="text-sm text-gray-700">导入 Excel 课表</strong><span className="text-xs text-gray-400">首列为课节，后续列包含周一至周日</span></FileDropZone>{status && <p className="text-sm text-blue-600">{status}</p>}<div className="space-y-2">{schedule.periods.map(period => <div key={period.id} className="rounded-xl border border-gray-100 px-3 py-2"><div className="text-xs font-bold text-gray-400">{period.label}</div><div className="mt-1 flex flex-wrap gap-1">{schedule.entries.filter(entry => entry.periodId === period.id).map(entry => <span key={entry.id} className="rounded-lg bg-gray-100 px-2 py-1 text-xs text-gray-600">周{["", "一", "二", "三", "四", "五", "六", "日"][entry.weekday]} {entry.subject}</span>)}</div></div>)}</div></div></ToolDrawer>
-  <ToolDrawer open={weeklyOpen} title="本周班级复盘" onClose={() => setWeeklyOpen(false)}><div className="space-y-4">{aiBusy ? <AiGenerationPanel title="正在润色周报" steps={["读取本周事实", "整理表达", "生成可编辑草稿"]}/> : <><div className="flex flex-wrap gap-2">{facts.map(fact => <span key={fact} className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">{fact}</span>)}</div><textarea rows={14} value={weeklyContent} onChange={event => setWeeklyContent(event.target.value)} className="w-full resize-y rounded-xl border border-gray-200 px-3 py-3 text-sm leading-6 outline-none focus:border-blue-300"/><div className="flex flex-wrap justify-center gap-2"><Button variant="ai" onClick={() => void enhanceWeekly()}><Sparkles className="h-4 w-4"/>AI 润色</Button><Button variant="secondary" disabled={!weeklyContent.trim()} onClick={() => void copyWeekly()}><Clipboard className="h-4 w-4"/>复制</Button></div></>}{weeklyStatus && <p className="text-xs leading-5 text-gray-500">{weeklyStatus}</p>}</div></ToolDrawer>
-  <ToolDrawer open={queueOpen} title={`全部待处理 · ${items.length}`} onClose={() => setQueueOpen(false)}><div className="space-y-2">{items.map(item => <button type="button" key={item.id} onClick={() => { setQueueOpen(false); openItem(item); }} className="flex w-full items-start gap-3 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] p-3 text-left hover:border-blue-200 hover:bg-blue-50/40"><span className={`mt-1.5 h-2.5 w-2.5 rounded-full ${item.urgency === 0 ? "bg-red-500" : item.urgency === 1 ? "bg-amber-500" : "bg-blue-500"}`}/><span><strong className="block text-sm text-gray-800">{item.title}</strong><span className="mt-1 block text-xs text-gray-500">{item.detail}</span></span></button>)}{!items.length && <p className="py-12 text-center text-sm text-gray-400">今天没有待处理事项</p>}</div></ToolDrawer>
+  <ToolDrawer open={scheduleOpen} title="课表管理" onClose={() => setScheduleOpen(false)}><div className="space-y-4"><FileDropZone accept=".xlsx,.xls,.xlsm,.csv,.tsv" onChange={file => void importSchedule(file)}><FileSpreadsheet className="h-7 w-7 text-blue-500"/><strong className="text-sm text-gray-700">导入 Excel 课表</strong><span className="text-xs text-gray-400">首列为课节，后续列包含周一至周日</span></FileDropZone>{status && <InlineStatus message={status} className="text-sm" />}<div className="space-y-2">{schedule.periods.map(period => <div key={period.id} className="rounded-xl border border-gray-100 px-3 py-2"><div className="text-xs font-bold text-gray-400">{period.label}</div><div className="mt-1 flex flex-wrap gap-1">{schedule.entries.filter(entry => entry.periodId === period.id).map(entry => <span key={entry.id} className="rounded-lg bg-gray-100 px-2 py-1 text-xs text-gray-600">周{["", "一", "二", "三", "四", "五", "六", "日"][entry.weekday]} {entry.subject}</span>)}</div></div>)}</div></div></ToolDrawer>
+  <ToolDrawer open={weeklyOpen} title="本周班级复盘" onClose={() => setWeeklyOpen(false)}><div className="space-y-4">{aiBusy ? <AiGenerationPanel title="正在润色周报" steps={["读取本周事实", "整理表达", "生成可编辑草稿"]}/> : <><div className="flex flex-wrap gap-2">{facts.map(fact => <span key={fact} className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">{fact}</span>)}</div><textarea rows={14} value={weeklyContent} onChange={event => setWeeklyContent(event.target.value)} className="w-full resize-y rounded-xl border border-gray-200 px-3 py-3 text-sm leading-6 outline-none focus:border-blue-300"/><div className="flex flex-wrap justify-center gap-2"><Button variant="ai" onClick={() => void enhanceWeekly()}><Sparkles className="h-4 w-4"/>AI 润色</Button><Button variant="secondary" disabled={!weeklyContent.trim()} onClick={() => void copyWeekly()}><Clipboard className="h-4 w-4"/>复制</Button></div></>}{weeklyStatus && <InlineStatus message={weeklyStatus} tone="ai" />}</div></ToolDrawer>
+  <ToolDrawer open={queueOpen} title={`全部待处理 · ${items.length}`} onClose={() => setQueueOpen(false)}><div className="space-y-2">{items.map(item => renderQueueItem(item, () => { setQueueOpen(false); openItem(item); }))}{!items.length && <p className="py-12 text-center text-sm text-gray-400">今天没有待处理事项</p>}</div></ToolDrawer>
   </div>;
 }

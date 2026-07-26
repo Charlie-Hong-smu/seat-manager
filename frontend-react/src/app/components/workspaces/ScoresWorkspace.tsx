@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileUp, PanelLeftClose, PanelLeftOpen, Sparkles, Trash2, X } from "lucide-react";
+import { FileUp, PanelLeftClose, PanelLeftOpen, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 
@@ -16,11 +16,12 @@ import {
   type ScoreMapping,
 } from "../../state/scoreImport";
 import type { AiClassTrendResult } from "../../state/aiTrendService";
+import type { GradeThresholds } from "../../state/teacherWorkbench";
 import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuestionDefinition, SavedGradeExamRecord, ScoreImportDraft, StudentId } from "../../state/types";
 import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, IconButton, SelectMenu, UnderlineTabs } from "../ui";
+import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, IconButton, InlineStatus, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 import { toLocalDateKey } from "../../state/dateKey";
@@ -44,6 +45,8 @@ export function ScoresWorkspace({
   initialTarget,
   onInitialTargetConsumed,
   onOpenTask,
+  gradeThresholds,
+  onGradeThresholdsChange,
 }: {
   exams: GradeExam[];
   students: AppStudent[];
@@ -51,7 +54,7 @@ export function ScoresWorkspace({
   onOpenStudentFollowup: (student: AppStudent) => void;
   onSaveScoreImport: (record: SavedGradeExamRecord) => GradeExam | null;
   onUpdateGradeExam: (examId: string, name: string, date: string) => boolean;
-  onDeleteGradeExam: (examId: string) => boolean;
+  onDeleteGradeExam: (examId: string) => (() => void) | null;
   onGenerateClassAnalysis: () => Promise<AiClassTrendResult>;
   onGenerateLocalClassAnalysis: () => string;
   onGenerateStudentTrendAdvice: () => Promise<{ generated: number; failed: number; skipped: number }>;
@@ -70,12 +73,16 @@ export function ScoresWorkspace({
   initialTarget?: TimelineTarget;
   onInitialTargetConsumed?: () => void;
   onOpenTask?: (taskId: string) => void;
+  gradeThresholds?: GradeThresholds;
+  onGradeThresholdsChange?: (next: GradeThresholds) => void;
 }) {
+  const actionToast = useActionToast();
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
   const [scoreRows, setScoreRows] = useState<string[][]>([]);
   const [scoreFilename, setScoreFilename] = useState("");
   const [manualMapping, setManualMapping] = useState<ScoreMapping | null>(null);
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
+  const mappingModalRef = useModalFocus(mappingModalOpen, () => setMappingModalOpen(false));
   const [scoreStatus, setScoreStatus] = useState("");
   const [examName, setExamName] = useState("");
   const [examDate, setExamDate] = useState(toLocalDateKey());
@@ -282,10 +289,18 @@ export function ScoresWorkspace({
   }
 
   function deleteExam(exam: GradeExam) {
-    if (onDeleteGradeExam(exam.id)) {
+    const undo = onDeleteGradeExam(exam.id);
+    if (undo) {
       setScoreStatus(`已删除「${exam.name}」。`);
       setPendingDeleteExam(null);
       setDeleteExamError("");
+      actionToast.show({
+        message: `考试“${exam.name}”已删除`,
+        actionLabel: "撤销",
+        actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+        onAction: undo,
+        duration: 6000,
+      });
     } else {
       setDeleteExamError("删除失败，本机成绩数据未改变，请检查存储空间后重试。");
     }
@@ -387,7 +402,7 @@ export function ScoresWorkspace({
                   {draft.warnings.join(" ")}
                 </div>
               ) : null}
-              {scoreStatus && <p className="text-sm text-blue-600">{scoreStatus}</p>}
+              {scoreStatus && <InlineStatus message={scoreStatus} className="text-sm" />}
             </div>
           </Panel>
 
@@ -443,20 +458,20 @@ export function ScoresWorkspace({
                   {classAnalysis.disclaimer && <div className="mt-1 text-blue-500">{classAnalysis.disclaimer}</div>}
                 </div>
               )}
-              {classAnalysisStatus && <p className="text-xs text-blue-600">{classAnalysisStatus}</p>}
-              {studentAdviceProgress.status && <p className="text-xs text-violet-600">{studentAdviceProgress.status}</p>}
+              {classAnalysisStatus && <InlineStatus message={classAnalysisStatus} />}
+              {studentAdviceProgress.status && <InlineStatus message={studentAdviceProgress.status} tone="ai" />}
             </div>
           </Panel>
         </aside>
 
         <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
           <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-white pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
-          {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}
+          {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}
         </main>
       </div>
       {mappingModalOpen && manualMapping && (
         <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-5">
-          <div className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none">
             <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
               <div>
                 <h3 className="text-lg text-gray-900" style={{ fontWeight: 900 }}>成绩列映射</h3>
@@ -693,7 +708,8 @@ export function ScoresWorkspace({
         </div>
       )}
       {examTable && <ExamTableModal exam={examTable} onClose={() => setExamTable(null)} />}
-      <ConfirmDialog open={Boolean(pendingDeleteExam)} title="删除这场考试？" description={`将删除“${pendingDeleteExam?.name || "当前考试"}”及其对应的全部学生成绩记录。删除后无法恢复。`} confirmLabel="确认删除考试" error={deleteExamError} onCancel={() => { setPendingDeleteExam(null); setDeleteExamError(""); }} onConfirm={() => pendingDeleteExam && deleteExam(pendingDeleteExam)} />
+      <ConfirmDialog open={Boolean(pendingDeleteExam)} title="删除这场考试？" description={`将删除“${pendingDeleteExam?.name || "当前考试"}”及其对应的全部学生成绩记录；操作后可在 6 秒内撤销。`} confirmLabel="确认删除考试" error={deleteExamError} onCancel={() => { setPendingDeleteExam(null); setDeleteExamError(""); }} onConfirm={() => pendingDeleteExam && deleteExam(pendingDeleteExam)} />
+      {actionToast.toast}
     </div>
   );
 }

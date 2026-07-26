@@ -1,6 +1,7 @@
 import { Check, ChevronDown, Search, UserRound, X } from "lucide-react";
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { AppStudent, StudentId } from "../state/types";
+import { matchesStudentSearch } from "../state/studentSearch";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { AnimatedPopover } from "./ui";
 
@@ -8,7 +9,7 @@ export function StudentPicker({ students, value, onChange, label = "选择学生
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selected = students.find(student => student.id === value);
-  const candidates = useMemo(() => students.filter(student => !search.trim() || student.name.includes(search.trim()) || student.aliases.some(alias => alias.includes(search.trim()))), [search, students]);
+  const candidates = useMemo(() => students.filter(student => matchesStudentSearch(student, search)), [search, students]);
   return <div className="relative">
     <button type="button" aria-expanded={open} onClick={() => setOpen(current => !current)} className="flex h-11 w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 text-left transition-colors hover:border-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20">
       <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600"><UserRound className="h-4 w-4" /></span>
@@ -28,7 +29,7 @@ export function StudentMultiPicker({ students, values, onChange, label = "选择
   const selectedIds = new Set(values);
   const selectedContainerRef = useRef<HTMLDivElement>(null);
   const candidatesContainerRef = useRef<HTMLDivElement>(null);
-  const candidates = useMemo(() => students.filter(student => !search.trim() || student.name.includes(search.trim()) || student.aliases.some(alias => alias.includes(search.trim()))), [search, students]);
+  const candidates = useMemo(() => students.filter(student => matchesStudentSearch(student, search)), [search, students]);
 
   function toggle(id: string) {
     onChange(selectedIds.has(id) ? values.filter(value => value !== id) : [...values, id]);
