@@ -480,33 +480,31 @@ export function StudentModal({
     <div className={`soft-backdrop-enter fixed inset-0 ${layerClassName} flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm`}>
       <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-white shadow-[var(--app-shadow-float)] outline-none transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
         {/* Header */}
-        <div ref={modalHeaderRef} className="flex shrink-0 items-start justify-between border-b border-gray-100 p-6 pb-4">
-          <div className="flex min-w-0 items-center gap-3">
+        <div ref={modalHeaderRef} className="flex shrink-0 items-center gap-3 border-b border-gray-100 p-5 pb-4">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {onNavigate && <IconButton label="上一位学生" size="sm" onClick={() => onNavigate(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-xs text-gray-400 mb-1" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
-              <h3 className="truncate text-gray-900" style={{ fontSize: "1.25rem" }}>
+              <h3 className="truncate text-gray-900" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`} style={{ fontSize: "1.25rem" }}>
                 {student.name}
-                <span className="text-gray-400 ml-2" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
+                <span className="ml-2 hidden text-gray-400 2xl:inline" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
               </h3>
             </div>
             {onNavigate && <IconButton label="下一位学生" size="sm" onClick={() => onNavigate(1)}><ChevronRight className="h-4 w-4" /></IconButton>}
           </div>
-          <div className="flex items-center gap-2">
-            <>
-                <button onClick={() => changeActiveTab("followup")} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors" style={{ fontWeight: 700 }}>
-                  <Sparkles className="w-3.5 h-3.5" />AI跟进
-                </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+                <Button type="button" size="sm" variant="ghost" aria-label="AI跟进" onClick={() => changeActiveTab("followup")} className="shrink-0 whitespace-nowrap border-violet-200 bg-violet-50 px-2 text-violet-700 hover:border-violet-200 hover:bg-violet-100 sm:px-2.5">
+                  <Sparkles className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI跟进</span>
+                </Button>
                 {onOpenAiComment && (
-                  <button onClick={onOpenAiComment} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-violet-600 border border-violet-200 rounded-xl hover:bg-violet-50 transition-colors" style={{ fontWeight: 600 }}>
-                    <Sparkles className="w-3.5 h-3.5" />AI评语
-                  </button>
+                  <Button type="button" size="sm" variant="ghost" aria-label="AI评语" onClick={onOpenAiComment} className="shrink-0 whitespace-nowrap border-violet-200 px-2 text-violet-600 hover:border-violet-200 hover:bg-violet-50 sm:px-2.5">
+                    <Sparkles className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI评语</span>
+                  </Button>
                 )}
-                <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 border border-red-200 rounded-xl hover:bg-red-50 transition-colors" style={{ fontWeight: 600 }}>
-                  <Trash2 className="w-3.5 h-3.5" />移出当前班级
-                </button>
+                <Button type="button" size="sm" variant="ghost" aria-label="移出当前班级" onClick={() => setShowDeleteConfirm(true)} className="shrink-0 whitespace-nowrap border-red-200 px-2 text-red-500 hover:border-red-200 hover:bg-red-50 sm:px-2.5">
+                  <Trash2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">移出当前班级</span>
+                </Button>
                 <IconButton label="关闭学生详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
-            </>
           </div>
         </div>
 

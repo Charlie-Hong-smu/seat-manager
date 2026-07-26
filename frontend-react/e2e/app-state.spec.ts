@@ -134,6 +134,16 @@ test("opens student detail from the current comment avatar without a separate de
   await expect(workbench).toBeVisible();
   await expect(closeStudentDetail).toBeVisible();
   const currentStudentDialog = page.getByRole("dialog", { name: "头像详情学生学生详情" });
+  for (const label of ["AI跟进", "AI评语", "移出当前班级"]) {
+    const action = currentStudentDialog.getByRole("button", { name: label, exact: true });
+    const layout = await action.evaluate(element => ({
+      whiteSpace: getComputedStyle(element).whiteSpace,
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(layout.whiteSpace).toBe("nowrap");
+    expect(layout.scrollHeight).toBeLessThanOrEqual(layout.clientHeight);
+  }
   const followupTab = currentStudentDialog.getByRole("tab", { name: "建议与沟通" });
   await followupTab.click();
   await expect(followupTab).toHaveAttribute("aria-selected", "true");
