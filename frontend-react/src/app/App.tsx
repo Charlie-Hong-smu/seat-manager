@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw } from "lucide-react";
 
 import { AppShell } from "./components/AppShell";
@@ -40,7 +40,7 @@ import { useActionToast, useAppDialog } from "./components/ui";
 import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
 import { resolveSeatLayout } from "./state/seatLayout";
 import { WorkspaceRecoveryScreen } from "./components/WorkspaceRecoveryScreen";
-import { inspectWorkspaceStorage } from "./state/workspaces";
+import { getCurrentWorkspaceScope, inspectWorkspaceStorage } from "./state/workspaces";
 import { TodayWorkspace } from "./components/workspaces/TodayWorkspace";
 import { QuickRecordDrawer, type QuickRecordInput } from "./components/QuickRecordDrawer";
 import { normalizeSubjectCatalog } from "./state/teacherWorkbench";
@@ -132,6 +132,10 @@ export default function App() {
   const [followupMode, setFollowupMode] = useState<"tasks" | "homework">("tasks");
   const [quickRecordOpen, setQuickRecordOpen] = useState(false);
   const followupAfterSave = useRef<((taskIds: string[]) => void) | null>(null);
+  const flushPersistRef = useRef<() => void>(() => {});
+  // 两个全量扫描只在对应页签激活时计算，且 toast/弹窗等 App 局部状态变化不再触发重算。
+  const historyTimeline = useMemo(() => (sidebarTab === "history" ? buildTimeline(appState) : []), [appState, sidebarTab]);
+  const healthIssues = useMemo(() => (sidebarTab === "data" ? inspectStateHealth(appState) : []), [appState, sidebarTab]);
 
   function recordActivity(event: ActivityEvent) {
     setActivityEvents(current => [event, ...current].slice(0, 2000));
@@ -253,6 +257,8 @@ export default function App() {
   const hasMounted = useRef(false);
   const studentAdviceRunning = useRef(false);
 
+  // 400ms 防抖：连续输入合并为一次整柜写入。关页、隐藏、切换班级或登出前
+  // 必须先经 flushPersistRef 同步落盘；flush 时校验切片未变，旧切片状态不得写进新切片。
   useEffect(() => {
     if (!hasMounted.current) {
       hasMounted.current = true;
@@ -262,11 +268,31 @@ export default function App() {
       return;
     }
     setSaveStatus("saving");
-    const saved = persistState();
-    if (saved) setSaveStatus("saved");
-    else {
-      try { const probe = "seat-manager-storage-probe"; localStorage.setItem(probe, "1"); localStorage.removeItem(probe); setSaveStatus("failed"); } catch { setSaveStatus("quota"); }
+    const scope = getCurrentWorkspaceScope();
+    let timer: number | null = window.setTimeout(() => flush(), 400);
+    function flush() {
+      if (timer === null) return;
+      window.clearTimeout(timer);
+      timer = null;
+      if (getCurrentWorkspaceScope() !== scope) return;
+      const saved = persistState();
+      if (saved) setSaveStatus("saved");
+      else {
+        try { const probe = "seat-manager-storage-probe"; localStorage.setItem(probe, "1"); localStorage.removeItem(probe); setSaveStatus("failed"); } catch { setSaveStatus("quota"); }
+      }
     }
+    flushPersistRef.current = flush;
+    const handleVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
   }, [appState, loggedIn, persistState, workspaceStorage.status]);
 
   useEffect(() => {
@@ -760,6 +786,7 @@ export default function App() {
       return;
     }
     try {
+      flushPersistRef.current();
       await unbindCurrentDevice();
       await appDialog.notice({ title: "设备已解绑", description: "本机已经退出登录，并释放了一个设备名额。" });
       setLoggedIn(false);
@@ -850,9 +877,11 @@ export default function App() {
           onSelectStudent={student => openStudentDetail(student)}
           onUnbindDevice={USES_LICENSE_AUTH ? handleUnbindDevice : undefined}
           onWorkspaceChanged={reloadFromLegacyState}
+          onBeforeWorkspaceMutate={() => flushPersistRef.current()}
           saveStatus={saveStatus}
           onRetrySave={() => { setSaveStatus("saving"); setSaveStatus(persistState() ? "saved" : "failed"); }}
           onLogout={() => {
+            flushPersistRef.current();
             clearAuth();
             setLoggedIn(false);
           }}
@@ -1082,7 +1111,7 @@ export default function App() {
               onImportRoster={handleImportRoster}
               onBeforeBackupExport={saveCurrentLegacySnapshot}
               onBackupImported={reloadFromLegacyState}
-              healthIssues={inspectStateHealth(appState)}
+              healthIssues={healthIssues}
               onRestoreStudent={handleRestoreStudent}
               onPermanentlyDeleteStudent={handlePermanentlyDeleteStudent}
             />
@@ -1094,7 +1123,7 @@ export default function App() {
             <HistoryWorkspace
               students={students}
               history={savedSeatHistory}
-              timeline={buildTimeline(appState)}
+              timeline={historyTimeline}
               onSave={handleSaveSeatHistory}
               onRename={handleUpdateSeatHistoryNote}
               onView={setSelectedHistorySnapshot}

@@ -228,15 +228,17 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const allGeneratedExportSelected = generatedExportIds.size > 0 &&
     [...generatedExportIds].every(id => exportSelectedIds.has(id));
 
+  const commentByStudentId = useMemo(() => new Map(comments.map(comment => [comment.studentId, comment])), [comments]);
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
-      const state = comments.find(c => c.studentId === s.id)!;
+      const state = commentByStudentId.get(s.id);
+      if (!state) return false;
       if (filterSearch && !s.name.includes(filterSearch)) return false;
       if (filterMode === "pending" && state.generated) return false;
       if (filterMode === "needsInfo" && !state.needsInfo) return false;
       return true;
     });
-  }, [comments, filterMode, filterSearch, students]);
+  }, [commentByStudentId, filterMode, filterSearch, students]);
   const filteredStudentIds = useMemo(() => filteredStudents.map(student => student.id), [filteredStudents]);
   const selectedBatchCount = selectedBatchIds.size;
   const allFilteredSelected = filteredStudentIds.length > 0 && filteredStudentIds.every(id => selectedBatchIds.has(id));
@@ -1041,7 +1043,8 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
             <div key={filterMode} className="comment-list-enter">
             {filteredStudents.map(student => {
-              const state = comments.find(comment => comment.studentId === student.id)!;
+              const state = commentByStudentId.get(student.id);
+              if (!state) return null;
               const active = student.id === selectedId;
               const batchSelected = selectedBatchIds.has(student.id);
               const status = getCommentStatus(state);

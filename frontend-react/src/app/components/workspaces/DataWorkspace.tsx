@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArchiveRestore, FileDown, FileUp, Trash2, X } from "lucide-react";
 
 import {
@@ -13,7 +13,7 @@ import {
   type BackupImportPreview,
 } from "../../state/backupStorage";
 import { hasStoredAiScoreMappingAuth, suggestRosterMappingWithAi, type AiRosterMappingSuggestion } from "../../state/aiScoreMappingService";
-import { readRowsFromFile } from "../../state/scoreImport";
+import { prefetchXlsxAsset, readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
 import type { AppStudent, SeatLayoutV1, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
@@ -44,6 +44,7 @@ export function DataWorkspace({
   onPermanentlyDeleteStudent?: (studentId: StudentId) => void;
 }) {
   const appDialog = useAppDialog();
+  useEffect(() => prefetchXlsxAsset(), []);
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [keepHistory, setKeepHistory] = useState(true);
   const [rosterFile, setRosterFile] = useState<File | null>(null);

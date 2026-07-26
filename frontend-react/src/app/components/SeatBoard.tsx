@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Lock, Star } from "lucide-react";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
@@ -41,7 +41,9 @@ interface DragVisualState {
   settleTop?: number;
 }
 
-function SeatCard({
+// memo：拖拽时 dragVisual 每帧变化触发 SeatBoard 重渲染，
+// 未受影响的座位卡必须跳过（props 全部保持稳定值/稳定引用）。
+const SeatCard = memo(function SeatCard({
   studentId,
   studentById,
   seatIndex,
@@ -168,7 +170,7 @@ function SeatCard({
       </div>
     </div>
   );
-}
+});
 
 export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelectStudent, onMoveSeat, onAssignStudentToSeat, lockedSeats, onToggleLock }: Props) {
   const [draggingSeat, setDraggingSeat] = useState<number | null>(null);
@@ -180,16 +182,16 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const layout = useMemo(() => resolveSeatLayout(seatSettings.layout, seatOrder.length), [seatOrder.length, seatSettings.layout]);
   const seatedIds = useMemo(() => new Set(seatOrder.filter((id): id is StudentId => Boolean(id))), [seatOrder]);
-  const waitingStudents = students.filter(student => !seatedIds.has(student.id));
+  const waitingStudents = useMemo(() => students.filter(student => !seatedIds.has(student.id)), [seatedIds, students]);
   const [pendingStudentId, setPendingStudentId] = useState<StudentId | null>(null);
   const rowCount = Math.ceil(seatOrder.length / COLS);
 
-  const rows = Array.from({ length: rowCount }, (_, r) =>
+  const rows = useMemo(() => Array.from({ length: rowCount }, (_, r) =>
     Array.from({ length: COLS }, (_, c) => ({
       seatIndex: r * COLS + c,
       studentId: seatOrder[r * COLS + c] ?? null,
     }))
-  );
+  ), [rowCount, seatOrder]);
 
   // Groups: [0,1] [2,3] [4,5] [6,7]
   const groups = [
@@ -278,6 +280,11 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       }
     }));
   }
+
+  // memo 的 SeatCard 需要稳定的回调身份；ref 转发保证拿到的始终是最新闭包。
+  const beginPointerDragRef = useRef<(event: ReactPointerEvent<HTMLElement>, fromIndex: number) => void>(() => {});
+  const handleSeatPointerDrag = useCallback((event: ReactPointerEvent<HTMLElement>, fromIndex: number) => beginPointerDragRef.current(event, fromIndex), []);
+  beginPointerDragRef.current = beginPointerDrag;
 
   function beginPointerDrag(event: ReactPointerEvent<HTMLElement>, fromIndex: number) {
     if (event.button !== 0 || lockedSeats.has(fromIndex) || !seatOrder[fromIndex]) return;
@@ -411,7 +418,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
           <div className={`absolute z-0 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 ${layout.frontEdge === "top" ? "left-1/2 top-2 -translate-x-1/2" : layout.frontEdge === "bottom" ? "bottom-2 left-1/2 -translate-x-1/2" : layout.frontEdge === "left" ? "left-2 top-1/2 -translate-y-1/2 -rotate-90" : "right-2 top-1/2 -translate-y-1/2 rotate-90"}`}>讲台</div>
           {layout.groups.filter(group => group.shape === "round").map(group => { const nodes = group.seatIds.map(id => layout.seats.find(seat => seat.id === id)).filter(Boolean) as typeof layout.seats; const x = nodes.reduce((sum, seat) => sum + seat.x, 0) / Math.max(1, nodes.length); const y = nodes.reduce((sum, seat) => sum + seat.y, 0) / Math.max(1, nodes.length); return <div key={group.id} className="pointer-events-none absolute z-0 grid h-20 w-28 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[50%] border border-violet-200 bg-violet-50/80 text-xs font-bold text-violet-500" style={{ left: `${x / layout.canvas.width * 100}%`, top: `${y / layout.canvas.height * 100}%` }}>{group.name}</div>; })}
           {layout.seats.map((seat, seatIndex) => <div key={seat.id} className="absolute z-10 h-[68px] w-[104px]" style={{ left: `${seat.x / layout.canvas.width * 100}%`, top: `${seat.y / layout.canvas.height * 100}%`, transform: `translate(-50%, -50%) rotate(${seat.rotation}deg)` }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) onAssignStudentToSeat(studentId, seatIndex); }} onClick={() => { if (pendingStudentId) { onAssignStudentToSeat(pendingStudentId, seatIndex); setPendingStudentId(null); } }}>
-            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={beginPointerDrag} onToggleLock={onToggleLock} />
+            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} />
             <span className="pointer-events-none absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold text-[var(--app-text-muted)]">{seat.label}</span>
           </div>)}
         </div>
@@ -477,7 +484,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
                           visualTransform={seatVisualTransform(cell.seatIndex)}
                           cardMode={cardMode}
                           onSelect={onSelectStudent}
-                          onPointerDragStart={beginPointerDrag}
+                          onPointerDragStart={handleSeatPointerDrag}
                           onToggleLock={onToggleLock}
                         />
                       </div>

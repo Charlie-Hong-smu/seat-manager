@@ -183,6 +183,25 @@ function getXlsxScriptUrl(): string {
   return new URL("vendor/xlsx.full.min.js", baseUrl).toString();
 }
 
+// xlsx 不进 Service Worker precache（见 vite.config.ts），改为进入成绩/名单页时空闲预热：
+// 请求经过 SW 的 CacheFirst 规则落入运行时缓存，之后离线导入仍可用。
+export function prefetchXlsxAsset(): () => void {
+  if (typeof window === "undefined" || window.XLSX) return () => undefined;
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+  const warm = () => {
+    void fetch(getXlsxScriptUrl()).catch(() => undefined);
+  };
+  if (idleWindow.requestIdleCallback) {
+    const handle = idleWindow.requestIdleCallback(warm, { timeout: 4_000 });
+    return () => idleWindow.cancelIdleCallback?.(handle);
+  }
+  const handle = window.setTimeout(warm, 1_500);
+  return () => window.clearTimeout(handle);
+}
+
 export async function loadXlsx(): Promise<XlsxApi> {
   if (window.XLSX) {
     return window.XLSX;

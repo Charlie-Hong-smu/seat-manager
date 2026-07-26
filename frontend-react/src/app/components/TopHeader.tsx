@@ -32,6 +32,7 @@ interface TopHeaderProps {
   onUnbindDevice?: () => void;
   onLogout: () => void;
   onWorkspaceChanged: () => void;
+  onBeforeWorkspaceMutate?: () => void;
   saveStatus?: "saving" | "saved" | "failed" | "quota";
   onRetrySave?: () => void;
 }
@@ -54,6 +55,7 @@ export function TopHeader({
   onUnbindDevice,
   onLogout,
   onWorkspaceChanged,
+  onBeforeWorkspaceMutate,
   saveStatus = "saved",
   onRetrySave,
 }: TopHeaderProps) {
@@ -102,7 +104,7 @@ export function TopHeader({
             <BookOpen className="h-[18px] w-[18px]" />
           </div>
           <span className="hidden whitespace-nowrap text-sm font-bold text-[var(--app-text)] min-[1180px]:block">{APP_NAME}</span>
-          <WorkspaceSwitcher onChanged={onWorkspaceChanged} />
+          <WorkspaceSwitcher onChanged={onWorkspaceChanged} onBeforeMutate={onBeforeWorkspaceMutate} />
         </div>
 
         <div className="relative ml-auto hidden w-full max-w-sm min-[1100px]:block">

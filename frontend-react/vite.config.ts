@@ -48,6 +48,20 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: false,
         globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
+        // xlsx 体积约 861KB，不进 precache（否则占掉 38% 预算且每个用户安装时就要下载）。
+        // 改为运行时 CacheFirst：首次使用成绩/名单导入时缓存，之后离线可用。
+        globIgnores: ["**/vendor/**"],
+        runtimeCaching: [
+          {
+            urlPattern: /\/vendor\/xlsx\.full\.min\.js$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "xlsx-vendor",
+              expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/admin\//, /^\/license\//, /^\/sync\//],
       },

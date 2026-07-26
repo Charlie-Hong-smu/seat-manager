@@ -1,14 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil } from "lucide-react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+
+import { RetryableLazy } from "./RetryableLazy";
 import { type NewDormEventInput } from "../state/dormitoryActions";
 import { DormEventForm } from "./DormEventForm";
 import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
@@ -27,7 +20,6 @@ import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
 import { StudentActivityTimeline, StudentAttentionSummary, type ContextPreviewRequest } from "./StudentAttentionSummary";
 import {
   buildWeekOptions,
-  formatScore,
   getBestSubject,
   getExamSortValue,
   getExamTotal,
@@ -40,6 +32,8 @@ import {
   toLocalDateKey,
   type StudentModalRecord,
 } from "./studentModalSelectors";
+
+const loadStudentTrendChart = () => import("./StudentTrendChart");
 
 type StudentDetailTab = "records" | "profile" | "attendance" | "trend" | "followup";
 
@@ -797,27 +791,11 @@ export function StudentModal({
             <div className="p-4 space-y-4">
               {hasTrendChart ? (
                 <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendData} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={36} />
-                      <Tooltip
-                        labelFormatter={label => String(label || "")}
-                        formatter={(value) => [formatScore(typeof value === "number" ? value : null), effectiveTrendMetric === "total" ? "总分" : effectiveTrendMetric]}
-                        contentStyle={{ borderRadius: 12, border: "1px solid var(--app-border)", fontSize: 13 }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey={effectiveTrendMetric}
-                        stroke="var(--app-primary)"
-                        strokeWidth={2.5}
-                        dot={{ r: 3.5, fill: "var(--app-primary)", strokeWidth: 0 }}
-                        activeDot={{ r: 5, fill: "var(--app-primary-hover)", stroke: "var(--app-surface-muted)", strokeWidth: 3 }}
-                        connectNulls
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <RetryableLazy
+                    load={loadStudentTrendChart}
+                    componentProps={{ data: trendData, metric: effectiveTrendMetric }}
+                    fallback={<div className="h-full animate-pulse rounded-xl bg-gray-100" aria-label="正在加载趋势图" />}
+                  />
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-400">

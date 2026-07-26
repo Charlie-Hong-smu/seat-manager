@@ -105,9 +105,9 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 
 ## PWA
 
-`vite-plugin-pwa` 为两种 base 生成 manifest 和 service worker。静态应用壳、哈希资源、图标和本地 XLSX 库进入 precache；API、Worker、同步和第三方请求不缓存。发现新 service worker 时只显示提示，用户点击“立即更新”后才刷新。
+`vite-plugin-pwa` 为两种 base 生成 manifest 和 service worker。静态应用壳、哈希资源和图标进入 precache；API、Worker、同步和第三方请求不缓存。本地 XLSX 库（约 861 KiB）不进 precache：`vendor/**` 被 `globIgnores` 排除，改用运行时 `CacheFirst`（cache 名 `xlsx-vendor`），并在成绩与名单/备份工作区挂载时空闲预热一次，首次联网访问后离线导入仍可用。发现新 service worker 时只显示提示，用户点击“立即更新”后才刷新。
 
-Scores、AI Companion 面板和 Comment Workbench 是非首屏异步模块；AI 浮动入口、登录、应用壳和默认今日页保持同步加载。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.25 MiB，XLSX vendor 单独报告。2026-07 的跨领域闭环增加了离线动作流水、生命周期和共享业务组件后，precache 从 2.20 MiB 小幅上调；入口和异步脚本上限不变，不能以此继续放大首屏。
+Scores、AI Companion 面板、Comment Workbench 和学生详情的成绩趋势图（`StudentTrendChart`，recharts 唯一非懒加载入口曾经在此）是非首屏异步模块；AI 浮动入口、登录、应用壳和默认今日页保持同步加载。recharts/charts-vendor 只允许被异步 chunk 引用，不得回到入口的静态导入链。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.25 MiB，XLSX vendor 单独报告。2026-07 把 XLSX 移出 precache、图表退出首屏后，precache 约 1.4 MiB、入口 gzip 约 159 KiB；这是当前基线，不能以预算上限为由回退。
 
 ## 设计原则
 

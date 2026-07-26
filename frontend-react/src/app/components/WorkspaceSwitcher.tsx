@@ -27,6 +27,8 @@ import type { TermSeason } from "../state/types";
 import { AnimatedPopover, ConfirmDialog, useActionToast, useAppDialog } from "./ui";
 
 interface Props {
+  /** 切换/新建/删除等触碰文件柜前调用，App 用它同步 flush 防抖中的持久化。 */
+  onBeforeMutate?: () => void;
   /** 切换 / 新建 / 升学期成功后回调,让上层重新加载当前班级数据。 */
   onChanged: () => void;
 }
@@ -261,7 +263,7 @@ function getNextTermDefault(current: { term: { year: number; season: TermSeason 
   return guessCurrentTerm();
 }
 
-export function WorkspaceSwitcher({ onChanged }: Props) {
+export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
   const appDialog = useAppDialog();
   const actionToast = useActionToast();
   const [open, setOpen] = useState(false);
@@ -287,6 +289,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
 
   function handleEditClass(input: TermFormResult) {
     if (!editingClassId) return;
+    onBeforeMutate?.();
     const saved = updateClassInfo(editingClassId, {
       stage: input.stage,
       gradeNumber: input.gradeNumber || 1,
@@ -305,6 +308,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
       closeAll();
       return;
     }
+    onBeforeMutate?.();
     if (switchSlice(sliceId)) {
       onChanged();
       actionToast.show({ message: "已切换班级与学期" });
@@ -315,6 +319,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
   }
 
   function handleCreateClass(input: TermFormResult) {
+    onBeforeMutate?.();
     const term = makeTerm({ year: input.year, season: input.season, label: input.label });
     // 若用户手动填了与自动拼接不同的名字,作为 customName 传入。
     const auto = input.gradeNumber
@@ -337,6 +342,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
   }
 
   function handleNextTerm(input: TermFormResult) {
+    onBeforeMutate?.();
     const term = makeTerm({ year: input.year, season: input.season, label: input.label });
     const created = advanceToNextTerm({ fromSliceId: current.id, term, copyRoster: true });
     if (!created) { void appDialog.notice({ title: "创建新学期失败", description: "本机数据没有改变。请先导出备份并检查浏览器存储空间。" }); return; }
@@ -349,6 +355,7 @@ export function WorkspaceSwitcher({ onChanged }: Props) {
   const currentName = sliceDisplayName(current);
 
   function handleDeleteSlice(sliceId: string) {
+    onBeforeMutate?.();
     exportPreImportBackup();
     if (!deleteSlice(sliceId)) { setDeleteError("删除失败，本机数据未改变，请检查本机存储空间。"); return; }
     setPendingDeleteSlice(null);

@@ -236,10 +236,29 @@ export function inspectWorkspaceStorage(): WorkspaceStorageStatus {
   }
 }
 
+// 进程内已解析文件柜缓存：每次持久化不再全量 JSON.parse + 校验整柜。
+// 以 raw 字符串比对判断有效性，其他标签页或测试直接写 localStorage 时自动失效。
+let bookCache: { raw: string; book: WorkspaceBook } | null = null;
+
 function readBookRaw(): WorkspaceBook | null {
+  if (!hasStorage()) {
+    return null;
+  }
+  const raw = window.localStorage.getItem(WORKSPACES_KEY);
+  if (!raw) {
+    bookCache = null;
+    return null;
+  }
+  if (bookCache && bookCache.raw === raw) {
+    return bookCache.book;
+  }
   const status = inspectWorkspaceStorage();
   if (status.status === "corrupt") throw new WorkspaceStorageCorruptError(status.issues);
-  return status.status === "ready" ? status.book : null;
+  if (status.status === "ready") {
+    bookCache = { raw, book: status.book };
+    return status.book;
+  }
+  return null;
 }
 
 function writeBook(book: WorkspaceBook): boolean {
@@ -247,9 +266,12 @@ function writeBook(book: WorkspaceBook): boolean {
     return false;
   }
   try {
-    window.localStorage.setItem(WORKSPACES_KEY, JSON.stringify(book));
+    const raw = JSON.stringify(book);
+    window.localStorage.setItem(WORKSPACES_KEY, raw);
+    bookCache = { raw, book };
     return true;
   } catch (error) {
+    bookCache = null;
     console.warn("无法保存文件柜数据", error);
     return false;
   }

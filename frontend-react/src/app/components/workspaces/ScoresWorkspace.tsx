@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileUp, PanelLeftClose, PanelLeftOpen, Sparkles, Trash2, X } from "lucide-react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
@@ -8,6 +8,7 @@ import {
   buildScoreImportDraftFromRows,
   createSavedGradeExamRecord,
   detectScoreMapping,
+  prefetchXlsxAsset,
   prepareScoreRows,
   parseRowsWithMapping,
   readRowsFromFile,
@@ -95,6 +96,7 @@ export function ScoresWorkspace({
   const [pendingDeleteExam, setPendingDeleteExam] = useState<GradeExam | null>(null);
   const [deleteExamError, setDeleteExamError] = useState("");
   const [scoreView, setScoreView] = useState<"overview" | "items">("overview");
+  useEffect(() => prefetchXlsxAsset(), []);
   // 目标复制到本地后立刻回收，懒加载面板挂载时仍能拿到定位参数。
   const [analysisTarget, setAnalysisTarget] = useState<TimelineTarget | undefined>(initialTarget);
   useInitialTargetEffect(initialTarget?.entityId ? `${initialTarget.entityId}|${initialTarget.subEntityId || ""}` : undefined, () => {

@@ -198,6 +198,9 @@ function StatCard({ icon, label, value, sub, accent }: {
   );
 }
 
+const EMPTY_SUBJECTS: string[] = [];
+const EMPTY_ROWS: GradeExam["rows"] = [];
+
 export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFollowup }: GradesPageProps) {
   const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id || "");
   const [selectedSubject, setSelectedSubject] = useState("total");
@@ -212,7 +215,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
 
   const selectedExam = exams.find(exam => exam.id === selectedExamId) || exams[0];
-  const subjects = selectedExam?.subjects || [];
+  const subjects = selectedExam?.subjects || EMPTY_SUBJECTS;
   const trendSubjects = useMemo(
     () => Array.from(new Set(exams.flatMap(exam => exam.subjects))),
     [exams]
@@ -220,18 +223,21 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const visibleTrendSubjects = trendSubject === "all" || !trendSubjects.includes(trendSubject)
     ? trendSubjects
     : [trendSubject];
-  const rows = selectedExam?.rows || [];
+  const rows = selectedExam?.rows || EMPTY_ROWS;
   const metricKey = selectedSubject === "total" || subjects.includes(selectedSubject) ? selectedSubject : "total";
-  const studentById = new Map(students.map(student => [student.id, student]));
-  const studentByName = new Map<string, AppStudent>();
-  students.forEach(student => {
-    [student.name, ...student.aliases].forEach(name => {
-      const normalized = normalizeName(name);
-      if (normalized && !studentByName.has(normalized)) {
-        studentByName.set(normalized, student);
-      }
+  const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
+  const studentByName = useMemo(() => {
+    const lookup = new Map<string, AppStudent>();
+    students.forEach(student => {
+      [student.name, ...student.aliases].forEach(name => {
+        const normalized = normalizeName(name);
+        if (normalized && !lookup.has(normalized)) {
+          lookup.set(normalized, student);
+        }
+      });
     });
-  });
+    return lookup;
+  }, [students]);
 
   useEffect(() => {
     if (exams.length && !exams.some(exam => exam.id === selectedExamId)) {
@@ -254,11 +260,16 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     }
   }, [trendSubject, trendSubjects]);
 
-  const rowsWithMetrics = rows.map(row => ({
+  const rowsWithMetrics = useMemo(() => rows.map(row => ({
     ...row,
     totalScore: getRowTotal(row),
     averageScore: getRowAverage(row, subjects),
-  }));
+  })), [rows, subjects]);
+  // 总分排名一次算成查找表；此前每行渲染都复制整表排序，搜索时是 O(n²logn)。
+  const rankById = useMemo(() => {
+    const ranked = [...rowsWithMetrics].sort((a, b) => compareValues(a.totalScore, b.totalScore, false));
+    return new Map(ranked.map((row, index) => [row.id, index + 1]));
+  }, [rowsWithMetrics]);
   const metricLabel = metricKey === "total" ? "全部" : metricKey;
   const fullScore = Math.max(1, subjects.length * 100);
   const totalThresholds = {
@@ -269,13 +280,13 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const totalThresholdHint = `全部阈值：及格≥${formatThresholdValue(totalThresholds.pass)} / 良好≥${formatThresholdValue(totalThresholds.good)} / 优秀≥${formatThresholdValue(totalThresholds.excellent)}`;
   const subjectThresholdHint = `单科阈值：及格≥${thresholds.pass} / 良好≥${thresholds.good} / 优秀≥${thresholds.excellent}`;
 
-  const filtered = [...rowsWithMetrics]
+  const filtered = useMemo(() => [...rowsWithMetrics]
     .filter(row => row.name.includes(searchQuery))
     .sort((a, b) => {
       const av = sortKey === "name" ? a.name : sortKey === "total" ? a.totalScore : a.scores[sortKey]?.score ?? null;
       const bv = sortKey === "name" ? b.name : sortKey === "total" ? b.totalScore : b.scores[sortKey]?.score ?? null;
       return compareValues(av, bv, sortAsc);
-    });
+    }), [rowsWithMetrics, searchQuery, sortAsc, sortKey]);
 
   const totals = rowsWithMetrics
     .map(row => row.totalScore)
@@ -316,7 +327,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
       count: rowsWithMetrics.filter(row => getBandKey(getMetricBandValue(row, metricKey, subjects), thresholds) === band.key).length,
     })),
   ];
-  const subjectRankingRows = [...rowsWithMetrics]
+  const subjectRankingRows = useMemo(() => [...rowsWithMetrics]
     .filter(row => row.name.includes(searchQuery))
     .map(row => ({
       row,
@@ -324,15 +335,15 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
       matchedStudent: (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null,
     }))
     .filter(item => typeof item.value === "number" && Number.isFinite(item.value))
-    .sort((a, b) => compareValues(a.value, b.value, false));
-  const trendFollowupCandidates = students
+    .sort((a, b) => compareValues(a.value, b.value, false)), [metricKey, rowsWithMetrics, searchQuery, studentById, studentByName]);
+  const trendFollowupCandidates = useMemo(() => students
     .map(student => {
       const signal = getTrendFollowupReason(student);
       return signal ? { student, ...signal } : null;
     })
     .filter((item): item is { student: AppStudent; reason: string; score: number; diff: number | null } => Boolean(item))
     .sort((a, b) => b.score - a.score || a.student.name.localeCompare(b.student.name, "zh-Hans-CN"))
-    .slice(0, 6);
+    .slice(0, 6), [students]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortAsc(v => !v);
@@ -618,7 +629,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                     <tbody>
                       {filtered.map((row, index) => {
                         const matchedStudent = (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null;
-                        const rank = [...rowsWithMetrics].sort((a, b) => compareValues(a.totalScore, b.totalScore, false)).findIndex(item => item.id === row.id) + 1;
+                        const rank = rankById.get(row.id) || 0;
                         const grade = getGradeLabel(getMetricBandValue(row, metricKey, subjects), thresholds);
                         const gradeColor = {
                           优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
