@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { calcBalance, createFundTransaction, filterFundTransactionsByPeriod, getFundPeriodRange, normalizeFundTransactions, shiftFundPeriod } from "./classFundActions";
-import { calculateDormScore, closeDormitoryPeriod, createDormEvent, createDormStudentRecord, deleteDormitoryEventFromLedger, updateDormitoryEventInLedger } from "./dormitoryActions";
+import { calcBalance, createFundTransaction, filterFundTransactionsByPeriod, getFundPeriodRange, normalizeFundTransactions, shiftFundPeriod, summarizeStudentFundCollection } from "./classFundActions";
+import { calculateDormScore, closeDormitoryPeriod, createDormEvent, createDormStudentRecord, deleteDormitoryEventFromLedger, restoreDeletedDormitory, updateDormitoryEventInLedger } from "./dormitoryActions";
 import { createStudent, createStudentRecord, updateStudentProfile } from "./studentActions";
 import { createTestStudent } from "./testFixtures";
 
@@ -53,6 +53,59 @@ describe("student, dormitory and fund actions", () => {
     expect(shiftFundPeriod("week", "2026-07-11", 1)).toBe("2026-07-18");
     const transactions = normalizeFundTransactions([{ id: "a", type: "expense", amount: 1, date: "2026-07-01" }, { id: "b", type: "expense", amount: 2, date: "2026-08-01" }]);
     expect(filterFundTransactionsByPeriod(transactions, "month", "2026-07-11").map(tx => tx.id)).toEqual(["a"]);
+  });
+
+  it("does not duplicate a shared fund transaction as every student's personal amount", () => {
+    const students = [createTestStudent("s1", "张三"), createTestStudent("s2", "李四")];
+    const individual = createFundTransaction({ type: "income", amount: 20, category: "班费", relatedStudentIds: ["s1"] }, students);
+    const shared = createFundTransaction({ type: "income", amount: 100, category: "捐款", relatedStudentIds: ["s1", "s2"] }, students);
+    individual.date = "2026-07-01";
+    shared.date = "2026-07-02";
+
+    expect(summarizeStudentFundCollection([individual, shared], students[0])).toEqual({
+      count: 2,
+      individualTotal: 20,
+      sharedCount: 1,
+      latest: "2026-07-02",
+    });
+    expect(summarizeStudentFundCollection([individual, shared], students[1])).toEqual({
+      count: 1,
+      individualTotal: 0,
+      sharedCount: 1,
+      latest: "2026-07-02",
+    });
+  });
+
+  it("summarizes legacy fund associations without losing name-based records", () => {
+    const student = createTestStudent("s1", "张三");
+    const transactions = normalizeFundTransactions([
+      { id: "legacy-id", type: "income", amount: 15, relatedStudentId: "s1", date: "2026-06-01" },
+      { id: "legacy-names", type: "income", amount: 30, relatedStudentNames: ["张三", "李四"], date: "2026-06-02" },
+      { id: "legacy-name", type: "income", amount: 8, relatedStudentName: "王五", date: "2026-06-03" },
+    ]);
+
+    expect(summarizeStudentFundCollection(transactions, student)).toEqual({
+      count: 2,
+      individualTotal: 15,
+      sharedCount: 1,
+      latest: "2026-06-02",
+    });
+    expect(summarizeStudentFundCollection(transactions, createTestStudent("s9", "赵六")).count).toBe(0);
+  });
+
+  it("restores deleted dorm members without leaving them in another dormitory", () => {
+    const deletedDormitory = {
+      id: "d1", name: "101", memberIds: ["s1"], baseScore: 0, currentScore: 0, events: [], periodStart: "2026-07-01", history: [],
+    };
+    const currentDormitories = [{
+      id: "d2", name: "102", memberIds: ["s1", "s2"], baseScore: 0, currentScore: 0, events: [], periodStart: "2026-07-01", history: [],
+    }];
+
+    const restored = restoreDeletedDormitory(currentDormitories, deletedDormitory, 0, ["s1"]);
+
+    expect(restored.map(dormitory => dormitory.id)).toEqual(["d1", "d2"]);
+    expect(restored[0].memberIds).toEqual(["s1"]);
+    expect(restored[1].memberIds).toEqual(["s2"]);
   });
 
   it("handles note-only dorm events without creating student records", () => {

@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { createDormEvent, createDormitory, createDormStudentRecord, deleteDormitoryEventFromLedger, normalizeDormitoryScore, updateDormitoryEventInLedger, type DormitoryEventPatch, type NewDormEventInput } from "../state/dormitoryActions";
+import { createDormEvent, createDormitory, createDormStudentRecord, deleteDormitoryEventFromLedger, normalizeDormitoryScore, restoreDeletedDormitory, updateDormitoryEventInLedger, type DormitoryEventPatch, type NewDormEventInput } from "../state/dormitoryActions";
 import type { SeatManagerController } from "../state/seatManagerController";
 import type { AppStudent, Dormitory, StudentId } from "../state/types";
 
@@ -18,19 +18,18 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
   const handleDeleteDormitory = useCallback((dormitoryId: string) => {
     const previousIndex = dormitories.findIndex(dormitory => dormitory.id === dormitoryId);
     const previousDormitory = previousIndex >= 0 ? dormitories[previousIndex] : null;
-    const previousMemberIds = new Set(students.filter(student => student.dormitoryId === dormitoryId).map(student => student.id));
+    const previousMemberIds = Array.from(new Set([
+      ...(previousDormitory?.memberIds ?? []),
+      ...students.filter(student => student.dormitoryId === dormitoryId).map(student => student.id),
+    ]));
+    const previousMemberSet = new Set(previousMemberIds);
     setDormitories((current) => current.filter((dormitory) => dormitory.id !== dormitoryId));
     setStudents((current) => current.map((student) => student.dormitoryId === dormitoryId ? { ...student, dormitoryId: undefined } : student));
     return () => {
       if (previousDormitory) {
-        setDormitories(current => {
-          if (current.some(dormitory => dormitory.id === dormitoryId)) return current;
-          const next = [...current];
-          next.splice(Math.min(previousIndex, next.length), 0, previousDormitory);
-          return next;
-        });
+        setDormitories(current => restoreDeletedDormitory(current, previousDormitory, previousIndex, previousMemberIds));
       }
-      setStudents(current => current.map(student => previousMemberIds.has(student.id) ? { ...student, dormitoryId } : student));
+      setStudents(current => current.map(student => previousMemberSet.has(student.id) ? { ...student, dormitoryId } : student));
     };
   }, [dormitories, setDormitories, setStudents, students]);
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, ListPlus, Pencil, RotateCcw, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 
-import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
+import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, summarizeStudentFundCollection, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
 import { buildCsvContent, downloadCsvFile } from "../../state/csv";
 import { todayKey } from "../../state/dailyManagement";
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
@@ -64,14 +64,10 @@ export function ClassFundWorkspace({
   const collectionIncome = collectionCategory === "all" ? activeIncome : activeIncome.filter(tx => (tx.category || "未分类") === collectionCategory);
   const collectionRows = useMemo(() => students
     .map(student => {
-      const own = collectionIncome.filter(tx => tx.relatedStudentIds?.length
-        ? tx.relatedStudentIds.includes(student.id)
-        : tx.relatedStudentId === student.id || (Boolean(tx.relatedStudentName) && tx.relatedStudentName === student.name));
+      const summary = summarizeStudentFundCollection(collectionIncome, student);
       return {
         student,
-        count: own.length,
-        total: own.reduce((sum, tx) => sum + tx.amount, 0),
-        latest: own.reduce((max, tx) => (tx.date > max ? tx.date : max), ""),
+        ...summary,
       };
     })
     .sort((a, b) => (a.count === 0 ? 0 : 1) - (b.count === 0 ? 0 : 1) || a.student.name.localeCompare(b.student.name, "zh-Hans-CN")), [collectionIncome, students]);
@@ -209,17 +205,23 @@ export function ClassFundWorkspace({
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-600">已交 {collectionRows.length - unpaidStudents.length} 人</span>
                     <span className={`rounded-full px-2.5 py-1 ${unpaidStudents.length ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}>未交 {unpaidStudents.length} 人</span>
                     <span className="text-[var(--app-text-muted)]">统计口径：{periodLabel} · {collectionCategoryLabel}</span>
+                    <span className="text-[var(--app-text-muted)]">多人流水仅记笔数，金额不作均摊</span>
                   </div>
                   <div className="overflow-hidden rounded-xl border border-gray-100">
                     <div className="grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500">
-                      <span>学生</span><span>状态</span><span className="text-right">笔数</span><span className="text-right">合计金额</span><span className="text-right">最近登记</span>
+                      <span>学生</span><span>状态</span><span className="text-right">笔数</span><span className="text-right">个人金额 / 多人流水</span><span className="text-right">最近登记</span>
                     </div>
                     {collectionRows.map(row => (
                       <div key={row.student.id} className="grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] items-center gap-2 border-b border-gray-50 px-4 py-2.5 text-sm last:border-0">
                         <span className="truncate font-bold text-gray-800">{row.student.name}</span>
                         <span>{row.count ? <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold text-emerald-600">已交</span> : <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-bold text-red-500">未交</span>}</span>
                         <span className="text-right tabular-nums text-gray-500">{row.count || "—"}</span>
-                        <span className="text-right tabular-nums text-gray-800">{row.count ? `¥${formatCurrency(row.total)}` : "—"}</span>
+                        <span className="text-right tabular-nums text-gray-800">{row.count
+                          ? [
+                              row.individualTotal > 0 ? `¥${formatCurrency(row.individualTotal)}` : "",
+                              row.sharedCount > 0 ? `${row.sharedCount} 笔多人` : "",
+                            ].filter(Boolean).join(" + ")
+                          : "—"}</span>
                         <span className="text-right text-xs text-gray-400">{row.latest || "—"}</span>
                       </div>
                     ))}

@@ -40,6 +40,31 @@ export function normalizeDormitoryScore(dormitory: Dormitory): Dormitory {
   };
 }
 
+export function restoreDeletedDormitory(
+  currentDormitories: Dormitory[],
+  deletedDormitory: Dormitory,
+  previousIndex: number,
+  previousMemberIds: StudentId[],
+): Dormitory[] {
+  const restoredMemberIds = Array.from(new Set([
+    ...deletedDormitory.memberIds.filter(id => previousMemberIds.includes(id)),
+    ...previousMemberIds,
+  ]));
+  const restoredMemberSet = new Set(restoredMemberIds);
+  const withoutConflictingMemberships = currentDormitories
+    .filter(dormitory => dormitory.id !== deletedDormitory.id)
+    .map(dormitory => ({
+      ...dormitory,
+      memberIds: dormitory.memberIds.filter(id => !restoredMemberSet.has(id)),
+    }));
+  const next = [...withoutConflictingMemberships];
+  next.splice(Math.min(Math.max(previousIndex, 0), next.length), 0, {
+    ...deletedDormitory,
+    memberIds: restoredMemberIds,
+  });
+  return next;
+}
+
 export type DormitoryEventPatch = {
   reason?: string;
   score?: number;

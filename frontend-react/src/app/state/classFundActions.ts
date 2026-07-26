@@ -85,6 +85,54 @@ export function calcBalance(transactions: FundTransaction[]): number {
   return calcIncomeTotal(transactions) - calcExpenseTotal(transactions);
 }
 
+export interface StudentFundCollectionSummary {
+  count: number;
+  individualTotal: number;
+  sharedCount: number;
+  latest: string;
+}
+
+function transactionMatchesStudent(transaction: FundTransaction, student: AppStudent): boolean {
+  if (transaction.relatedStudentIds?.length) {
+    return transaction.relatedStudentIds.includes(student.id);
+  }
+  if (transaction.relatedStudentId) {
+    return transaction.relatedStudentId === student.id;
+  }
+  if (transaction.relatedStudentNames?.length) {
+    return transaction.relatedStudentNames.includes(student.name);
+  }
+  return transaction.relatedStudentName === student.name;
+}
+
+function relatedStudentCount(transaction: FundTransaction): number {
+  if (transaction.relatedStudentIds?.length) {
+    return new Set(transaction.relatedStudentIds).size;
+  }
+  if (transaction.relatedStudentNames?.length) {
+    return new Set(transaction.relatedStudentNames).size;
+  }
+  return transaction.relatedStudentId || transaction.relatedStudentName ? 1 : 0;
+}
+
+export function summarizeStudentFundCollection(
+  transactions: FundTransaction[],
+  student: AppStudent,
+): StudentFundCollectionSummary {
+  return transactions.reduce<StudentFundCollectionSummary>((summary, transaction) => {
+    if (!transactionMatchesStudent(transaction, student)) {
+      return summary;
+    }
+    const shared = relatedStudentCount(transaction) > 1;
+    return {
+      count: summary.count + 1,
+      individualTotal: summary.individualTotal + (shared ? 0 : transaction.amount),
+      sharedCount: summary.sharedCount + (shared ? 1 : 0),
+      latest: transaction.date > summary.latest ? transaction.date : summary.latest,
+    };
+  }, { count: 0, individualTotal: 0, sharedCount: 0, latest: "" });
+}
+
 export function createFundTransaction(input: NewFundTxInput, students: AppStudent[]): FundTransaction {
   const amount = Number.isFinite(input.amount) ? Math.round(input.amount * 100) / 100 : 0;
   const ids = (input.relatedStudentIds ?? []).filter(Boolean);
