@@ -1,4 +1,5 @@
 import type { ActivityEvent, BusinessEntityRef, FollowupTask, SeatManagerState, StudentId } from "./types";
+import { toLocalDateKey } from "./dateKey";
 
 export type TimelineType = "学生记录" | "出勤" | "跟进" | "作业" | "沟通稿" | "宿舍" | "成绩" | "班费";
 export type TimelineTone = "normal" | "reminder" | "danger" | "success" | "muted";
@@ -93,7 +94,7 @@ function activityType(event: ActivityEvent): TimelineType {
   return "学生记录";
 }
 
-export function buildTimeline(state: SeatManagerState, today = new Date().toISOString().slice(0, 10)): TimelineItem[] {
+export function buildTimeline(state: SeatManagerState, today = toLocalDateKey()): TimelineItem[] {
   const items: TimelineItem[] = [];
   const studentMap = new Map(state.students.map(student => [student.id, student.name]));
   const activityKeys = new Set(state.activityEvents.map(event => `${event.ref.domain}:${event.ref.entityId}`));

@@ -271,7 +271,7 @@ export default function App() {
 
   useEffect(() => {
     if (!loggedIn || typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    const due = followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task)) && task.lastNotifiedAt?.slice(0, 10) !== new Date().toISOString().slice(0, 10));
+    const due = followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task)) && task.lastNotifiedAt?.slice(0, 10) !== todayKey());
     if (!due.length) return;
     new Notification("班级跟进提醒", { body: `今天有 ${due.length} 项待处理或已逾期任务。` });
     const now = new Date().toISOString();
@@ -385,7 +385,7 @@ export default function App() {
   function persistSeatHistory(nextHistory: SeatHistorySnapshot[]): boolean {
     setSaveStatus("saving");
     const saved = saveLegacySnapshot({
-      students,
+      students: allStudents,
       seatOrder,
       lockedSeats: appState.lockedSeats,
       seatSettings,
@@ -490,6 +490,10 @@ export default function App() {
     setSelectedStudentId(student.id);
   }
 
+  function consumeTimelineTarget() {
+    setTimelineTarget(null);
+  }
+
   function openTimelineTarget(target: TimelineTarget) {
     if (target.kind === "student") {
       const student = allStudents.find(item => item.id === target.studentId || item.id === target.entityId);
@@ -524,7 +528,7 @@ export default function App() {
   function handleSaveScoreImport(record: SavedGradeExamRecord): GradeExam | null {
     const next = saveGradeExamRecord({
       record,
-      students,
+      students: allStudents,
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
@@ -546,7 +550,7 @@ export default function App() {
       examId,
       name,
       date,
-      students,
+      students: allStudents,
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
@@ -564,7 +568,7 @@ export default function App() {
   function handleDeleteGradeExam(examId: string): boolean {
     const next = deleteGradeExamRecord({
       examId,
-      students,
+      students: allStudents,
       seatOrder,
       lockedSeats: [...lockedSeats],
       seatSettings,
@@ -580,7 +584,7 @@ export default function App() {
   }
 
   function handleSaveGradeItemAnalysis(examId: string, itemAnalysis: GradeItemAnalysis): boolean {
-    const next = updateGradeExamItemAnalysis({ examId, itemAnalysis, students, seatOrder, lockedSeats: [...lockedSeats], seatSettings, settings: appState.settings, dormitories, seatHistory: savedSeatHistory, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts });
+    const next = updateGradeExamItemAnalysis({ examId, itemAnalysis, students: allStudents, seatOrder, lockedSeats: [...lockedSeats], seatSettings, settings: appState.settings, dormitories, seatHistory: savedSeatHistory, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts });
     if (!next) return false;
     replaceState(next);
     return true;
@@ -1005,7 +1009,7 @@ export default function App() {
       }
     >
       <div className="h-full">
-        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} /></div>}
+        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full workspace-tab-enter">
             <DailyWorkspace
@@ -1053,17 +1057,18 @@ export default function App() {
               periodSettings={dormitoryPeriodSettings}
               onPeriodSettingsChange={settings => setSettings(current => ({ ...current, dormitoryPeriod: settings }))}
               initialTarget={timelineTarget?.workspace === "dormitories" ? timelineTarget : undefined}
+              onInitialTargetConsumed={consumeTimelineTarget}
             />
           </div>
         )}
 
-        {sidebarTab === "attendance" && <div className="h-full workspace-tab-enter"><AttendanceWorkspace students={students} records={attendanceRecords} tasks={followupTasks} onChange={setAttendanceRecords} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenTask={taskId => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId })} initialTarget={timelineTarget?.workspace === "attendance" ? timelineTarget : undefined} /></div>}
+        {sidebarTab === "attendance" && <div className="h-full workspace-tab-enter"><AttendanceWorkspace students={students} records={attendanceRecords} tasks={followupTasks} onChange={setAttendanceRecords} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenTask={taskId => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId })} initialTarget={timelineTarget?.workspace === "attendance" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} /></div>}
 
-        {sidebarTab === "followups" && <div className="h-full workspace-tab-enter"><FollowupWorkspace key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenSource={navigateToEntity} sourceExists={ref => businessEntityExists(appState, ref)} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} initialMode={followupMode} /></div>}
+        {sidebarTab === "followups" && <div className="h-full workspace-tab-enter"><FollowupWorkspace key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenSource={navigateToEntity} sourceExists={ref => businessEntityExists(appState, ref)} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} initialMode={followupMode} /></div>}
 
         {sidebarTab === "scores" && (
           <div className="h-full workspace-tab-enter">
-            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, tasks: followupTasks, initialTarget: timelineTarget?.workspace === "scores" ? timelineTarget : undefined, onOpenTask: (taskId: string) => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId }), onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, studentId } }), onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => requestFollowupTask({ studentId: studentIds[0], studentIds, title: `跟进${exam.name} · ${question.label}`, type: "学业关注", description: question.knowledgePoints.length ? `薄弱知识点：${question.knowledgePoints.join("、")}` : `${question.label}得分低于 60%`, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, subEntityId: question.id } }) }} />
+            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, tasks: followupTasks, initialTarget: timelineTarget?.workspace === "scores" ? timelineTarget : undefined, onInitialTargetConsumed: consumeTimelineTarget, onOpenTask: (taskId: string) => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId }), onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, studentId } }), onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => requestFollowupTask({ studentId: studentIds[0], studentIds, title: `跟进${exam.name} · ${question.label}`, type: "学业关注", description: question.knowledgePoints.length ? `薄弱知识点：${question.knowledgePoints.join("、")}` : `${question.label}得分低于 60%`, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, subEntityId: question.id } }) }} />
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import { getTagLabels, isAcademicTagLabel } from "./tagCatalog";
 import type { AppStudent, Gender, RecordType, StudentRecord } from "./types";
+import { toLocalDateKey } from "./dateKey";
 
 export interface NewStudentInput {
   name: string;
@@ -19,7 +20,7 @@ export interface StudentProfileInput {
 }
 
 function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalDateKey();
 }
 
 function deriveTagLabels(manualTagIds: string[], autoTagIds: string[]) {

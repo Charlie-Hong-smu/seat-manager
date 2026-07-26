@@ -5,6 +5,7 @@ import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsB
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
 import { FundTransactionForm } from "../FundTransactionForm";
 import { Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, useActionToast } from "../ui";
+import { toLocalDateKey } from "../../state/dateKey";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,7 +35,7 @@ export function ClassFundWorkspace({
   const [editNote, setEditNote] = useState("");
   const [editDate, setEditDate] = useState("");
   const [periodMode, setPeriodMode] = useState<FundPeriodMode>("month");
-  const [periodAnchor, setPeriodAnchor] = useState(() => new Date().toISOString().slice(0, 10));
+  const [periodAnchor, setPeriodAnchor] = useState(() => toLocalDateKey());
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [pendingVoidTransaction, setPendingVoidTransaction] = useState<FundTransaction | null>(null);
   const actionToast = useActionToast();

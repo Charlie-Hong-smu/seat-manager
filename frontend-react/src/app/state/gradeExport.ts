@@ -1,5 +1,6 @@
 import { loadXlsx, SUBJECT_ORDER } from "./scoreImport";
 import type { AppStudent, GradeExam, GradeRow, GradeScoreCell, StudentId } from "./types";
+import { toLocalDateKey } from "./dateKey";
 
 type CellValue = string | number | boolean | null;
 type SheetRows = CellValue[][];
@@ -502,7 +503,7 @@ function safeSheetName(raw: string, used: Set<string>): string {
 }
 
 function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalDateKey();
 }
 
 function getExportScope(exams: GradeExam[], students: AppStudent[], options: GradeExportOptions) {

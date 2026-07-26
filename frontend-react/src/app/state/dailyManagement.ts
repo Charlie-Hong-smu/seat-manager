@@ -1,12 +1,12 @@
 import type { AppStudent, AttendanceRecord, AttendanceStatus, BusinessDomain, DrawSession, FollowupTask, FollowupTaskSource, FollowupTaskStatus, StudentId } from "./types";
+import { toLocalDateKey } from "./dateKey";
 
 function id(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function todayKey(date = new Date()): string {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+  return toLocalDateKey(date);
 }
 
 export function normalizeAttendanceRecords(raw: unknown): AttendanceRecord[] {

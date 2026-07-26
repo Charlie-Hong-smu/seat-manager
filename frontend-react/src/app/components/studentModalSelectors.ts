@@ -41,12 +41,9 @@ export function formatScore(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value * 10) / 10) : "—";
 }
 
-export function toLocalDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+import { toLocalDateKey } from "../state/dateKey";
+
+export { toLocalDateKey };
 
 export function parseLocalDate(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);

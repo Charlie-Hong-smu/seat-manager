@@ -1,4 +1,5 @@
 import type { GradeScoreCell, SavedGradeExamRecord, ScoreImportDraft } from "./types";
+import { toLocalDateKey } from "./dateKey";
 
 export const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
 
@@ -357,7 +358,7 @@ export function createSavedGradeExamRecord(
   input: { id?: string; name: string; date: string; rows?: string[][]; mapping?: ScoreMapping },
 ): SavedGradeExamRecord {
   const name = input.name.trim() || draft.filename.replace(/\.[^.]+$/, "") || "考试";
-  const date = input.date || new Date().toISOString().slice(0, 10);
+  const date = input.date || toLocalDateKey();
   const entries = draft.entries.map(entry => ({
     name: entry.name,
     studentNo: entry.studentNo,

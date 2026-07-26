@@ -222,7 +222,12 @@ function getExamSignature(exam: Record<string, unknown>): string {
 
 function buildStudentLookup(students: Record<string, unknown>[]): Map<string, Record<string, unknown>[]> {
   const lookup = new Map<string, Record<string, unknown>[]>();
-  students.forEach(student => {
+  // 活跃学生优先领取同名成绩行，归档学生只兜底旧数据。
+  const ordered = [
+    ...students.filter(student => student.enrollmentStatus !== "archived"),
+    ...students.filter(student => student.enrollmentStatus === "archived"),
+  ];
+  ordered.forEach(student => {
     const names = [student.name, ...(Array.isArray(student.aliases) ? student.aliases : [])];
     names.forEach(name => {
       const key = normalizeNameForMatch(name);

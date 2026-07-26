@@ -25,6 +25,7 @@ import type {
   StudentId,
   StudentRecord,
 } from "./types";
+import { toLocalDateKey } from "./dateKey";
 
 const COLS = 8;
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
@@ -131,7 +132,7 @@ function normalizeDormEvent(value: unknown, index: number, dormId: string): Dorm
     punishment: toStringValue(value.punishment) || undefined,
     punishmentDone: value.punishmentDone === true,
     followupTaskIds: toStringArray(value.followupTaskIds),
-    date: toStringValue(value.date) || new Date().toISOString().slice(0, 10),
+    date: toStringValue(value.date) || toLocalDateKey(),
     createdAt: toStringValue(value.createdAt) || new Date().toISOString(),
   };
 }
@@ -186,7 +187,7 @@ function normalizeDormitories(value: unknown, validStudentIds: Set<StudentId>): 
         baseScore: Number.isFinite(baseScore) ? baseScore : 0,
         currentScore: 0,
         events,
-        periodStart: toStringValue(item.periodStart) || earliestEventDate || new Date().toISOString().slice(0, 10),
+        periodStart: toStringValue(item.periodStart) || earliestEventDate || toLocalDateKey(),
         history,
       };
       return { ...dormitory, currentScore: calculateDormScore(dormitory) };

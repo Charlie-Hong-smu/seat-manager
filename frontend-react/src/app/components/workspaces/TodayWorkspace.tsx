@@ -1,13 +1,14 @@
 import { BookOpenCheck, CalendarDays, CheckCircle2, Clipboard, ClipboardList, FileSpreadsheet, LayoutGrid, Sparkles, UserRoundCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
+import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 import { generateAiWeeklyDraft } from "../../state/teacherAiService";
 import { buildLocalWeeklyDraft, buildTodayWorkItems, buildWeeklyFacts, getWeekRange, parseScheduleRows } from "../../state/teacherWorkbench";
 import { readRowsFromFile } from "../../state/scoreImport";
 import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, CommunicationDraft, Dormitory, FollowupTask, GradeExam, HomeworkAssignment } from "../../state/types";
 import { AiGenerationPanel, Button, Card, FileDropZone, ToolDrawer } from "../ui";
 
-export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, initialDraftId }: {
+export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, initialDraftId, onInitialDraftConsumed }: {
   students: AppStudent[];
   attendance: AttendanceRecord[];
   tasks: FollowupTask[];
@@ -24,6 +25,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   onOpenQuickRecord: () => void;
   onOpenEntity?: (ref: BusinessEntityRef) => void;
   initialDraftId?: string;
+  onInitialDraftConsumed?: () => void;
 }) {
   const today = new Date().toLocaleDateString("sv-SE");
   const weekday = new Date().getDay() || 7;
@@ -42,14 +44,13 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   const range = getWeekRange();
   const facts = buildWeeklyFacts({ students, attendance, tasks, homework, dormitories, gradeExams, ...range });
 
-  useEffect(() => {
-    if (!initialDraftId) return;
+  useInitialTargetEffect(initialDraftId, () => {
     const draft = drafts.find(item => item.id === initialDraftId);
     if (!draft) return;
     setWeeklyContent(draft.content);
     setWeeklyStatus("已从历史打开保存的周报草稿。");
     setWeeklyOpen(true);
-  }, [drafts, initialDraftId]);
+  }, onInitialDraftConsumed);
 
   function openItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
     if (onOpenEntity) {

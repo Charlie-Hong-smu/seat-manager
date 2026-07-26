@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FileUp, PanelLeftClose, PanelLeftOpen, Sparkles, Trash2, X } from "lucide-react";
+
+import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 
 import { hasStoredAiScoreMappingAuth, suggestScoreMappingWithAi, type AiScoreMappingSuggestion } from "../../state/aiScoreMappingService";
 import {
@@ -20,6 +22,7 @@ import { GradesPage } from "../GradesPage";
 import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, IconButton, SelectMenu, UnderlineTabs } from "../ui";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
+import { toLocalDateKey } from "../../state/dateKey";
 
 export function ScoresWorkspace({
   exams,
@@ -38,6 +41,7 @@ export function ScoresWorkspace({
   onCreateQuestionFollowups,
   tasks,
   initialTarget,
+  onInitialTargetConsumed,
   onOpenTask,
 }: {
   exams: GradeExam[];
@@ -63,6 +67,7 @@ export function ScoresWorkspace({
   onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => void;
   tasks: FollowupTask[];
   initialTarget?: TimelineTarget;
+  onInitialTargetConsumed?: () => void;
   onOpenTask?: (taskId: string) => void;
 }) {
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
@@ -72,7 +77,7 @@ export function ScoresWorkspace({
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [scoreStatus, setScoreStatus] = useState("");
   const [examName, setExamName] = useState("");
-  const [examDate, setExamDate] = useState(new Date().toISOString().slice(0, 10));
+  const [examDate, setExamDate] = useState(toLocalDateKey());
   const [remappingExamId, setRemappingExamId] = useState("");
   const [aiMappingBusy, setAiMappingBusy] = useState(false);
   const [aiMappingSuggestion, setAiMappingSuggestion] = useState<AiScoreMappingSuggestion | null>(null);
@@ -90,9 +95,12 @@ export function ScoresWorkspace({
   const [pendingDeleteExam, setPendingDeleteExam] = useState<GradeExam | null>(null);
   const [deleteExamError, setDeleteExamError] = useState("");
   const [scoreView, setScoreView] = useState<"overview" | "items">("overview");
-  useEffect(() => {
+  // 目标复制到本地后立刻回收，懒加载面板挂载时仍能拿到定位参数。
+  const [analysisTarget, setAnalysisTarget] = useState<TimelineTarget | undefined>(initialTarget);
+  useInitialTargetEffect(initialTarget?.entityId ? `${initialTarget.entityId}|${initialTarget.subEntityId || ""}` : undefined, () => {
+    setAnalysisTarget(initialTarget);
     if (initialTarget?.entityId && initialTarget.subEntityId) setScoreView("items");
-  }, [initialTarget]);
+  }, onInitialTargetConsumed);
 
   async function readScoreFile(file?: File) {
     if (!file) return;
@@ -111,7 +119,7 @@ export function ScoresWorkspace({
       setDraft(nextDraft);
       if (!remappingExamId) {
         setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
-        setExamDate(new Date().toISOString().slice(0, 10));
+        setExamDate(toLocalDateKey());
       }
       setScoreStatus(`已解析 ${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。${nextDraft.warnings.length ? " 可打开映射设置进一步确认。" : ""}`);
     } catch (error) {
@@ -122,7 +130,7 @@ export function ScoresWorkspace({
         setScoreFilename(file.name);
         if (!remappingExamId) {
           setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
-          setExamDate(new Date().toISOString().slice(0, 10));
+          setExamDate(toLocalDateKey());
         }
       } catch {
         setScoreRows([]);
@@ -235,7 +243,7 @@ export function ScoresWorkspace({
       setScoreFilename("");
       setManualMapping(null);
       setExamName(exam.name);
-      setExamDate(exam.date || new Date().toISOString().slice(0, 10));
+      setExamDate(exam.date || toLocalDateKey());
       setRemappingExamId(exam.id);
       setMappingModalOpen(false);
       setAiMappingSuggestion(null);
@@ -258,7 +266,7 @@ export function ScoresWorkspace({
       setScoreFilename(exam.importSource.filename || nextDraft.filename);
       setManualMapping(mapping);
       setExamName(exam.name);
-      setExamDate(exam.date || new Date().toISOString().slice(0, 10));
+      setExamDate(exam.date || toLocalDateKey());
       setRemappingExamId(exam.id);
       setMappingModalOpen(true);
       setAiMappingSuggestion(null);
@@ -267,7 +275,7 @@ export function ScoresWorkspace({
       setScoreStatus("这场考试的原始表格无法重新映射，只能编辑考试名称和日期。");
       setEditingExamId(exam.id);
       setEditExamName(exam.name);
-      setEditExamDate(exam.date || new Date().toISOString().slice(0, 10));
+      setEditExamDate(exam.date || toLocalDateKey());
     }
   }
 
@@ -441,7 +449,7 @@ export function ScoresWorkspace({
 
         <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
           <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-white pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
-          {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={initialTarget?.entityId} initialQuestionId={initialTarget?.subEntityId}/>}
+          {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}
         </main>
       </div>
       {mappingModalOpen && manualMapping && (

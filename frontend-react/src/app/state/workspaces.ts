@@ -21,6 +21,7 @@ import {
   validateWorkspaceBook,
   type WorkspaceValidationIssue,
 } from "./workspaceValidation";
+import { toLocalDateKey } from "./dateKey";
 
 const LEGACY_STORAGE_KEY = "homeroom-seat-manager-v1";
 export const WORKSPACES_KEY = "seat-manager-workspaces-v1";
@@ -496,7 +497,7 @@ function copyRosterForNewTerm(data: Record<string, unknown>): Record<string, unk
       events: [],
       history: [],
       currentScore: item.baseScore ?? 0,
-      periodStart: new Date().toISOString().slice(0, 10),
+      periodStart: toLocalDateKey(),
     };
   });
   return {

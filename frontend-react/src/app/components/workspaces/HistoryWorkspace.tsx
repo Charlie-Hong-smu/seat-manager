@@ -4,6 +4,7 @@ import type { AppStudent, SeatHistorySnapshot } from "../../state/types";
 import { filterTimeline, type TimelineItem, type TimelineTarget, type TimelineTone, type TimelineType } from "../../state/dataInsights";
 import { StudentPicker } from "../StudentPicker";
 import { Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, useActionToast } from "../ui";
+import { toLocalDateKey } from "../../state/dateKey";
 
 type HistoryView = "activity" | "seats";
 type DateRange = "7" | "30" | "term" | "custom";
@@ -23,11 +24,11 @@ function dateDaysAgo(days: number): string {
   const date = new Date();
   date.setHours(12, 0, 0, 0);
   date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
+  return toLocalDateKey(date);
 }
 
 function displayDate(value: string): string {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateKey();
   if (value === today) return `今天 · ${value}`;
   if (value === dateDaysAgo(1)) return `昨天 · ${value}`;
   return value;

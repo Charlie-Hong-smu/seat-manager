@@ -6,6 +6,7 @@ import {
   prepareWorkspaceImport,
   type PreparedWorkspaceImport,
 } from "./workspaces";
+import { toLocalDateKey } from "./dateKey";
 
 const BACKUP_VERSION = 2;
 const COLS = 8;
@@ -29,7 +30,7 @@ function isValidLegacyState(value: unknown): value is Record<string, unknown> {
 }
 
 function formatDateForFilename(date = new Date()): string {
-  return date.toISOString().slice(0, 10);
+  return toLocalDateKey(date);
 }
 
 function formatTimeForFilename(date = new Date()): string {

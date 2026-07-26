@@ -1,4 +1,5 @@
 import type { AppStudent, FundTransaction, FundTxType, StudentId } from "./types";
+import { toLocalDateKey } from "./dateKey";
 
 export const FUND_INCOME_PRESETS: Array<{ category: string; note: string }> = [
   { category: "班费收缴", note: "收取班费" },
@@ -65,7 +66,7 @@ function createId(prefix: string): string {
 }
 
 function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalDateKey();
 }
 
 export function calcIncomeTotal(transactions: FundTransaction[]): number {

@@ -4,6 +4,7 @@ import { ArchiveRestore, FileDown, FileUp, Trash2, X } from "lucide-react";
 import {
   exportBackupJson,
   exportCurrentClassBackupJson,
+  exportPreImportBackup,
   exportSeatsCsv,
   formatBackupTime,
   getLastBackupAt,
@@ -43,7 +44,7 @@ export function DataWorkspace({
   onPermanentlyDeleteStudent?: (studentId: StudentId) => void;
 }) {
   const appDialog = useAppDialog();
-  const [replaceExisting, setReplaceExisting] = useState(true);
+  const [replaceExisting, setReplaceExisting] = useState(false);
   const [keepHistory, setKeepHistory] = useState(true);
   const [rosterFile, setRosterFile] = useState<File | null>(null);
   const [rosterRows, setRosterRows] = useState<string[][]>([]);
@@ -64,6 +65,17 @@ export function DataWorkspace({
       setRosterStatus("请先选择名单文件。");
       return;
     }
+    if (replaceExisting) {
+      const confirmed = await appDialog.confirm({
+        title: "覆盖现有名单？",
+        description: `新名单将成为当前在班名单${keepHistory ? "，同名学生沿用原有档案" : "，且新名单学生不继承原有档案"}。未出现在新名单中的在班学生会移入本页的归档区，可随时恢复，不会被删除。确认后会先自动导出一份完整备份文件，再执行覆盖。`,
+        confirmLabel: "导出备份并覆盖",
+        variant: "danger",
+      });
+      if (!confirmed) return;
+      onBeforeBackupExport();
+      exportPreImportBackup();
+    }
     setRosterStatus("正在导入名单...");
     try {
       const result = await onImportRoster(rosterFile, { replaceExisting, keepHistory: replaceExisting ? keepHistory : true, mapping: rosterMapping || undefined });
@@ -71,7 +83,18 @@ export function DataWorkspace({
       setRosterRows([]);
       setRosterMapping(null);
       setAiRosterMappingSuggestion(null);
-      setRosterStatus(`导入成功：${result.studentCount} 名学生、${result.seatCount} 个座位。`);
+      if (result.mode === "replace") {
+        const parts = [`当前在班 ${result.studentCount} 名学生`];
+        if (result.matchedCount) parts.push(`${result.matchedCount} 名沿用原档案`);
+        if (result.archivedCount) parts.push(`${result.archivedCount} 名未出现的学生已移入归档`);
+        setRosterStatus(`名单已覆盖：${parts.join("，")}。`);
+      } else {
+        const parts: string[] = [];
+        if (result.newCount) parts.push(`新增 ${result.newCount} 名`);
+        if (result.matchedCount) parts.push(`从归档恢复 ${result.matchedCount} 名`);
+        if (result.skippedCount) parts.push(`跳过 ${result.skippedCount} 名已在名单中`);
+        setRosterStatus(`导入完成：${parts.length ? `${parts.join("，")}，` : ""}当前在班 ${result.studentCount} 名学生。`);
+      }
     } catch {
       setRosterStatus("名单导入失败：请使用 .xlsx / .xls / .xlsm / .csv / .tsv，并确认表内有姓名列。");
     }

@@ -51,6 +51,7 @@ import {
   saveCommentBatchState,
   type CommentBatchState,
 } from "./commentBatchStorage";
+import { toLocalDateKey } from "../state/dateKey";
 
 interface CommentState {
   studentId: StudentId;
@@ -892,7 +893,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           return `【${s.name}】\n${state?.text || ""}`;
         })
         .join("\n\n");
-      downloadTextFile(`期末评语-${new Date().toISOString().slice(0, 10)}.txt`, text, "text/plain;charset=utf-8");
+      downloadTextFile(`期末评语-${toLocalDateKey()}.txt`, text, "text/plain;charset=utf-8");
     } else {
       const rows = [
         ["姓名", "字数", "评语"],
@@ -902,7 +903,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
         }),
       ];
       const content = `\ufeff${rows.map(row => row.map(csvEscape).join(",")).join("\n")}`;
-      downloadTextFile(`期末评语-${new Date().toISOString().slice(0, 10)}.csv`, content, "text/csv;charset=utf-8");
+      downloadTextFile(`期末评语-${toLocalDateKey()}.csv`, content, "text/csv;charset=utf-8");
     }
     setShowExportModal(false);
   }

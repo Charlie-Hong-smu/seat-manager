@@ -1,6 +1,7 @@
 import { BarChart3, ChevronDown, ChevronUp, FileSpreadsheet, HelpCircle, ListPlus, Sparkles, Tags } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
+import { useInitialTargetEffect } from "../hooks/useInitialTargetEffect";
 import { generateAiItemAnalysis, type AiItemAnalysisResult } from "../state/teacherAiService";
 import { buildItemAnalysisFromWideRows, getQuestionStats } from "../state/teacherWorkbench";
 import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuestionDefinition, StudentId } from "../state/types";
@@ -23,13 +24,13 @@ export function ScoreItemAnalysisPanel({ exams, students, tasks, onSave, onCreat
     return [...groups].map(([label, rates]) => ({ label, rate: Math.round(rates.reduce((sum, value) => sum + value, 0) / rates.length * 10) / 10 })).sort((a, b) => a.rate - b.rate);
   }, [stats]);
 
-  useEffect(() => {
+  useInitialTargetEffect(initialExamId || initialQuestionId ? `${initialExamId || ""}|${initialQuestionId || ""}` : undefined, () => {
     if (initialExamId && exams.some(item => item.id === initialExamId)) setExamId(initialExamId);
     if (initialQuestionId) {
       setExpandedQuestionId(initialQuestionId);
       window.setTimeout(() => document.querySelector(`[data-score-question-id="${CSS.escape(initialQuestionId)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
     }
-  }, [exams, initialExamId, initialQuestionId]);
+  });
 
   function linkedTask(studentId: StudentId, questionId: string) {
     return tasks.find(task => task.studentId === studentId && task.sourceRef?.domain === "score" && task.sourceRef.entityId === exam?.id && task.sourceRef.subEntityId === questionId && task.status === "pending")

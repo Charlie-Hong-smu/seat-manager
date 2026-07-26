@@ -1,6 +1,7 @@
 import { Archive, Check, CheckCircle2, LayoutGrid, List, Pencil, Plus, RotateCcw, Search, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useInitialTargetEffect } from "../hooks/useInitialTargetEffect";
 import { todayKey } from "../state/dailyManagement";
 import { createActivityEvent } from "../state/activityEvents";
 import type { ActivityEvent, AppStudent, FollowupTask, HomeworkAssignment, HomeworkStudentStatus, StudentId } from "../state/types";
@@ -78,12 +79,12 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
     if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
   }, []);
 
-  useEffect(() => {
+  useInitialTargetEffect(initialAssignmentId, () => {
     const target = assignments.find(item => item.id === initialAssignmentId);
     if (!target) return;
     setSelectedId(target.id);
     setLifecycleFilter(target.lifecycle || "active");
-  }, [assignments, initialAssignmentId]);
+  });
 
   useEffect(() => {
     if (selected && selected.id !== selectedId) setSelectedId(selected.id);

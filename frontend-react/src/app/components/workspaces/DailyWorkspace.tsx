@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDown,
   Dices,
@@ -82,8 +82,16 @@ export function DailyWorkspace({
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
-  const [drawHistory, setDrawHistory] = useState<Array<{ id: string; time: string; names: string[] }>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // 抽签历史直接读持久化的 drawSessions，切页或刷新后仍然可见。
+  const drawHistory = useMemo(() => {
+    const studentById = new Map(students.map(student => [student.id, student]));
+    return drawSessions.slice(0, 10).map(session => ({
+      id: session.id,
+      time: `${session.date === todayKey() ? "" : `${session.date} `}${new Date(session.createdAt).toLocaleTimeString("zh-CN", { hour12: false })}`,
+      names: session.studentIds.map(id => studentById.get(id)?.name || "已移出学生"),
+    }));
+  }, [drawSessions, students]);
   const drawerStudents = students.filter(student => !drawerSearch || student.name.includes(drawerSearch) || student.aliases.some(item => item.includes(drawerSearch))).slice(0, 8);
   const constraints = seatSettings.constraints;
   const activeConstraintCount = constraints.lockedDeskmatePairs.length
@@ -110,10 +118,6 @@ export function DailyWorkspace({
     const picked = selected.map(student => student.name);
     if (selected.length) onDrawSessionsChange([{ id: `draw-${Date.now()}`, date: todayKey(), studentIds: selected.map(student => student.id), createdAt: new Date().toISOString() }, ...drawSessions].slice(0, 50));
     setDrawResult(picked);
-    setDrawHistory(current => [
-      { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, time: new Date().toLocaleTimeString("zh-CN", { hour12: false }), names: picked },
-      ...current,
-    ].slice(0, 10));
   }
 
   return (

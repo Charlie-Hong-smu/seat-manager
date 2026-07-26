@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+
+import { useInitialTargetEffect } from "../hooks/useInitialTargetEffect";
 import {
   Check,
   ChevronDown,
@@ -58,6 +60,7 @@ interface Props {
   periodSettings: DormitoryPeriodSettings;
   onPeriodSettingsChange: (settings: DormitoryPeriodSettings) => void;
   initialTarget?: TimelineTarget;
+  onInitialTargetConsumed?: () => void;
 }
 
 export function DormitoryWorkspace({
@@ -76,6 +79,7 @@ export function DormitoryWorkspace({
   periodSettings,
   onPeriodSettingsChange,
   initialTarget,
+  onInitialTargetConsumed,
 }: Props) {
   const appDialog = useAppDialog();
   const actionToast = useActionToast();
@@ -91,6 +95,7 @@ export function DormitoryWorkspace({
   const [eventDate, setEventDate] = useState(localDateKey());
   const [periodMode, setPeriodMode] = useState<DormitoryPeriodMode>("week");
   const [periodAnchor, setPeriodAnchor] = useState(localDateKey());
+  const [focusedEventId, setFocusedEventId] = useState("");
 
   // 事件录入表单 state
   const [reason, setReason] = useState("");
@@ -102,7 +107,7 @@ export function DormitoryWorkspace({
   const [responsibleSearch, setResponsibleSearch] = useState("");
   const [recordToStudent, setRecordToStudent] = useState(true);
   const [createFollowup, setCreateFollowup] = useState(false);
-  const [followupDueDate, setFollowupDueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [followupDueDate, setFollowupDueDate] = useState(() => localDateKey());
 
   // 可变预设事件列表 + 自定义输入
   const [presets, setPresets] = useState<PresetEvent[]>(() => {
@@ -163,14 +168,15 @@ export function DormitoryWorkspace({
     }
   }, [selectedDormitory, sortedDormitories]);
 
-  useEffect(() => {
-    if (!initialTarget?.entityId) return;
-    const match = dormitories.flatMap(dormitory => [...dormitory.events, ...dormitory.history.flatMap(archive => archive.events)].map(event => ({ dormitory, event }))).find(item => item.event.id === initialTarget.entityId || item.dormitory.id === initialTarget.entityId);
+  useInitialTargetEffect(initialTarget?.entityId, () => {
+    const entityId = initialTarget?.entityId || "";
+    const match = dormitories.flatMap(dormitory => [...dormitory.events, ...dormitory.history.flatMap(archive => archive.events)].map(event => ({ dormitory, event }))).find(item => item.event.id === entityId || item.dormitory.id === entityId);
     if (!match) return;
     setSelectedDormId(match.dormitory.id);
     if (match.event) setPeriodAnchor(match.event.date);
-    window.setTimeout(() => document.querySelector(`[data-dormitory-event-id="${CSS.escape(initialTarget.entityId)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
-  }, [dormitories, initialTarget]);
+    setFocusedEventId(entityId);
+    window.setTimeout(() => document.querySelector(`[data-dormitory-event-id="${CSS.escape(entityId)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+  }, onInitialTargetConsumed);
 
   // 切换宿舍时重置编辑状态 + 触发主区域动画
   useEffect(() => {
@@ -365,7 +371,7 @@ export function DormitoryWorkspace({
     if (!savedEvent) return;
     if (createFollowup && punishment.trim() && responsibleIds.length) {
       const studentId = responsibleIds[0];
-      onRequestFollowupTask({ studentId, studentIds: responsibleIds, title: `宿舍处理：${punishment.trim()}`, description: `${selectedDormitory.name} · ${reason.trim()}${note.trim() ? ` · ${note.trim()}` : ""}`, plannedDate: new Date().toISOString().slice(0, 10), dueDate: followupDueDate, type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: savedEvent.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, savedEvent.id, { followupTaskIds: taskIds }));
+      onRequestFollowupTask({ studentId, studentIds: responsibleIds, title: `宿舍处理：${punishment.trim()}`, description: `${selectedDormitory.name} · ${reason.trim()}${note.trim() ? ` · ${note.trim()}` : ""}`, plannedDate: localDateKey(), dueDate: followupDueDate, type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: savedEvent.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, savedEvent.id, { followupTaskIds: taskIds }));
     }
     resetForm();
     actionToast.show({
@@ -715,7 +721,7 @@ export function DormitoryWorkspace({
                     <div className="divide-y divide-gray-50">
                       {selectedPeriodEvents.map(({ event }) =>
                         editingEventId === event.id ? (
-                          <div key={event.id} data-dormitory-event-id={event.id} className={`bg-blue-50/40 px-5 py-3 space-y-2 ${initialTarget?.entityId === event.id ? "entity-focus-highlight" : ""}`}>
+                          <div key={event.id} data-dormitory-event-id={event.id} className={`bg-blue-50/40 px-5 py-3 space-y-2 ${focusedEventId === event.id ? "entity-focus-highlight" : ""}`}>
                             <div className="flex gap-2">
                               <input
                                 value={editReason}
@@ -759,7 +765,7 @@ export function DormitoryWorkspace({
                             </div>
                           </div>
                         ) : (
-                          <div key={event.id} data-dormitory-event-id={event.id} className={`group px-5 py-3 hover:bg-gray-50/60 transition-colors ${initialTarget?.entityId === event.id ? "entity-focus-highlight" : ""}`}>
+                          <div key={event.id} data-dormitory-event-id={event.id} className={`group px-5 py-3 hover:bg-gray-50/60 transition-colors ${focusedEventId === event.id ? "entity-focus-highlight" : ""}`}>
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-3 min-w-0 flex-1">
                                 <span className="text-[10px] text-gray-400 shrink-0">{event.date}</span>

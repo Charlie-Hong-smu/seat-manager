@@ -16,6 +16,11 @@ export interface RosterImportResult {
   studentCount: number;
   seatCount: number;
   hasPlacement: boolean;
+  mode: "replace" | "append";
+  newCount: number;
+  matchedCount: number;
+  archivedCount: number;
+  skippedCount: number;
 }
 
 export interface ParsedRoster {
@@ -201,6 +206,8 @@ function makeStudent(name: string, gender: string, studentNo: string, preserved?
     autoTags: preserved ? cloneJson(preserved.autoTags, []) : [],
     exams: preserved ? cloneJson(preserved.exams, []) : [],
     aiComments: preserved ? cloneJson(preserved.aiComments, {}) : {},
+    enrollmentStatus: "active",
+    archivedAt: undefined,
   };
 }
 
@@ -216,11 +223,38 @@ function placeFirstEmpty(seatOrder: Array<string | null>, studentId: string): vo
   }
 }
 
-function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): Record<string, unknown> {
+interface AppliedRosterImport {
+  next: Record<string, unknown>;
+  newCount: number;
+  matchedCount: number;
+  archivedCount: number;
+  skippedCount: number;
+}
+
+function collectStudentNameKeys(student: Record<string, unknown>): string[] {
+  return [student.name, ...(Array.isArray(student.aliases) ? student.aliases : [])]
+    .map(normalizeName)
+    .filter(Boolean);
+}
+
+function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): AppliedRosterImport {
   const base = isRecord(readLegacyRootState()) ? readLegacyRootState() as Record<string, unknown> : {};
-  const previousStudents = Array.isArray(base.students) ? base.students : [];
+  const previousStudents = Array.isArray(base.students) ? base.students.filter(isRecord) : [];
+  const activePrevious = previousStudents.filter(student => student.enrollmentStatus !== "archived");
+  const archivedPrevious = previousStudents.filter(student => student.enrollmentStatus === "archived");
   if (options.replaceExisting) {
-    const preservedLookup = options.keepHistory ? buildPreservedLookup(previousStudents) : new Map<string, Record<string, unknown>[]>();
+    // 活跃学生优先领取同名档案；匹配到的归档学生视为重新入班。
+    const preservedLookup = options.keepHistory ? buildPreservedLookup([...activePrevious, ...archivedPrevious]) : new Map<string, Record<string, unknown>[]>();
+    const consumedIds = new Set<string>();
+    let matchedCount = 0;
+    const takeMatch = (name: string): Record<string, unknown> | null => {
+      const preserved = takePreserved(preservedLookup, name);
+      if (preserved && preserved.id !== undefined) {
+        consumedIds.add(String(preserved.id));
+        matchedCount += 1;
+      }
+      return preserved;
+    };
     const students: Record<string, unknown>[] = [];
     const placementCount = parsed.placements.filter(Boolean).length;
     const totalCount = placementCount + parsed.names.length;
@@ -230,15 +264,24 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
       if (!name) {
         return;
       }
-      const student = makeStudent(name, parsed.genders[index] || "", parsed.studentNos[index] || "", takePreserved(preservedLookup, name));
+      const student = makeStudent(name, parsed.genders[index] || "", parsed.studentNos[index] || "", takeMatch(name));
       students.push(student);
       seatOrder[index] = String(student.id);
     });
     parsed.names.forEach((name, index) => {
-      const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "", takePreserved(preservedLookup, name));
+      const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "", takeMatch(name));
       students.push(student);
       placeFirstEmpty(seatOrder, String(student.id));
     });
+    const rosterSize = students.length;
+
+    // 未出现在新名单中的在班学生移入归档而不是删除，历史与跨领域引用保持可用、可恢复。
+    const archivedAt = new Date().toISOString();
+    const leftBehind = activePrevious
+      .filter(student => !consumedIds.has(String(student.id)))
+      .map(student => ({ ...student, enrollmentStatus: "archived", archivedAt: typeof student.archivedAt === "string" && student.archivedAt ? student.archivedAt : archivedAt }));
+    const keptArchived = archivedPrevious.filter(student => !consumedIds.has(String(student.id))).map(student => ({ ...student }));
+    students.push(...leftBehind, ...keptArchived);
 
     const next = {
       ...base,
@@ -249,39 +292,74 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
       exams: options.keepHistory && Array.isArray(base.exams) ? base.exams : [],
       savedExams: options.keepHistory && Array.isArray(base.savedExams) ? base.savedExams : [],
     };
-    return next;
+    return { next, newCount: rosterSize - matchedCount, matchedCount, archivedCount: leftBehind.length, skippedCount: 0 };
   }
 
-  const students = previousStudents.filter(isRecord).map(student => ({ ...student }));
-  const seatOrder = ensureSeatCapacity(Array.isArray(base.seatOrder) ? base.seatOrder.map(item => item ? String(item) : null) : [], students.length + parsed.names.length);
-  parsed.names.forEach((name, index) => {
-    const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "");
-    students.push(student);
-    placeFirstEmpty(seatOrder, String(student.id));
+  // 追加导入：已在名单中的姓名跳过，命中归档学生则恢复其在班状态。
+  const students = previousStudents.map(student => ({ ...student }));
+  const activeKeys = new Set<string>();
+  students.forEach(student => {
+    if (student.enrollmentStatus !== "archived") {
+      collectStudentNameKeys(student).forEach(key => activeKeys.add(key));
+    }
   });
+  const archivedLookup = buildPreservedLookup(students.filter(student => student.enrollmentStatus === "archived"));
+  const additions: string[] = [];
+  let newCount = 0;
+  let matchedCount = 0;
+  let skippedCount = 0;
+  parsed.names.forEach((name, index) => {
+    const key = normalizeName(name);
+    if (key && activeKeys.has(key)) {
+      skippedCount += 1;
+      return;
+    }
+    const revived = takePreserved(archivedLookup, name);
+    if (revived) {
+      revived.enrollmentStatus = "active";
+      delete revived.archivedAt;
+      matchedCount += 1;
+      additions.push(String(revived.id));
+    } else {
+      const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "");
+      students.push(student);
+      newCount += 1;
+      additions.push(String(student.id));
+    }
+    if (key) {
+      activeKeys.add(key);
+    }
+  });
+  const activeCount = students.filter(student => student.enrollmentStatus !== "archived").length;
+  const seatOrder = ensureSeatCapacity(Array.isArray(base.seatOrder) ? base.seatOrder.map(item => item ? String(item) : null) : [], activeCount);
+  additions.forEach(id => placeFirstEmpty(seatOrder, id));
 
-  return {
-    ...base,
-    students,
-    seatOrder,
-  };
+  return { next: { ...base, students, seatOrder }, newCount, matchedCount, archivedCount: 0, skippedCount };
 }
 
-export async function importRosterFile(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
-  const rows = prepareRosterRows(await readRowsFromFile(file));
-  const parsed = parseRosterRows(rows, options.mapping);
+export function applyParsedRoster(parsed: ParsedRoster, options: RosterImportOptions): RosterImportResult {
   if (!parsed.names.length && !parsed.hasPlacement) {
     throw new Error("empty_roster");
   }
-  const next = applyRosterImport(parsed, options);
+  const { next, newCount, matchedCount, archivedCount, skippedCount } = applyRosterImport(parsed, options);
   if (!writeLegacyRootState(next)) {
     throw new Error("save_failed");
   }
   const nextState = createSeatManagerState(next);
   return {
     state: nextState,
-    studentCount: nextState.students.length,
+    studentCount: nextState.students.filter(student => student.enrollmentStatus !== "archived").length,
     seatCount: nextState.seatOrder.length,
     hasPlacement: parsed.hasPlacement,
+    mode: options.replaceExisting ? "replace" : "append",
+    newCount,
+    matchedCount,
+    archivedCount,
+    skippedCount,
   };
+}
+
+export async function importRosterFile(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
+  const rows = prepareRosterRows(await readRowsFromFile(file));
+  return applyParsedRoster(parseRosterRows(rows, options.mapping), options);
 }

@@ -1,4 +1,5 @@
 import type { DormEvent, Dormitory, DormitoryPeriodMode, DormitoryPeriodSettings } from "./types";
+import { toLocalDateKey } from "./dateKey";
 
 export interface DormitoryPeriodRange {
   start: string;
@@ -13,7 +14,7 @@ export interface DormitoryEventEntry {
 }
 
 export function localDateKey(value = new Date()): string {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  return toLocalDateKey(value);
 }
 
 function parseDateKey(value: string): Date {

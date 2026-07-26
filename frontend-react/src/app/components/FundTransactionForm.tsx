@@ -5,6 +5,7 @@ import { FUND_EXPENSE_PRESETS, FUND_INCOME_PRESETS, type NewFundTxInput } from "
 import type { AppStudent, FundTxType } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { DatePicker } from "./ui";
+import { toLocalDateKey } from "../state/dateKey";
 
 interface FundTransactionFormProps {
   students: AppStudent[];
@@ -16,7 +17,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(FUND_EXPENSE_PRESETS[0]?.category || "活动支出");
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => toLocalDateKey());
   const [showRelated, setShowRelated] = useState(false);
   const [relatedIds, setRelatedIds] = useState<string[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
