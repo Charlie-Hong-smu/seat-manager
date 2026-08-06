@@ -379,6 +379,7 @@ export function createSavedGradeExamRecord(
   const name = input.name.trim() || draft.filename.replace(/\.[^.]+$/, "") || "考试";
   const date = input.date || toLocalDateKey();
   const entries = draft.entries.map(entry => ({
+    studentId: entry.studentId,
     name: entry.name,
     studentNo: entry.studentNo,
     scores: Object.fromEntries(draft.subjects.map(subject => [subject, entry.scores[subject] || { score: null }])),

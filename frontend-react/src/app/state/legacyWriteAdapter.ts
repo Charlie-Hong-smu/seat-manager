@@ -1,6 +1,7 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
 import { normalizeGradeItemAnalysis } from "./teacherWorkbench";
+import { attachSavedGradeStudentIds, resolveGradeStudent, type GradeStudentCandidate } from "./gradeStudentIdentity";
 import type { ActivityEvent, AppStudent, AttendanceRecord, ClassScheduleV1, CommunicationDraft, Dormitory, DrawSession, FollowupTask, FundTransaction, GradeItemAnalysis, HomeworkAssignment, QuickRecordPreset, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
 interface PersistSnapshotInput {
@@ -19,6 +20,8 @@ interface PersistSnapshotInput {
   quickRecordPresets?: QuickRecordPreset[];
   communicationDrafts?: CommunicationDraft[];
   activityEvents?: ActivityEvent[];
+  savedExams?: unknown[];
+  exams?: unknown[];
   settings?: Record<string, unknown>;
 }
 
@@ -49,15 +52,6 @@ function toNumberOrNull(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function normalizeNameForMatch(name: unknown): string {
-  return String(name || "")
-    .trim()
-    .replace(/\u3000/g, " ")
-    .replace(/[()（）][^()（）]*[()（）]/g, "")
-    .replace(/(同学|学生)$/g, "")
-    .replace(/\s+/g, "");
 }
 
 function getBaseState(): Record<string, unknown> {
@@ -128,6 +122,7 @@ function normalizeExamEntry(value: unknown): SavedGradeExamEntry | null {
     return null;
   }
   return {
+    studentId: typeof value.studentId === "string" || typeof value.studentId === "number" ? String(value.studentId).trim() : undefined,
     name,
     studentNo: typeof value.studentNo === "string" || typeof value.studentNo === "number" ? String(value.studentNo).trim() : undefined,
     scores: isRecord(value.scores) ? value.scores as SavedGradeExamEntry["scores"] : {},
@@ -220,43 +215,29 @@ function getExamSignature(exam: Record<string, unknown>): string {
   });
 }
 
-function buildStudentLookup(students: Record<string, unknown>[]): Map<string, Record<string, unknown>[]> {
-  const lookup = new Map<string, Record<string, unknown>[]>();
-  // 活跃学生优先领取同名成绩行，归档学生只兜底旧数据。
-  const ordered = [
-    ...students.filter(student => student.enrollmentStatus !== "archived"),
-    ...students.filter(student => student.enrollmentStatus === "archived"),
-  ];
-  ordered.forEach(student => {
-    const names = [student.name, ...(Array.isArray(student.aliases) ? student.aliases : [])];
-    names.forEach(name => {
-      const key = normalizeNameForMatch(name);
-      if (!key) {
-        return;
-      }
-      const list = lookup.get(key) || [];
-      list.push(student);
-      lookup.set(key, list);
-    });
-  });
-  return lookup;
-}
-
 function syncSavedExamsToStudents(students: Record<string, unknown>[], records: SavedGradeExamRecord[]): Record<string, unknown>[] {
-  const syncedStudents = students.map(student => ({
+  const syncedStudents: Record<string, unknown>[] = students.map(student => ({
     ...student,
     exams: Array.isArray(student.exams)
       ? student.exams.filter(exam => !isRecord(exam) || exam.source !== "savedExamRecord")
       : [],
   }));
+  const candidates = syncedStudents.flatMap<GradeStudentCandidate & { target: Record<string, unknown> }>(student => typeof student.id === "string" && typeof student.name === "string" ? [{
+    id: student.id,
+    name: student.name,
+    studentNo: typeof student.studentNo === "string" ? student.studentNo : undefined,
+    aliases: Array.isArray(student.aliases) ? student.aliases.filter((alias: unknown): alias is string => typeof alias === "string") : [],
+    enrollmentStatus: student.enrollmentStatus === "archived" ? "archived" as const : "active" as const,
+    target: student,
+  }] : []);
 
   records.forEach(record => {
-    const lookup = buildStudentLookup(syncedStudents);
     record.entries.forEach(entry => {
-      const student = lookup.get(normalizeNameForMatch(entry.name))?.shift();
-      if (!student) {
+      const matched = resolveGradeStudent(candidates, entry);
+      if (!matched) {
         return;
       }
+      const student = matched.target;
       if (entry.studentNo && !student.studentNo) {
         student.studentNo = entry.studentNo;
       }
@@ -271,7 +252,7 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
       };
       const syncedSignature = getExamSignature(syncedExam);
       const existing = Array.isArray(student.exams) ? student.exams : [];
-      student.exams = existing.filter(exam => {
+      student.exams = existing.filter((exam: unknown) => {
         if (!isRecord(exam)) {
           return false;
         }
@@ -290,7 +271,30 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
   return syncedStudents;
 }
 
-export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents, settings }: PersistSnapshotInput): boolean {
+function mergeSnapshotDomains(baseState: Record<string, unknown>, input: PersistSnapshotInput): Record<string, unknown> {
+  return {
+    ...baseState,
+    seatOrder: input.seatOrder,
+    lockedSeats: input.lockedSeats,
+    dormitories: input.dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
+    fundTransactions: input.fundTransactions ?? (Array.isArray(baseState.fundTransactions) ? baseState.fundTransactions : []),
+    attendanceRecords: input.attendanceRecords ?? (Array.isArray(baseState.attendanceRecords) ? baseState.attendanceRecords : []),
+    followupTasks: input.followupTasks ?? (Array.isArray(baseState.followupTasks) ? baseState.followupTasks : []),
+    drawSessions: input.drawSessions ?? (Array.isArray(baseState.drawSessions) ? baseState.drawSessions : []),
+    schedule: input.schedule ?? baseState.schedule,
+    homeworkAssignments: input.homeworkAssignments ?? (Array.isArray(baseState.homeworkAssignments) ? baseState.homeworkAssignments : []),
+    quickRecordPresets: input.quickRecordPresets ?? (Array.isArray(baseState.quickRecordPresets) ? baseState.quickRecordPresets : []),
+    communicationDrafts: input.communicationDrafts ?? (Array.isArray(baseState.communicationDrafts) ? baseState.communicationDrafts : []),
+    activityEvents: input.activityEvents ?? (Array.isArray(baseState.activityEvents) ? baseState.activityEvents : []),
+    seatHistory: input.seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
+    savedExams: input.savedExams ?? (Array.isArray(baseState.savedExams) ? baseState.savedExams : []),
+    exams: input.exams ?? (Array.isArray(baseState.exams) ? baseState.exams : []),
+    settings: mergeSeatSettings(baseState.settings, input.seatSettings, input.settings),
+    commentRubric: baseState.commentRubric || null,
+  };
+}
+
+export function saveLegacySnapshot(input: PersistSnapshotInput): boolean {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -302,29 +306,13 @@ export function saveLegacySnapshot({ students, seatOrder, lockedSeats, seatSetti
   });
 
   return writeLegacyRootState({
-    ...baseState,
-    students: students.map(student => toLegacyStudent(student, previousById.get(student.id))),
-    seatOrder,
-    lockedSeats,
-    dormitories: dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
-    fundTransactions: fundTransactions ?? (Array.isArray(baseState.fundTransactions) ? baseState.fundTransactions : []),
-    attendanceRecords: attendanceRecords ?? (Array.isArray(baseState.attendanceRecords) ? baseState.attendanceRecords : []),
-    followupTasks: followupTasks ?? (Array.isArray(baseState.followupTasks) ? baseState.followupTasks : []),
-    drawSessions: drawSessions ?? (Array.isArray(baseState.drawSessions) ? baseState.drawSessions : []),
-    schedule: schedule ?? baseState.schedule,
-    homeworkAssignments: homeworkAssignments ?? (Array.isArray(baseState.homeworkAssignments) ? baseState.homeworkAssignments : []),
-    quickRecordPresets: quickRecordPresets ?? (Array.isArray(baseState.quickRecordPresets) ? baseState.quickRecordPresets : []),
-    communicationDrafts: communicationDrafts ?? (Array.isArray(baseState.communicationDrafts) ? baseState.communicationDrafts : []),
-    activityEvents: activityEvents ?? (Array.isArray(baseState.activityEvents) ? baseState.activityEvents : []),
-    seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
-    savedExams: Array.isArray(baseState.savedExams) ? baseState.savedExams : [],
-    exams: Array.isArray(baseState.exams) ? baseState.exams : [],
-    settings: mergeSeatSettings(baseState.settings, seatSettings, settings),
-    commentRubric: baseState.commentRubric || null,
+    ...mergeSnapshotDomains(baseState, input),
+    students: input.students.map(student => toLegacyStudent(student, previousById.get(student.id))),
   });
 }
 
-export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, settings, record }: SaveGradeExamInput): SeatManagerState | null {
+export function saveGradeExamRecord(input: SaveGradeExamInput): SeatManagerState | null {
+  const { students, record } = input;
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -335,31 +323,25 @@ export function saveGradeExamRecord({ students, seatOrder, lockedSeats, seatSett
     }
   });
 
-  const savedExams = [
+  const savedExams = attachSavedGradeStudentIds([
     record,
-    ...getSavedExamRecords(baseState.savedExams).filter(item => item.id !== record.id),
-  ];
+    ...getSavedExamRecords(input.savedExams ?? baseState.savedExams).filter(item => item.id !== record.id),
+  ], students);
   const legacyStudents = students.map(student => toLegacyStudent(student, previousById.get(student.id)));
   const nextState = {
-    ...baseState,
+    ...mergeSnapshotDomains(baseState, input),
     students: syncSavedExamsToStudents(legacyStudents, savedExams),
-    seatOrder,
-    lockedSeats,
-    dormitories: dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
-    seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
     savedExams,
-    exams: Array.isArray(baseState.exams) ? baseState.exams : [],
-    settings: mergeSeatSettings(baseState.settings, seatSettings, settings),
-    commentRubric: baseState.commentRubric || null,
   };
 
   return writeLegacyRootState(nextState) ? createSeatManagerState(nextState) : null;
 }
 
 function persistSavedExamRecords(
-  { students, seatOrder, lockedSeats, seatSettings, seatHistory, dormitories, settings }: PersistSnapshotInput,
+  input: PersistSnapshotInput,
   savedExams: SavedGradeExamRecord[],
 ): SeatManagerState | null {
+  const { students } = input;
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -370,18 +352,12 @@ function persistSavedExamRecords(
     }
   });
 
+  const resolvedSavedExams = attachSavedGradeStudentIds(savedExams, students);
   const legacyStudents = students.map(student => toLegacyStudent(student, previousById.get(student.id)));
   const nextState = {
-    ...baseState,
-    students: syncSavedExamsToStudents(legacyStudents, savedExams),
-    seatOrder,
-    lockedSeats,
-    dormitories: dormitories ?? (Array.isArray(baseState.dormitories) ? baseState.dormitories : []),
-    seatHistory: seatHistory ?? (Array.isArray(baseState.seatHistory) ? baseState.seatHistory : []),
-    savedExams,
-    exams: Array.isArray(baseState.exams) ? baseState.exams : [],
-    settings: mergeSeatSettings(baseState.settings, seatSettings, settings),
-    commentRubric: baseState.commentRubric || null,
+    ...mergeSnapshotDomains(baseState, input),
+    students: syncSavedExamsToStudents(legacyStudents, resolvedSavedExams),
+    savedExams: resolvedSavedExams,
   };
 
   return writeLegacyRootState(nextState) ? createSeatManagerState(nextState) : null;
@@ -389,7 +365,7 @@ function persistSavedExamRecords(
 
 export function updateGradeExamRecordMetadata(input: UpdateGradeExamInput): SeatManagerState | null {
   const baseState = getBaseState();
-  const savedExams = getSavedExamRecords(baseState.savedExams);
+  const savedExams = getSavedExamRecords(input.savedExams ?? baseState.savedExams);
   let changed = false;
   const nextRecords = savedExams.map(record => {
     if (record.id !== input.examId) {
@@ -408,14 +384,14 @@ export function updateGradeExamRecordMetadata(input: UpdateGradeExamInput): Seat
 
 export function deleteGradeExamRecord(input: DeleteGradeExamInput): SeatManagerState | null {
   const baseState = getBaseState();
-  const savedExams = getSavedExamRecords(baseState.savedExams);
+  const savedExams = getSavedExamRecords(input.savedExams ?? baseState.savedExams);
   const nextRecords = savedExams.filter(record => record.id !== input.examId);
   return nextRecords.length !== savedExams.length ? persistSavedExamRecords(input, nextRecords) : null;
 }
 
 export function updateGradeExamItemAnalysis(input: PersistSnapshotInput & { examId: string; itemAnalysis: GradeItemAnalysis }): SeatManagerState | null {
   const baseState = getBaseState();
-  const savedExams = getSavedExamRecords(baseState.savedExams);
+  const savedExams = getSavedExamRecords(input.savedExams ?? baseState.savedExams);
   let changed = false;
   const nextRecords = savedExams.map(record => {
     if (record.id !== input.examId) return record;

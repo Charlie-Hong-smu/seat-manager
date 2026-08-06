@@ -1,7 +1,6 @@
-import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
+import { clearAiApiAuth, fetchAiRoute, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { getProductAuthToken } from "./authStorage";
 import { buildLocalStudentTrendSummary, buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
-import { getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, GradeExam, StudentExamSummary } from "./types";
 import { getCurrentWorkspaceScope } from "./workspaces";
 
@@ -402,7 +401,7 @@ export async function generateClassAiTrend(
     }
   }
 
-  const send = async (token: string) => fetch(`${getWorkerBaseUrl()}/analyze-class`, {
+  const send = async (token: string) => fetchAiRoute("/analyze-class", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -478,7 +477,7 @@ export async function generateStudentAiTrend(
     }
   }
 
-  const send = async (token: string) => fetch(`${getWorkerBaseUrl()}/analyze-trend`, {
+  const send = async (token: string) => fetchAiRoute("/analyze-trend", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

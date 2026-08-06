@@ -61,6 +61,8 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
     quickRecordPresets: state.quickRecordPresets,
     communicationDrafts: state.communicationDrafts,
     activityEvents: state.activityEvents,
+    savedExams: state.savedExams,
+    exams: state.exams,
   }), [state]);
 
   const setStudents = useCallback<SeatManagerController["setStudents"]>(update => {

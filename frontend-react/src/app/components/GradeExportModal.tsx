@@ -3,6 +3,7 @@ import { FileSpreadsheet, Printer, Search, X } from "lucide-react";
 import { buildGradePrintPreviewHtml, exportGradeWorkbook, getDefaultGradeExportOptions } from "../state/gradeExport";
 import type { AppStudent, GradeExam } from "../state/types";
 import type { GradeExportContentKey, GradeExportOptions } from "../state/gradeExport";
+import { matchesStudentSearch } from "../state/studentSearch";
 import { DatePicker } from "./ui";
 
 interface GradeExportModalProps {
@@ -31,11 +32,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
   const printFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   const filteredStudents = useMemo(() => {
-    const keyword = studentSearch.trim();
-    return students.filter(student => {
-      if (!keyword) return true;
-      return [student.name, ...student.aliases].some(name => name.includes(keyword));
-    });
+    return students.filter(student => matchesStudentSearch(student, studentSearch));
   }, [studentSearch, students]);
 
   const selectedStudentCount = options.selectedStudentIds.length;

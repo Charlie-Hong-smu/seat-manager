@@ -55,6 +55,25 @@ describe("data insights", () => {
     expect(targetFromBusinessRef({ domain: "score", entityId: "e1", subEntityId: "q2" })).toMatchObject({ workspace: "scores", entityId: "e1", subEntityId: "q2" });
   });
 
+  it("does not duplicate quick records or derived dormitory student records", () => {
+    const state = createEmptySeatManagerState();
+    state.students = [{ ...createTestStudent("s1", "张三"), records: [{ id: "quick-r1", type: "note", note: "课堂表现", date: "2026-08-02" }, { id: "record-d1-s1", type: "punish", note: "宿舍扣分", date: "2026-08-02" }] }];
+    state.activityEvents = [
+      createActivityEvent({ action: "created", ref: { domain: "student", entityId: "s1", studentId: "s1", subEntityId: "quick-r1" }, studentIds: ["s1"], title: "课堂表现", detail: "快捷记录" }),
+      createActivityEvent({ action: "created", ref: { domain: "dormitory", entityId: "d1", studentId: "s1" }, studentIds: ["s1"], title: "新增宿舍事件", detail: "一号宿舍" }),
+    ];
+    expect(buildTimeline(state).map(item => item.title)).toEqual(expect.arrayContaining(["课堂表现", "新增宿舍事件"]));
+    expect(buildTimeline(state)).toHaveLength(2);
+  });
+
+  it("reports divergent dormitory ownership and unresolved persisted grades", () => {
+    const state = createEmptySeatManagerState();
+    state.students = [{ ...createTestStudent("s1", "同名"), studentNo: "001", dormitoryId: "d1" }, { ...createTestStudent("s2", "同名"), studentNo: "002" }];
+    state.dormitories = [{ id: "d1", name: "一号宿舍", memberIds: [], baseScore: 100, currentScore: 100, events: [], periodStart: "2026-08-01", history: [] }];
+    state.savedExams = [{ id: "e1", name: "月考", entries: [{ name: "同名", scores: {}, total: {} }] }];
+    expect(inspectStateHealth(state).map(issue => issue.title)).toEqual(expect.arrayContaining(["学生档案与宿舍名单不一致", "持久化成绩无法确定学生身份"]));
+  });
+
   it("detects missing question-level sources without rejecting existing ones", () => {
     const state = createEmptySeatManagerState();
     state.gradeExams = [{ id: "e1", name: "月考", date: "2026-07-14", subjects: ["数学"], rows: [], itemAnalysis: { questions: [{ id: "q1", label: "第1题", subject: "数学", maxScore: 10, knowledgePoints: [], sourceColumn: 2 }], rows: [], updatedAt: "" } }];

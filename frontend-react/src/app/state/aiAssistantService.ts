@@ -1,13 +1,13 @@
-import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
+import { clearAiApiAuth, fetchAiRoute, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { getProductAuthToken } from "./authStorage";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import { createSeatManagerState } from "./legacyStateAdapter";
-import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 import { exportWholeBook, getCurrentSlice, sliceDisplayName } from "./workspaces";
 import type { AppStudent, Dormitory, FundTransaction, GradeExam, GradeRow, SeatManagerState, WorkspaceSlice } from "./types";
 import { buildAiAssistantRequestBody } from "./aiAssistantPayload";
 import { parseAiAssistantResponse } from "./aiAssistantResult";
 import { listDormitoryEvents } from "./dormitoryPeriods";
+import { resolveReferencedStudentNames } from "./studentReferences";
 
 interface MentionedStudentMatch {
   student: AppStudent;
@@ -469,7 +469,7 @@ function summarizeFundCategories(transactions: FundTransaction[], type: FundTran
     .map(([label, amount]) => `${label} ${Math.round(amount * 100) / 100}`);
 }
 
-function buildFundPack(transactions: FundTransaction[]): AiContextPack {
+function buildFundPack(transactions: FundTransaction[], students: AppStudent[]): AiContextPack {
   const income = transactions.filter(tx => tx.type === "income").reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
   const expense = transactions.filter(tx => tx.type === "expense").reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
   const latest = [...transactions]
@@ -477,7 +477,8 @@ function buildFundPack(transactions: FundTransaction[]): AiContextPack {
     .slice(0, 12)
     .map(tx => {
       const sign = tx.type === "income" ? "+" : "-";
-      const names = tx.relatedStudentNames?.length ? `（关联：${tx.relatedStudentNames.slice(0, 4).join("、")}）` : "";
+      const currentNames = resolveReferencedStudentNames({ students, studentIds: tx.relatedStudentIds, studentId: tx.relatedStudentId, snapshotNames: tx.relatedStudentNames, snapshotName: tx.relatedStudentName });
+      const names = currentNames.length ? `（关联：${currentNames.slice(0, 4).join("、")}）` : "";
       return `${tx.date || "未填日期"} ${sign}${Math.round(Math.abs(tx.amount || 0) * 100) / 100} ${tx.category || "未分类"}：${tx.note || "无备注"}${names}`;
     });
   return {
@@ -903,7 +904,7 @@ export function buildAiAssistantContext(input: {
     if (pack) packs.push(pack);
   }
   if (includesAny(normalized, ["班费", "花销", "花费", "支出", "收入", "余额", "报销", "费用", "流水", "钱", "财务"])) {
-    packs.push(buildFundPack(input.fundTransactions));
+    packs.push(buildFundPack(input.fundTransactions, input.students));
   }
 
   const comparisonContext = buildAiAssistantComparisonContext({
@@ -937,7 +938,7 @@ export async function sendAiAssistantChat(input: {
   }
   const auth = await getAiAuth({ accessCode: input.accessCode, remember: input.remember });
   const requestBody = buildAiAssistantRequestBody(input.messages, input.context);
-  const send = (baseUrl: string) => fetch(`${baseUrl}/chat-assistant`, {
+  const send = () => fetchAiRoute("/chat-assistant", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -945,10 +946,7 @@ export async function sendAiAssistantChat(input: {
     },
     body: requestBody,
   });
-  let response = await send(getWorkerBaseUrl());
-  if (response.status === 404 || response.status === 405) {
-    response = await send(getDirectWorkerUrl());
-  }
+  const response = await send();
   if (response.status === 401) {
     if (!getProductAuthToken()) {
       clearAiApiAuth();

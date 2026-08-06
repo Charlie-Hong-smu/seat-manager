@@ -9,13 +9,16 @@ import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import { FundTransactionForm } from "../FundTransactionForm";
 import { Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, SelectMenu, useActionToast } from "../ui";
 import { toLocalDateKey } from "../../state/dateKey";
+import { resolveReferencedStudentNames } from "../../state/studentReferences";
+import { createActivityEvent } from "../../state/activityEvents";
+import type { ActivityEvent } from "../../state/types";
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function transactionStudentLabel(tx: FundTransaction): string {
-  return (tx.relatedStudentNames?.length ? tx.relatedStudentNames.join("、") : tx.relatedStudentName) || "";
+function transactionStudentLabel(tx: FundTransaction, students: AppStudent[]): string {
+  return resolveReferencedStudentNames({ students, studentIds: tx.relatedStudentIds, studentId: tx.relatedStudentId, snapshotNames: tx.relatedStudentNames, snapshotName: tx.relatedStudentName }).join("、");
 }
 
 export function ClassFundWorkspace({
@@ -27,6 +30,7 @@ export function ClassFundWorkspace({
   onDelete,
   onClearAll,
   onRequestFollowupTask,
+  onActivity,
 }: {
   transactions: FundTransaction[];
   students: AppStudent[];
@@ -36,6 +40,7 @@ export function ClassFundWorkspace({
   onDelete: (id: string) => () => void;
   onClearAll: () => () => void;
   onRequestFollowupTask?: (draft: FollowupTaskDraft) => void;
+  onActivity?: (event: ActivityEvent) => void | (() => void);
 }) {
   const [editingId, setEditingId] = useState("");
   const [editType, setEditType] = useState<FundTxType>("income");
@@ -77,7 +82,7 @@ export function ClassFundWorkspace({
   function exportLedgerCsv() {
     const rows = [
       ["日期", "类型", "分类", "金额", "状态", "关联学生", "说明"],
-      ...periodTransactions.map(tx => [tx.date, tx.type === "income" ? "收入" : "支出", tx.category || "", tx.amount.toFixed(2), tx.status === "void" ? "已作废" : "有效", transactionStudentLabel(tx), tx.note || ""]),
+      ...periodTransactions.map(tx => [tx.date, tx.type === "income" ? "收入" : "支出", tx.category || "", tx.amount.toFixed(2), tx.status === "void" ? "已作废" : "有效", transactionStudentLabel(tx, students), tx.note || ""]),
     ];
     downloadCsvFile(`班费流水_${periodLabel.replace(/\s/g, "")}.csv`, buildCsvContent(rows));
   }
@@ -121,23 +126,25 @@ export function ClassFundWorkspace({
       note: editNote,
       date: editDate,
     });
+    const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "fund", entityId: editingId }, studentIds: previousTransaction?.relatedStudentIds || [], title: `修改班费流水：${editCategory || "未分类"}`, detail: `${editType === "income" ? "收入" : "支出"} ¥${Math.abs(value).toFixed(2)}` }));
     setEditingId("");
     actionToast.show({
       message: "班费流水修改已保存",
       actionLabel: previousTransaction ? "撤销" : undefined,
       actionIcon: previousTransaction ? <RotateCcw className="h-3.5 w-3.5" /> : undefined,
-      onAction: previousTransaction ? () => onUpdate(previousTransaction.id, { type: previousTransaction.type, amount: previousTransaction.amount, category: previousTransaction.category, note: previousTransaction.note, date: previousTransaction.date, relatedStudentIds: previousTransaction.relatedStudentIds }) : undefined,
+      onAction: previousTransaction ? () => { onUpdate(previousTransaction.id, { type: previousTransaction.type, amount: previousTransaction.amount, category: previousTransaction.category, note: previousTransaction.note, date: previousTransaction.date, relatedStudentIds: previousTransaction.relatedStudentIds }); if (typeof undoActivity === "function") undoActivity(); } : undefined,
       duration: 6000,
     });
   }
 
   function addTransaction(input: NewFundTxInput) {
     const created = onAdd(input);
+    const undoActivity = onActivity?.(createActivityEvent({ action: "created", ref: { domain: "fund", entityId: created.id, studentId: created.relatedStudentIds?.[0] || created.relatedStudentId }, studentIds: created.relatedStudentIds || (created.relatedStudentId ? [created.relatedStudentId] : []), title: `新增班费流水：${created.category || "未分类"}`, detail: `${created.type === "income" ? "收入" : "支出"} ¥${created.amount.toFixed(2)}` }));
     actionToast.show({
       message: "班费流水已保存",
       actionLabel: "撤销",
       actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
-      onAction: () => onRemoveCreated(created.id),
+      onAction: () => { onRemoveCreated(created.id); if (typeof undoActivity === "function") undoActivity(); },
       duration: 6000,
     });
   }
@@ -347,8 +354,8 @@ export function ClassFundWorkspace({
                               {tx.note && (
                                 <span className="text-xs text-gray-400">{tx.note}</span>
                               )}
-                              {(tx.relatedStudentNames?.length ? tx.relatedStudentNames.join("、") : tx.relatedStudentName) && (
-                                <span className="text-xs text-blue-500">@{tx.relatedStudentNames?.length ? tx.relatedStudentNames.join("、") : tx.relatedStudentName}</span>
+                              {transactionStudentLabel(tx, students) && (
+                                <span className="text-xs text-blue-500">@{transactionStudentLabel(tx, students)}</span>
                               )}
                             </div>
                             <div className="mt-0.5 text-xs text-gray-400">{tx.date}</div>
@@ -387,15 +394,17 @@ export function ClassFundWorkspace({
       </div>
       <ConfirmDialog open={confirmClearAll} title="作废全部班费流水？" description={`将把全部 ${transactions.length} 条交易记录标记为已作废。原金额和审计记录会保留，统计默认排除作废项；操作后可在 6 秒内撤销。`} confirmLabel="确认全部作废" onCancel={() => setConfirmClearAll(false)} onConfirm={() => {
         const undo = onClearAll();
+        const activityUndos = transactions.flatMap(transaction => { const activityUndo = onActivity?.(createActivityEvent({ action: "deleted", ref: { domain: "fund", entityId: transaction.id, studentId: transaction.relatedStudentIds?.[0] || transaction.relatedStudentId }, studentIds: transaction.relatedStudentIds || (transaction.relatedStudentId ? [transaction.relatedStudentId] : []), title: `作废班费流水：${transaction.category || "未分类"}`, detail: "批量作废" })); return typeof activityUndo === "function" ? [activityUndo] : []; });
         setConfirmClearAll(false);
-        actionToast.show({ message: "全部班费流水已作废", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: undo, duration: 6000 });
+        actionToast.show({ message: "全部班费流水已作废", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { undo(); activityUndos.forEach(activityUndo => activityUndo()); }, duration: 6000 });
       }} />
       <ConfirmDialog open={Boolean(pendingVoidTransaction)} title="作废这笔班费流水？" description={`“${pendingVoidTransaction?.category || "当前流水"}”将保留原金额和记录，但不再计入默认统计；操作后可在 6 秒内撤销。`} confirmLabel="确认作废" onCancel={() => setPendingVoidTransaction(null)} onConfirm={() => {
         if (!pendingVoidTransaction) return;
         const transaction = pendingVoidTransaction;
         const undo = onDelete(transaction.id);
+        const undoActivity = onActivity?.(createActivityEvent({ action: "deleted", ref: { domain: "fund", entityId: transaction.id, studentId: transaction.relatedStudentIds?.[0] || transaction.relatedStudentId }, studentIds: transaction.relatedStudentIds || (transaction.relatedStudentId ? [transaction.relatedStudentId] : []), title: `作废班费流水：${transaction.category || "未分类"}`, detail: "教师手动作废" }));
         setPendingVoidTransaction(null);
-        actionToast.show({ message: `班费流水“${transaction.category || "未分类"}”已作废`, actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: undo, duration: 6000 });
+        actionToast.show({ message: `班费流水“${transaction.category || "未分类"}”已作废`, actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { undo(); if (typeof undoActivity === "function") undoActivity(); }, duration: 6000 });
       }} />
       {actionToast.toast}
     </div>

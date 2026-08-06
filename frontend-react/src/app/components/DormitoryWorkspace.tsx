@@ -18,8 +18,10 @@ import { DORM_EVENT_PRESETS } from "../state/dormitoryActions";
 import type { NewDormEventInput } from "../state/dormitoryActions";
 import { resolveDormitoryPreferences, type DormitoryPreferences } from "../state/dormitoryPreferences";
 import { matchesStudentSearch } from "../state/studentSearch";
+import { resolveReferencedStudentNames } from "../state/studentReferences";
+import { createActivityEvent } from "../state/activityEvents";
 import { calculateDormitoryPeriodScore, filterDormitoryEventsByRange, getDormitoryPeriodRange, localDateKey, shiftDormitoryPeriod } from "../state/dormitoryPeriods";
-import type { AppStudent, DormEvent, Dormitory, DormitoryPeriodMode, DormitoryPeriodSettings, FollowupTask, StudentId } from "../state/types";
+import type { ActivityEvent, AppStudent, DormEvent, Dormitory, DormitoryPeriodMode, DormitoryPeriodSettings, FollowupTask, StudentId } from "../state/types";
 import type { FollowupTaskDraft } from "./FollowupTaskDrawer";
 import type { TimelineTarget } from "../state/dataInsights";
 import { animateSelectionTransfer } from "./selectionMotion";
@@ -58,7 +60,8 @@ interface Props {
   onSelectStudent: (student: AppStudent) => void;
   followupTasks: FollowupTask[];
   onRequestFollowupTask: (draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) => void;
-  onSetLinkedTaskStatus: (taskIds: string[], status: "pending" | "completed" | "cancelled") => void;
+  onActivity?: (event: ActivityEvent) => void | (() => void);
+  onSetLinkedTaskStatus: (taskIds: string[], status: "pending" | "completed" | "cancelled") => void | (() => void);
   periodSettings: DormitoryPeriodSettings;
   onPeriodSettingsChange: (settings: DormitoryPeriodSettings) => void;
   preferences: unknown;
@@ -79,6 +82,7 @@ export function DormitoryWorkspace({
   onSelectStudent,
   followupTasks,
   onRequestFollowupTask,
+  onActivity,
   onSetLinkedTaskStatus,
   periodSettings,
   onPeriodSettingsChange,
@@ -293,12 +297,13 @@ export function DormitoryWorkspace({
     if (!selectedDormitory || !editingEventId) return;
     const previousEvent = selectedPeriodEvents.find(entry => entry.event.id === editingEventId)?.event;
     onUpdateDormitoryEvent(selectedDormitory.id, editingEventId, { reason: editReason, score: editScore, note: editNote, punishment: editPunishment, date: editDate });
+    const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "dormitory", entityId: editingEventId, studentId: previousEvent?.responsibleStudentIds?.[0] || previousEvent?.responsibleStudentId }, studentIds: previousEvent?.responsibleStudentIds || (previousEvent?.responsibleStudentId ? [previousEvent.responsibleStudentId] : []), title: `修改宿舍事件：${editReason}`, detail: `${selectedDormitory.name} · ${editScore > 0 ? "+" : ""}${editScore} 分` }));
     setEditingEventId("");
     actionToast.show({
       message: "宿舍事件修改已保存",
       actionLabel: previousEvent ? "撤销" : undefined,
       actionIcon: previousEvent ? <RotateCcw className="h-3.5 w-3.5" /> : undefined,
-      onAction: previousEvent ? () => onUpdateDormitoryEvent(selectedDormitory.id, previousEvent.id, { reason: previousEvent.reason, score: previousEvent.score, note: previousEvent.note, punishment: previousEvent.punishment || "", date: previousEvent.date }) : undefined,
+      onAction: previousEvent ? () => { onUpdateDormitoryEvent(selectedDormitory.id, previousEvent.id, { reason: previousEvent.reason, score: previousEvent.score, note: previousEvent.note, punishment: previousEvent.punishment || "", date: previousEvent.date }); if (typeof undoActivity === "function") undoActivity(); } : undefined,
       duration: 6000,
     });
   }
@@ -379,6 +384,7 @@ export function DormitoryWorkspace({
       date: eventDate,
     });
     if (!savedEvent) return;
+    const undoActivity = onActivity?.(createActivityEvent({ action: "created", ref: { domain: "dormitory", entityId: savedEvent.id, studentId: savedEvent.responsibleStudentIds?.[0] || savedEvent.responsibleStudentId }, studentIds: savedEvent.responsibleStudentIds || (savedEvent.responsibleStudentId ? [savedEvent.responsibleStudentId] : []), title: `新增宿舍事件：${savedEvent.reason}`, detail: `${selectedDormitory.name} · ${savedEvent.score > 0 ? "+" : ""}${savedEvent.score} 分` }));
     if (createFollowup && punishment.trim() && responsibleIds.length) {
       const studentId = responsibleIds[0];
       onRequestFollowupTask({ studentId, studentIds: responsibleIds, title: `宿舍处理：${punishment.trim()}`, description: `${selectedDormitory.name} · ${reason.trim()}${note.trim() ? ` · ${note.trim()}` : ""}`, plannedDate: localDateKey(), dueDate: followupDueDate, type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: savedEvent.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, savedEvent.id, { followupTaskIds: taskIds }));
@@ -388,7 +394,7 @@ export function DormitoryWorkspace({
       message: "宿舍事件已保存",
       actionLabel: "撤销",
       actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
-      onAction: () => onDeleteDormitoryEvent(savedEvent.dormId, savedEvent.id),
+      onAction: () => { onDeleteDormitoryEvent(savedEvent.dormId, savedEvent.id); if (typeof undoActivity === "function") undoActivity(); },
       duration: 6000,
     });
   }
@@ -397,7 +403,10 @@ export function DormitoryWorkspace({
     const nextDone = !event.punishmentDone;
     const pendingIds = (event.followupTaskIds || []).filter(id => followupTasks.some(task => task.id === id && task.status === "pending"));
     onUpdateDormitoryEvent(event.dormId, event.id, { punishmentDone: nextDone });
-    if (nextDone && pendingIds.length && await appDialog.confirm({ title: "同步完成关联任务？", description: `处罚已标记完成。是否同时将关联的 ${pendingIds.length} 项待处理任务标记为已完成？`, confirmLabel: "同步完成任务", variant: "primary" })) onSetLinkedTaskStatus(pendingIds, "completed");
+    let undoLinkedTasks: void | (() => void);
+    if (nextDone && pendingIds.length && await appDialog.confirm({ title: "同步完成关联任务？", description: `处罚已标记完成。是否同时将关联的 ${pendingIds.length} 项待处理任务标记为已完成？`, confirmLabel: "同步完成任务", variant: "primary" })) undoLinkedTasks = onSetLinkedTaskStatus(pendingIds, "completed");
+    const undoActivity = onActivity?.(createActivityEvent({ action: "status_changed", ref: { domain: "dormitory", entityId: event.id, studentId: event.responsibleStudentIds?.[0] || event.responsibleStudentId }, studentIds: event.responsibleStudentIds || (event.responsibleStudentId ? [event.responsibleStudentId] : []), title: `${nextDone ? "完成" : "恢复"}宿舍处理：${event.reason}`, detail: event.punishment || "处罚执行状态已更新" }));
+    actionToast.show({ message: nextDone ? "宿舍处理已完成" : "宿舍处理已恢复", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { onUpdateDormitoryEvent(event.dormId, event.id, { punishmentDone: event.punishmentDone }); if (typeof undoLinkedTasks === "function") undoLinkedTasks(); if (typeof undoActivity === "function") undoActivity(); }, duration: 6000 });
   }
 
   function deleteEvent(event: DormEvent) {
@@ -408,8 +417,9 @@ export function DormitoryWorkspace({
     const event = pendingDeleteEvent;
     if (!event) return;
     const pendingIds = (event.followupTaskIds || []).filter(id => followupTasks.some(task => task.id === id && task.status === "pending"));
-    if (cancelLinkedTasks && pendingIds.length) onSetLinkedTaskStatus(pendingIds, "cancelled");
+    const undoTaskStatus = cancelLinkedTasks && pendingIds.length ? onSetLinkedTaskStatus(pendingIds, "cancelled") : undefined;
     const undoDelete = onDeleteDormitoryEvent(event.dormId, event.id);
+    const undoActivity = onActivity?.(createActivityEvent({ action: "deleted", ref: { domain: "dormitory", entityId: event.id, studentId: event.responsibleStudentIds?.[0] || event.responsibleStudentId }, studentIds: event.responsibleStudentIds || (event.responsibleStudentId ? [event.responsibleStudentId] : []), title: `删除宿舍事件：${event.reason}`, detail: "宿舍事件已删除" }));
     setPendingDeleteEvent(null);
     actionToast.show({
       message: `宿舍事件“${event.reason}”已删除`,
@@ -417,7 +427,8 @@ export function DormitoryWorkspace({
       actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
       onAction: () => {
         undoDelete();
-        if (cancelLinkedTasks && pendingIds.length) onSetLinkedTaskStatus(pendingIds, "pending");
+        if (typeof undoTaskStatus === "function") undoTaskStatus();
+        if (typeof undoActivity === "function") undoActivity();
       },
       duration: 6000,
     });
@@ -796,9 +807,7 @@ export function DormitoryWorkspace({
                                   <span className="text-xs text-gray-400 truncate">· {event.note}</span>
                                 )}
                                 <span className="text-[10px] text-gray-400 shrink-0">
-                                  {event.responsibleStudentNames?.length
-                                    ? event.responsibleStudentNames.join("、")
-                                    : event.responsibleStudentName || "宿舍"}
+                                  {resolveReferencedStudentNames({ students, studentIds: event.responsibleStudentIds, studentId: event.responsibleStudentId, snapshotNames: event.responsibleStudentNames, snapshotName: event.responsibleStudentName }).join("、") || "宿舍"}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">

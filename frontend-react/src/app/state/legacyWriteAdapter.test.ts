@@ -69,4 +69,33 @@ describe("legacyWriteAdapter roster retention", () => {
     expect(next?.students.find(student => student.id === "s-active")?.exams).toHaveLength(1);
     expect(next?.students.find(student => student.id === "s-archived")?.exams).toHaveLength(0);
   });
+
+  it("stores and reloads a stable student id selected by student number", () => {
+    const first = { ...createTestStudent("s1", "同名"), studentNo: "001" };
+    const second = { ...createTestStudent("s2", "同名"), studentNo: "002" };
+    seedSlice([first, second]);
+    const input = examRecord("同名");
+    input.entries[0].studentNo = "002";
+
+    const next = saveGradeExamRecord({ record: input, students: [first, second], seatOrder: [first.id, second.id], lockedSeats: [] });
+
+    expect(next?.gradeExams[0].rows[0].studentId).toBe("s2");
+    const stored = readCurrentSliceData() as { savedExams: SavedGradeExamRecord[] };
+    expect(stored.savedExams[0].entries[0].studentId).toBe("s2");
+  });
+
+  it("preserves the current cross-domain snapshot during a direct grade write", () => {
+    const student = createTestStudent("s1", "张三");
+    seedSlice([student]);
+    const next = saveGradeExamRecord({
+      record: examRecord("张三"),
+      students: [student],
+      seatOrder: [student.id],
+      lockedSeats: [],
+      fundTransactions: [{ id: "fund-new", type: "income", amount: 20, category: "班费", note: "", date: "2026-08-02", createdAt: "2026-08-02T08:00:00.000Z", status: "active" }],
+      attendanceRecords: [{ id: "attendance-new", studentId: student.id, date: "2026-08-02", status: "normal", late: true, earlyLeave: false, note: "", createdAt: "2026-08-02T08:00:00.000Z", updatedAt: "2026-08-02T08:00:00.000Z" }],
+    });
+    expect(next?.fundTransactions.map(item => item.id)).toEqual(["fund-new"]);
+    expect(next?.attendanceRecords.map(item => item.id)).toEqual(["attendance-new"]);
+  });
 });

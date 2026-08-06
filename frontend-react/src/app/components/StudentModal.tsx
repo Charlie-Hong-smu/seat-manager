@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
 import { RetryableLazy } from "./RetryableLazy";
 import { type NewDormEventInput } from "../state/dormitoryActions";
@@ -13,9 +13,10 @@ import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreview
 import { getNeighborIndexPairs, getSeatPositionLabel, resolveSeatLayout } from "../state/seatLayout";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
 import { normalizeAttendancePatch } from "../state/classManagementCommands";
+import { createActivityEvent } from "../state/activityEvents";
 import { matchesStudentSearch } from "../state/studentSearch";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
-import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useAppDialog, useModalFocus } from "./ui";
+import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import { StudentPicker } from "./StudentPicker";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
@@ -70,6 +71,7 @@ interface Props {
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
   onAttendanceChange?: (records: AttendanceRecord[]) => void;
+  onActivity?: (event: ActivityEvent) => void | (() => void);
   homeworkAssignments?: HomeworkAssignment[];
   communicationDrafts?: CommunicationDraft[];
   activityEvents?: ActivityEvent[];
@@ -102,6 +104,7 @@ export function StudentModal({
   attendanceRecords = [],
   followupTasks = [],
   onAttendanceChange,
+  onActivity,
   homeworkAssignments = [],
   communicationDrafts = [],
   activityEvents = [],
@@ -112,6 +115,7 @@ export function StudentModal({
 }: Props) {
   const modalPanelRef = useModalFocus(true, onClose);
   const appDialog = useAppDialog();
+  const actionToast = useActionToast();
   const modalHeaderRef = useRef<HTMLDivElement>(null);
   const modalTabsRef = useRef<HTMLDivElement>(null);
   const modalContentMeasureRef = useRef<HTMLDivElement>(null);
@@ -277,10 +281,17 @@ export function StudentModal({
     ? listDormitoryEvents(currentDormitory).sort((a, b) => `${b.event.date}-${b.event.createdAt}`.localeCompare(`${a.event.date}-${a.event.createdAt}`))[0]?.event
     : undefined;
   function updateTodayAttendance(patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave">>) {
+    if (!onAttendanceChange) return;
     const date = todayKey();
     const current = attendanceRecords.find(item => item.studentId === student.id && item.date === date);
     const normalized = patch.status ? normalizeAttendancePatch(current, patch.status) : null;
-    onAttendanceChange?.(upsertAttendance(attendanceRecords, { studentId: student.id, date, status: normalized?.status ?? current?.status ?? "normal", late: patch.late ?? normalized?.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? normalized?.earlyLeave ?? current?.earlyLeave ?? false, note: current?.note || "", leaveStart: patch.status ? normalized?.leaveStart : current?.leaveStart, leaveEnd: patch.status ? normalized?.leaveEnd : current?.leaveEnd }));
+    const next = upsertAttendance(attendanceRecords, { studentId: student.id, date, status: normalized?.status ?? current?.status ?? "normal", late: patch.late ?? normalized?.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? normalized?.earlyLeave ?? current?.earlyLeave ?? false, note: current?.note || "", leaveStart: patch.status ? normalized?.leaveStart : current?.leaveStart, leaveEnd: patch.status ? normalized?.leaveEnd : current?.leaveEnd });
+    const saved = next.find(item => item.studentId === student.id && item.date === date);
+    onAttendanceChange(next);
+    if (!saved) return;
+    const statusLabel = saved.status === "leave" ? "请假" : saved.status === "absent" ? "缺勤" : "正常";
+    const undoActivity = onActivity?.(createActivityEvent({ action: current ? "updated" : "created", ref: { domain: "attendance", entityId: saved.id, studentId: student.id, date }, studentIds: [student.id], title: `登记出勤：${student.name}`, detail: `${statusLabel}${saved.late ? " · 迟到" : ""}${saved.earlyLeave ? " · 早退" : ""}` }));
+    actionToast.show({ message: "出勤状态已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { onAttendanceChange(attendanceRecords); if (typeof undoActivity === "function") undoActivity(); }, duration: 6000 });
   }
   const preservedManualTagIds = useMemo(
     () => student.manualTagIds.filter(id => !BEHAVIOR_TAG_IDS.has(id)),
@@ -1035,6 +1046,7 @@ export function StudentModal({
       <ConfirmDialog open={showDeleteConfirm} title="将这名学生移出当前班级？" description={`“${student.name}”会从当前名单、座位、宿舍、出勤和新作业中移出，但历史记录、成绩、任务和沟通内容都会保留，可随时从归档学生中恢复。`} confirmLabel="确认移出班级" onCancel={() => setShowDeleteConfirm(false)} onConfirm={() => onDeleteStudent(student.id)} />
       <ConfirmDialog open={Boolean(pendingRecordDelete)} title="删除这条学生记录？" description={`将删除“${pendingRecordDelete?.note || "无备注记录"}”，删除后无法恢复。`} confirmLabel="确认删除记录" onCancel={() => setPendingRecordDelete(null)} onConfirm={() => { if (!pendingRecordDelete) return; deleteRecord(pendingRecordDelete.id); setPendingRecordDelete(null); }} />
       {appDialog.dialog}
+      {actionToast.toast}
     </div>
   );
 }

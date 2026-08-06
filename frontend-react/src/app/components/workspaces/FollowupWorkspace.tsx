@@ -10,7 +10,7 @@ import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import { FollowupTaskForm } from "../FollowupTaskForm";
 import type { TimelineTarget } from "../../state/dataInsights";
 import type { ActivityEvent, BusinessEntityRef } from "../../state/types";
-import { completeFollowupTask, updateFollowupResolution } from "../../state/classManagementCommands";
+import { changeFollowupTaskStatus, syncCompletedFollowupHomework, updateFollowupResolution } from "../../state/classManagementCommands";
 import { createActivityEvent } from "../../state/activityEvents";
 import { ResolutionEditor, SourceLink } from "../LinkedWorkflow";
 
@@ -67,32 +67,29 @@ export function FollowupWorkspace({ students, tasks, homeworkAssignments, subjec
     });
   }
   async function update(id: string, status: FollowupTask["status"]) {
-    const now = new Date().toISOString();
     const current = tasks.find(task => task.id === id);
     if (!current) return;
+    const result = changeFollowupTaskStatus(current, status);
     if (status === "completed") {
-      const result = completeFollowupTask(current);
       setFilter("all");
       onChange(tasks.map(task => task.id === id ? result.task : task));
       const activityUndo = onActivity?.(result.event);
       setUndoSnapshot({ tasks, homework: homeworkAssignments, activityUndos: typeof activityUndo === "function" ? [activityUndo] : [] });
       setResolutionTaskId(id);
-      if (current.sourceRef?.domain === "homework" && current.studentId) {
+      const homeworkSync = syncCompletedFollowupHomework(current, homeworkAssignments);
+      if (homeworkSync) {
         const assignment = homeworkAssignments.find(item => item.id === current.sourceRef?.entityId);
-        if (assignment && assignment.studentStates[current.studentId]?.status !== "submitted") {
-          const shouldSync = await appDialog.confirm({ title: "同步作业状态？", description: `跟进任务已经完成。是否同时把“${assignment.title}”中该学生的状态更新为“已交”？选择取消也不会影响任务完成。`, confirmLabel: "同步为已交" });
-          if (shouldSync) {
-            const updatedAt = new Date().toISOString();
-            onHomeworkChange(homeworkAssignments.map(item => item.id === assignment.id ? { ...item, studentStates: { ...item.studentStates, [current.studentId]: { status: "submitted", note: item.studentStates[current.studentId]?.note || "", updatedAt } }, updatedAt } : item));
-            const sourceUndo = onActivity?.(createActivityEvent({ action: "status_changed", ref: { ...current.sourceRef, studentId: current.studentId }, studentIds: [current.studentId], title: `同步作业状态：${assignment.title}`, detail: "跟进完成后同步为已交" }));
-            if (typeof sourceUndo === "function") setUndoSnapshot(snapshot => snapshot ? { ...snapshot, activityUndos: [...snapshot.activityUndos, sourceUndo] } : snapshot);
-          }
+        const shouldSync = await appDialog.confirm({ title: "同步作业状态？", description: `跟进任务已经完成。是否同时把“${assignment?.title || "关联作业"}”中该学生的状态更新为“已交”？选择取消也不会影响任务完成。`, confirmLabel: "同步为已交" });
+        if (shouldSync) {
+          onHomeworkChange(homeworkSync.assignments);
+          const sourceUndo = onActivity?.(homeworkSync.event);
+          if (typeof sourceUndo === "function") setUndoSnapshot(snapshot => snapshot ? { ...snapshot, activityUndos: [...snapshot.activityUndos, sourceUndo] } : snapshot);
         }
       }
       return;
     }
-    onChange(tasks.map(task => task.id === id ? { ...task, status, updatedAt: now, completedAt: undefined } : task));
-    const activityUndo = onActivity?.(createActivityEvent({ action: "status_changed", ref: { domain: "followup", entityId: current.id, studentId: current.studentId || undefined }, studentIds: current.studentId ? [current.studentId] : [], title: `${status === "cancelled" ? "取消" : "恢复"}跟进：${current.title}`, detail: status === "cancelled" ? "已取消" : "恢复为待处理" }));
+    onChange(tasks.map(task => task.id === id ? result.task : task));
+    const activityUndo = onActivity?.(result.event);
     setUndoSnapshot({ tasks, homework: homeworkAssignments, activityUndos: typeof activityUndo === "function" ? [activityUndo] : [] });
   }
   async function enableNotifications() { if ("Notification" in window && Notification.permission === "default") await Notification.requestPermission(); }

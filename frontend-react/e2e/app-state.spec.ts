@@ -36,6 +36,36 @@ test("license login and student edits survive a reload", async ({ page }) => {
   expect(storedBook.slices[0].data.students.some((student: { name: string }) => student.name === "测试学生")).toBe(true);
 });
 
+test("quick-record undo preserves archived students", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  for (const name of ["快捷记录学生", "归档保留学生"]) {
+    await page.getByPlaceholder("姓名", { exact: true }).fill(name);
+    await page.getByRole("button", { name: "添加到班级" }).click();
+  }
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await page.getByText("归档保留学生", { exact: true }).click();
+  const studentDialog = page.getByRole("dialog", { name: "归档保留学生学生详情" });
+  await studentDialog.getByRole("button", { name: "移出当前班级" }).click();
+  await page.getByRole("button", { name: "确认移出班级" }).click();
+
+  await page.getByLabel("主导航").getByRole("button", { name: "今日", exact: true }).click();
+  await page.getByRole("button", { name: "快捷记录", exact: true }).click();
+  await page.getByRole("button", { name: /记录学生/ }).click();
+  await page.getByRole("button", { name: /快捷记录学生/ }).click();
+  await page.getByPlaceholder("记录客观事实").fill("完成课堂练习");
+  await page.getByRole("button", { name: "保存到 1 名学生" }).click();
+  const toast = page.getByRole("status").filter({ hasText: "快捷记录已保存" });
+  await toast.getByRole("button", { name: "撤销" }).click();
+
+  await expect.poll(() => page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
+    const current = book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId);
+    const archived = current?.data?.students?.find((student: { name: string }) => student.name === "归档保留学生");
+    return archived?.enrollmentStatus;
+  })).toBe("archived");
+});
+
 test("custom round-table layout persists and keeps overflow students waiting", async ({ page }) => {
   await login(page);
 
@@ -562,6 +592,22 @@ test("creates a class-level followup without a student and supports undo", async
   await expect(toast).toBeVisible();
   await toast.getByRole("button", { name: "撤销" }).click();
   await expect(page.getByText("准备下周班会材料", { exact: true })).toHaveCount(0);
+});
+
+test("today completion uses the shared result workflow", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /^任务与作业/ }).click();
+  await page.getByPlaceholder("跟进事项，例如：确认处罚执行情况").fill("今日完成链路测试");
+  await page.getByRole("button", { name: "创建任务", exact: true }).click();
+  await page.getByLabel("主导航").getByRole("button", { name: "今日", exact: true }).click();
+  await page.getByRole("button", { name: "完成跟进：今日完成链路测试" }).click();
+  const resultDrawer = page.getByRole("complementary", { name: "补充处理结果" });
+  await expect(resultDrawer).toBeVisible();
+  await resultDrawer.getByPlaceholder(/例如：已与家长沟通/).fill("已完成当日处理");
+  await resultDrawer.getByRole("button", { name: "保存结果" }).click();
+  await page.getByRole("button", { name: /^任务与作业/ }).click();
+  await page.getByRole("group", { name: "任务筛选" }).getByRole("button", { name: "已完成" }).click();
+  await expect(page.getByText("处理结果：已完成当日处理")).toBeVisible();
 });
 
 test("today workspace routes into homework and persists the teacher ledger", async ({ page }) => {

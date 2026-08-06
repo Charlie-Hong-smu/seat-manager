@@ -1,8 +1,7 @@
 import { saveStudentCommentDraft } from "./commentStorage";
 import { getProductAuthToken } from "./authStorage";
-import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
+import { clearAiApiAuth, fetchAiRoute, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
-import { getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, StudentCommentDraft } from "./types";
 
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
@@ -134,7 +133,7 @@ export async function generateStudentAiComment(
     }
   }
 
-  const send = async (token: string) => fetch(`${getWorkerBaseUrl()}/generate-comment`, {
+  const send = async (token: string) => fetchAiRoute("/generate-comment", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

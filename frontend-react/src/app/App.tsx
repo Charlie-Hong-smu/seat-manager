@@ -36,7 +36,7 @@ import { createFollowupTask, findOpenLinkedTask, getTaskUrgency, todayKey } from
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, businessEntityExists, inspectStateHealth, targetFromBusinessRef, type TimelineTarget } from "./state/dataInsights";
 import { createActivityEvent } from "./state/activityEvents";
-import { archiveStudent, completeFollowupTask, permanentlyDeleteStudent, restoreStudent } from "./state/classManagementCommands";
+import { archiveStudent, changeFollowupTaskStatus, permanentlyDeleteStudent, restoreStudent, syncCompletedFollowupHomework, updateFollowupResolution } from "./state/classManagementCommands";
 import { useActionToast, useAppDialog } from "./components/ui";
 import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
 import { resolveSeatLayout } from "./state/seatLayout";
@@ -140,17 +140,27 @@ export default function App() {
   const healthIssues = useMemo(() => (sidebarTab === "data" ? inspectStateHealth(appState) : []), [appState, sidebarTab]);
 
   function recordActivity(event: ActivityEvent) {
-    setActivityEvents(current => [event, ...current].slice(0, 2000));
-    return () => setActivityEvents(current => current.filter(item => item.id !== event.id));
+    return recordActivities([event]);
+  }
+
+  function recordActivities(events: ActivityEvent[]) {
+    const ids = new Set(events.map(event => event.id));
+    setActivityEvents(current => [...events, ...current].slice(0, 2000));
+    return () => setActivityEvents(current => current.filter(item => !ids.has(item.id)));
   }
 
   function applyQuickRecord(input: QuickRecordInput) {
-    const previous = students;
     const now = new Date().toISOString();
-    setStudents(current => current.map(student => input.studentIds.includes(student.id) ? { ...student, records: [{ id: `record-${Date.now()}-${student.id}`, type: input.type, note: input.note, date: todayKey(), score: input.score, presetId: input.presetId, createdAt: now }, ...student.records] } : student));
-    const event = createActivityEvent({ action: "created", ref: { domain: "student", entityId: input.studentIds[0] || "class", date: todayKey() }, studentIds: input.studentIds, title: input.note, detail: input.studentIds.length > 1 ? `${input.studentIds.length} 名学生` : "快捷记录" });
-    recordActivity(event);
-    return () => { setStudents(previous); setActivityEvents(current => current.filter(item => item.id !== event.id)); };
+    const records = new Map(input.studentIds.map((studentId, index) => [studentId, { id: `record-${Date.now()}-${index}-${studentId}`, type: input.type, note: input.note, date: todayKey(), score: input.score, presetId: input.presetId, createdAt: now }]));
+    setStudents(current => current.map(student => records.has(student.id) ? { ...student, records: [records.get(student.id)!, ...student.records] } : student));
+    const removeActivities = recordActivities(input.studentIds.map(studentId => createActivityEvent({ action: "created", ref: { domain: "student", entityId: studentId, subEntityId: records.get(studentId)?.id, studentId, date: todayKey() }, studentIds: [studentId], title: input.note, detail: "快捷记录" })));
+    return () => {
+      setStudents(current => current.map(student => {
+        const createdRecord = records.get(student.id);
+        return createdRecord ? { ...student, records: student.records.filter(record => record.id !== createdRecord.id) } : student;
+      }));
+      removeActivities();
+    };
   }
 
   function requestFollowupTask(draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) {
@@ -165,22 +175,62 @@ export default function App() {
     setFollowupDraft(draft);
   }
 
-  function handleCompleteTodayTask(taskId: string) {
+  async function handleCompleteTodayTask(taskId: string) {
     const task = followupTasks.find(item => item.id === taskId);
-    if (!task || task.status !== "pending") return;
-    const result = completeFollowupTask(task);
+    if (!task || task.status !== "pending") return false;
+    const previousHomework = homeworkAssignments;
+    const result = changeFollowupTaskStatus(task, "completed");
     setFollowupTasks(current => current.map(item => (item.id === taskId ? result.task : item)));
-    const removeActivity = recordActivity(result.event);
+    const events = [result.event];
+    let homeworkChanged = false;
+    const homeworkSync = syncCompletedFollowupHomework(task, homeworkAssignments);
+    if (homeworkSync) {
+      const assignment = homeworkAssignments.find(item => item.id === task.sourceRef?.entityId);
+      homeworkChanged = await appDialog.confirm({ title: "同步作业状态？", description: `跟进任务已经完成。是否同时把“${assignment?.title || "关联作业"}”中该学生的状态更新为“已交”？选择取消也不会影响任务完成。`, confirmLabel: "同步为已交" });
+      if (homeworkChanged) {
+        setHomeworkAssignments(homeworkSync.assignments);
+        events.push(homeworkSync.event);
+      }
+    }
+    const removeActivity = recordActivities(events);
     actionToast.show({
       message: `已完成跟进：${task.title}`,
       actionLabel: "撤销",
       actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
       onAction: () => {
         setFollowupTasks(current => current.map(item => (item.id === taskId ? task : item)));
+        if (homeworkChanged) setHomeworkAssignments(previousHomework);
         removeActivity();
       },
       duration: 6000,
     });
+    return true;
+  }
+
+  function handleSaveTodayTaskResolution(taskId: string, note: string) {
+    const task = followupTasks.find(item => item.id === taskId);
+    if (!task) return;
+    const result = updateFollowupResolution(task, note);
+    setFollowupTasks(current => current.map(item => item.id === taskId ? result.task : item));
+    const removeActivity = recordActivity(result.event);
+    actionToast.show({ message: "处理结果已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { setFollowupTasks(current => current.map(item => item.id === taskId ? task : item)); removeActivity(); }, duration: 6000 });
+  }
+
+  function handleContinueTodayTask(taskId: string) {
+    const task = followupTasks.find(item => item.id === taskId);
+    if (!task) return;
+    requestFollowupTask({ studentId: task.studentId, title: task.title, type: task.type, description: task.resolutionNote ? `上次处理：${task.resolutionNote}` : task.description, plannedDate: todayKey(), dueDate: todayKey(), source: task.source, sourceRef: task.sourceRef, continuedFromTaskId: task.id });
+  }
+
+  function handleSetLinkedTaskStatus(taskIds: string[], status: "pending" | "completed" | "cancelled") {
+    const previous = followupTasks.filter(task => taskIds.includes(task.id));
+    const changes = previous.map(task => changeFollowupTaskStatus(task, status));
+    setFollowupTasks(current => current.map(task => changes.find(change => change.task.id === task.id)?.task || task));
+    const removeActivities = recordActivities(changes.map(change => change.event));
+    return () => {
+      setFollowupTasks(current => current.map(task => previous.find(item => item.id === task.id) || task));
+      removeActivities();
+    };
   }
 
   async function openCommentWorkbench() {
@@ -446,6 +496,9 @@ export default function App() {
       homeworkAssignments,
       quickRecordPresets,
       communicationDrafts,
+      activityEvents: appState.activityEvents,
+      savedExams: appState.savedExams,
+      exams: appState.exams,
     });
     setSaveStatus(saved ? "saved" : "failed");
     if (saved) setSavedSeatHistory(nextHistory);
@@ -582,6 +635,7 @@ export default function App() {
   }
 
   function handleSaveScoreImport(record: SavedGradeExamRecord): GradeExam | null {
+    const existed = appState.gradeExams.some(exam => exam.id === record.id);
     const next = saveGradeExamRecord({
       record,
       students: allStudents,
@@ -591,17 +645,20 @@ export default function App() {
       settings: appState.settings,
       dormitories,
       seatHistory: savedSeatHistory,
+      fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents: appState.activityEvents, savedExams: appState.savedExams, exams: appState.exams,
     });
     if (!next) {
       return null;
     }
     replaceState(next);
+    recordActivity(createActivityEvent({ action: existed ? "updated" : "created", ref: { domain: "score", entityId: record.id }, studentIds: record.entries.map(entry => entry.studentId).filter((id): id is string => Boolean(id)), title: `${existed ? "更新" : "导入"}考试：${record.name || "考试"}`, detail: `${record.studentCount} 名学生 · ${record.subjectCount} 科` }));
     setSeatHistory([]);
     setSidebarTab("scores");
     return next.gradeExams.find(exam => exam.id === record.id) || next.gradeExams[0] || null;
   }
 
   function handleUpdateGradeExam(examId: string, name: string, date: string): boolean {
+    const previousExam = appState.gradeExams.find(exam => exam.id === examId);
     const next = updateGradeExamRecordMetadata({
       examId,
       name,
@@ -613,11 +670,13 @@ export default function App() {
       settings: appState.settings,
       dormitories,
       seatHistory: savedSeatHistory,
+      fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents: appState.activityEvents, savedExams: appState.savedExams, exams: appState.exams,
     });
     if (!next) {
       return false;
     }
     replaceState(next);
+    recordActivity(createActivityEvent({ action: "updated", ref: { domain: "score", entityId: examId }, studentIds: previousExam?.rows.map(row => row.studentId).filter((id): id is string => Boolean(id)) || [], title: `修改考试：${name}`, detail: date || "未设置日期" }));
     return true;
   }
 
@@ -633,6 +692,7 @@ export default function App() {
       subjectCount: exam.subjects.length,
       subjects: exam.subjects,
       entries: exam.rows.map(row => ({
+        studentId: row.studentId,
         name: row.name,
         studentNo: row.studentNo,
         scores: row.scores,
@@ -650,13 +710,15 @@ export default function App() {
       settings: appState.settings,
       dormitories,
       seatHistory: savedSeatHistory,
+      fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents: appState.activityEvents, savedExams: appState.savedExams, exams: appState.exams,
     });
     if (!next) {
       return null;
     }
     replaceState(next);
+    const removeActivity = recordActivity(createActivityEvent({ action: "deleted", ref: { domain: "score", entityId: examId }, studentIds: exam?.rows.map(row => row.studentId).filter((id): id is string => Boolean(id)) || [], title: `删除考试：${exam?.name || deletedRecord?.name || "考试"}`, detail: "考试成绩已删除" }));
     if (!deletedRecord) return null;
-    return () => replaceState(current => saveGradeExamRecord({
+    return () => { replaceState(current => saveGradeExamRecord({
       record: deletedRecord,
       students: current.students,
       seatOrder: current.seatOrder,
@@ -674,13 +736,16 @@ export default function App() {
       quickRecordPresets: current.quickRecordPresets,
       communicationDrafts: current.communicationDrafts,
       activityEvents: current.activityEvents,
-    }) || current);
+      savedExams: current.savedExams,
+      exams: current.exams,
+    }) || current); removeActivity(); };
   }
 
   function handleSaveGradeItemAnalysis(examId: string, itemAnalysis: GradeItemAnalysis): boolean {
-    const next = updateGradeExamItemAnalysis({ examId, itemAnalysis, students: allStudents, seatOrder, lockedSeats: [...lockedSeats], seatSettings, settings: appState.settings, dormitories, seatHistory: savedSeatHistory, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts });
+    const next = updateGradeExamItemAnalysis({ examId, itemAnalysis, students: allStudents, seatOrder, lockedSeats: [...lockedSeats], seatSettings, settings: appState.settings, dormitories, seatHistory: savedSeatHistory, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents: appState.activityEvents, savedExams: appState.savedExams, exams: appState.exams });
     if (!next) return false;
     replaceState(next);
+    recordActivity(createActivityEvent({ action: "updated", ref: { domain: "score", entityId: examId }, studentIds: itemAnalysis.rows.map(row => row.studentId).filter((id): id is string => Boolean(id)), title: `更新题目分析：${appState.gradeExams.find(exam => exam.id === examId)?.name || "考试"}`, detail: `${itemAnalysis.questions.length} 道题目` }));
     return true;
   }
 
@@ -1045,6 +1110,7 @@ export default function App() {
               attendanceRecords={attendanceRecords}
               followupTasks={followupTasks}
               onAttendanceChange={setAttendanceRecords}
+              onActivity={recordActivity}
               homeworkAssignments={homeworkAssignments}
               communicationDrafts={communicationDrafts}
               activityEvents={appState.activityEvents}
@@ -1110,7 +1176,7 @@ export default function App() {
       }
     >
       <div className="h-full">
-        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
+        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full workspace-tab-enter">
             <DailyWorkspace
@@ -1154,7 +1220,8 @@ export default function App() {
               onSelectStudent={student => openStudentDetail(student)}
               followupTasks={followupTasks}
               onRequestFollowupTask={requestFollowupTask}
-              onSetLinkedTaskStatus={(taskIds, status) => { const now = new Date().toISOString(); setFollowupTasks(current => current.map(task => taskIds.includes(task.id) ? { ...task, status, updatedAt: now, completedAt: status === "completed" ? now : undefined } : task)); }}
+              onActivity={recordActivity}
+              onSetLinkedTaskStatus={handleSetLinkedTaskStatus}
               periodSettings={dormitoryPeriodSettings}
               onPeriodSettingsChange={settings => setSettings(current => ({ ...current, dormitoryPeriod: settings }))}
               preferences={appState.settings.dormitoryPreferences}
@@ -1219,6 +1286,7 @@ export default function App() {
               onDelete={handleDeleteFundTransaction}
               onClearAll={handleClearFundTransactions}
               onRequestFollowupTask={requestFollowupTask}
+              onActivity={recordActivity}
             />
           </div>
         )}

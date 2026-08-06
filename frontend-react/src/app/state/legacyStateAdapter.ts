@@ -26,6 +26,7 @@ import type {
   StudentRecord,
 } from "./types";
 import { toLocalDateKey } from "./dateKey";
+import { attachStudentIdsToRawSavedGradeExams, resolveGradeStudent } from "./gradeStudentIdentity";
 
 const COLS = 8;
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
@@ -71,14 +72,6 @@ function toNumber(value: unknown): number | undefined {
 
 function normalizeGender(value: unknown): Gender {
   return value === "男" || value === "女" ? value : "";
-}
-
-function normalizeName(name: unknown): string {
-  return toStringValue(name)
-    .replace(/\u3000/g, " ")
-    .replace(/[()（）][^()（）]*[()（）]/g, "")
-    .replace(/(同学|学生)$/g, "")
-    .replace(/\s+/g, "");
 }
 
 function normalizeRecord(value: unknown, index: number): StudentRecord | null {
@@ -540,22 +533,6 @@ function createMockGradeExams(): GradeExam[] {
   }));
 }
 
-function createStudentNameLookup(students: AppStudent[]): Map<string, AppStudent[]> {
-  const lookup = new Map<string, AppStudent[]>();
-  students.forEach(student => {
-    [student.name, ...student.aliases].forEach(name => {
-      const key = normalizeName(name);
-      if (!key) {
-        return;
-      }
-      const list = lookup.get(key) || [];
-      list.push(student);
-      lookup.set(key, list);
-    });
-  });
-  return lookup;
-}
-
 function normalizeSavedExamRecord(record: unknown, index: number, students: AppStudent[]): GradeExam | null {
   if (!isRecord(record)) {
     return null;
@@ -567,7 +544,6 @@ function normalizeSavedExamRecord(record: unknown, index: number, students: AppS
     return null;
   }
 
-  const nameLookup = createStudentNameLookup(students);
   const rows = rawEntries.reduce<GradeRow[]>((items, entry, entryIndex) => {
     if (!isRecord(entry)) {
       return items;
@@ -584,12 +560,16 @@ function normalizeSavedExamRecord(record: unknown, index: number, students: AppS
       return map;
     }, {});
     const totalCell = parseScoreCell(entry.total);
-    const matchedStudent = nameLookup.get(normalizeName(name))?.shift();
+    const matchedStudent = resolveGradeStudent(students, {
+      studentId: toStudentId(entry.studentId) || undefined,
+      studentNo: toStudentId(entry.studentNo) || undefined,
+      name,
+    });
 
     items.push({
       id: `${toStringValue(record.id, `exam-${index}`)}-${entryIndex}`,
-      name,
-      studentNo: toStudentId(entry.studentNo) || undefined,
+      name: matchedStudent?.name || name,
+      studentNo: toStudentId(entry.studentNo) || matchedStudent?.studentNo,
       studentId: matchedStudent?.id,
       scores,
       total: totalCell.score ?? sumScoreCells(scores),
@@ -790,7 +770,9 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
   const validDormIds = new Set(dormitories.map(dormitory => dormitory.id));
   const dormitoryIdByStudent = new Map<StudentId, string>();
   dormitories.forEach(dormitory => {
-    dormitory.memberIds.forEach(studentId => dormitoryIdByStudent.set(studentId, dormitory.id));
+    dormitory.memberIds.forEach(studentId => {
+      if (!dormitoryIdByStudent.has(studentId)) dormitoryIdByStudent.set(studentId, dormitory.id);
+    });
   });
   const normalizedStudents = students.map(student => {
     const dormitoryId = student.dormitoryId && validDormIds.has(student.dormitoryId)
@@ -800,14 +782,14 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
   });
   const normalizedDormitories = dormitories.map(dormitory => ({
     ...dormitory,
-    memberIds: Array.from(new Set([
-      ...dormitory.memberIds,
-      ...normalizedStudents.filter(student => student.dormitoryId === dormitory.id).map(student => student.id),
-    ])),
+    memberIds: normalizedStudents
+      .filter(student => student.enrollmentStatus !== "archived" && student.dormitoryId === dormitory.id)
+      .map(student => student.id),
   }));
   const settings = isRecord(raw.settings) ? raw.settings : {};
   const seatSettings = normalizeSeatSettings(settings, normalizedStudents);
   const seatOrder = normalizeSeatOrder(normalizedStudents, raw.seatOrder, seatSettings.layout?.seats.length);
+  const savedExams = attachStudentIdsToRawSavedGradeExams(raw.savedExams, normalizedStudents);
 
   return {
     source: "legacy",
@@ -827,13 +809,13 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     communicationDrafts: normalizeCommunicationDrafts(raw.communicationDrafts),
     activityEvents: normalizeActivityEvents(raw.activityEvents),
     seatHistory: normalizeSeatHistory(raw.seatHistory),
-    savedExams: toUnknownArray(raw.savedExams),
+    savedExams,
     exams: toUnknownArray(raw.exams),
     manualTags: toUnknownArray(raw.manualTags),
     autoTags: toUnknownArray(raw.autoTags),
     aiComments: raw.aiComments ?? null,
     commentRubric: raw.commentRubric ?? null,
     settings,
-    gradeExams: normalizeGradeExams(raw.savedExams, students),
+    gradeExams: normalizeGradeExams(savedExams, normalizedStudents),
   };
 }

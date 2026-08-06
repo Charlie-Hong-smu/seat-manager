@@ -1,10 +1,32 @@
 import { createActivityEvent } from "./activityEvents";
-import type { ActivityEvent, AttendanceRecord, AttendanceStatus, FollowupTask, SeatManagerState, StudentId } from "./types";
+import { removeStudentFromSavedGradeExams } from "./gradeStudentIdentity";
+import type { ActivityEvent, AttendanceRecord, AttendanceStatus, FollowupTask, HomeworkAssignment, SeatManagerState, StudentId } from "./types";
 
 export function completeFollowupTask(task: FollowupTask, resolutionNote = ""): { task: FollowupTask; event: ActivityEvent } {
   const now = new Date().toISOString();
   const next = { ...task, status: "completed" as const, completedAt: now, updatedAt: now, resolutionNote: resolutionNote.trim() || task.resolutionNote, resolutionUpdatedAt: resolutionNote.trim() ? now : task.resolutionUpdatedAt };
   return { task: next, event: createActivityEvent({ action: "status_changed", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: task.studentId ? [task.studentId] : [], title: `完成跟进：${task.title}`, detail: resolutionNote.trim() || "已完成" }) };
+}
+
+export function changeFollowupTaskStatus(task: FollowupTask, status: FollowupTask["status"]): { task: FollowupTask; event: ActivityEvent } {
+  if (status === "completed") return completeFollowupTask(task);
+  const now = new Date().toISOString();
+  const action = status === "cancelled" ? "取消" : "恢复";
+  return {
+    task: { ...task, status, updatedAt: now, completedAt: undefined },
+    event: createActivityEvent({ action: "status_changed", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: task.studentId ? [task.studentId] : [], title: `${action}跟进：${task.title}`, detail: status === "cancelled" ? "已取消" : "恢复为待处理" }),
+  };
+}
+
+export function syncCompletedFollowupHomework(task: FollowupTask, assignments: HomeworkAssignment[]): { assignments: HomeworkAssignment[]; event: ActivityEvent } | null {
+  if (task.sourceRef?.domain !== "homework" || !task.studentId) return null;
+  const assignment = assignments.find(item => item.id === task.sourceRef?.entityId);
+  if (!assignment || assignment.studentStates[task.studentId]?.status === "submitted") return null;
+  const updatedAt = new Date().toISOString();
+  return {
+    assignments: assignments.map(item => item.id === assignment.id ? { ...item, studentStates: { ...item.studentStates, [task.studentId]: { status: "submitted", note: item.studentStates[task.studentId]?.note || "", updatedAt } }, updatedAt } : item),
+    event: createActivityEvent({ action: "status_changed", ref: { ...task.sourceRef, studentId: task.studentId }, studentIds: [task.studentId], title: `同步作业状态：${assignment.title}`, detail: "跟进完成后同步为已交" }),
+  };
 }
 
 export function updateFollowupResolution(task: FollowupTask, resolutionNote: string): { task: FollowupTask; event: ActivityEvent } {
@@ -37,7 +59,18 @@ export function restoreStudent(state: SeatManagerState, studentId: StudentId): S
   const student = state.students.find(item => item.id === studentId);
   if (!student || student.enrollmentStatus !== "archived") return state;
   const event = createActivityEvent({ action: "restored", ref: { domain: "student", entityId: studentId, studentId }, studentIds: [studentId], title: `恢复到当前班级：${student.name}`, detail: "已恢复为在班学生" });
-  return { ...state, students: state.students.map(item => item.id === studentId ? { ...item, enrollmentStatus: "active", archivedAt: undefined } : item), activityEvents: [event, ...state.activityEvents] };
+  const dormitoryId = student.dormitoryId && state.dormitories.some(dormitory => dormitory.id === student.dormitoryId) ? student.dormitoryId : undefined;
+  return {
+    ...state,
+    students: state.students.map(item => item.id === studentId ? { ...item, dormitoryId, enrollmentStatus: "active", archivedAt: undefined } : item),
+    dormitories: state.dormitories.map(dormitory => ({
+      ...dormitory,
+      memberIds: dormitory.id === dormitoryId
+        ? Array.from(new Set([...dormitory.memberIds, studentId]))
+        : dormitory.memberIds.filter(id => id !== studentId),
+    })),
+    activityEvents: [event, ...state.activityEvents],
+  };
 }
 
 export function permanentlyDeleteStudent(state: SeatManagerState, studentId: StudentId): SeatManagerState {
@@ -55,6 +88,7 @@ export function permanentlyDeleteStudent(state: SeatManagerState, studentId: Stu
     fundTransactions: state.fundTransactions.map(tx => ({ ...tx, relatedStudentIds: remove(tx.relatedStudentIds), relatedStudentId: tx.relatedStudentId === studentId ? undefined : tx.relatedStudentId })),
     dormitories: state.dormitories.map(dorm => ({ ...dorm, memberIds: dorm.memberIds.filter(id => id !== studentId), events: dorm.events.map(event => ({ ...event, responsibleStudentIds: remove(event.responsibleStudentIds), responsibleStudentId: event.responsibleStudentId === studentId ? undefined : event.responsibleStudentId })), history: dorm.history.map(archive => ({ ...archive, events: archive.events.map(event => ({ ...event, responsibleStudentIds: remove(event.responsibleStudentIds), responsibleStudentId: event.responsibleStudentId === studentId ? undefined : event.responsibleStudentId })) })) })),
     gradeExams: state.gradeExams.map(exam => ({ ...exam, rows: exam.rows.filter(row => row.studentId !== studentId), itemAnalysis: exam.itemAnalysis ? { ...exam.itemAnalysis, rows: exam.itemAnalysis.rows.filter(row => row.studentId !== studentId) } : undefined })),
+    savedExams: removeStudentFromSavedGradeExams(state.savedExams, studentId, state.students),
     activityEvents: state.activityEvents.flatMap(event => {
       if (event.ref.domain === "student" && event.ref.entityId === studentId) return [];
       const remainingStudentIds = event.studentIds.filter(id => id !== studentId);

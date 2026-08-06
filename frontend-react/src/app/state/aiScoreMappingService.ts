@@ -1,8 +1,7 @@
-import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
+import { clearAiApiAuth, fetchAiRoute, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { getProductAuthToken } from "./authStorage";
 import type { RosterMapping } from "./rosterImport";
 import { SUBJECT_ORDER, type ScoreMapping } from "./scoreImport";
-import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 
 export interface AiScoreMappingSuggestion {
   mapping: ScoreMapping;
@@ -102,7 +101,7 @@ export async function suggestScoreMappingWithAi(
     sampleRows: compactRowsForAi(rows),
     knownSubjects: SUBJECT_ORDER,
   });
-  const send = (baseUrl: string) => fetch(`${baseUrl}/suggest-score-mapping`, {
+  const send = () => fetchAiRoute("/suggest-score-mapping", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -110,10 +109,7 @@ export async function suggestScoreMappingWithAi(
     },
     body: requestBody,
   });
-  let response = await send(getWorkerBaseUrl());
-  if (response.status === 404 || response.status === 405) {
-    response = await send(getDirectWorkerUrl());
-  }
+  const response = await send();
   if (response.status === 401) {
     if (!getProductAuthToken()) {
       clearAiApiAuth();
@@ -164,7 +160,7 @@ export async function suggestRosterMappingWithAi(
     headers,
     sampleRows: compactRowsForAi(rows),
   });
-  const send = (baseUrl: string) => fetch(`${baseUrl}/suggest-roster-mapping`, {
+  const send = () => fetchAiRoute("/suggest-roster-mapping", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -172,10 +168,7 @@ export async function suggestRosterMappingWithAi(
     },
     body: requestBody,
   });
-  let response = await send(getWorkerBaseUrl());
-  if (response.status === 404 || response.status === 405) {
-    response = await send(getDirectWorkerUrl());
-  }
+  const response = await send();
   if (response.status === 401) {
     if (!getProductAuthToken()) {
       clearAiApiAuth();

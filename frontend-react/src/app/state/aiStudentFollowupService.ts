@@ -1,7 +1,6 @@
-import { clearAiApiAuth, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
+import { clearAiApiAuth, fetchAiRoute, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { getProductAuthToken } from "./authStorage";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
-import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 import type { AppStudent, Dormitory, StudentCommentDraft } from "./types";
 import { getCurrentWorkspaceScope } from "./workspaces";
 
@@ -198,7 +197,7 @@ export async function generateStudentFollowup(
     }
   }
 
-  const send = async (baseUrl: string, token: string) => fetch(`${baseUrl}/student-followup`, {
+  const send = async (token: string) => fetchAiRoute("/student-followup", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -208,20 +207,14 @@ export async function generateStudentFollowup(
   });
 
   let auth = await getAiAuth(input);
-  let response = await send(getWorkerBaseUrl(), auth.token);
-  if (response.status === 404 || response.status === 405) {
-    response = await send(getDirectWorkerUrl(), auth.token);
-  }
+  let response = await send(auth.token);
   if (response.status === 401) {
     if (getProductAuthToken()) {
       throw new Error("ai_unauthorized");
     }
     clearAiApiAuth();
     auth = await getAiAuth(input);
-    response = await send(getWorkerBaseUrl(), auth.token);
-    if (response.status === 404 || response.status === 405) {
-      response = await send(getDirectWorkerUrl(), auth.token);
-    }
+    response = await send(auth.token);
   }
   if (response.status === 403) {
     throw new Error("ai_unauthorized");

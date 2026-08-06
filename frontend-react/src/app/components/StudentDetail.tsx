@@ -28,6 +28,7 @@ interface StudentDetailProps {
   attendanceRecords?: AttendanceRecord[];
   followupTasks?: FollowupTask[];
   onAttendanceChange?: (records: AttendanceRecord[]) => void;
+  onActivity?: (event: ActivityEvent) => void | (() => void);
   homeworkAssignments?: HomeworkAssignment[];
   communicationDrafts?: CommunicationDraft[];
   activityEvents?: ActivityEvent[];
@@ -58,6 +59,7 @@ export function StudentDetail({
   attendanceRecords,
   followupTasks,
   onAttendanceChange,
+  onActivity,
   homeworkAssignments,
   communicationDrafts,
   activityEvents,
@@ -91,6 +93,7 @@ export function StudentDetail({
         attendanceRecords={attendanceRecords}
         followupTasks={followupTasks}
         onAttendanceChange={onAttendanceChange}
+        onActivity={onActivity}
         homeworkAssignments={homeworkAssignments}
         communicationDrafts={communicationDrafts}
         activityEvents={activityEvents}

@@ -7,8 +7,9 @@ import { buildLocalWeeklyDraft, buildTodayWorkItems, buildWeeklyFacts, getWeekRa
 import { readRowsFromFile } from "../../state/scoreImport";
 import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, CommunicationDraft, Dormitory, FollowupTask, GradeExam, HomeworkAssignment } from "../../state/types";
 import { AiGenerationPanel, Button, Card, FileDropZone, IconButton, InlineStatus, ToolDrawer } from "../ui";
+import { ResolutionEditor } from "../LinkedWorkflow";
 
-export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, initialDraftId, onInitialDraftConsumed }: {
+export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
   students: AppStudent[];
   attendance: AttendanceRecord[];
   tasks: FollowupTask[];
@@ -24,7 +25,9 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   onOpenHomework: () => void;
   onOpenQuickRecord: () => void;
   onOpenEntity?: (ref: BusinessEntityRef) => void;
-  onCompleteTask?: (taskId: string) => void;
+  onCompleteTask?: (taskId: string) => boolean | Promise<boolean>;
+  onSaveTaskResolution?: (taskId: string, note: string) => void;
+  onContinueTask?: (taskId: string) => void;
   initialDraftId?: string;
   onInitialDraftConsumed?: () => void;
 }) {
@@ -38,6 +41,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   const [weeklyStatus, setWeeklyStatus] = useState("");
   const [queueOpen, setQueueOpen] = useState(false);
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
+  const [resolutionTaskId, setResolutionTaskId] = useState("");
   const items = useMemo(() => buildTodayWorkItems({ date: today, students, attendance, tasks, homework }), [attendance, homework, students, tasks, today]);
   const todayEntries = schedule.entries.filter(item => item.weekday === weekday).sort((a, b) => schedule.periods.findIndex(period => period.id === a.periodId) - schedule.periods.findIndex(period => period.id === b.periodId));
   const abnormalCount = attendance.filter(item => item.date === today && (item.status !== "normal" || item.late || item.earlyLeave)).length;
@@ -65,13 +69,19 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   // 跟进任务就地完成：先做 180ms 收起补位，再交给来源领域写状态（可经 toast 撤销）。
   function completeItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
     if (!onCompleteTask || item.kind !== "task") return;
+    const finish = async () => {
+      if (await onCompleteTask(item.entityId)) {
+        setQueueOpen(false);
+        setResolutionTaskId(item.entityId);
+      }
+    };
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      onCompleteTask(item.entityId);
+      void finish();
       return;
     }
     setCompletingIds(current => new Set(current).add(item.id));
     window.setTimeout(() => {
-      onCompleteTask(item.entityId);
+      void finish();
       setCompletingIds(current => { const next = new Set(current); next.delete(item.id); return next; });
     }, 180);
   }
@@ -133,5 +143,6 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   <ToolDrawer open={scheduleOpen} title="课表管理" onClose={() => setScheduleOpen(false)}><div className="space-y-4"><FileDropZone accept=".xlsx,.xls,.xlsm,.csv,.tsv" onChange={file => void importSchedule(file)}><FileSpreadsheet className="h-7 w-7 text-blue-500"/><strong className="text-sm text-gray-700">导入 Excel 课表</strong><span className="text-xs text-gray-400">首列为课节，后续列包含周一至周日</span></FileDropZone>{status && <InlineStatus message={status} className="text-sm" />}<div className="space-y-2">{schedule.periods.map(period => <div key={period.id} className="rounded-xl border border-gray-100 px-3 py-2"><div className="text-xs font-bold text-gray-400">{period.label}</div><div className="mt-1 flex flex-wrap gap-1">{schedule.entries.filter(entry => entry.periodId === period.id).map(entry => <span key={entry.id} className="rounded-lg bg-gray-100 px-2 py-1 text-xs text-gray-600">周{["", "一", "二", "三", "四", "五", "六", "日"][entry.weekday]} {entry.subject}</span>)}</div></div>)}</div></div></ToolDrawer>
   <ToolDrawer open={weeklyOpen} title="本周班级复盘" onClose={() => setWeeklyOpen(false)}><div className="space-y-4">{aiBusy ? <AiGenerationPanel title="正在润色周报" steps={["读取本周事实", "整理表达", "生成可编辑草稿"]}/> : <><div className="flex flex-wrap gap-2">{facts.map(fact => <span key={fact} className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">{fact}</span>)}</div><textarea rows={14} value={weeklyContent} onChange={event => setWeeklyContent(event.target.value)} className="w-full resize-y rounded-xl border border-gray-200 px-3 py-3 text-sm leading-6 outline-none focus:border-blue-300"/><div className="flex flex-wrap justify-center gap-2"><Button variant="ai" onClick={() => void enhanceWeekly()}><Sparkles className="h-4 w-4"/>AI 润色</Button><Button variant="secondary" disabled={!weeklyContent.trim()} onClick={() => void copyWeekly()}><Clipboard className="h-4 w-4"/>复制</Button></div></>}{weeklyStatus && <InlineStatus message={weeklyStatus} tone="ai" />}</div></ToolDrawer>
   <ToolDrawer open={queueOpen} title={`全部待处理 · ${items.length}`} onClose={() => setQueueOpen(false)}><div className="space-y-2">{items.map(item => renderQueueItem(item, () => { setQueueOpen(false); openItem(item); }))}{!items.length && <p className="py-12 text-center text-sm text-gray-400">今天没有待处理事项</p>}</div></ToolDrawer>
+  <ToolDrawer open={Boolean(resolutionTaskId)} title="补充处理结果" onClose={() => setResolutionTaskId("")}>{(() => { const task = tasks.find(item => item.id === resolutionTaskId); return task ? <ResolutionEditor task={task} onSave={note => { onSaveTaskResolution?.(task.id, note); setResolutionTaskId(""); }} onContinue={() => { onContinueTask?.(task.id); setResolutionTaskId(""); }}/> : null; })()}</ToolDrawer>
   </div>;
 }

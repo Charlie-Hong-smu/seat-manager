@@ -396,6 +396,8 @@ export interface SeatHistorySnapshot {
 }
 
 export interface SavedGradeExamEntry {
+  /** 新数据使用稳定学生 ID；旧备份缺失时继续按学号、姓名兼容匹配。 */
+  studentId?: StudentId;
   name: string;
   studentNo?: string;
   scores: Record<string, GradeScoreCell>;
