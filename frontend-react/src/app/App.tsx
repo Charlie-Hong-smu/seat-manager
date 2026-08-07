@@ -414,6 +414,13 @@ export default function App() {
     }
   }
 
+  function handleMoveStudentToWaiting(fromIndex: number) {
+    if (lockedSeats.has(fromIndex) || fromIndex < 0 || fromIndex >= seatOrder.length || !seatOrder[fromIndex]) return;
+    const next = [...seatOrder];
+    next[fromIndex] = null;
+    commitSeatOrder(next);
+  }
+
   function handleAssignStudentToSeat(studentId: StudentId, seatIndex: number) {
     if (lockedSeats.has(seatIndex) || seatIndex < 0 || seatIndex >= seatOrder.length) return;
     const next = seatOrder.map(id => id === studentId ? null : id);
@@ -1194,6 +1201,7 @@ export default function App() {
               onSelectStudent={student => openStudentDetail(student)}
               onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
               onMoveSeat={handleMoveSeat}
+              onMoveStudentToWaiting={handleMoveStudentToWaiting}
               onAssignStudentToSeat={handleAssignStudentToSeat}
               onToggleLock={toggleLock}
               drawSessions={drawSessions}

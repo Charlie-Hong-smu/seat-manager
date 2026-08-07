@@ -70,7 +70,7 @@ test("custom round-table layout persists and keeps overflow students waiting", a
   await login(page);
 
   await page.getByRole("button", { name: /新增学生/ }).click();
-  for (const name of ["布局学生甲", "布局学生乙", "布局学生丙"]) {
+  for (const name of ["布局学生甲", "布局学生乙", "布局学生丙", "布局学生丁", "布局学生戊", "布局学生己", "布局学生庚", "布局学生辛"]) {
     await page.getByPlaceholder("姓名", { exact: true }).fill(name);
     await page.getByRole("button", { name: "添加到班级" }).click();
   }
@@ -87,7 +87,34 @@ test("custom round-table layout persists and keeps overflow students waiting", a
   await dialog.getByRole("button", { name: "应用布局" }).click();
   await dialog.getByRole("button", { name: "关闭排座设置" }).click();
 
-  await expect(page.getByRole("region", { name: "待排学生" })).toBeVisible();
+  const waitingDock = page.getByRole("region", { name: "待排学生" });
+  await expect(waitingDock).toBeVisible();
+  await waitingDock.getByRole("button", { name: "收起等待区" }).click();
+  await page.waitForTimeout(400);
+  const compactGeometry = await waitingDock.evaluate(element => {
+    const dock = element.getBoundingClientRect();
+    const board = element.previousElementSibling?.getBoundingClientRect();
+    return { dock: { y: dock.y, width: dock.width, height: dock.height }, board: board && { bottom: board.bottom, width: board.width, height: board.height } };
+  });
+  expect(compactGeometry.dock.height).toBe(44);
+  expect(compactGeometry.dock.y).toBeGreaterThanOrEqual(compactGeometry.board?.bottom || 0);
+  await waitingDock.getByRole("button", { name: "展开等待区" }).click();
+  await page.waitForTimeout(400);
+  const expandedGeometry = await waitingDock.evaluate(element => {
+    const dock = element.getBoundingClientRect();
+    const board = element.previousElementSibling?.getBoundingClientRect();
+    const visibleWaitingStudents = Array.from(element.querySelectorAll<HTMLElement>("[data-waiting-student-id]"))
+      .filter(student => {
+        const rect = student.getBoundingClientRect();
+        return rect.left >= dock.left && rect.right <= dock.right;
+      }).length;
+    return { dock: { width: dock.width, height: dock.height }, board: board && { width: board.width, height: board.height }, visibleWaitingStudents };
+  });
+  expect(expandedGeometry.dock.width).toBeGreaterThan(compactGeometry.dock.width);
+  expect(Math.abs(expandedGeometry.dock.width - (expandedGeometry.board?.width || 0))).toBeLessThan(2);
+  expect(expandedGeometry.visibleWaitingStudents).toBeGreaterThanOrEqual(6);
+  expect(expandedGeometry.dock.height).toBe(compactGeometry.dock.height);
+  expect(expandedGeometry.board).toEqual(compactGeometry.board && { width: compactGeometry.board.width, height: compactGeometry.board.height });
   await expect.poll(() => page.evaluate(() => {
     const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
     const current = book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId);
@@ -98,6 +125,42 @@ test("custom round-table layout persists and keeps overflow students waiting", a
   await page.getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("region", { name: "待排学生" })).toBeVisible();
   await expect(page.getByText("第 1 组", { exact: true })).toBeVisible();
+});
+
+test("moves a seated student into the bottom waiting dock and back to an empty seat", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("等待拖放学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+
+  const source = page.locator('[data-student-id]').filter({ hasText: "等待拖放学生" });
+  const waitingDock = page.getByRole("region", { name: "待排学生" });
+  const sourceBox = await source.boundingBox();
+  const dockBox = await waitingDock.boundingBox();
+  expect(sourceBox).not.toBeNull();
+  expect(dockBox).not.toBeNull();
+  await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(dockBox!.x + dockBox!.width / 2, dockBox!.y + dockBox!.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  const waitingStudent = waitingDock.getByRole("button", { name: /等待学生 等待拖放学生/ });
+  await expect(waitingStudent).toBeVisible();
+  await expect(page.locator("[data-drag-student-id]")).toBeHidden();
+  const waitingBox = await waitingStudent.boundingBox();
+  expect(waitingBox).not.toBeNull();
+  expect(Math.round(waitingBox!.width)).toBe(64);
+  expect(Math.round(waitingBox!.height)).toBe(36);
+  const emptySeat = page.locator("[data-seat-index]").filter({ has: page.getByText("空", { exact: true }) }).first();
+  const emptyBox = await emptySeat.boundingBox();
+  expect(emptyBox).not.toBeNull();
+  await page.mouse.move(waitingBox!.x + waitingBox!.width / 2, waitingBox!.y + waitingBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(emptyBox!.x + emptyBox!.width / 2, emptyBox!.y + emptyBox!.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(waitingStudent).toBeHidden();
+  await expect(source).toBeVisible();
 });
 
 test("corrupt local workspace stays untouched until an explicit recovery", async ({ page }) => {
@@ -122,28 +185,55 @@ test("corrupt local workspace stays untouched until an explicit recovery", async
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).not.toBe(corruptRaw);
 });
 
-test("preloads the comment workbench and keeps its full-screen background stable", async ({ page }) => {
+test("preloads the comment workbench and uses the Open Design entry and exit motion", async ({ page }) => {
   await login(page);
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((entry) => entry.name.includes("CommentWorkbench-")))).toBe(true);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("动效测试学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
 
   await page.getByRole("button", { name: "评语工作台" }).click();
   const dialog = page.getByRole("dialog", { name: "评语工作台" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute("data-transition-state", "open");
   await expect(page.getByPlaceholder("AI 授权码")).toHaveCount(0);
-  const shellStyle = await dialog.evaluate((element) => ({
-    animationName: getComputedStyle(element).animationName,
-    animationDuration: getComputedStyle(element).animationDuration,
-    opacity: getComputedStyle(element).opacity,
-  }));
-  expect(shellStyle).toEqual({ animationName: "comment-workbench-panel-enter", animationDuration: "0.44s", opacity: "1" });
-  const contentStyle = await dialog.locator(":scope > .comment-workbench-enter-item").first().evaluate((element) => ({
-    animationName: getComputedStyle(element).animationName,
-    opacity: getComputedStyle(element).opacity,
-  }));
-  expect(contentStyle).toEqual({ animationName: "none", opacity: "1" });
+  await expect.poll(() => dialog.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { opacity: style.opacity, transform: style.transform, borderRadius: style.borderRadius };
+  })).toEqual({ opacity: "1", transform: "matrix(1, 0, 0, 1, 0, 0)", borderRadius: "0px" });
+  const shellStyle = await dialog.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { transitionProperty: style.transitionProperty, transitionDuration: style.transitionDuration };
+  });
+  expect(shellStyle).toEqual({ transitionProperty: "opacity, transform, border-radius", transitionDuration: "0.22s, 0.42s, 0.42s" });
+  const paneStyle = await Promise.all([
+    dialog.locator(".comment-workbench-roster"),
+    dialog.locator(".comment-workbench-editor"),
+    dialog.locator(".comment-workbench-materials"),
+  ].map(locator => locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { animationName: style.animationName, animationDuration: style.animationDuration, animationDelay: style.animationDelay };
+  })));
+  expect(paneStyle).toEqual([
+    { animationName: "comment-workbench-pane-enter", animationDuration: "0.48s", animationDelay: "0s" },
+    { animationName: "comment-workbench-pane-enter", animationDuration: "0.48s", animationDelay: "0.055s" },
+    { animationName: "comment-workbench-pane-enter", animationDuration: "0.48s", animationDelay: "0.11s" },
+  ]);
   await dialog.getByRole("button", { name: "关闭评语工作台" }).click();
   await expect(dialog).toHaveAttribute("data-transition-state", "closing");
+  const exitMotion = await Promise.all([
+    dialog.locator(".comment-workbench-topbar"),
+    dialog.locator(".comment-workbench-roster"),
+    dialog.locator(".comment-workbench-editor"),
+    dialog.locator(".comment-workbench-materials"),
+  ].map(locator => locator.evaluate((element) => getComputedStyle(element).animationName)));
+  expect(exitMotion).toEqual([
+    "comment-workbench-topbar-exit",
+    "comment-workbench-roster-exit",
+    "comment-workbench-editor-exit",
+    "comment-workbench-materials-exit",
+  ]);
   await expect(dialog).toBeHidden();
 });
 

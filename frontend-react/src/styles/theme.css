@@ -96,23 +96,43 @@
   }
 }
 
-@keyframes comment-workbench-panel-enter {
+@keyframes comment-workbench-pane-enter {
   from {
-    transform: translate3d(100%, 0, 0);
+    opacity: 0;
+    transform: translateY(14px);
   }
 
   to {
-    transform: translate3d(0, 0, 0);
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@keyframes comment-workbench-panel-exit {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-
+@keyframes comment-workbench-topbar-exit {
   to {
-    transform: translate3d(100%, 0, 0);
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes comment-workbench-materials-exit {
+  to {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+}
+
+@keyframes comment-workbench-editor-exit {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.996);
+  }
+}
+
+@keyframes comment-workbench-roster-exit {
+  to {
+    opacity: 0;
+    transform: translateX(-14px);
   }
 }
 
@@ -396,24 +416,66 @@
   isolation: isolate;
   backface-visibility: hidden;
   contain: paint;
-  will-change: transform;
+  border-radius: 28px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px) scale(0.988);
+  transform-origin: 28px 52%;
+  transition:
+    opacity 220ms cubic-bezier(0.28, 0, 0.22, 1),
+    transform 420ms cubic-bezier(0.28, 0, 0.22, 1),
+    border-radius 420ms cubic-bezier(0.28, 0, 0.22, 1);
+  will-change: transform, opacity, border-radius;
 }
 
 .comment-workbench-shell[data-transition-state="preparing"] {
-  transform: translate3d(100%, 0, 0);
   pointer-events: none;
 }
 
 .comment-workbench-shell[data-transition-state="open"] {
-  animation: comment-workbench-panel-enter 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  border-radius: 0;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
 }
 
 .comment-workbench-shell[data-transition-state="closing"] {
-  animation: comment-workbench-panel-exit 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  border-radius: 28px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px) scale(0.986);
+  transition:
+    opacity 260ms 90ms cubic-bezier(0.28, 0, 0.22, 1),
+    transform 360ms 70ms cubic-bezier(0.28, 0, 0.22, 1),
+    border-radius 360ms 70ms cubic-bezier(0.28, 0, 0.22, 1);
 }
 
-.comment-workbench-enter-item {
-  opacity: 1;
+.comment-workbench-shell[data-transition-state="open"] .comment-workbench-pane {
+  animation: comment-workbench-pane-enter 480ms cubic-bezier(0.28, 0, 0.22, 1) both;
+}
+
+.comment-workbench-shell[data-transition-state="open"] .comment-workbench-editor {
+  animation-delay: 55ms;
+}
+
+.comment-workbench-shell[data-transition-state="open"] .comment-workbench-materials {
+  animation-delay: 110ms;
+}
+
+.comment-workbench-shell[data-transition-state="closing"] .comment-workbench-topbar {
+  animation: comment-workbench-topbar-exit 180ms cubic-bezier(0.28, 0, 0.22, 1) both;
+}
+
+.comment-workbench-shell[data-transition-state="closing"] .comment-workbench-materials {
+  animation: comment-workbench-materials-exit 210ms cubic-bezier(0.28, 0, 0.22, 1) both;
+}
+
+.comment-workbench-shell[data-transition-state="closing"] .comment-workbench-editor {
+  animation: comment-workbench-editor-exit 240ms 35ms cubic-bezier(0.28, 0, 0.22, 1) both;
+}
+
+.comment-workbench-shell[data-transition-state="closing"] .comment-workbench-roster {
+  animation: comment-workbench-roster-exit 220ms 70ms cubic-bezier(0.28, 0, 0.22, 1) both;
 }
 
 .surface-enter {
@@ -678,6 +740,213 @@
 .seat-card-enter {
   /* 只在入场前保留起始帧；结束后释放 transform，供拖拽推开动画使用。 */
   animation: seat-card-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.seat-waiting-dock {
+  position: relative;
+  z-index: 30;
+  width: 11rem;
+  max-width: 100%;
+  height: 2.75rem;
+  transition: width 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.seat-waiting-dock[data-expanded="true"] {
+  width: 100%;
+}
+
+.seat-waiting-dock__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  width: 11rem;
+  height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.375rem 0.25rem 0.75rem;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  transition:
+    border-color 220ms ease,
+    border-radius 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.seat-waiting-dock__count {
+  display: grid;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  padding: 0 0.375rem;
+  border-radius: 999px;
+  background: var(--app-surface-muted);
+  color: var(--app-text-muted);
+  font-size: 0.625rem;
+}
+
+.seat-waiting-dock__chevron {
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.seat-waiting-dock[data-expanded="true"] .seat-waiting-dock__bar {
+  border-right-color: transparent;
+  border-radius: var(--app-radius-md) 0 0 var(--app-radius-md);
+}
+
+.seat-waiting-dock[data-expanded="true"] .seat-waiting-dock__chevron {
+  transform: rotate(180deg);
+}
+
+.seat-waiting-dock__reveal {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: calc(11rem - 1px);
+  display: grid;
+  width: 0;
+  overflow: hidden;
+  visibility: hidden;
+  border: 1px solid transparent;
+  border-radius: 0 var(--app-radius-md) var(--app-radius-md) 0;
+  background: var(--app-surface);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-0.375rem);
+  transition:
+    width 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease,
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease,
+    visibility 0s linear 360ms;
+}
+
+.seat-waiting-dock__inner {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.seat-waiting-dock__cue {
+  display: flex;
+  width: 10.5rem;
+  min-width: 0;
+  flex: 0 0 10.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-right: 1px solid var(--app-border);
+  padding: 0 0.625rem;
+}
+
+.seat-waiting-dock__list {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0.5rem;
+  scrollbar-width: thin;
+}
+
+.seat-waiting-person {
+  display: grid;
+  width: 4rem;
+  height: 2.25rem;
+  place-content: center;
+  border-radius: 0.625rem;
+  line-height: 0.875rem;
+  font-weight: 700;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.seat-waiting-person:active {
+  cursor: grabbing;
+}
+
+.seat-student-morph {
+  border-color: color-mix(in srgb, var(--app-primary) 42%, var(--app-border));
+  border-radius: var(--app-radius-md);
+  opacity: 1;
+  transform-origin: top left;
+  transition:
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+  will-change: transform, width, height;
+}
+
+.seat-student-morph[data-drag-phase="settling"] {
+  opacity: 0.96;
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    height 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-radius 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.seat-student-morph[data-drag-shape="waiting"] {
+  border-radius: 0.625rem;
+  background: var(--app-surface-muted);
+}
+
+.seat-student-morph__seat,
+.seat-student-morph__waiting {
+  transition: opacity 120ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.seat-student-morph__waiting {
+  line-height: 0.875rem;
+  opacity: 0;
+  transform: scale(0.88);
+}
+
+.seat-student-morph[data-drag-shape="waiting"] .seat-student-morph__seat {
+  opacity: 0;
+  transform: scale(0.88);
+}
+
+.seat-student-morph[data-drag-shape="waiting"] .seat-student-morph__waiting {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.seat-waiting-dock[data-expanded="true"] .seat-waiting-dock__reveal {
+  width: calc(100% - 11rem + 1px);
+  visibility: visible;
+  border-color: var(--app-border);
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  box-shadow: var(--app-shadow-float);
+  transition-delay: 0s;
+}
+
+.seat-waiting-dock[data-drop-active="true"] .seat-waiting-dock__bar,
+.seat-waiting-dock[data-drop-active="true"] .seat-waiting-dock__reveal {
+  border-color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 14%, transparent);
+}
+
+.seat-waiting-dock[data-expanded="true"][data-drop-active="true"] .seat-waiting-dock__bar {
+  border-right-color: transparent;
+}
+
+.seat-waiting-dock[data-drop-active="true"] .seat-waiting-dock__count {
+  color: var(--app-primary);
 }
 
 .dorm-member-enter {

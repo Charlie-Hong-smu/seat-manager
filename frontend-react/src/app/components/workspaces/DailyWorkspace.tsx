@@ -41,6 +41,7 @@ export function DailyWorkspace({
   onSelectStudent,
   onOpenStudentFollowup,
   onMoveSeat,
+  onMoveStudentToWaiting,
   onAssignStudentToSeat,
   onToggleLock,
   drawSessions,
@@ -64,6 +65,7 @@ export function DailyWorkspace({
   onSelectStudent: (student: AppStudent) => void;
   onOpenStudentFollowup: (student: AppStudent) => void;
   onMoveSeat: (fromIndex: number, toIndex: number) => void;
+  onMoveStudentToWaiting: (fromIndex: number) => void;
   onAssignStudentToSeat: (studentId: StudentId, seatIndex: number) => void;
   onToggleLock: (idx: number) => void;
   drawSessions: DrawSession[];
@@ -166,7 +168,7 @@ export function DailyWorkspace({
 
       <div className="min-h-0 flex-1 p-4">
         <div className="h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-4 shadow-[var(--app-shadow-card)]">
-          <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+          <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onMoveStudentToWaiting={onMoveStudentToWaiting} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
         </div>
       </div>
 

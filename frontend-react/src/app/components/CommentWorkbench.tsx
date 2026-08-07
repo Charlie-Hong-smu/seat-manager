@@ -1,4 +1,4 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, type TransitionEvent as ReactTransitionEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   Check,
@@ -208,6 +208,12 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const [showExportModal, setShowExportModal] = useState(false);
   const [showFollowupPanel, setShowFollowupPanel] = useState(false);
   const [exportSelectedIds, setExportSelectedIds] = useState<Set<StudentId>>(() => new Set());
+
+  function handleWorkbenchTransitionEnd(event: ReactTransitionEvent<HTMLDivElement>) {
+    if (event.target === event.currentTarget && event.propertyName === "transform" && transitionState === "closing") {
+      onExitComplete();
+    }
+  }
   const [exportFormat, setExportFormat] = useState<"csv" | "txt">("csv");
   const pauseRequested = useRef(false);
   const workbenchRef = useRef<HTMLDivElement>(null);
@@ -946,21 +952,21 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
 
   if (!selectedStudent || !selectedComment) {
     return (
-      <div role="dialog" aria-modal="true" aria-label="评语工作台" data-transition-state={transitionState} onAnimationEnd={event => { if (event.target === event.currentTarget && transitionState === "closing") onExitComplete(); }} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-gray-50">
-        <div className="comment-workbench-enter-item shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+      <div role="dialog" aria-modal="true" aria-label="评语工作台" data-transition-state={transitionState} onTransitionEnd={handleWorkbenchTransitionEnd} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-gray-50">
+        <div className="comment-workbench-topbar shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
           <h2 className="text-gray-900">评语工作台</h2>
           <button aria-label="关闭评语工作台" onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="comment-workbench-enter-item flex-1 grid place-items-center text-gray-400">暂无学生</div>
+        <div className="comment-workbench-pane comment-workbench-editor flex-1 grid place-items-center text-gray-400">暂无学生</div>
       </div>
     );
   }
 
   return (
-    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} data-transition-state={transitionState} onKeyDown={handleWorkbenchKeyDown} onAnimationEnd={event => { if (event.target === event.currentTarget && transitionState === "closing") onExitComplete(); }} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
-      <header className="comment-workbench-enter-item flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-white px-4">
+    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} data-transition-state={transitionState} onKeyDown={handleWorkbenchKeyDown} onTransitionEnd={handleWorkbenchTransitionEnd} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
+      <header className="comment-workbench-topbar flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-white px-4">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="shrink-0 text-base font-bold text-gray-900">评语工作台</h2>
           <span className="text-sm font-semibold text-gray-400">
@@ -998,8 +1004,8 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
         </div>
       </header>
 
-      <div className="comment-workbench-enter-item grid min-h-0 flex-1 grid-cols-[184px_minmax(520px,1fr)_300px] overflow-hidden xl:grid-cols-[216px_minmax(680px,1fr)_340px]">
-        <aside className="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-white">
+      <div className="grid min-h-0 flex-1 grid-cols-[184px_minmax(520px,1fr)_300px] overflow-hidden xl:grid-cols-[216px_minmax(680px,1fr)_340px]">
+        <aside className="comment-workbench-pane comment-workbench-roster flex min-h-0 flex-col border-r border-[var(--app-border)] bg-white">
           <div className="space-y-3 border-b border-[var(--app-border)] p-3">
             <div className="relative grid grid-cols-2 gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1" role="group" aria-label="评语处理模式">
               <span aria-hidden="true" className="pointer-events-none absolute bottom-1 left-1 top-1 rounded-lg bg-white shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none" style={{ width: "calc((100% - 12px) / 2)", transform: workbenchMode === "batch" ? "translateX(calc(100% + 4px))" : "translateX(0)" }} />
@@ -1094,8 +1100,8 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           </div>
         </aside>
 
-        <main key={`editor-${selectedId}`} className="comment-detail-enter min-h-0 min-w-0 bg-[var(--app-bg)] p-3 xl:p-4">
-          <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-card)]">
+        <main className="comment-workbench-pane comment-workbench-editor min-h-0 min-w-0 bg-[var(--app-bg)] p-3 xl:p-4">
+          <section key={`editor-${selectedId}`} className="comment-detail-enter flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-card)]">
             <div className="shrink-0 border-b border-[var(--app-border)] px-4 py-3.5 xl:px-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
@@ -1220,8 +1226,8 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           </section>
         </main>
 
-        <aside key={`tools-${selectedId}`} className="comment-detail-enter min-h-0 border-l border-[var(--app-border)] bg-gray-50 p-3">
-          <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-card)]">
+        <aside className="comment-workbench-pane comment-workbench-materials min-h-0 border-l border-[var(--app-border)] bg-gray-50 p-3">
+          <section key={`tools-${selectedId}`} className="comment-detail-enter flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-card)]">
             <div className="shrink-0 border-b border-[var(--app-border)] px-3.5 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
