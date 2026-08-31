@@ -55,11 +55,15 @@ test("shared followup creates one task, edits every participant, survives reload
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "收起侧栏", exact: true }).click();
   const description = cards.getByText(/关联乙、关联丙/);
-  await expect.poll(async () => (await description.boundingBox())?.width || 0).toBeGreaterThan(150);
-  const labelBox = await description.boundingBox();
-  const actionBox = await cards.getByRole("button", { name: "编辑任务", exact: true }).boundingBox();
-  expect(labelBox?.width).toBeGreaterThan(150);
-  expect(actionBox!.y).toBeGreaterThanOrEqual(labelBox!.y + labelBox!.height);
+  // Sample both elements in one frame while the sidebar width animates.
+  await expect.poll(() => description.evaluate(label => {
+    const labelBox = label.getBoundingClientRect();
+    const actionBox = label.closest("article")?.querySelector('button[aria-label="编辑任务"]')?.getBoundingClientRect();
+    return {
+      labelHasRoom: labelBox.width > 150,
+      actionsBelowLabel: !!actionBox && actionBox.top >= labelBox.bottom,
+    };
+  })).toEqual({ labelHasRoom: true, actionsBelowLabel: true });
 });
 
 test("today entry shares one task, counts once and preserves all students when continuing", async ({ page }) => {
