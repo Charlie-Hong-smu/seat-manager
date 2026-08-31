@@ -21,6 +21,28 @@ async function login(page: import("@playwright/test").Page) {
   await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
 }
 
+async function groupContoursAreDisjoint(page: import("@playwright/test").Page) {
+  return page.locator("[data-seat-layout-group-boundary]").evaluateAll(elements => {
+    const shapes = elements.map(element => ({ rect: element.getBoundingClientRect(), path: element.querySelector("path") }));
+    const contains = (shape: typeof shapes[number], x: number, y: number) => {
+      if (shape.path) {
+        const matrix = shape.path.getScreenCTM();
+        return Boolean(matrix && shape.path.isPointInFill(new DOMPoint(x, y).matrixTransform(matrix.inverse())));
+      }
+      return x > shape.rect.left && x < shape.rect.right && y > shape.rect.top && y < shape.rect.bottom;
+    };
+    for (let i = 0; i < shapes.length; i++) for (const b of shapes.slice(i + 1)) {
+      const a = shapes[i];
+      for (let y = Math.max(a.rect.top, b.rect.top) + 1; y < Math.min(a.rect.bottom, b.rect.bottom); y += 3) {
+        for (let x = Math.max(a.rect.left, b.rect.left) + 1; x < Math.min(a.rect.right, b.rect.right); x += 3) {
+          if (contains(a, x, y) && contains(b, x, y)) return false;
+        }
+      }
+    }
+    return true;
+  });
+}
+
 test("license login and student edits survive a reload", async ({ page }) => {
   await login(page);
 
@@ -66,65 +88,514 @@ test("quick-record undo preserves archived students", async ({ page }) => {
   })).toBe("archived");
 });
 
-test("custom round-table layout persists and keeps overflow students waiting", async ({ page }) => {
+test("main seat editor supports animated range selection, isolated slots and a podium", async ({ page }) => {
   await login(page);
 
   await page.getByRole("button", { name: /新增学生/ }).click();
-  for (const name of ["布局学生甲", "布局学生乙", "布局学生丙", "布局学生丁", "布局学生戊", "布局学生己", "布局学生庚", "布局学生辛"]) {
+  await page.getByPlaceholder("姓名", { exact: true }).fill("布局预览学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  await expect(editor).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "排座" })).toBeHidden();
+
+  await editor.getByRole("button", { name: "批量框选" }).click();
+  const rangeTarget = editor.locator('[data-seat-layout-slot="4:6"]');
+  await rangeTarget.locator(".seat-layout-slot__face").hover();
+  await expect(editor.getByText("7 列 × 5 行", { exact: true })).toBeVisible();
+  await rangeTarget.locator(".seat-layout-slot__face").click();
+  await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(35);
+
+  const isolated = editor.locator('[data-seat-layout-slot="7:7"]');
+  await isolated.getByRole("button", { name: "第 8 行第 8 列，未启用", exact: true }).click();
+  await expect(isolated).toHaveAttribute("data-active", "true");
+  await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(36);
+  await expect(isolated.locator(".seat-layout-slot__face")).toHaveCSS("animation-name", "seat-layout-slot-enable");
+
+  await editor.getByRole("button", { name: "框选成组" }).click();
+  const groupStart = editor.locator('[data-seat-layout-slot="0:0"] .seat-layout-slot__face');
+  const groupEnd = editor.locator('[data-seat-layout-slot="4:1"] .seat-layout-slot__face');
+  await groupStart.hover();
+  await page.mouse.down();
+  await expect(editor.locator("[data-seat-layout-slot-grid]")).toHaveAttribute("data-group-dragging", "true");
+  await groupEnd.hover();
+  await expect(editor.locator("[data-seat-layout-slot-grid]")).toHaveAttribute("data-group-target", "4:1");
+  await page.mouse.up();
+  await page.getByRole("alertdialog", { name: "覆盖现有小组？" }).getByRole("button", { name: "确认覆盖" }).click();
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id^="group-custom-"]')).toHaveCount(10);
+
+  const podiumSlot = editor.locator('[data-seat-layout-slot="8:7"]');
+  await podiumSlot.hover();
+  await podiumSlot.getByRole("button", { name: "将第 9 行第 8 列设为讲台" }).click();
+  await expect(podiumSlot).toHaveAttribute("data-podium", "true");
+  await editor.getByRole("button", { name: "应用布局" }).click();
+
+  await expect(editor).toBeHidden();
+  await expect(page.locator("[data-seat-layout-node]")).toHaveCount(36);
+  await expect(page.locator("[data-seat-layout-podium]")).toBeVisible();
+  await expect(page.locator('[data-seat-layout-group-boundary^="group-custom-"]')).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
+    const current = book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId);
+    return current?.data?.settings?.seatLayout;
+  })).toMatchObject({ template: "freeform", podium: expect.any(Object) });
+
+  await page.getByRole("button", { name: "排座", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "排座" });
+  await expect(dialog.getByRole("button", { name: "布局设计" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "关闭排座设置" }).click();
+});
+
+test("custom classroom grid renders without overlapping seat cards", async ({ page }) => {
+  await login(page);
+
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  for (const name of ["拖动学生甲", "拖动学生乙"]) {
     await page.getByPlaceholder("姓名", { exact: true }).fill(name);
     await page.getByRole("button", { name: "添加到班级" }).click();
   }
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
 
-  await page.getByRole("button", { name: "排座", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "排座" });
-  await dialog.getByRole("button", { name: "布局设计" }).click();
-  await dialog.getByRole("button", { name: "座位布局模板" }).click();
-  await page.getByRole("option", { name: "围桌布局" }).click();
-  await dialog.getByRole("spinbutton", { name: "桌数" }).fill("1");
-  await dialog.getByRole("spinbutton", { name: "每桌人数" }).fill("2");
-  await dialog.getByRole("button", { name: "生成布局草稿" }).click();
-  await dialog.getByRole("button", { name: "应用布局" }).click();
-  await dialog.getByRole("button", { name: "关闭排座设置" }).click();
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  await editor.getByRole("button", { name: "批量框选" }).click();
+  await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
+  await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(64);
+  await editor.getByRole("button", { name: "应用布局" }).click();
 
-  const waitingDock = page.getByRole("region", { name: "待排学生" });
-  await expect(waitingDock).toBeVisible();
-  await waitingDock.getByRole("button", { name: "收起等待区" }).click();
-  await page.waitForTimeout(400);
-  const compactGeometry = await waitingDock.evaluate(element => {
-    const dock = element.getBoundingClientRect();
-    const board = element.previousElementSibling?.getBoundingClientRect();
-    return { dock: { y: dock.y, width: dock.width, height: dock.height }, board: board && { bottom: board.bottom, width: board.width, height: board.height } };
-  });
-  expect(compactGeometry.dock.height).toBe(44);
-  expect(compactGeometry.dock.y).toBeGreaterThanOrEqual(compactGeometry.board?.bottom || 0);
-  await waitingDock.getByRole("button", { name: "展开等待区" }).click();
-  await page.waitForTimeout(400);
-  const expandedGeometry = await waitingDock.evaluate(element => {
-    const dock = element.getBoundingClientRect();
-    const board = element.previousElementSibling?.getBoundingClientRect();
-    const visibleWaitingStudents = Array.from(element.querySelectorAll<HTMLElement>("[data-waiting-student-id]"))
-      .filter(student => {
-        const rect = student.getBoundingClientRect();
-        return rect.left >= dock.left && rect.right <= dock.right;
-      }).length;
-    return { dock: { width: dock.width, height: dock.height }, board: board && { width: board.width, height: board.height }, visibleWaitingStudents };
-  });
-  expect(expandedGeometry.dock.width).toBeGreaterThan(compactGeometry.dock.width);
-  expect(Math.abs(expandedGeometry.dock.width - (expandedGeometry.board?.width || 0))).toBeLessThan(2);
-  expect(expandedGeometry.visibleWaitingStudents).toBeGreaterThanOrEqual(6);
-  expect(expandedGeometry.dock.height).toBe(compactGeometry.dock.height);
-  expect(expandedGeometry.board).toEqual(compactGeometry.board && { width: compactGeometry.board.width, height: compactGeometry.board.height });
-  await expect.poll(() => page.evaluate(() => {
-    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null");
-    const current = book?.slices?.find((slice: { id: string }) => slice.id === book.currentSliceId);
-    return current?.data?.settings?.seatLayout?.template;
-  })).toBe("round-table");
+  const nodes = page.locator("[data-seat-layout-node]");
+  await expect(nodes).toHaveCount(64);
+  await expect(page.locator("[data-seat-layout-group-boundary]")).toHaveCount(4);
+  await expect.poll(() => nodes.evaluateAll(elements => {
+    const boxes = elements.map(element => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    });
+    let overlapCount = 0;
+    for (let first = 0; first < boxes.length; first += 1) {
+      for (let second = first + 1; second < boxes.length; second += 1) {
+        const a = boxes[first];
+        const b = boxes[second];
+        if (Math.min(a.right, b.right) > Math.max(a.left, b.left) && Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top)) overlapCount += 1;
+      }
+    }
+    return { count: boxes.length, overlapCount };
+  })).toEqual({ count: 64, overlapCount: 0 });
 
+  const sourceNode = page.locator('[data-seat-layout-node="seat-1"]');
+  const targetNode = page.locator('[data-seat-layout-node="seat-2"]');
+  const sourceCard = sourceNode.locator("[data-student-id]");
+  const sourceStudentId = await sourceCard.getAttribute("data-student-id");
+  const targetStudentId = await targetNode.locator("[data-student-id]").getAttribute("data-student-id");
+  expect(sourceStudentId).toBeTruthy();
+  expect(targetStudentId).toBeTruthy();
+  await sourceCard.scrollIntoViewIfNeeded();
+  await targetNode.scrollIntoViewIfNeeded();
+  const sourceBox = await sourceCard.boundingBox();
+  const targetBox = await targetNode.boundingBox();
+  expect(sourceBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+  await page.waitForTimeout(300);
+  await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sourceBox!.x + sourceBox!.width / 2 + 12, sourceBox!.y + sourceBox!.height / 2 + 8);
+  await expect(page.locator("[data-drag-student-id]")).toBeVisible();
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator("[data-drag-student-id]")).toBeHidden();
+  await expect(targetNode.locator(`[data-student-id="${sourceStudentId}"]`)).toBeVisible();
+  await expect(sourceNode.locator(`[data-student-id="${targetStudentId}"]`)).toBeVisible();
+});
+
+test("layout editor cancel preserves data and reduced motion keeps slot editing usable", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await login(page);
+  await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
+
+  const before = await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"));
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  const isolated = editor.locator('[data-seat-layout-slot="8:7"]');
+  await isolated.locator(".seat-layout-slot__face").click();
+  await expect(isolated).toHaveAttribute("data-active", "true");
+  await expect(isolated.locator(".seat-layout-slot__face")).toHaveCSS("animation-name", "none");
+  await editor.getByRole("button", { name: "在第 8 列后新增一列", exact: true }).click();
+  await editor.getByRole("button", { name: "在第 9 行后新增一行", exact: true }).click();
+  const added = editor.locator('[data-seat-layout-slot="9:8"]');
+  await added.locator(".seat-layout-slot__face").press("Enter");
+  await expect(added).toHaveAttribute("data-active", "true");
+  await expect(added).not.toHaveAttribute("data-group-id");
+  await added.locator(".seat-layout-slot__face").press("Space");
+  await expect(added).toHaveAttribute("data-active", "false");
+  await editor.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(editor).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(before);
+});
+
+test("axis controls stay subtle and only the individual hovered or keyboard-focused control grows", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  const controls = editor.locator(".seat-grid-axis button");
+  await page.mouse.move(50, 100);
+  for (const axis of ["列", "行"]) {
+    const add = editor.getByRole("button", { name: `在第 2 ${axis}前新增一${axis}`, exact: true });
+    const remove = editor.getByRole("button", { name: `删除第 2 ${axis}`, exact: true });
+    await expect(add).toHaveCSS("opacity", "0.18");
+    await expect(add).toHaveCSS("scale", "0.55");
+    expect((await add.boundingBox())!.width).toBeCloseTo(11, 0);
+    await expect.poll(async () => (await add.locator("..").boundingBox())!.width).toBeCloseTo(20, 1);
+    // Hover the original hit area, including space outside the shrunken icon.
+    await add.locator("..").hover({ position: { x: 2, y: 10 } });
+    await expect(add).toHaveCSS("opacity", "1");
+    await expect(add).toHaveCSS("scale", "1");
+    await expect.poll(() => controls.evaluateAll(elements => elements.filter(element => getComputedStyle(element).opacity === "1").length)).toBe(1);
+    await expect(remove).toHaveCSS("opacity", "0.18");
+    await remove.hover();
+    await expect(remove).toHaveCSS("scale", "1");
+    await expect(add).toHaveCSS("scale", "0.55");
+    await expect.poll(() => controls.evaluateAll(elements => elements.filter(element => getComputedStyle(element).opacity === "1").length)).toBe(1);
+    await page.mouse.move(50, 100);
+    await expect(remove).toHaveCSS("opacity", "0.18");
+  }
+  const emptyRow = editor.getByRole("button", { name: "删除第 9 行", exact: true });
+  await emptyRow.click();
+  await page.mouse.move(50, 100);
+  await expect.poll(() => controls.evaluateAll(elements => elements.filter(element => getComputedStyle(element).opacity === "1").length)).toBe(0);
+  const append = editor.getByRole("button", { name: "在第 8 列后新增一列", exact: true });
+  await append.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(append).toBeFocused();
+  await expect(append).toHaveCSS("opacity", "1");
+  await expect(append).toHaveCSS("scale", "1");
+  await append.press("Enter");
+  await expect(editor.locator('[data-seat-layout-slot="0:8"]')).toBeVisible();
+});
+
+test("row and column insertion preserves seats and occupied deletion requires confirmation in selection modes", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("行列验收学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
+  const original = await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"));
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  const enabled = editor.locator('[data-seat-layout-slot][data-active="true"]');
+  const firstId = await editor.locator('[data-seat-layout-slot="0:0"]').getAttribute("data-seat-grid-seat");
+  const enabledCount = await enabled.count();
+  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await editor.getByRole("button", { name: "在第 1 列前新增一列", exact: true }).click();
+  await expect(editor.locator('[data-seat-layout-slot="0:0"]')).toHaveAttribute("data-active", "false");
+  await expect(editor.locator('[data-seat-layout-slot="0:1"]')).toHaveAttribute("data-seat-grid-seat", firstId!);
+  await expect(enabled).toHaveCount(enabledCount);
+  await editor.getByRole("button", { name: "删除第 1 列", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(editor.locator('[data-seat-layout-slot="0:0"]')).toHaveAttribute("data-seat-grid-seat", firstId!);
+  await editor.getByRole("button", { name: "在第 2 行前新增一行", exact: true }).click();
+  await expect(editor.locator('[data-seat-layout-slot^="1:"][data-active="true"]')).toHaveCount(0);
+  await expect(enabled).toHaveCount(enabledCount);
+  await editor.getByRole("button", { name: "删除第 2 行", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(editor.getByRole("button", { name: "批量框选中" })).toHaveAttribute("aria-pressed", "true");
+
+  await editor.getByRole("button", { name: "删除第 1 列", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "删除第 1 列？" });
+  await expect(dialog).toContainText("此列已经有学生座位，是否仍要删除？");
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(enabled).toHaveCount(enabledCount);
+  await expect(editor.getByRole("button", { name: "批量框选中" })).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(original);
+
+  await editor.getByRole("button", { name: "框选成组", exact: true }).click();
+  const deletedCount = await editor.locator('[data-seat-layout-slot^="0:"][data-active="true"]').count();
+  await editor.getByRole("button", { name: "删除第 1 行", exact: true }).click();
+  const rowDialog = page.getByRole("alertdialog", { name: "删除第 1 行？" });
+  await expect(rowDialog).toContainText("此行已经有学生座位，是否仍要删除？");
+  await rowDialog.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(enabled).toHaveCount(enabledCount - deletedCount);
+  await expect(editor.getByRole("button", { name: "框选成组中" })).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(original);
+  await editor.getByRole("button", { name: "应用布局", exact: true }).click();
+  await expect(page.locator("[data-seat-layout-node]")).toHaveCount(enabledCount - deletedCount);
+  await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
-  await expect(page.getByRole("region", { name: "待排学生" })).toBeVisible();
-  await expect(page.getByText("第 1 组", { exact: true })).toBeVisible();
+  await page.getByLabel("主导航").getByRole("button", { name: /^座位/ }).click();
+  await expect(page.locator("[data-seat-layout-node]")).toHaveCount(enabledCount - deletedCount);
+  await page.getByRole("button", { name: "展开等待区", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^等待学生 行列验收学生/ })).toBeVisible();
+});
+
+test("inserting between rows and columns keeps existing blue nodes opaque without replaying enable pulses", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
+  const faces = editor.locator('[data-seat-grid-seat] .seat-layout-slot__face');
+  await expect(faces).toHaveCount(64);
+  await expect.poll(() => faces.evaluateAll(elements => elements.some(el => el.getAnimations().some(animation => animation.playState === "running")))).toBe(false);
+  const originalNodes = await page.evaluateHandle(() => [...document.querySelectorAll<HTMLElement>("[data-seat-grid-seat]")]);
+  for (const axis of ["行", "列", "行", "列"]) {
+    const frames = page.evaluate(() => new Promise<{ minOpacity: number; enablePulses: number }>(resolve => {
+      let samples = 0, minOpacity = 1, enablePulses = 0;
+      const sample = () => {
+        document.querySelectorAll("[data-seat-grid-seat] .seat-layout-slot__face").forEach(face => {
+          minOpacity = Math.min(minOpacity, Number(getComputedStyle(face).opacity));
+          enablePulses += face.getAnimations().filter(animation => animation instanceof CSSAnimation && animation.animationName === "seat-layout-slot-enable" && animation.playState === "running").length;
+        });
+        if (++samples < 36) requestAnimationFrame(sample); else resolve({ minOpacity, enablePulses });
+      };
+      requestAnimationFrame(sample);
+    }));
+    await editor.getByRole("button", { name: `在第 3 ${axis}前新增一${axis}`, exact: true }).click();
+    expect(await frames).toEqual({ minOpacity: 1, enablePulses: 0 });
+    expect(await originalNodes.evaluate(nodes => nodes.every(node => node.isConnected))).toBe(true);
+    await expect(faces).toHaveCount(64);
+  }
+  await originalNodes.dispose();
+  const isolated = editor.locator('[data-seat-layout-slot="2:2"] .seat-layout-slot__face');
+  await isolated.click();
+  await expect(isolated).toHaveCSS("animation-name", "seat-layout-slot-enable");
+});
+
+test("existing group edges resize, podiums stay outside and overlapping selection requires explicit confirmation", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("缩放验收学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  const grid = editor.locator("[data-seat-layout-slot-grid]");
+  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await editor.locator('[data-seat-layout-slot="3:3"] .seat-layout-slot__face').click();
+  const podium = editor.locator('[data-seat-layout-slot="1:0"]');
+  await podium.hover();
+  await podium.getByRole("button", { name: "将第 2 行第 1 列设为讲台" }).click();
+  await expect(podium).toHaveAttribute("data-podium", "true");
+  await expect(podium).not.toHaveAttribute("data-group-id");
+  const firstGroup = editor.locator('[data-seat-layout-group-boundary="group-slot-1"]');
+  await expect(firstGroup).toHaveAttribute("data-podium-cutout", "true");
+  await editor.getByRole("button", { name: "框选成组", exact: true }).click();
+  const bottom = firstGroup.getByRole("button", { name: "调整第 1 组下边缘" });
+  await bottom.hover();
+  await page.mouse.down();
+  await editor.locator('[data-seat-layout-slot="1:1"]').hover();
+  await expect(grid).toHaveAttribute("data-group-resizing", "group-slot-1");
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-slot-1"]')).toHaveCount(7);
+  await page.mouse.up();
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-slot-1"]')).toHaveCount(3);
+  await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(15);
+  await bottom.press("ArrowDown");
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-slot-1"]')).toHaveCount(5);
+  const width = (await firstGroup.boundingBox())!.width;
+  await firstGroup.getByRole("button", { name: "调整第 1 组右边缘" }).press("ArrowRight");
+  await page.getByRole("alertdialog", { name: "覆盖现有小组？" }).getByRole("button", { name: "取消", exact: true }).click();
+  expect((await firstGroup.boundingBox())!.width).toBeCloseTo(width, 1);
+
+  async function collide() {
+    await editor.locator('[data-seat-layout-slot="0:0"] .seat-layout-slot__face').hover();
+    await page.mouse.down();
+    await editor.locator('[data-seat-layout-slot="2:2"] .seat-layout-slot__face').hover();
+    await expect(editor.locator('[data-seat-layout-group-boundary]')).toHaveCount(2);
+    await expect(editor.locator('[data-seat-layout-group-boundary][data-collision="true"]')).toHaveCount(2);
+    await expect(editor.locator('[data-seat-layout-group-boundary="group-slot-2"]')).toHaveCSS("border-top-color", "rgb(220, 38, 38)");
+    await expect(editor.locator('[data-seat-group-selection]')).toHaveAttribute("data-podium-cutout", "true");
+    await page.screenshot({ path: "../output/seat-layout-acceptance/group-collision-preview.png", animations: "disabled" });
+    await page.mouse.up();
+    return page.getByRole("alertdialog", { name: "覆盖现有小组？" });
+  }
+  const cancelDialog = await collide();
+  await expect(cancelDialog).toContainText("第 1 组");
+  await expect(cancelDialog).toContainText("第 2 组");
+  await cancelDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(firstGroup).toHaveCount(1);
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-slot-1"]')).toHaveCount(5);
+  const confirmDialog = await collide();
+  await confirmDialog.getByRole("button", { name: "确认覆盖", exact: true }).click();
+  await expect(editor.locator('[data-seat-layout-group-boundary]')).toHaveCount(2);
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id^="group-custom-"]')).toHaveCount(8);
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-slot-2"]')).toHaveCount(5);
+  await expect(editor.locator('[data-seat-layout-group-boundary="group-slot-2"] .seat-group-label__name')).toHaveText("第 2 组");
+  await expect.poll(() => groupContoursAreDisjoint(page)).toBe(true);
+  await expect(podium).not.toHaveAttribute("data-group-id");
+  const targetGroup = editor.locator('[data-seat-layout-group-boundary^="group-custom-"]');
+  const targetName = await targetGroup.locator(".seat-group-label__name").textContent();
+  await targetGroup.locator('[data-seat-group-resize="right"]').hover();
+  await page.mouse.down();
+  await editor.locator('[data-seat-layout-slot="1:3"] .seat-layout-slot__face').hover();
+  await expect(editor.locator('[data-seat-layout-group-boundary="group-slot-2"]')).toHaveAttribute("data-collision", "true");
+  await expect(editor.locator('[data-seat-layout-group-boundary]')).toHaveCount(2);
+  await page.screenshot({ path: "../output/seat-layout-acceptance/group-resize-collision.png", animations: "disabled" });
+  await page.mouse.up();
+  const resizeDialog = page.getByRole("alertdialog", { name: "覆盖现有小组？" });
+  await expect(resizeDialog).toContainText("原小组保留剩余座位");
+  await resizeDialog.getByRole("button", { name: "确认覆盖" }).click();
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id^="group-custom-"]')).toHaveCount(11);
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-slot-2"]')).toHaveCount(2);
+  await expect(targetGroup.locator(".seat-group-label__name")).toHaveText(targetName!);
+  await expect.poll(() => groupContoursAreDisjoint(page)).toBe(true);
+  await editor.getByRole("button", { name: "应用布局", exact: true }).click();
+  await expect(page.locator('[data-seat-layout-group-boundary][data-podium-cutout="true"]')).toHaveCount(1);
+  await expect(page.locator("[data-seat-layout-node]")).toHaveCount(15);
+  await expect(page.locator("[data-seat-layout-podium]")).toBeVisible();
+});
+
+test("legacy 66-seat layout fits with disjoint trimmed contours, automatic split groups and hover ungroup", async ({ page }) => {
+  await page.setViewportSize({ width: 1310, height: 690 });
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("旧布局验收");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1")!);
+    const slice = book.slices.find((item: { id: string }) => item.id === book.currentSliceId);
+    slice.data.students = Array.from({ length: 60 }, (_, index) => ({ ...slice.data.students[0], id: `demo-${index}`, name: `验收学生${index + 1}`, gender: index % 2 ? "女" : "男" }));
+    const cols = [0, 1, 3, 4, 6, 7, 9, 10];
+    const seats = Array.from({ length: 64 }, (_, index) => ({
+      id: `legacy-${index}`, x: Math.round(60 + cols[index % 8] * 80), y: 70 + (7 - Math.floor(index / 8)) * 70,
+      rotation: 0, label: `${Math.floor(index / 8) + 1}-${index % 8 + 1}`, groupId: `group-${Math.floor(index % 8 / 2) + 1}`,
+    }));
+    seats.push({ id: "extra-a", x: 380, y: 630, label: "9-4", rotation: 0, groupId: "group-9" }, { id: "extra-b", x: 620, y: 630, label: "9-6", rotation: 0, groupId: "group-9" });
+    const groups = [1, 2, 3, 4, 9].map(n => ({ id: `group-${n}`, name: `第 ${n} 组`, shape: "columns", seatIds: seats.filter(seat => seat.groupId === `group-${n}`).map(seat => seat.id) }));
+    slice.data.settings = { ...slice.data.settings, seatLayout: { version: 1, slotGridVersion: 1, template: "freeform", frontEdge: "bottom", canvas: { width: 1000, height: 700 }, seats, groups, neighborEdges: [] } };
+    slice.data.seatOrder = Array.from({ length: 66 }, (_, index) => slice.data.students[index]?.id || null);
+    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify(book));
+  });
+  await page.reload();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: /^座位/ }).click();
+  const nodes = page.locator("[data-seat-layout-node]");
+  await expect(nodes).toHaveCount(66);
+  await expect.poll(() => nodes.evaluateAll(elements => {
+    const rects = elements.map(el => el.getBoundingClientRect());
+    return rects.every(r => r.x >= 200 && r.right <= innerWidth && r.top >= 120 && r.bottom <= innerHeight - 60);
+  })).toBe(true);
+  await page.screenshot({ path: "../output/seat-layout-acceptance/legacy-66-main.png", animations: "disabled" });
+  const before = await nodes.evaluateAll(els => els.map(el => ({ id: el.getAttribute("data-seat-layout-node"), cell: el.getAttribute("data-seat-grid-cell") })));
+
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  await expect(editor.locator('[data-seat-layout-slot="0:7"]')).toHaveAttribute("data-active", "true");
+  await expect(editor.locator('[data-seat-layout-slot="0:8"]')).toHaveCount(0);
+  await editor.locator('[data-seat-layout-slot="1:0"]').hover();
+  const ungroup = editor.getByRole("button", { name: "解除第 1 组小组", exact: true });
+  await expect(ungroup).toBeVisible();
+  await expect(editor.locator('[data-seat-layout-group-boundary="group-1"]')).toHaveAttribute("data-highlighted", "true");
+  await ungroup.click();
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-1"]')).toHaveCount(0);
+  await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(66);
+
+  await editor.getByRole("button", { name: "框选成组", exact: true }).click();
+  await editor.locator('[data-seat-layout-slot="1:1"] .seat-layout-slot__face').hover();
+  await page.mouse.down();
+  await editor.locator('[data-seat-layout-slot="3:4"] .seat-layout-slot__face').hover();
+  await expect(editor.locator("[data-seat-group-selection]")).toHaveCSS("border-top-color", "rgb(217, 119, 6)");
+  await page.screenshot({ path: "../output/seat-layout-acceptance/group-selection.png", animations: "disabled" });
+  await page.mouse.up();
+  await page.getByRole("alertdialog", { name: "覆盖现有小组？" }).getByRole("button", { name: "确认覆盖" }).click();
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id^="group-custom-"]')).toHaveCount(12);
+  // Only intersected seats transfer; disconnected remnants become separately named groups.
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-2"]')).toHaveCount(2);
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-2-part-2"]')).toHaveCount(8);
+  await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-3"]')).toHaveCount(13);
+  await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(66);
+  const boundaries = page.locator("[data-seat-layout-group-boundary]");
+  const disjoint = () => groupContoursAreDisjoint(page);
+  await expect.poll(disjoint).toBe(true);
+  await editor.getByRole("button", { name: "应用布局", exact: true }).click();
+  expect(await nodes.evaluateAll(els => els.map(el => ({ id: el.getAttribute("data-seat-layout-node"), cell: el.getAttribute("data-seat-grid-cell") })))).toEqual(before);
+  await expect(boundaries).toHaveCount(6);
+  await expect.poll(disjoint).toBe(true);
+  await page.screenshot({ path: "../output/seat-layout-acceptance/disjoint-groups-main.png", animations: "disabled" });
+  await page.reload();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: /^座位/ }).click();
+  await expect(nodes).toHaveCount(66);
+  await expect(page.locator('[data-seat-layout-group-boundary^="group-custom-"]')).toHaveCount(1);
+  await expect(page.locator('[data-seat-layout-group-boundary="group-1"]')).toHaveCount(0);
+  await expect(boundaries).toHaveCount(6);
+  await expect.poll(disjoint).toBe(true);
+});
+
+test("group names and ungroup actions work in both selection modes and persist only after apply", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("分组验收学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  const editor = page.locator("[data-seat-layout-editor]");
+  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
+  const slots = editor.locator('[data-seat-layout-slot][data-active="true"]');
+  const group = (id: number) => editor.locator(`[data-seat-layout-group-boundary="group-slot-${id}"]`);
+  const prompt = page.getByRole("dialog", { name: "编辑组名", exact: true });
+  const name = prompt.getByRole("textbox", { name: "名称" });
+
+  await editor.getByRole("button", { name: "框选成组", exact: true }).click();
+  await editor.locator('[data-seat-layout-slot="1:0"]').hover();
+  await group(1).getByRole("button", { name: /^编辑/ }).click();
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toBeInViewport();
+  await expect(name).toBeFocused();
+  await name.fill("2");
+  await expect(prompt.getByRole("alert")).toHaveText("已有同名小组，请换一个组名");
+  await expect(prompt.getByRole("button", { name: "确定", exact: true })).toBeDisabled();
+  await name.fill("7");
+  await name.press("Enter");
+  await expect(prompt).toBeHidden();
+  await expect(group(1).locator(".seat-group-label__name")).toHaveText("第 7 组");
+  await expect(editor.getByRole("button", { name: "框选成组中", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(slots).toHaveCount(64);
+  await group(2).locator(".seat-group-label").hover();
+  await group(2).getByRole("button", { name: /^解除/ }).click();
+  await expect(group(2)).toHaveCount(0);
+  await expect(slots).toHaveCount(64);
+
+  await group(1).locator(".seat-group-label").hover();
+  await group(1).getByRole("button", { name: /^编辑/ }).click();
+  await name.fill("9");
+  await name.press("Escape");
+  await expect(prompt).toBeHidden();
+  await expect(group(1).locator(".seat-group-label__name")).toHaveText("第 7 组");
+  await expect(editor.getByRole("button", { name: "框选成组中", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await editor.locator('[data-seat-layout-slot="1:0"]').hover();
+  await group(1).locator(".seat-group-label").hover();
+  await page.screenshot({ path: "../output/seat-layout-acceptance/group-actions-in-selection.png", animations: "disabled" });
+  await group(1).getByRole("button", { name: /^编辑/ }).click();
+  await name.fill("8");
+  await prompt.getByRole("button", { name: "确定", exact: true }).click();
+  await expect(group(1).locator(".seat-group-label__name")).toHaveText("第 8 组");
+  await expect(editor.getByRole("button", { name: "批量框选中", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await group(3).locator(".seat-group-label").hover();
+  await group(3).getByRole("button", { name: /^解除/ }).click();
+  await expect(group(3)).toHaveCount(0);
+  await expect(slots).toHaveCount(64);
+  await editor.getByRole("button", { name: "应用布局", exact: true }).click();
+  const savedName = page.locator('[data-seat-layout-group-boundary="group-slot-1"] .seat-group-label__name');
+  await expect(savedName).toHaveText("第 8 组");
+  await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: /^座位/ }).click();
+  await expect(savedName).toHaveText("第 8 组");
+  await expect(page.locator("[data-seat-layout-node]")).toHaveCount(64);
+  await expect(page.locator("[data-seat-layout-group-boundary]")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await group(1).locator(".seat-group-label").hover();
+  await group(1).getByRole("button", { name: /^编辑/ }).click();
+  await name.fill("9");
+  await prompt.getByRole("button", { name: "确定", exact: true }).click();
+  await editor.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(savedName).toHaveText("第 8 组");
 });
 
 test("moves a seated student into the bottom waiting dock and back to an empty seat", async ({ page }) => {
@@ -780,11 +1251,27 @@ test("roster, exam, cloud sync and workspace switching keep data isolated", asyn
   await page.locator('input[type="file"]').first().setInputFiles({
     name: "scores.csv",
     mimeType: "text/csv",
-    buffer: Buffer.from("姓名,语文,数学\n甲同学,90,95\n乙同学,88,92"),
+    buffer: Buffer.from("姓名,语文原始分,语文赋分,数学原始分\n甲同学,90,93,95\n乙同学,88,91,92"),
   });
+  await expect(page.getByRole("heading", { name: "自动补全班级排名？" })).toBeVisible();
+  await page.getByRole("dialog", { name: "自动补全班级排名？" }).getByRole("button", { name: "关闭" }).click();
+  await expect(page.getByRole("heading", { name: "自动补全班级排名？" })).toBeHidden();
   await page.getByPlaceholder("考试名称").fill("E2E 期中测试");
   await page.getByRole("button", { name: "保存考试" }).click();
+  await expect(page.getByRole("heading", { name: "自动补全班级排名？" })).toBeVisible();
+  await page.getByRole("button", { name: "稍后决定" }).click();
+  await page.getByRole("button", { name: /排名设置/ }).click();
+  await page.getByRole("button", { name: "应用自动排名" }).click();
+  await expect(page.getByRole("button", { name: /排名设置/ })).toContainText("自动补全");
+  await page.getByRole("button", { name: "保存考试" }).click();
   await expect(page.getByText("E2E 期中测试", { exact: true }).first()).toBeVisible();
+
+  await page.locator("tbody tr").filter({ hasText: "甲同学" }).first().click();
+  await page.getByRole("tab", { name: "成绩", exact: true }).click();
+  await expect(page.getByLabel("语文成绩 93，班排 1")).toBeVisible();
+  await expect(page.getByLabel("数学成绩 95，班排 1")).toBeVisible();
+  await expect(page.getByText("原 90", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "关闭学生详情" }).click();
 
   const scoreManagementToggle = page.getByRole("button", { name: "收起成绩管理" });
   const scoreOverviewTab = page.getByRole("tab", { name: "成绩概览" });

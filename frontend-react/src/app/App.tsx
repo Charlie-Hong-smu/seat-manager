@@ -32,7 +32,8 @@ import type { ActivityEvent, AppStudent, BusinessEntityRef, GradeExam, GradeItem
 import { useStudentActions } from "./hooks/useStudentActions";
 import { useDormitoryActions } from "./hooks/useDormitoryActions";
 import { useClassFundActions } from "./hooks/useClassFundActions";
-import { createFollowupTask, findOpenLinkedTask, getTaskUrgency, todayKey } from "./state/dailyManagement";
+import { editFollowupTask, findMatchingFollowupTask, getTaskUrgency, prepareFollowupTasks, todayKey } from "./state/dailyManagement";
+import { getFollowupStudentIds } from "./state/followupStudents";
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, businessEntityExists, inspectStateHealth, targetFromBusinessRef, type TimelineTarget } from "./state/dataInsights";
 import { createActivityEvent } from "./state/activityEvents";
@@ -133,7 +134,7 @@ export default function App() {
   const [timelineTarget, setTimelineTarget] = useState<TimelineTarget | null>(null);
   const [followupMode, setFollowupMode] = useState<"tasks" | "homework">("tasks");
   const [quickRecordOpen, setQuickRecordOpen] = useState(false);
-  const followupAfterSave = useRef<((taskIds: string[]) => void) | null>(null);
+  const followupAfterSave = useRef<((taskIds: string[]) => void | (() => void)) | null>(null);
   const flushPersistRef = useRef<() => void>(() => {});
   // 两个全量扫描只在对应页签激活时计算，且 toast/弹窗等 App 局部状态变化不再触发重算。
   const historyTimeline = useMemo(() => (sidebarTab === "history" ? buildTimeline(appState) : []), [appState, sidebarTab]);
@@ -163,11 +164,12 @@ export default function App() {
     };
   }
 
-  function requestFollowupTask(draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) {
+  function requestFollowupTask(draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void | (() => void)) {
     if (!draft.id && !draft.continuedFromTaskId && draft.sourceRef) {
-      const existing = findOpenLinkedTask(followupTasks, draft.studentId, draft.sourceRef);
+      const existing = findMatchingFollowupTask(followupTasks, draft);
       if (existing) {
-        setFollowupDraft({ id: existing.id, studentId: existing.studentId, title: existing.title, type: existing.type, description: existing.description, plannedDate: existing.plannedDate, dueDate: existing.dueDate, source: existing.source, sourceRef: existing.sourceRef });
+        followupAfterSave.current = afterSave || null;
+        setFollowupDraft({ id: existing.id, studentIds: getFollowupStudentIds(existing), studentMode: existing.studentMode, studentId: existing.studentId, title: existing.title, type: existing.type, description: existing.description, plannedDate: existing.plannedDate, dueDate: existing.dueDate, source: existing.source, sourceRef: existing.sourceRef });
         return;
       }
     }
@@ -219,7 +221,7 @@ export default function App() {
   function handleContinueTodayTask(taskId: string) {
     const task = followupTasks.find(item => item.id === taskId);
     if (!task) return;
-    requestFollowupTask({ studentId: task.studentId, title: task.title, type: task.type, description: task.resolutionNote ? `上次处理：${task.resolutionNote}` : task.description, plannedDate: todayKey(), dueDate: todayKey(), source: task.source, sourceRef: task.sourceRef, continuedFromTaskId: task.id });
+    requestFollowupTask({ studentIds: getFollowupStudentIds(task), studentMode: task.studentMode, studentId: task.studentId, title: task.title, type: task.type, description: task.resolutionNote ? `上次处理：${task.resolutionNote}` : task.description, plannedDate: todayKey(), dueDate: todayKey(), source: task.source, sourceRef: task.sourceRef, continuedFromTaskId: task.id });
   }
 
   function handleSetLinkedTaskStatus(taskIds: string[], status: "pending" | "completed" | "cancelled") {
@@ -269,34 +271,36 @@ export default function App() {
     const previousTask = draft.id ? followupTasks.find(task => task.id === draft.id) : undefined;
     const afterSave = followupAfterSave.current;
     let savedIds: string[] = draft.id ? [draft.id] : [];
-    if (draft.id) {
-      const { studentIds: _studentIds, id: _id, ...patch } = draft;
-      setFollowupTasks(current => current.map(task => task.id === draft.id ? { ...task, ...patch, updatedAt: new Date().toISOString() } : task));
-    } else {
-      const studentIds = draft.studentIds?.length ? draft.studentIds : [draft.studentId];
-      const created = studentIds.map(studentId => createFollowupTask({ ...draft, studentId, sourceRef: draft.sourceRef ? { ...draft.sourceRef, studentId: draft.sourceRef.studentId || studentId } : undefined }));
-      savedIds = created.map(task => task.id);
-      setFollowupTasks(current => [...created, ...current]);
+    let savedTasks: typeof followupTasks = [];
+    if (previousTask) {
+      const updated = editFollowupTask(previousTask, draft);
+      savedTasks = [updated];
+      setFollowupTasks(current => current.map(task => task.id === updated.id ? updated : task));
+    } else if (!draft.id) {
+      const result = prepareFollowupTasks(draft, followupTasks);
+      savedTasks = result.created;
+      savedIds = result.taskIds;
+      setFollowupTasks(current => [...result.created, ...current]);
     }
-    afterSave?.(savedIds);
-    const activity = createActivityEvent({ action: wasEditing ? "updated" : "created", ref: { domain: "followup", entityId: savedIds[0] || draft.id || "", studentId: draft.studentId || undefined }, studentIds: draft.studentIds?.length ? draft.studentIds : draft.studentId ? [draft.studentId] : [], title: `${wasEditing ? "修改" : "创建"}跟进：${draft.title}`, detail: draft.description || `截止 ${draft.dueDate}` });
-    recordActivity(activity);
+    const undoSource = afterSave?.(savedIds);
+    const removeActivities = recordActivities(savedTasks.map(task => createActivityEvent({ action: wasEditing ? "updated" : "created", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: getFollowupStudentIds(task), title: `${wasEditing ? "修改" : "创建"}跟进：${task.title}`, detail: task.description || `截止 ${task.dueDate}` })));
     followupAfterSave.current = null;
     setFollowupDraft(null);
     actionToast.show({
-      message: wasEditing ? "跟进任务修改已保存" : savedIds.length > 1 ? `已创建 ${savedIds.length} 项跟进任务` : "跟进任务已创建",
+      message: wasEditing ? "跟进任务修改已保存" : !savedTasks.length ? "已关联现有跟进任务" : savedTasks.length > 1 ? `已创建 ${savedTasks.length} 项跟进任务` : "跟进任务已创建",
       actionLabel: "撤销",
       actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
       onAction: () => {
         if (previousTask) {
           setFollowupTasks(current => current.map(task => task.id === previousTask.id ? previousTask : task));
-          setActivityEvents(current => current.filter(item => item.id !== activity.id));
+          removeActivities();
+          if (typeof undoSource === "function") undoSource();
           return;
         }
-        const idSet = new Set(savedIds);
+        const idSet = new Set(savedTasks.map(task => task.id));
         setFollowupTasks(current => current.filter(task => !idSet.has(task.id)));
-        setActivityEvents(current => current.filter(item => item.id !== activity.id));
-        afterSave?.([]);
+        removeActivities();
+        if (typeof undoSource === "function") undoSource();
       },
       duration: 6000,
     });
@@ -689,6 +693,7 @@ export default function App() {
 
   function handleDeleteGradeExam(examId: string): (() => void) | null {
     const exam = appState.gradeExams.find(item => item.id === examId);
+    const deletedCatalogEntries = appState.exams.filter(item => item !== null && typeof item === "object" && "id" in item && String(item.id) === examId);
     const storedRecord = appState.savedExams.find(item => item !== null && typeof item === "object" && "id" in item && item.id === examId) as SavedGradeExamRecord | undefined;
     const deletedRecord = storedRecord || (exam ? {
       id: exam.id,
@@ -703,11 +708,14 @@ export default function App() {
         name: row.name,
         studentNo: row.studentNo,
         scores: row.scores,
-        total: { score: row.total, rankClass: row.rankClass, rankSchool: row.rankSchool },
+        total: { ...row.totalCell, score: row.total, rankClass: row.rankClass, rankSchool: row.rankSchool },
       })),
+      rankConfig: exam.rankConfig,
       importSource: exam.importSource,
       itemAnalysis: exam.itemAnalysis,
     } satisfies SavedGradeExamRecord : undefined);
+    if (!deletedRecord) return null;
+    const deletionEvent = createActivityEvent({ action: "deleted", ref: { domain: "score", entityId: examId }, studentIds: exam?.rows.map(row => row.studentId).filter((id): id is string => Boolean(id)) || [], title: `删除考试：${exam?.name || deletedRecord.name || "考试"}`, detail: "考试成绩已删除" });
     const next = deleteGradeExamRecord({
       examId,
       students: allStudents,
@@ -717,14 +725,12 @@ export default function App() {
       settings: appState.settings,
       dormitories,
       seatHistory: savedSeatHistory,
-      fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents: appState.activityEvents, savedExams: appState.savedExams, exams: appState.exams,
+      fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents: [deletionEvent, ...appState.activityEvents].slice(0, 2000), savedExams: appState.savedExams, exams: appState.exams,
     });
     if (!next) {
       return null;
     }
     replaceState(next);
-    const removeActivity = recordActivity(createActivityEvent({ action: "deleted", ref: { domain: "score", entityId: examId }, studentIds: exam?.rows.map(row => row.studentId).filter((id): id is string => Boolean(id)) || [], title: `删除考试：${exam?.name || deletedRecord?.name || "考试"}`, detail: "考试成绩已删除" }));
-    if (!deletedRecord) return null;
     return () => { replaceState(current => saveGradeExamRecord({
       record: deletedRecord,
       students: current.students,
@@ -742,10 +748,11 @@ export default function App() {
       homeworkAssignments: current.homeworkAssignments,
       quickRecordPresets: current.quickRecordPresets,
       communicationDrafts: current.communicationDrafts,
-      activityEvents: current.activityEvents,
+      activityEvents: current.activityEvents.filter(event => event.id !== deletionEvent.id),
       savedExams: current.savedExams,
-      exams: current.exams,
-    }) || current); removeActivity(); };
+      exams: current.exams.some(item => item !== null && typeof item === "object" && "id" in item && String(item.id) === examId)
+        ? current.exams : [...current.exams, ...deletedCatalogEntries],
+    }) || current); };
   }
 
   function handleSaveGradeItemAnalysis(examId: string, itemAnalysis: GradeItemAnalysis): boolean {
@@ -809,10 +816,10 @@ export default function App() {
     const improved = subjectDiffs.filter(item => item.diff > 0).slice(0, 2).map(item => `${item.subject}+${item.diff}`);
     const declined = subjectDiffs.filter(item => item.diff < 0).slice(0, 2).map(item => `${item.subject}${item.diff}`);
     if (improved.length) {
-      parts.push(`提升较明显：${improved.join("、")}。`);
+      parts.push(`均分上升较明显：${improved.join("、")}。`);
     }
     if (declined.length) {
-      parts.push(`需要关注：${declined.join("、")}。`);
+      parts.push(`均分下降需关注：${declined.join("、")}。`);
     }
     if (!improved.length && !declined.length) {
       parts.push("各科均分变化较平稳，可继续结合学生个体趋势做分层跟进。");

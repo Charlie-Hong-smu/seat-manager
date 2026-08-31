@@ -221,10 +221,10 @@ function examOverviewSheet(exams: GradeExam[]): SheetRows {
 
 function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects: string[]): SheetRows {
   const maps = studentMaps(students);
-  const subjectHeaders = subjects.flatMap(subject => [`${subject}成绩`, `${subject}班排`, `${subject}校排`]);
+  const subjectHeaders = subjects.flatMap(subject => [`${subject}有效成绩`, `${subject}原始分`, `${subject}赋分`, `${subject}班排`, `${subject}校排`]);
   const rows: SheetRows = [[
     "学号", "姓名", "性别", "考试ID", "考试名称", "考试日期", ...subjectHeaders,
-    "总分", "总分班排", "总分校排", "平均分", "等级", "缺失科目数",
+    "有效总分", "原始总分", "赋分总分", "总分班排", "总分校排", "平均分", "等级", "缺失科目数",
   ]];
   exams.forEach(exam => {
     exam.rows.forEach(row => {
@@ -241,9 +241,11 @@ function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects:
         exam.date,
         ...subjects.flatMap(subject => {
           const cell = row.scores[subject] || { score: null, rankClass: null, rankSchool: null };
-          return [cell.score ?? null, cell.rankClass ?? null, cell.rankSchool ?? null];
+          return [cell.score ?? null, cell.rawScore ?? null, cell.assignedScore ?? null, cell.rankClass ?? null, cell.rankSchool ?? null];
         }),
         total,
+        row.totalCell?.rawScore ?? null,
+        row.totalCell?.assignedScore ?? null,
         row.rankClass ?? null,
         row.rankSchool ?? null,
         average,
@@ -257,7 +259,7 @@ function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects:
 
 function subjectDetailSheet(exams: GradeExam[], students: AppStudent[], subjects: string[]): SheetRows {
   const maps = studentMaps(students);
-  const rows: SheetRows = [["学号", "姓名", "性别", "考试ID", "考试名称", "考试日期", "科目", "分数", "班排", "校排", "是否缺考/无成绩"]];
+  const rows: SheetRows = [["学号", "姓名", "性别", "考试ID", "考试名称", "考试日期", "科目", "有效成绩", "原始分", "赋分", "班排", "校排", "是否缺考/无成绩"]];
   exams.forEach(exam => {
     exam.rows.forEach(row => {
       const student = matchStudent(row, maps);
@@ -272,6 +274,8 @@ function subjectDetailSheet(exams: GradeExam[], students: AppStudent[], subjects
           exam.date,
           subject,
           cell.score ?? null,
+          cell.rawScore ?? null,
+          cell.assignedScore ?? null,
           cell.rankClass ?? null,
           cell.rankSchool ?? null,
           cell.score === null || cell.score === undefined ? "是" : "否",
@@ -386,6 +390,8 @@ function studentSummary(student: AppStudent, exams: GradeExam[], subjects: strin
     worstTotal: totals.length ? Math.min(...totals) : null,
     bestRank: ranks.length ? Math.min(...ranks) : null,
     worstRank: ranks.length ? Math.max(...ranks) : null,
+    firstRank: ranks[0] ?? null,
+    lastRank: ranks.length ? ranks[ranks.length - 1] : null,
     strengths: byAvgDesc.slice(0, 3).map(item => item.subject).join("、"),
     weaknesses: byAvgAsc.slice(0, 3).map(item => item.subject).join("、"),
     mostVolatile: byRangeDesc.slice(0, 3).map(item => item.subject).join("、"),
@@ -393,7 +399,7 @@ function studentSummary(student: AppStudent, exams: GradeExam[], subjects: strin
 }
 
 function studentSummarySheet(exams: GradeExam[], students: AppStudent[], subjects: string[]): SheetRows {
-  const rows: SheetRows = [["学号", "姓名", "性别", "参加考试次数", "最近一次考试名称", "首次总分", "末次总分", "总分变化", "平均总分", "最好总分", "最低总分", "最好班排", "最差班排", "优势科目", "薄弱科目", "波动最大科目"]];
+  const rows: SheetRows = [["学号", "姓名", "性别", "参加考试次数", "最近一次考试名称", "首次总分", "末次总分", "总分变化", "首次班排", "末次班排", "排名判断", "平均总分", "最好总分", "最低总分", "最好班排", "最差班排", "优势科目", "薄弱科目", "波动最大科目"]];
   students.forEach(student => {
     const summary = studentSummary(student, exams, subjects);
     rows.push([
@@ -405,6 +411,9 @@ function studentSummarySheet(exams: GradeExam[], students: AppStudent[], subject
       summary.firstTotal,
       summary.lastTotal,
       summary.firstTotal !== null && summary.lastTotal !== null ? round1(summary.lastTotal - summary.firstTotal) : null,
+      summary.firstRank,
+      summary.lastRank,
+      getRankTrend(summary.firstRank, summary.lastRank),
       summary.avgTotal,
       summary.bestTotal,
       summary.worstTotal,
@@ -429,7 +438,7 @@ function studentPersonalSheet(student: AppStudent, exams: GradeExam[], subjects:
     ["导出时间", new Date().toLocaleString("zh-CN")],
     [],
     ["历次考试总览"],
-    ["考试名称", "考试日期", "总分", "平均分", "班排", "校排", "等级", "较上次总分变化", "较上次排名变化"],
+    ["考试名称", "考试日期", "有效总分", "原始总分", "赋分总分", "平均分", "班排", "校排", "等级", "较上次总分变化", "较上次排名变化"],
   ];
   let previousTotal: number | null = null;
   let previousRank: number | null = null;
@@ -440,6 +449,8 @@ function studentPersonalSheet(student: AppStudent, exams: GradeExam[], subjects:
       exam.name,
       exam.date,
       total,
+      row?.totalCell?.rawScore ?? null,
+      row?.totalCell?.assignedScore ?? null,
       row ? getRowAverage(row, exam.subjects) : null,
       rank,
       row?.rankSchool ?? null,
@@ -450,9 +461,12 @@ function studentPersonalSheet(student: AppStudent, exams: GradeExam[], subjects:
     previousTotal = total;
     previousRank = rank;
   });
-  rows.push([], ["各科历次成绩"], ["考试名称", "考试日期", ...subjects]);
+  rows.push([], ["各科历次成绩"], ["考试名称", "考试日期", ...subjects.flatMap(subject => [`${subject}有效成绩`, `${subject}原始分`, `${subject}赋分`])]);
   summary.examRows.forEach(({ exam, row }) => {
-    rows.push([exam.name, exam.date, ...subjects.map(subject => row?.scores[subject]?.score ?? null)]);
+    rows.push([exam.name, exam.date, ...subjects.flatMap(subject => {
+      const cell = row?.scores[subject];
+      return [cell?.score ?? null, cell?.rawScore ?? null, cell?.assignedScore ?? null];
+    })]);
   });
   rows.push([], ["各科排名"], ["考试名称", "考试日期", ...subjects.flatMap(subject => [`${subject}班排`, `${subject}校排`])]);
   summary.examRows.forEach(({ exam, row }) => {
@@ -461,7 +475,8 @@ function studentPersonalSheet(student: AppStudent, exams: GradeExam[], subjects:
   rows.push(
     [],
     ["个人分析摘要"],
-    ["总分趋势", getScoreTrend(summary.firstTotal, summary.lastTotal)],
+    ["排名判断", getRankTrend(summary.firstRank, summary.lastRank)],
+    ["总分变化", getScoreTrend(summary.firstTotal, summary.lastTotal)],
     ["优势科目", summary.strengths || "—"],
     ["薄弱科目", summary.weaknesses || "—"],
     ["波动最大科目", summary.mostVolatile || "—"],
@@ -476,6 +491,14 @@ function getScoreTrend(first: number | null, last: number | null): string {
   if (diff >= 5) return "上升";
   if (diff <= -5) return "下降";
   return "稳定";
+}
+
+function getRankTrend(first: number | null, last: number | null): string {
+  if (first === null || last === null) return "排名数据不足";
+  const improvement = first - last;
+  if (improvement > 0) return `进步 ${improvement} 名`;
+  if (improvement < 0) return `退步 ${Math.abs(improvement)} 名`;
+  return "排名持平";
 }
 
 function buildMissingHint(examRows: Array<{ exam: GradeExam; row: GradeRow | null }>, subjects: string[]): string {
@@ -737,7 +760,7 @@ function rankTrendChartHtml(examRows: Array<{ exam: GradeExam; row: GradeRow | n
 function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: string[], forcePageBreak: boolean): string {
   const summary = studentSummary(student, exams, subjects);
   const studentNo = getStudentNoFromRows(student, summary.examRows);
-  const overviewRows: SheetRows = [["考试", "日期", "总分", "平均分", "总分班排", "总分校排", "等级", "较上次总分"]];
+  const overviewRows: SheetRows = [["考试", "日期", "有效总分", "原始总分", "赋分总分", "平均分", "总分班排", "总分校排", "等级", "较上次总分"]];
   let previousTotal: number | null = null;
   summary.examRows.forEach(({ exam, row }) => {
     const total = row ? getRowTotal(row) : null;
@@ -745,6 +768,8 @@ function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: 
       exam.name,
       exam.date,
       total,
+      row?.totalCell?.rawScore ?? null,
+      row?.totalCell?.assignedScore ?? null,
       row ? getRowAverage(row, exam.subjects) : null,
       row?.rankClass ?? null,
       row?.rankSchool ?? null,
@@ -753,14 +778,14 @@ function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: 
     ]);
     previousTotal = total;
   });
-  const subjectRows: SheetRows = [["考试", "日期", ...subjects.flatMap(subject => [`${subject}分数`, `${subject}班排`, `${subject}校排`])]];
+  const subjectRows: SheetRows = [["考试", "日期", ...subjects.flatMap(subject => [`${subject}有效成绩`, `${subject}原始分`, `${subject}赋分`, `${subject}班排`, `${subject}校排`])]];
   summary.examRows.forEach(({ exam, row }) => {
     subjectRows.push([
       exam.name,
       exam.date,
       ...subjects.flatMap(subject => {
         const cell = row?.scores[subject];
-        return [cell?.score ?? null, cell?.rankClass ?? null, cell?.rankSchool ?? null];
+        return [cell?.score ?? null, cell?.rawScore ?? null, cell?.assignedScore ?? null, cell?.rankClass ?? null, cell?.rankSchool ?? null];
       }),
     ]);
   });
@@ -771,7 +796,7 @@ function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: 
         <div><strong>性别</strong><span>${escapeHtml(student.gender || "—")}</span></div>
         ${studentNo ? `<div><strong>学号</strong><span>${escapeHtml(studentNo)}</span></div>` : ""}
         <div><strong>参加考试</strong><span>${summary.attended} 次</span></div>
-        <div><strong>总分趋势</strong><span>${escapeHtml(getScoreTrend(summary.firstTotal, summary.lastTotal))}</span></div>
+        <div><strong>排名判断</strong><span>${escapeHtml(getRankTrend(summary.firstRank, summary.lastRank))}</span></div>
       </div>
       <div class="summary-line">
         优势科目：${escapeHtml(summary.strengths || "—")}　

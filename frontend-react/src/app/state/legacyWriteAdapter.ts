@@ -75,6 +75,7 @@ function mergeSeatSettings(baseSettings: unknown, seatSettings?: SeatSettings, n
     seatLayout: seatSettings.layout ? {
       ...seatSettings.layout,
       canvas: { ...seatSettings.layout.canvas },
+      podium: seatSettings.layout.podium ? { ...seatSettings.layout.podium } : undefined,
       seats: seatSettings.layout.seats.map(seat => ({ ...seat })),
       groups: seatSettings.layout.groups.map(group => ({ ...group, seatIds: [...group.seatIds] })),
       neighborEdges: seatSettings.layout.neighborEdges.map(edge => ({ ...edge })),
@@ -105,11 +106,28 @@ function toLegacyStudent(student: AppStudent, previous?: Record<string, unknown>
     records: student.records,
     manualTags: student.manualTagIds,
     autoTags: student.autoTagIds,
-    exams: student.exams,
+    exams: student.exams.map(exam => ({
+      ...exam,
+      scores: exam.scoreCells ?? exam.scores,
+      total: exam.totalCell ?? exam.total,
+    })),
     dormitoryId: student.dormitoryId,
     aiComments: student.aiComments || previous?.aiComments || {},
     enrollmentStatus: student.enrollmentStatus || "active",
     archivedAt: student.archivedAt,
+  };
+}
+
+function normalizeGradeScoreCell(value: unknown): SavedGradeExamEntry["total"] {
+  if (!isRecord(value)) {
+    return { score: toNumberOrNull(value), rankClass: null, rankSchool: null };
+  }
+  return {
+    score: toNumberOrNull(value.score),
+    ...(Object.prototype.hasOwnProperty.call(value, "rawScore") ? { rawScore: toNumberOrNull(value.rawScore) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(value, "assignedScore") ? { assignedScore: toNumberOrNull(value.assignedScore) } : {}),
+    rankClass: toNumberOrNull(value.rankClass),
+    rankSchool: toNumberOrNull(value.rankSchool),
   };
 }
 
@@ -125,14 +143,10 @@ function normalizeExamEntry(value: unknown): SavedGradeExamEntry | null {
     studentId: typeof value.studentId === "string" || typeof value.studentId === "number" ? String(value.studentId).trim() : undefined,
     name,
     studentNo: typeof value.studentNo === "string" || typeof value.studentNo === "number" ? String(value.studentNo).trim() : undefined,
-    scores: isRecord(value.scores) ? value.scores as SavedGradeExamEntry["scores"] : {},
-    total: isRecord(value.total)
-      ? {
-          score: toNumberOrNull(value.total.score),
-          rankClass: toNumberOrNull(value.total.rankClass),
-          rankSchool: toNumberOrNull(value.total.rankSchool),
-        }
-      : { score: null, rankClass: null, rankSchool: null },
+    scores: isRecord(value.scores)
+      ? Object.fromEntries(Object.entries(value.scores).map(([subject, cell]) => [subject, normalizeGradeScoreCell(cell)]))
+      : {},
+    total: normalizeGradeScoreCell(value.total),
   };
 }
 
@@ -161,13 +175,17 @@ function normalizeImportSource(value: unknown): ScoreImportSource | undefined {
             .map(item => ({
               subject: String(item.subject || ""),
               scoreCol: Number.isInteger(item.scoreCol) ? item.scoreCol as number : -1,
+              rawScoreCol: Number.isInteger(item.rawScoreCol) ? item.rawScoreCol as number : -1,
+              assignedScoreCol: Number.isInteger(item.assignedScoreCol) ? item.assignedScoreCol as number : -1,
               rankClassCol: Number.isInteger(item.rankClassCol) ? item.rankClassCol as number : -1,
               rankSchoolCol: Number.isInteger(item.rankSchoolCol) ? item.rankSchoolCol as number : -1,
             }))
-            .filter(item => item.subject && item.scoreCol >= 0)
+            .filter(item => item.subject && [item.scoreCol, item.rawScoreCol, item.assignedScoreCol].some(index => index >= 0))
         : [],
       totalMapping: {
         scoreCol: Number.isInteger(totalMapping.scoreCol) ? totalMapping.scoreCol as number : -1,
+        rawScoreCol: Number.isInteger(totalMapping.rawScoreCol) ? totalMapping.rawScoreCol as number : -1,
+        assignedScoreCol: Number.isInteger(totalMapping.assignedScoreCol) ? totalMapping.assignedScoreCol as number : -1,
         rankClassCol: Number.isInteger(totalMapping.rankClassCol) ? totalMapping.rankClassCol as number : -1,
         rankSchoolCol: Number.isInteger(totalMapping.rankSchoolCol) ? totalMapping.rankSchoolCol as number : -1,
       },
@@ -196,6 +214,10 @@ function normalizeSavedGradeExamRecord(value: unknown): SavedGradeExamRecord | n
     subjectCount: Number.isInteger(value.subjectCount) ? value.subjectCount as number : subjects.length,
     subjects,
     entries,
+    rankConfig: isRecord(value.rankConfig) ? {
+      autoClassRank: value.rankConfig.autoClassRank === true,
+      scoreBasis: "effective",
+    } : undefined,
     importSource: normalizeImportSource(value.importSource),
     itemAnalysis: normalizeGradeItemAnalysis(value.itemAnalysis),
   };
@@ -207,19 +229,13 @@ function getSavedExamRecords(value: unknown): SavedGradeExamRecord[] {
     : [];
 }
 
-function getExamSignature(exam: Record<string, unknown>): string {
-  return JSON.stringify({
-    subjects: Array.isArray(exam.subjects) ? [...exam.subjects].sort() : [],
-    scores: exam.scores || {},
-    total: exam.total || {},
-  });
-}
-
-function syncSavedExamsToStudents(students: Record<string, unknown>[], records: SavedGradeExamRecord[]): Record<string, unknown>[] {
+function syncSavedExamsToStudents(students: Record<string, unknown>[], records: SavedGradeExamRecord[], previousRecords: SavedGradeExamRecord[]): Record<string, unknown>[] {
+  // 旧客户端会丢失 source。以本次写入前后的稳定 ID 清理投影，不按名称或分数猜测归属。
+  const managedIds = new Set([...previousRecords, ...records].map(record => record.id));
   const syncedStudents: Record<string, unknown>[] = students.map(student => ({
     ...student,
     exams: Array.isArray(student.exams)
-      ? student.exams.filter(exam => !isRecord(exam) || exam.source !== "savedExamRecord")
+      ? student.exams.filter(exam => !isRecord(exam) || !managedIds.has(String(exam.id)))
       : [],
   }));
   const candidates = syncedStudents.flatMap<GradeStudentCandidate & { target: Record<string, unknown> }>(student => typeof student.id === "string" && typeof student.name === "string" ? [{
@@ -250,21 +266,8 @@ function syncSavedExamsToStudents(students: Record<string, unknown>[], records: 
         total: entry.total,
         source: "savedExamRecord",
       };
-      const syncedSignature = getExamSignature(syncedExam);
       const existing = Array.isArray(student.exams) ? student.exams : [];
-      student.exams = existing.filter((exam: unknown) => {
-        if (!isRecord(exam)) {
-          return false;
-        }
-        if (exam.id === record.id) {
-          return false;
-        }
-        if ((exam.name || "") === syncedExam.name && (exam.date || "") === syncedExam.date) {
-          return false;
-        }
-        return getExamSignature(exam) !== syncedSignature;
-      });
-      (student.exams as unknown[]).push(syncedExam);
+      student.exams = [...existing.filter(exam => !isRecord(exam) || String(exam.id) !== record.id), syncedExam];
     });
   });
 
@@ -330,7 +333,7 @@ export function saveGradeExamRecord(input: SaveGradeExamInput): SeatManagerState
   const legacyStudents = students.map(student => toLegacyStudent(student, previousById.get(student.id)));
   const nextState = {
     ...mergeSnapshotDomains(baseState, input),
-    students: syncSavedExamsToStudents(legacyStudents, savedExams),
+    students: syncSavedExamsToStudents(legacyStudents, savedExams, getSavedExamRecords(input.savedExams ?? baseState.savedExams)),
     savedExams,
   };
 
@@ -356,7 +359,7 @@ function persistSavedExamRecords(
   const legacyStudents = students.map(student => toLegacyStudent(student, previousById.get(student.id)));
   const nextState = {
     ...mergeSnapshotDomains(baseState, input),
-    students: syncSavedExamsToStudents(legacyStudents, resolvedSavedExams),
+    students: syncSavedExamsToStudents(legacyStudents, resolvedSavedExams, getSavedExamRecords(input.savedExams ?? baseState.savedExams)),
     savedExams: resolvedSavedExams,
   };
 
@@ -386,7 +389,15 @@ export function deleteGradeExamRecord(input: DeleteGradeExamInput): SeatManagerS
   const baseState = getBaseState();
   const savedExams = getSavedExamRecords(input.savedExams ?? baseState.savedExams);
   const nextRecords = savedExams.filter(record => record.id !== input.examId);
-  return nextRecords.length !== savedExams.length ? persistSavedExamRecords(input, nextRecords) : null;
+  const hasStudentExam = input.students.some(student => student.exams.some(exam => exam.id === input.examId));
+  if (nextRecords.length === savedExams.length && !hasStudentExam) return null;
+  // 同时支持仅保存在学生档案内的旧考试；同名的其他考试、其他业务数据保持不变。
+  const exams = input.exams ?? (Array.isArray(baseState.exams) ? baseState.exams : []);
+  return persistSavedExamRecords({
+    ...input,
+    students: input.students.map(student => ({ ...student, exams: student.exams.filter(exam => exam.id !== input.examId) })),
+    exams: exams.filter(exam => !isRecord(exam) || String(exam.id) !== input.examId),
+  }, nextRecords);
 }
 
 export function updateGradeExamItemAnalysis(input: PersistSnapshotInput & { examId: string; itemAnalysis: GradeItemAnalysis }): SeatManagerState | null {

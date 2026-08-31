@@ -1,3 +1,4 @@
+import { followupHasStudent, followupStudentLabel } from "./followupStudents";
 import type {
   AppStudent,
   AttendanceRecord,
@@ -168,7 +169,7 @@ export type TodayWorkItem = {
 
 export function buildTodayWorkItems(input: { date: string; students: AppStudent[]; attendance: AttendanceRecord[]; tasks: FollowupTask[]; homework: HomeworkAssignment[] }): TodayWorkItem[] {
   const names = new Map(input.students.map(student => [student.id, student.name]));
-  const tasks = input.tasks.filter(task => task.status === "pending" && task.dueDate <= input.date).map(task => ({ id: `task:${task.id}`, kind: "task" as const, title: task.title, detail: `${task.studentId ? names.get(task.studentId) || "未知学生" : "班级事项"} · ${task.dueDate < input.date ? "已逾期" : "今日截止"}`, urgency: (task.dueDate < input.date ? 0 : 1) as 0 | 1, entityId: task.id, studentId: task.studentId || undefined }));
+  const tasks = input.tasks.filter(task => task.status === "pending" && task.dueDate <= input.date).map(task => ({ id: `task:${task.id}`, kind: "task" as const, title: task.title, detail: `${followupStudentLabel(task, names)} · ${task.dueDate < input.date ? "已逾期" : "今日截止"}`, urgency: (task.dueDate < input.date ? 0 : 1) as 0 | 1, entityId: task.id, studentId: task.studentId || undefined }));
   const attendance = input.attendance.filter(item => item.date === input.date && (item.status !== "normal" || item.late || item.earlyLeave)).map(item => ({ id: `attendance:${item.id}`, kind: "attendance" as const, title: `${names.get(item.studentId) || "未知学生"}出勤异常`, detail: [item.status === "leave" ? "请假" : item.status === "absent" ? "缺勤" : "", item.late ? "迟到" : "", item.earlyLeave ? "早退" : ""].filter(Boolean).join(" · "), urgency: 2 as const, entityId: item.id, studentId: item.studentId }));
   const homework = input.homework.filter(item => (item.lifecycle || "active") === "active" && item.dueDate <= input.date).flatMap(item => {
     const participantIds = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates));
@@ -194,8 +195,8 @@ export function buildWeeklyFacts(input: { students: AppStudent[]; attendance: At
   const inRange = (date: string) => date >= input.startDate && date <= input.endDate;
   const studentIds = input.studentId ? new Set([input.studentId]) : new Set(input.students.map(student => student.id));
   const attendance = input.attendance.filter(item => studentIds.has(item.studentId) && inRange(item.date) && (item.status !== "normal" || item.late || item.earlyLeave));
-  const completed = input.tasks.filter(item => (!input.studentId || item.studentId === input.studentId) && item.status === "completed" && item.completedAt && inRange(item.completedAt.slice(0, 10))).length;
-  const pending = input.tasks.filter(item => (!input.studentId || item.studentId === input.studentId) && item.status === "pending" && item.dueDate <= input.endDate).length;
+  const completed = input.tasks.filter(item => (!input.studentId || followupHasStudent(item, input.studentId)) && item.status === "completed" && item.completedAt && inRange(item.completedAt.slice(0, 10))).length;
+  const pending = input.tasks.filter(item => (!input.studentId || followupHasStudent(item, input.studentId)) && item.status === "pending" && item.dueDate <= input.endDate).length;
   const records = input.students.filter(student => studentIds.has(student.id)).flatMap(student => student.records).filter(record => inRange(record.date));
   const assignments = input.homework.filter(item => (item.lifecycle || "active") !== "archived" && (inRange(item.assignedDate) || inRange(item.dueDate)));
   const pendingHomework = assignments.reduce((sum, item) => { const participants = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates)); return sum + [...studentIds].filter(id => participants.has(id) && item.studentStates[id]?.status === "pending").length; }, 0);

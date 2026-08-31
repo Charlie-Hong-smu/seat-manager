@@ -30,6 +30,7 @@ describe("AI student context and comment cache", () => {
     const context = buildStudentAiContext({ student });
     expect(context.trend.examCount).toBe(10);
     expect(context.trend.totalScoreChange).toBe(18);
+    expect(context.trend.summary).toContain("班级排名较最早一次进步 9 名");
     const compact = compactStudentContextForToken(context, 4);
     expect(compact.exams[0].subjects.length).toBeGreaterThan(0);
     expect(compact.exams[compact.exams.length - 1]?.subjects.length).toBeGreaterThan(0);

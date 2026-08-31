@@ -60,7 +60,7 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
           <div aria-live="polite" className="-mt-3 min-h-5 text-xs">{saveResult === "saved" && <span className="font-semibold text-emerald-600">备注已保存到本机。</span>}{saveResult === "failed" && <span role="alert" className="font-semibold text-red-600">保存失败，请检查本机存储空间后重试。</span>}</div>
 
           <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 overflow-x-auto">
-            {snapshot.layout ? <div className="relative min-h-[520px] min-w-[760px]" style={{ aspectRatio: `${snapshot.layout.canvas.width}/${snapshot.layout.canvas.height}` }}>{snapshot.layout.seats.map((seat, index) => { const name = snapshot.seats[index] || ""; return <div key={seat.id} className={`absolute grid h-12 w-24 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-xl border text-sm font-bold ${name ? "border-gray-200 bg-white text-gray-800" : "border-dashed border-gray-200 bg-gray-100 text-gray-300"}`} style={{ left: `${seat.x / snapshot.layout!.canvas.width * 100}%`, top: `${seat.y / snapshot.layout!.canvas.height * 100}%` }}>{name || "空"}<span className="absolute -bottom-4 text-[10px] font-medium text-gray-400">{seat.label}</span></div>; })}</div> :
+{snapshot.layout ? <SeatLayoutSurface layout={snapshot.layout} renderSeat={(seat, index) => { const name = snapshot.seats[index] || ""; return <div className={`grid h-full place-items-center rounded-xl border text-sm font-bold ${name ? "border-gray-200 bg-white text-gray-800" : "border-dashed border-gray-200 bg-gray-100 text-gray-300"}`} title={seat.label}>{name || "空"}</div>; }} /> :
             <div className="min-w-[820px] space-y-2">
               <div className="grid grid-cols-[3rem_repeat(8,minmax(4.5rem,1fr))] gap-2">
                 <div />
@@ -97,3 +97,4 @@ export function HistorySeatModal({ snapshot, onClose, onSaveNote, onApply, onDel
     </div>
   );
 }
+import { SeatLayoutSurface } from "./SeatLayoutSurface";

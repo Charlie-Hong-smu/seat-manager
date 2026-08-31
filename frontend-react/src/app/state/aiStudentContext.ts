@@ -128,17 +128,27 @@ export function buildLocalStudentTrendSummary(exams: StudentExamSummary[]): stri
   const chronological = [...exams].sort((a, b) => getExamSortValue(a).localeCompare(getExamSortValue(b)));
   const totals = chronological.map(getExamTotal).filter((value): value is number => value !== null);
   const summary: string[] = [];
+  const firstRank = parseRank(chronological[0]?.rank);
+  const latestRank = parseRank(chronological[chronological.length - 1]?.rank);
+  if (firstRank !== null && latestRank !== null) {
+    const improvement = firstRank - latestRank;
+    summary.push(improvement > 0
+      ? `班级排名较最早一次进步 ${improvement} 名。`
+      : improvement < 0
+        ? `班级排名较最早一次退步 ${Math.abs(improvement)} 名。`
+        : "班级排名较最早一次持平。");
+  }
   if (totals.length >= 2) {
     const diff = round1(totals[totals.length - 1] - totals[0]);
-    summary.push(`总分较最早一次${diff >= 0 ? "上升" : "下降"} ${Math.abs(diff)} 分。`);
+    summary.push(`总分变化 ${diff >= 0 ? "+" : ""}${diff} 分。`);
   }
   getSubjectChanges(chronological[0], chronological[chronological.length - 1])
     .filter(change => Math.abs(change.diff) >= 5)
     .slice(0, 6)
     .forEach(change => {
-      summary.push(`${change.subject}${change.diff >= 0 ? "上升" : "下降"} ${Math.abs(change.diff)} 分。`);
+      summary.push(`${change.subject}变化 ${change.diff >= 0 ? "+" : ""}${change.diff} 分。`);
     });
-  return summary.length ? summary.join(" ") : "可用考试次数或有效分数较少，主要参考单次成绩和排名。";
+  return summary.length ? summary.join(" ") : "可用考试次数或有效排名较少，暂不判断进退步。";
 }
 
 export function buildStudentAiContext(input: {

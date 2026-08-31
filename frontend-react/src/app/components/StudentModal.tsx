@@ -1,3 +1,4 @@
+import { followupHasStudent } from "../state/followupStudents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
@@ -9,7 +10,7 @@ import { createStudentRecord, updateStudentProfile } from "../state/studentActio
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
 import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
-import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreviewFallback, BusinessEntityPreviewModel, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, Gender, HomeworkAssignment, RecordType, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
+import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreviewFallback, BusinessEntityPreviewModel, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, Gender, GradeScoreCell, HomeworkAssignment, RecordType, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 import { getNeighborIndexPairs, getSeatPositionLabel, resolveSeatLayout } from "../state/seatLayout";
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
 import { normalizeAttendancePatch } from "../state/classManagementCommands";
@@ -37,6 +38,18 @@ import {
 } from "./studentModalSelectors";
 
 const loadStudentTrendChart = () => import("./StudentTrendChart");
+
+function formatGradeRank(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
+}
+
+function hasGradeScore(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function getStudentExamScoreCell(exam: AppStudent["exams"][number], subject: string, score: number): GradeScoreCell {
+  return exam.scoreCells?.[subject] || { score, rankClass: null, rankSchool: null };
+}
 
 export type StudentDetailTab = "records" | "profile" | "attendance" | "trend" | "followup";
 
@@ -854,7 +867,7 @@ export function StudentModal({
             </div>
           )}
 
-          {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-gray-50 p-3 text-center"><div className="text-xl font-black text-gray-800">{item.value}</div><div className="text-xs text-gray-400">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div className="mb-3 text-sm font-bold text-gray-800">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3"><span className="text-sm font-bold text-gray-700">{item.date}</span><span className="text-sm text-gray-500">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-sm text-gray-400">暂无出勤异常</p>}</div><div className="rounded-xl bg-blue-50 p-3 text-sm text-blue-700">当前跟进任务 {followupTasks.filter(task=>task.studentId===student.id&&task.status==="pending").length} 项</div></div>; })()}
+          {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-gray-50 p-3 text-center"><div className="text-xl font-black text-gray-800">{item.value}</div><div className="text-xs text-gray-400">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div className="mb-3 text-sm font-bold text-gray-800">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3"><span className="text-sm font-bold text-gray-700">{item.date}</span><span className="text-sm text-gray-500">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-sm text-gray-400">暂无出勤异常</p>}</div><div className="rounded-xl bg-blue-50 p-3 text-sm text-blue-700">当前跟进任务 {followupTasks.filter(task=>followupHasStudent(task, student.id)&&task.status==="pending").length} 项</div></div>; })()}
 
           {activeTab === "trend" && (
           <div className="space-y-5">
@@ -863,7 +876,7 @@ export function StudentModal({
             <div className="flex items-start justify-between gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
               <div>
                 <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>成绩趋势</span>
-                <p className="text-xs text-gray-400 mt-0.5">{chronologicalExams.length} 次考试 · 趋势按时间先后展示</p>
+                <p className="text-xs text-gray-400 mt-0.5">{chronologicalExams.length} 次考试 · 分数曲线按时间展示，进退步按班排判断</p>
               </div>
               <div className="max-w-[60%] overflow-x-auto">
                 <SegmentedControl value={effectiveTrendMetric} ariaLabel="成绩趋势科目" onChange={setTrendMetric} options={trendMetricOptions.slice(0, 7).map(metric => ({ value: metric, label: metric === "total" ? "总分" : metric }))} className="shrink-0" />
@@ -962,14 +975,30 @@ export function StudentModal({
                         {scoreEntries.map(([sub, subScore]) => {
                           const isBest = sub === best;
                           const isWeak = sub === weak;
+                          const cell = getStudentExamScoreCell(exam, sub, subScore);
+                          const scoreKind = hasGradeScore(cell.assignedScore) ? "赋" : hasGradeScore(cell.rawScore) ? "原" : "";
                           return (
-                            <div key={sub} className={`flex items-center justify-between px-3 py-2 rounded-xl border text-sm ${
+                            <div
+                              key={sub}
+                              aria-label={`${sub}成绩 ${subScore}，班排 ${formatGradeRank(cell.rankClass)}${hasGradeScore(cell.rankSchool) ? `，校排 ${cell.rankSchool}` : ""}`}
+                              className={`rounded-xl border px-3 py-2 text-sm ${
                               isBest ? "border-emerald-100 bg-emerald-50" :
                               isWeak ? "border-red-100 bg-red-50" :
                               "border-gray-100 bg-white"
-                            }`}>
-                              <span className={`${isBest ? "text-emerald-700" : isWeak ? "text-red-500" : "text-gray-600"}`} style={{ fontWeight: 600 }}>{sub}</span>
-                              <span className={`${isBest ? "text-emerald-700" : isWeak ? "text-red-500" : "text-gray-800"}`} style={{ fontWeight: 700 }}>{subScore}</span>
+                            }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`${isBest ? "text-emerald-700" : isWeak ? "text-red-500" : "text-gray-600"}`} style={{ fontWeight: 600 }}>{sub}</span>
+                                <span className={`flex items-center gap-1 ${isBest ? "text-emerald-700" : isWeak ? "text-red-500" : "text-gray-800"}`} style={{ fontWeight: 700 }}>
+                                  {scoreKind && <span className="rounded bg-white/70 px-1 py-0.5 text-[9px] font-bold text-gray-400">{scoreKind}</span>}
+                                  {subScore}
+                                </span>
+                              </div>
+                              <div className="mt-1.5 flex items-center gap-2 text-[10px] leading-none text-gray-400">
+                                <span className="font-semibold text-blue-500">班排 {formatGradeRank(cell.rankClass)}</span>
+                                {hasGradeScore(cell.rankSchool) && <span>校排 {cell.rankSchool}</span>}
+                                {hasGradeScore(cell.assignedScore) && hasGradeScore(cell.rawScore) && <span className="ml-auto">原 {cell.rawScore}</span>}
+                              </div>
                             </div>
                           );
                         })}
@@ -980,12 +1009,14 @@ export function StudentModal({
                           <span className="text-gray-400">总分</span>
                           <span className="text-blue-700" style={{ fontWeight: 800, fontSize: "1.125rem" }}>{Math.round(total * 10) / 10}</span>
                         </div>
-                        {exam.rank && (
+                        {(exam.rank || hasGradeScore(exam.totalCell?.rankClass)) && (
                           <div className="flex items-center gap-1 text-gray-400">
-                            <span>总排名</span>
-                            <span className="text-gray-700" style={{ fontWeight: 700 }}>第 {exam.rank} 名</span>
+                            <span>总班排</span>
+                            <span className="text-gray-700" style={{ fontWeight: 700 }}>第 {formatGradeRank(exam.totalCell?.rankClass) !== "—" ? formatGradeRank(exam.totalCell?.rankClass) : exam.rank} 名</span>
                           </div>
                         )}
+                        {hasGradeScore(exam.totalCell?.rankSchool) && <div className="text-xs text-gray-400">校排 {exam.totalCell.rankSchool}</div>}
+                        {hasGradeScore(exam.totalCell?.assignedScore) && hasGradeScore(exam.totalCell?.rawScore) && <div className="text-xs text-gray-400">原始总分 {exam.totalCell.rawScore}</div>}
                         <div className="ml-auto flex items-center gap-3">
                           <div className="flex items-center gap-1 text-xs text-emerald-600">
                             <TrendingUp className="w-3 h-3" />{best}

@@ -1,3 +1,5 @@
+import { findMatchingFollowupTask } from "../state/dailyManagement";
+import { getFollowupStudentIds } from "../state/followupStudents";
 import { useState, useMemo, useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 
 import { useInitialTargetEffect } from "../hooks/useInitialTargetEffect";
@@ -59,7 +61,7 @@ interface Props {
   onDeleteDormitoryEvent: (dormId: string, eventId: string) => () => void;
   onSelectStudent: (student: AppStudent) => void;
   followupTasks: FollowupTask[];
-  onRequestFollowupTask: (draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void) => void;
+  onRequestFollowupTask: (draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void | (() => void)) => void;
   onActivity?: (event: ActivityEvent) => void | (() => void);
   onSetLinkedTaskStatus: (taskIds: string[], status: "pending" | "completed" | "cancelled") => void | (() => void);
   periodSettings: DormitoryPeriodSettings;
@@ -387,7 +389,7 @@ export function DormitoryWorkspace({
     const undoActivity = onActivity?.(createActivityEvent({ action: "created", ref: { domain: "dormitory", entityId: savedEvent.id, studentId: savedEvent.responsibleStudentIds?.[0] || savedEvent.responsibleStudentId }, studentIds: savedEvent.responsibleStudentIds || (savedEvent.responsibleStudentId ? [savedEvent.responsibleStudentId] : []), title: `新增宿舍事件：${savedEvent.reason}`, detail: `${selectedDormitory.name} · ${savedEvent.score > 0 ? "+" : ""}${savedEvent.score} 分` }));
     if (createFollowup && punishment.trim() && responsibleIds.length) {
       const studentId = responsibleIds[0];
-      onRequestFollowupTask({ studentId, studentIds: responsibleIds, title: `宿舍处理：${punishment.trim()}`, description: `${selectedDormitory.name} · ${reason.trim()}${note.trim() ? ` · ${note.trim()}` : ""}`, plannedDate: localDateKey(), dueDate: followupDueDate, type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: savedEvent.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, savedEvent.id, { followupTaskIds: taskIds }));
+      onRequestFollowupTask({ studentId, studentIds: responsibleIds, title: `宿舍处理：${punishment.trim()}`, description: `${selectedDormitory.name} · ${reason.trim()}${note.trim() ? ` · ${note.trim()}` : ""}`, plannedDate: localDateKey(), dueDate: followupDueDate, type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: savedEvent.id } }, taskIds => { onUpdateDormitoryEvent(selectedDormitory.id, savedEvent.id, { followupTaskIds: taskIds }); return () => onUpdateDormitoryEvent(selectedDormitory.id, savedEvent.id, { followupTaskIds: savedEvent.followupTaskIds || [] }); });
     }
     resetForm();
     actionToast.show({
@@ -857,7 +859,7 @@ export function DormitoryWorkspace({
                                 <span className="shrink-0 font-semibold">
                                   {event.punishmentDone ? "已执行" : "待执行"}
                                 </span>
-                                {!event.punishmentDone && (event.responsibleStudentIds?.length || event.responsibleStudentId) && <button type="button" onClick={() => { const ids = event.responsibleStudentIds ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []); const studentId = ids[0]; const linked = followupTasks.find(task => task.studentId === studentId && task.status === "pending" && task.sourceRef?.domain === "dormitory" && task.sourceRef.entityId === event.id); onRequestFollowupTask(linked ? { id: linked.id, studentId: linked.studentId, title: linked.title, type: linked.type, description: linked.description, plannedDate: linked.plannedDate, dueDate: linked.dueDate, source: linked.source, sourceRef: linked.sourceRef } : { studentId, studentIds: ids, title: `宿舍处理：${event.punishment}`, description: `${selectedDormitory.name} · ${event.reason}`, plannedDate: localDateKey(), dueDate: localDateKey(), type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }, taskIds => onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: Array.from(new Set([...(event.followupTaskIds || []), ...taskIds])) })); }} className="ml-1 rounded-lg bg-white px-2 py-1 font-bold text-blue-600 shadow-sm hover:bg-blue-50"><ListPlus className="mr-1 inline h-3 w-3"/>{event.followupTaskIds?.length ? "查看任务" : "转为任务"}</button>}
+                                {!event.punishmentDone && (event.responsibleStudentIds?.length || event.responsibleStudentId) && <button type="button" onClick={() => { const ids = event.responsibleStudentIds ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []); const studentId = ids[0]; const linked = findMatchingFollowupTask(followupTasks, { studentId, studentIds: ids, title: event.punishment || event.reason, source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }); onRequestFollowupTask(linked ? { id: linked.id, studentIds: getFollowupStudentIds(linked), studentMode: linked.studentMode, studentId: linked.studentId, title: linked.title, type: linked.type, description: linked.description, plannedDate: linked.plannedDate, dueDate: linked.dueDate, source: linked.source, sourceRef: linked.sourceRef } : { studentId, studentIds: ids, title: `宿舍处理：${event.punishment}`, description: `${selectedDormitory.name} · ${event.reason}`, plannedDate: localDateKey(), dueDate: localDateKey(), type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }, taskIds => { onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: Array.from(new Set([...(event.followupTaskIds || []), ...taskIds])) }); return () => onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: event.followupTaskIds || [] }); }); }} className="ml-1 rounded-lg bg-white px-2 py-1 font-bold text-blue-600 shadow-sm hover:bg-blue-50"><ListPlus className="mr-1 inline h-3 w-3"/>{event.followupTaskIds?.length ? "查看任务" : "转为任务"}</button>}
                               </div>
                             )}
                           </div>

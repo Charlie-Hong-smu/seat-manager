@@ -206,6 +206,42 @@ test("AI upstream failures keep the stable error mapping", async () => {
   }
 });
 
+test("score mapping preserves raw and assigned score columns", async () => {
+  const codeHash = await sha256("SCORE-MAPPING-AI");
+  const key = `seat-manager:license:${codeHash}`;
+  const kv = createKv({ [key]: { licenseId: "teacher-score-mapping", status: "active", maxDevices: 3, aiEnabled: true, aiDailyLimit: 30, devices: [] } });
+  const env = { SEAT_MANAGER_KV: kv, PRODUCT_TOKEN_SECRET: "product-secret", DEEPSEEK_API_KEY: "test-key" };
+  const auth = await worker.fetch(post("/license/auth", { productCode: "SCORE-MAPPING-AI", deviceId: "device-1" }), env);
+  const { token } = await auth.json();
+  const originalFetch = globalThis.fetch;
+  let systemPrompt = "";
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    systemPrompt = body.messages[0].content;
+    return Response.json({ choices: [{ message: { content: JSON.stringify({
+      nameCol: 0,
+      subjectMappings: [{ subject: "语文", scoreCol: -1, rawScoreCol: 1, assignedScoreCol: 2, rankClassCol: 3, rankSchoolCol: -1 }],
+      totalMapping: { scoreCol: -1, rawScoreCol: 4, assignedScoreCol: 5, rankClassCol: -1, rankSchoolCol: -1 },
+      note: "已识别原始分与赋分",
+    }) } }] });
+  };
+  try {
+    const response = await worker.fetch(post("/suggest-score-mapping", {
+      headers: ["姓名", "语文原始分", "语文赋分", "语文班排", "总分原始分", "总分赋分"],
+      sampleRows: [["张三", "88", "92", "2", "168", "175"]],
+      knownSubjects: ["语文"],
+    }, token), env);
+    assert.equal(response.status, 200);
+    const mapping = await response.json();
+    assert.equal(mapping.subjectMappings[0].rawScoreCol, 1);
+    assert.equal(mapping.subjectMappings[0].assignedScoreCol, 2);
+    assert.equal(mapping.totalMapping.assignedScoreCol, 5);
+    assert.match(systemPrompt, /rawScoreCol/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("weekly and item analysis routes validate and sanitize structured AI output", async () => {
   const codeHash = await sha256("WORKBENCH-AI");
   const key = `seat-manager:license:${codeHash}`;

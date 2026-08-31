@@ -1,4 +1,5 @@
-import type { GradeScoreCell, SavedGradeExamRecord, ScoreImportDraft } from "./types";
+import { applyAutomaticClassRanks } from "./gradeRanking";
+import type { GradeRankConfig, GradeScoreCell, SavedGradeExamRecord, ScoreImportDraft } from "./types";
 import { toLocalDateKey } from "./dateKey";
 
 export const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
@@ -28,8 +29,8 @@ export interface ScoreMapping {
   headers: string[];
   nameCol: number;
   studentNoCol: number;
-  subjectMappings: Array<{ subject: string; scoreCol: number; rankClassCol: number; rankSchoolCol: number }>;
-  totalMapping: { scoreCol: number; rankClassCol: number; rankSchoolCol: number };
+  subjectMappings: Array<{ subject: string; scoreCol: number; rawScoreCol: number; assignedScoreCol: number; rankClassCol: number; rankSchoolCol: number }>;
+  totalMapping: { scoreCol: number; rawScoreCol: number; assignedScoreCol: number; rankClassCol: number; rankSchoolCol: number };
   warnings: string[];
 }
 
@@ -72,15 +73,23 @@ function isScoreHeader(header: unknown): boolean {
   if (!normalized || (!hasSubject && !isTotal)) {
     return false;
   }
-  return !/班排|班级排名|班级名次|校排|校排名|校级排名|schoolrank|classrank|名次|位次/.test(normalized);
+  return !/班排|班级排名|班级名次|校排|校排名|校级排名|schoolrank|classrank|排名|排行|名次|位次|rank/.test(normalized);
 }
 
 function isClassRankHeader(header: unknown): boolean {
-  return /班名|班排|班级排名|班级名次|classrank/.test(normalizeHeader(header));
+  const normalized = normalizeHeader(header);
+  return !isSchoolRankHeader(header) && /班名|班排|班级排名|班级名次|排名|名次|位次|classrank|rank$/.test(normalized);
 }
 
 function isSchoolRankHeader(header: unknown): boolean {
-  return /校名|校排|校级|校排名|校级排名|schoolrank/.test(normalizeHeader(header));
+  return /校名|校排|校级|校排名|校级排名|年级排名|年级名次|级排|schoolrank|graderank/.test(normalizeHeader(header));
+}
+
+function getScoreColumnKind(header: unknown): "raw" | "assigned" | "score" {
+  const normalized = normalizeHeader(header);
+  if (/赋分|等级分|转换分|折算分|标准分|scaledscore|assignedscore|convertedscore/.test(normalized)) return "assigned";
+  if (/原始分|原始成绩|原始得分|卷面分|卷面成绩|卷面得分|裸分|原分|rawscore|originalscore/.test(normalized)) return "raw";
+  return "score";
 }
 
 function parseScoreNumber(value: unknown): number | null {
@@ -248,72 +257,87 @@ export function detectScoreMapping(rows: string[][]): ScoreMapping {
   const studentNoCol = normalizedHeaders.findIndex(cell => /学号|学生编号|学生号|考号|准考证号|准考证|studentid|studentno|studentnumber|schoolid/.test(cell));
   const warnings: string[] = [];
   const subjectMappingsMap = new Map(
-    SUBJECT_ORDER.map(subject => [subject, { subject, scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }]),
+    SUBJECT_ORDER.map(subject => [subject, { subject, scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }]),
   );
-  const totalMapping = { scoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 };
+  const totalMapping = { scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 };
   let currentScope = "";
 
   headers.forEach((header, index) => {
     if (!header || index === nameCol || index === studentNoCol) {
       return;
     }
-    if (/学号|考号|准考证|考场|座位|组别|年级|性别|备注|缺考|缺席/.test(normalizedHeaders[index])) {
+    if (/学号|考号|准考证|考场|座位|组别|年级|性别|备注|缺考|缺席/.test(normalizedHeaders[index]) && !isClassRankHeader(header) && !isSchoolRankHeader(header)) {
       return;
     }
     const subject = detectSubjectFromHeader(header);
-    const isTotal = /总分|总成绩|totalscore|overall/.test(normalizedHeaders[index]);
+    const isTotal = /总分|总成绩|总排|总排名|总名次|totalscore|overall/.test(normalizedHeaders[index]);
 
     if ((subject || isTotal) && isScoreHeader(header)) {
+      const scoreKind = getScoreColumnKind(header);
+      const targetKey = scoreKind === "raw" ? "rawScoreCol" : scoreKind === "assigned" ? "assignedScoreCol" : "scoreCol";
+      const scoreLabel = scoreKind === "raw" ? "原始分" : scoreKind === "assigned" ? "赋分" : "成绩";
       if (subject) {
         const item = subjectMappingsMap.get(subject);
-        if (item && item.scoreCol !== -1) {
-          warnings.push(`${subject}分数列重复，已使用靠后的列。`);
+        if (item && item[targetKey] !== -1) {
+          warnings.push(`${subject}${scoreLabel}列重复，已使用靠后的列。`);
         }
         if (item) {
-          item.scoreCol = index;
+          item[targetKey] = index;
         }
         currentScope = subject;
       } else {
-        if (totalMapping.scoreCol !== -1) {
-          warnings.push("总分列重复，已使用靠后的列。");
+        if (totalMapping[targetKey] !== -1) {
+          warnings.push(`总分${scoreLabel}列重复，已使用靠后的列。`);
         }
-        totalMapping.scoreCol = index;
+        totalMapping[targetKey] = index;
         currentScope = "__total__";
       }
       return;
     }
 
     if (isClassRankHeader(header)) {
-      if (currentScope === "__total__") {
+      if (isTotal || (currentScope === "__total__" && !subject)) {
         totalMapping.rankClassCol = totalMapping.rankClassCol === -1 ? index : totalMapping.rankClassCol;
-      } else if (currentScope && subjectMappingsMap.has(currentScope)) {
-        const item = subjectMappingsMap.get(currentScope);
+      } else {
+        const rankSubject = subject || currentScope;
+        const item = rankSubject ? subjectMappingsMap.get(rankSubject) : undefined;
         if (item && item.rankClassCol === -1) item.rankClassCol = index;
       }
       return;
     }
 
     if (isSchoolRankHeader(header)) {
-      if (currentScope === "__total__") {
+      if (isTotal || (currentScope === "__total__" && !subject)) {
         totalMapping.rankSchoolCol = totalMapping.rankSchoolCol === -1 ? index : totalMapping.rankSchoolCol;
-      } else if (currentScope && subjectMappingsMap.has(currentScope)) {
-        const item = subjectMappingsMap.get(currentScope);
+      } else {
+        const rankSubject = subject || currentScope;
+        const item = rankSubject ? subjectMappingsMap.get(rankSubject) : undefined;
         if (item && item.rankSchoolCol === -1) item.rankSchoolCol = index;
       }
     }
   });
 
-  const subjectMappings = Array.from(subjectMappingsMap.values()).filter(item => item.scoreCol !== -1);
+  const subjectMappings = Array.from(subjectMappingsMap.values()).filter(item => item.scoreCol !== -1 || item.rawScoreCol !== -1 || item.assignedScoreCol !== -1);
   if (nameCol === -1) warnings.push("未识别到姓名列。");
   if (!subjectMappings.length) warnings.push("未识别到可用科目列。");
   return { headers, nameCol, studentNoCol, subjectMappings, totalMapping, warnings };
 }
 
-function readScoreCell(row: string[], scoreCol: number, rankClassCol: number, rankSchoolCol: number): GradeScoreCell {
+function readScoreCell(
+  row: string[],
+  mapping: { scoreCol: number; rawScoreCol?: number; assignedScoreCol?: number; rankClassCol: number; rankSchoolCol: number },
+): GradeScoreCell {
+  const rawScoreCol = mapping.rawScoreCol ?? -1;
+  const assignedScoreCol = mapping.assignedScoreCol ?? -1;
+  const genericScore = mapping.scoreCol >= 0 ? parseScoreNumber(row[mapping.scoreCol]) : null;
+  const rawScore = rawScoreCol >= 0 ? parseScoreNumber(row[rawScoreCol]) : null;
+  const assignedScore = assignedScoreCol >= 0 ? parseScoreNumber(row[assignedScoreCol]) : null;
   return {
-    score: scoreCol >= 0 ? parseScoreNumber(row[scoreCol]) : null,
-    rankClass: rankClassCol >= 0 ? parseRankNumber(row[rankClassCol]) : null,
-    rankSchool: rankSchoolCol >= 0 ? parseRankNumber(row[rankSchoolCol]) : null,
+    score: assignedScore ?? rawScore ?? genericScore,
+    ...(rawScoreCol >= 0 ? { rawScore } : {}),
+    ...(assignedScoreCol >= 0 ? { assignedScore } : {}),
+    rankClass: mapping.rankClassCol >= 0 ? parseRankNumber(row[mapping.rankClassCol]) : null,
+    rankSchool: mapping.rankSchoolCol >= 0 ? parseRankNumber(row[mapping.rankSchoolCol]) : null,
   };
 }
 
@@ -329,15 +353,10 @@ export function parseRowsWithMapping(rows: string[][], mapping: ScoreMapping): S
     }
     const studentNo = mapping.studentNoCol >= 0 ? String(row[mapping.studentNoCol] || "").trim() : "";
     const scores = mapping.subjectMappings.reduce<Record<string, GradeScoreCell>>((map, item) => {
-      map[item.subject] = readScoreCell(row, item.scoreCol, item.rankClassCol, item.rankSchoolCol);
+      map[item.subject] = readScoreCell(row, item);
       return map;
     }, {});
-    const total = readScoreCell(
-      row,
-      mapping.totalMapping.scoreCol,
-      mapping.totalMapping.rankClassCol,
-      mapping.totalMapping.rankSchoolCol,
-    );
+    const total = readScoreCell(row, mapping.totalMapping);
     return [{ name, studentNo: studentNo || undefined, scores, total }];
   });
 
@@ -374,15 +393,16 @@ export async function parseScoreFile(file: File): Promise<ScoreImportDraft> {
 
 export function createSavedGradeExamRecord(
   draft: ScoreImportDraft,
-  input: { id?: string; name: string; date: string; rows?: string[][]; mapping?: ScoreMapping },
+  input: { id?: string; name: string; date: string; rows?: string[][]; mapping?: ScoreMapping; rankConfig?: GradeRankConfig },
 ): SavedGradeExamRecord {
   const name = input.name.trim() || draft.filename.replace(/\.[^.]+$/, "") || "考试";
   const date = input.date || toLocalDateKey();
-  const entries = draft.entries.map(entry => ({
+  const preparedDraft = input.rankConfig?.autoClassRank ? applyAutomaticClassRanks(draft) : draft;
+  const entries = preparedDraft.entries.map(entry => ({
     studentId: entry.studentId,
     name: entry.name,
     studentNo: entry.studentNo,
-    scores: Object.fromEntries(draft.subjects.map(subject => [subject, entry.scores[subject] || { score: null }])),
+    scores: Object.fromEntries(preparedDraft.subjects.map(subject => [subject, entry.scores[subject] || { score: null }])),
     total: entry.total || { score: null, rankClass: null, rankSchool: null },
   }));
   return {
@@ -391,9 +411,10 @@ export function createSavedGradeExamRecord(
     date,
     savedAt: new Date().toISOString(),
     studentCount: entries.length,
-    subjectCount: draft.subjects.length,
-    subjects: [...draft.subjects],
+    subjectCount: preparedDraft.subjects.length,
+    subjects: [...preparedDraft.subjects],
     entries,
+    rankConfig: input.rankConfig,
     importSource: input.rows?.length && input.mapping ? {
       filename: draft.filename,
       rows: input.rows.map(row => row.map(cell => String(cell ?? ""))),

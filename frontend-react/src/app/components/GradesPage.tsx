@@ -27,6 +27,7 @@ import { GradeExportModal } from "./GradeExportModal";
 import { AnimatedPopover, SegmentedControl } from "./ui";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholds } from "../state/teacherWorkbench";
+import { createCompetitionRankMap } from "../state/gradeRanking";
 import type { AppStudent, GradeExam, GradeRow } from "../state/types";
 
 const SUBJECT_COLORS = ["var(--app-chart-blue)", "var(--app-chart-violet)", "var(--app-chart-green)", "var(--app-chart-amber)", "var(--app-chart-cyan)", "var(--app-chart-pink)", "var(--app-chart-indigo)", "var(--app-chart-lime)"];
@@ -98,12 +99,15 @@ function getTrendFollowupReason(student: AppStudent): { reason: string; score: n
   }
   const previous = exams[exams.length - 2];
   const latest = exams[exams.length - 1];
-  const previousTotal = getStudentExamTotal(previous);
-  const latestTotal = getStudentExamTotal(latest);
-  const totalDiff = previousTotal !== null && latestTotal !== null ? Math.round((latestTotal - previousTotal) * 10) / 10 : null;
   const previousRank = Number.parseInt(previous.rank || "", 10);
   const latestRank = Number.parseInt(latest.rank || "", 10);
   const rankDiff = Number.isFinite(previousRank) && Number.isFinite(latestRank) ? latestRank - previousRank : null;
+  if (rankDiff === null || rankDiff <= 0) {
+    return null;
+  }
+  const previousTotal = getStudentExamTotal(previous);
+  const latestTotal = getStudentExamTotal(latest);
+  const totalDiff = previousTotal !== null && latestTotal !== null ? Math.round((latestTotal - previousTotal) * 10) / 10 : null;
   const subjectDrop = Object.keys(latest.scores)
     .map(subject => {
       const before = previous.scores[subject];
@@ -112,24 +116,16 @@ function getTrendFollowupReason(student: AppStudent): { reason: string; score: n
     })
     .filter((item): item is { subject: string; diff: number } => Boolean(item))
     .sort((a, b) => a.diff - b.diff)[0];
-  const reasons: string[] = [];
-  let score = 0;
+  const reasons: string[] = [`排名退步 ${rankDiff} 名`];
+  let score = rankDiff;
   if (totalDiff !== null && totalDiff < 0) {
-    reasons.push(`总分下降 ${Math.abs(totalDiff)}`);
-    score += Math.abs(totalDiff);
-  }
-  if (rankDiff !== null && rankDiff > 0) {
-    reasons.push(`排名退步 ${rankDiff}`);
-    score += Math.min(rankDiff, 80) / 2;
+    reasons.push(`总分变化 ${totalDiff}`);
+    score += Math.min(Math.abs(totalDiff), 40) / 10;
   }
   if (subjectDrop && subjectDrop.diff <= -8) {
-    reasons.push(`${subjectDrop.subject}下降 ${Math.abs(subjectDrop.diff)}`);
-    score += Math.abs(subjectDrop.diff);
+    reasons.push(`${subjectDrop.subject}变化 ${subjectDrop.diff}`);
   }
-  if (!reasons.length) {
-    return null;
-  }
-  return { reason: reasons.slice(0, 2).join(" · "), score, diff: totalDiff };
+  return { reason: reasons.slice(0, 2).join(" · "), score, diff: -rankDiff };
 }
 
 function getGradeLabel(avg: number | null, thresholds: GradeThresholds) {
@@ -278,10 +274,8 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     averageScore: getRowAverage(row, subjects),
   })), [rows, subjects]);
   // 总分排名一次算成查找表；此前每行渲染都复制整表排序，搜索时是 O(n²logn)。
-  const rankById = useMemo(() => {
-    const ranked = [...rowsWithMetrics].sort((a, b) => compareValues(a.totalScore, b.totalScore, false));
-    return new Map(ranked.map((row, index) => [row.id, index + 1]));
-  }, [rowsWithMetrics]);
+  const rankById = useMemo(() => createCompetitionRankMap(rowsWithMetrics.map(row => ({ key: row.id, value: row.totalScore }))), [rowsWithMetrics]);
+  const metricRankById = useMemo(() => createCompetitionRankMap(rowsWithMetrics.map(row => ({ key: row.id, value: getMetricValue(row, metricKey) }))), [metricKey, rowsWithMetrics]);
   const metricLabel = metricKey === "total" ? "全部" : metricKey;
   const fullScore = Math.max(1, subjects.length * 100);
   const totalThresholds = {
@@ -475,7 +469,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
               <span key={activeTab} className="grade-toolbar-copy-enter">
-                {activeTab === "single" ? "阈值设置" : "趋势按原始分展示"}
+                {activeTab === "single" ? "阈值设置" : "分数趋势展示 · 进退步按班排"}
               </span>
             </button>
 
@@ -639,9 +633,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.map((row, index) => {
+                      {filtered.map(row => {
                         const matchedStudent = (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null;
-                        const rank = rankById.get(row.id) || 0;
+                        const rank = rankById.get(row.id);
                         const grade = getGradeLabel(getMetricBandValue(row, metricKey, subjects), thresholds);
                         const gradeColor = {
                           优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
@@ -657,7 +651,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             title={matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
                             className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${matchedStudent ? "cursor-pointer" : ""}`}
                           >
-                            <td className="px-6 py-3 text-gray-300 tabular-nums">{row.rankClass || rank || index + 1}</td>
+                            <td className="px-6 py-3 text-gray-300 tabular-nums">{row.rankClass ?? rank ?? "—"}</td>
                             <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{row.name}</td>
                             {subjects.map(subject => {
                               const score = row.scores[subject]?.score ?? null;
@@ -704,7 +698,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                       </tr>
                     </thead>
                     <tbody>
-                      {subjectRankingRows.map((item, index) => {
+                      {subjectRankingRows.map(item => {
                         const grade = getGradeLabel(item.value, thresholds);
                         const gradeColor = {
                           优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
@@ -720,7 +714,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             title={item.matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
                             className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${item.matchedStudent ? "cursor-pointer" : ""}`}
                           >
-                            <td className="px-6 py-3 text-gray-400 tabular-nums">{index + 1}</td>
+                            <td className="px-6 py-3 text-gray-400 tabular-nums">{item.row.scores[metricKey]?.rankClass ?? metricRankById.get(item.row.id) ?? "—"}</td>
                             <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{item.row.name}</td>
                             <td className="text-center px-4 py-3 tabular-nums text-blue-700" style={{ fontWeight: 700 }}>{formatScore(item.value)}</td>
                             <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
@@ -762,7 +756,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="text-gray-800" style={{ fontWeight: 900 }}>AI 跟进候选</h3>
-                    <p className="mt-0.5 text-sm text-gray-400">根据最近两次考试变化自动挑出需要先看的学生</p>
+                    <p className="mt-0.5 text-sm text-gray-400">按最近两次考试班排变化挑出需要先看的学生，分数仅作说明</p>
                   </div>
                   <Sparkles className="h-5 w-5 text-violet-500" />
                 </div>
@@ -776,7 +770,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-gray-900" style={{ fontWeight: 900 }}>{item.student.name}</span>
                         <span className={`rounded-full px-2 py-0.5 text-xs ${item.diff !== null && item.diff < 0 ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-400"}`} style={{ fontWeight: 800 }}>
-                          {item.diff !== null ? `${item.diff > 0 ? "+" : ""}${item.diff}` : "关注"}
+                          {item.diff !== null ? `↓${Math.abs(item.diff)}名` : "关注"}
                         </span>
                       </div>
                       <p className="mt-2 line-clamp-2 text-xs leading-5 text-gray-500">{item.reason}</p>

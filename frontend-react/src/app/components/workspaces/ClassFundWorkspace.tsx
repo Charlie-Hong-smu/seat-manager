@@ -92,6 +92,7 @@ export function ClassFundWorkspace({
     onRequestFollowupTask({
       studentId: unpaidStudents[0].id,
       studentIds: unpaidStudents.map(student => student.id),
+      studentMode: "individual",
       title: `班费收缴提醒（${collectionCategoryLabel}）`,
       type: "常规跟进",
       description: `${periodLabel}内未登记「${collectionCategoryLabel}」，请确认是否已收取并补记流水。`,

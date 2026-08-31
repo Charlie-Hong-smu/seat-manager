@@ -36,7 +36,7 @@ describe("business entity context preview", () => {
     const state = createPreviewState();
 
     const score = resolveBusinessEntityPreview(state, { domain: "score", entityId: "exam-new", studentId: "s1" });
-    expect(score).toMatchObject({ title: "期中考", status: "较上次进步 13 分", availability: "available" });
+    expect(score).toMatchObject({ title: "期中考", status: "较上次排名进步 4 名", availability: "available" });
     expect(score.facts).toEqual(expect.arrayContaining([{ label: "总分", value: "183" }, { label: "排名", value: "班级第 8 名" }]));
     expect(resolveBusinessEntityPreview(state, { domain: "communication", entityId: "communication-1", studentId: "s1" })).toMatchObject({ status: "已分享", description: "本周学习状态稳定。" });
     expect(resolveBusinessEntityPreview(state, { domain: "fund", entityId: "fund-1", studentId: "s1" })).toMatchObject({ title: "班级用品", status: "支出", description: "购买白板笔" });

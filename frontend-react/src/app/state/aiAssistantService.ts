@@ -160,12 +160,12 @@ function getStudentTrend(student: AppStudent): number | null {
   }
   const first = chronological[0];
   const latest = chronological[chronological.length - 1];
-  const firstTotal = typeof first.total === "number" ? first.total : null;
-  const latestTotal = typeof latest.total === "number" ? latest.total : null;
-  if (firstTotal === null || latestTotal === null) {
+  const firstRank = Number.parseInt(first.rank || "", 10);
+  const latestRank = Number.parseInt(latest.rank || "", 10);
+  if (!Number.isFinite(firstRank) || !Number.isFinite(latestRank)) {
     return null;
   }
-  return Math.round((latestTotal - firstTotal) * 10) / 10;
+  return firstRank - latestRank;
 }
 
 function buildStudentReasons(student: AppStudent, latestTotal: number | null, averageTotal: number | null): string[] {
@@ -179,8 +179,9 @@ function buildStudentReasons(student: AppStudent, latestTotal: number | null, av
     }
   }
   const diff = getStudentTrend(student);
-  if (diff !== null && diff < 0) reasons.push(`总分下降 ${Math.abs(diff)}`);
-  if (diff !== null && diff > 0) reasons.push(`总分提升 ${diff}`);
+  if (diff !== null && diff < 0) reasons.push(`排名退步 ${Math.abs(diff)} 名`);
+  if (diff !== null && diff > 0) reasons.push(`排名进步 ${diff} 名`);
+  if (diff === 0) reasons.push("排名持平");
   if (student.records.length) {
     reasons.push(`近期记录 ${student.records.slice(0, 3).map(record => record.note).filter(Boolean).join("；")}`);
   }
@@ -380,7 +381,7 @@ function buildStudentPack(student: AppStudent, exams: GradeExam[], latestExam: G
       ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
       summary: matchNote || "",
       previousTotal,
-      trend: studentContext.trend.totalScoreChange,
+      trend: getStudentTrend(student),
       exams: studentContext.exams.map(exam => {
         const scores = exam.subjects.map(item => `${item.subject}${item.score}`).join("、");
         const rank = exam.classRank !== null ? `；班排${exam.classRank}` : "";
@@ -400,7 +401,7 @@ function buildCandidatePack(title: string, reason: string, students: AppStudent[
     return {
       ...formatStudentExamSummary(student, latestExam, latestSubjectAverages),
       category,
-      trend: context.trend.totalScoreChange,
+      trend: getStudentTrend(student),
       exams: context.exams.map(exam => `${exam.name}${exam.date ? `(${exam.date})` : ""}：总分${exam.totalScore ?? "无"}${exam.classRank !== null ? `，班排${exam.classRank}` : ""}`),
       records: context.records,
       tags: context.tags,
@@ -558,6 +559,13 @@ function getLatestStudentTotal(student: AppStudent | null): number | null {
   return student ? getStudentLatestTotal(student) : null;
 }
 
+function getLatestStudentRank(student: AppStudent | null): number | null {
+  if (!student) return null;
+  const exam = [...student.exams].sort((a, b) => `${b.date || ""}-${b.name}`.localeCompare(`${a.date || ""}-${a.name}`))[0];
+  const rank = Number.parseInt(exam?.rank || "", 10);
+  return Number.isFinite(rank) ? rank : null;
+}
+
 function hasTermComparisonIntent(normalizedPrompt: string): boolean {
   return includesAny(normalizedPrompt, ["上学期", "上一学期", "上个学期", "跨学期", "学期对比", "比上学期", "和上学期", "这学期比"])
     || /20\d{2}(春|秋)/.test(normalizedPrompt)
@@ -621,15 +629,21 @@ function buildStudentTermPack(students: AppStudent[], compareStudents: AppStuden
       const compareStudent = findStudentByName(match.student, compareStudents);
       const currentTotal = getLatestStudentTotal(match.student);
       const compareTotal = getLatestStudentTotal(compareStudent);
-      const diff = currentTotal !== null && compareTotal !== null ? Math.round((currentTotal - compareTotal) * 10) / 10 : null;
+      const scoreDiff = currentTotal !== null && compareTotal !== null ? Math.round((currentTotal - compareTotal) * 10) / 10 : null;
+      const currentRank = getLatestStudentRank(match.student);
+      const compareRank = getLatestStudentRank(compareStudent);
+      const rankImprovement = currentRank !== null && compareRank !== null ? compareRank - currentRank : null;
+      const rankSummary = rankImprovement === null
+        ? "排名数据不足"
+        : rankImprovement > 0 ? `排名进步${rankImprovement}名` : rankImprovement < 0 ? `排名退步${Math.abs(rankImprovement)}名` : "排名持平";
       return {
         name: match.student.name,
         summary: compareStudent
-          ? `${match.student.name} ${currentTerm} 最新总分 ${formatMaybeNumber(currentTotal)}，${compareTerm} 最新总分 ${formatMaybeNumber(compareTotal)}${diff !== null ? `，变化 ${diff >= 0 ? "+" : ""}${diff}` : ""}`
+          ? `${match.student.name} ${rankSummary}；${currentTerm} 最新总分 ${formatMaybeNumber(currentTotal)}，${compareTerm} 最新总分 ${formatMaybeNumber(compareTotal)}${scoreDiff !== null ? `，总分变化 ${scoreDiff >= 0 ? "+" : ""}${scoreDiff}` : ""}`
           : `${match.student.name} 在对比学期未匹配到同名学生`,
         current: getStudentExamSeries(match.student).join("；") || "当前学期暂无成绩",
         compare: compareStudent ? (getStudentExamSeries(compareStudent).join("；") || "对比学期暂无成绩") : "未匹配",
-        trend: diff,
+        trend: rankImprovement,
         subjects: [],
         exams: [...getStudentExamSeries(compareStudent || match.student), ...getStudentExamSeries(match.student)].slice(0, 12),
       };
@@ -880,7 +894,7 @@ export function buildAiAssistantContext(input: {
       .filter(item => item.trend !== null && item.trend < 0)
       .sort((a, b) => (a.trend ?? 0) - (b.trend ?? 0))
       .map(item => item.student);
-    const pack = buildCandidatePack("退步候选学生", "问题询问退步/下降，附带退步幅度靠前的学生。", candidates, latestExam, latestSubjectAverages, "退步关注");
+    const pack = buildCandidatePack("退步候选学生", "问题询问退步/下降，附带班级排名退步幅度靠前的学生。", candidates, latestExam, latestSubjectAverages, "退步关注");
     if (pack) packs.push(pack);
   }
   if (includesAny(normalized, ["进步", "提升", "上升", "经验"])) {
@@ -888,7 +902,7 @@ export function buildAiAssistantContext(input: {
       .filter(item => item.trend !== null && item.trend > 0)
       .sort((a, b) => (b.trend ?? 0) - (a.trend ?? 0))
       .map(item => item.student);
-    const pack = buildCandidatePack("进步候选学生", "问题询问进步/提升，附带提升幅度靠前的学生。", candidates, latestExam, latestSubjectAverages, "进步样本");
+    const pack = buildCandidatePack("进步候选学生", "问题询问进步/提升，附带班级排名进步幅度靠前的学生。", candidates, latestExam, latestSubjectAverages, "进步样本");
     if (pack) packs.push(pack);
   }
   if (includesAny(normalized, ["低分", "薄弱", "弱项", "关注", "重点", "帮扶", "临界"])) {

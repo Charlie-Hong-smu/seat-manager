@@ -1,3 +1,4 @@
+import { followupHasStudent } from "../state/followupStudents";
 import { BookOpenCheck, CalendarCheck, ChevronDown, ClipboardList, GraduationCap, History, House } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -17,16 +18,19 @@ interface ContextPreviewProps {
 }
 export function StudentAttentionSummary({ student, attendance, tasks, homework, dormitories, activePreview, onTogglePreview, resolvePreview, onNavigate, leavesWorkbench = false }: { student: AppStudent; attendance: AttendanceRecord[]; tasks: FollowupTask[]; homework: HomeworkAssignment[]; dormitories: Dormitory[] } & ContextPreviewProps) {
   const items: AttentionItem[] = [];
-  tasks.filter(task => task.studentId === student.id && task.status === "pending").slice(0, 2).forEach(task => items.push({ id: `task-${task.id}`, label: task.title, detail: `待处理 · 截止 ${task.dueDate || "未设置"}`, ref: { domain: "followup", entityId: task.id, studentId: student.id }, icon: <ClipboardList className="h-4 w-4"/>, tone: "text-blue-600 bg-blue-50" }));
+  tasks.filter(task => followupHasStudent(task, student.id) && task.status === "pending").slice(0, 2).forEach(task => items.push({ id: `task-${task.id}`, label: task.title, detail: `待处理 · 截止 ${task.dueDate || "未设置"}`, ref: { domain: "followup", entityId: task.id, studentId: student.id }, icon: <ClipboardList className="h-4 w-4"/>, tone: "text-blue-600 bg-blue-50" }));
   homework.filter(assignment => (assignment.lifecycle || "active") === "active" && (assignment.participantStudentIds?.includes(student.id) || student.id in assignment.studentStates) && assignment.studentStates[student.id]?.status === "pending").slice(0, 2).forEach(assignment => items.push({ id: `homework-${assignment.id}`, label: assignment.title, detail: `作业未交 · 截止 ${assignment.dueDate}`, ref: { domain: "homework", entityId: assignment.id, studentId: student.id }, icon: <BookOpenCheck className="h-4 w-4"/>, tone: "text-rose-600 bg-rose-50" }));
   attendance.filter(record => record.studentId === student.id && (record.status !== "normal" || record.late || record.earlyLeave)).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 2).forEach(record => items.push({ id: `attendance-${record.id}`, label: record.status === "leave" ? "请假" : record.status === "absent" ? "缺勤" : record.late ? "迟到" : "早退", detail: `${record.date}${record.note ? ` · ${record.note}` : ""}`, ref: { domain: "attendance", entityId: record.id, studentId: student.id, date: record.date }, icon: <CalendarCheck className="h-4 w-4"/>, tone: "text-amber-600 bg-amber-50" }));
   dormitories.forEach(dormitory => listDormitoryEvents(dormitory).filter(({ event }) => !event.punishmentDone && (event.responsibleStudentIds?.includes(student.id) || event.responsibleStudentId === student.id)).slice(0, 1).forEach(({ event }) => items.push({ id: `dorm-${event.id}`, label: `${dormitory.name} · ${event.reason}`, detail: "宿舍处理待执行", ref: { domain: "dormitory", entityId: event.id, studentId: student.id, date: event.date }, icon: <House className="h-4 w-4"/>, tone: "text-rose-600 bg-rose-50" })));
   const exams = [...student.exams].sort((a,b) => a.date.localeCompare(b.date));
   if (exams.length >= 2) {
     const previous = exams[exams.length - 2]; const latest = exams[exams.length - 1];
-    const total = (exam: typeof latest) => typeof exam.total === "number" ? exam.total : Object.values(exam.scores).reduce((sum, value) => sum + value, 0);
-    const change = Math.round((total(latest) - total(previous)) * 10) / 10;
-    items.push({ id: `score-${latest.id}`, label: `${latest.name} ${change >= 0 ? "进步" : "回落"} ${Math.abs(change)} 分`, detail: `较 ${previous.name}`, ref: { domain: "score", entityId: latest.id, studentId: student.id }, icon: <GraduationCap className="h-4 w-4"/>, tone: change >= 0 ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50" });
+    const previousRank = Number.parseInt(previous.rank || "", 10);
+    const latestRank = Number.parseInt(latest.rank || "", 10);
+    if (Number.isFinite(previousRank) && Number.isFinite(latestRank) && previousRank !== latestRank) {
+      const improvement = previousRank - latestRank;
+      items.push({ id: `score-${latest.id}`, label: `${latest.name} 排名${improvement > 0 ? "进步" : "退步"} ${Math.abs(improvement)} 名`, detail: `较 ${previous.name}`, ref: { domain: "score", entityId: latest.id, studentId: student.id }, icon: <GraduationCap className="h-4 w-4"/>, tone: improvement > 0 ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50" });
+    }
   }
 
   const selected = activePreview?.source === "attention" ? activePreview : null;

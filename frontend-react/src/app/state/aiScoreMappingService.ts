@@ -25,8 +25,8 @@ function safeIndex(value: unknown, maxIndex: number): number {
 function normalizeMapping(headers: string[], result: {
   nameCol?: unknown;
   studentNoCol?: unknown;
-  subjectMappings?: Array<{ subject?: string; scoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown }>;
-  totalMapping?: { scoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown };
+  subjectMappings?: Array<{ subject?: string; scoreCol?: unknown; rawScoreCol?: unknown; assignedScoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown }>;
+  totalMapping?: { scoreCol?: unknown; rawScoreCol?: unknown; assignedScoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown };
 }): ScoreMapping {
   const maxIndex = headers.length - 1;
   const knownSubjects = new Set(SUBJECT_ORDER);
@@ -39,13 +39,17 @@ function normalizeMapping(headers: string[], result: {
           .map(item => ({
             subject: knownSubjects.has(String(item.subject)) ? String(item.subject) : "",
             scoreCol: safeIndex(item.scoreCol, maxIndex),
+            rawScoreCol: safeIndex(item.rawScoreCol, maxIndex),
+            assignedScoreCol: safeIndex(item.assignedScoreCol, maxIndex),
             rankClassCol: safeIndex(item.rankClassCol, maxIndex),
             rankSchoolCol: safeIndex(item.rankSchoolCol, maxIndex),
           }))
-          .filter(item => item.subject && item.scoreCol !== -1)
+          .filter(item => item.subject && (item.scoreCol !== -1 || item.rawScoreCol !== -1 || item.assignedScoreCol !== -1))
       : [],
     totalMapping: {
       scoreCol: safeIndex(result.totalMapping?.scoreCol, maxIndex),
+      rawScoreCol: safeIndex(result.totalMapping?.rawScoreCol, maxIndex),
+      assignedScoreCol: safeIndex(result.totalMapping?.assignedScoreCol, maxIndex),
       rankClassCol: safeIndex(result.totalMapping?.rankClassCol, maxIndex),
       rankSchoolCol: safeIndex(result.totalMapping?.rankSchoolCol, maxIndex),
     },
@@ -127,8 +131,8 @@ export async function suggestScoreMappingWithAi(
   }
   const data = await response.json() as {
     nameCol?: unknown;
-    subjectMappings?: Array<{ subject?: string; scoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown }>;
-    totalMapping?: { scoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown };
+    subjectMappings?: Array<{ subject?: string; scoreCol?: unknown; rawScoreCol?: unknown; assignedScoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown }>;
+    totalMapping?: { scoreCol?: unknown; rawScoreCol?: unknown; assignedScoreCol?: unknown; rankClassCol?: unknown; rankSchoolCol?: unknown };
     note?: string;
   };
   const mapping = normalizeMapping(headers, data);

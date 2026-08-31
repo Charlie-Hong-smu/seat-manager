@@ -20,6 +20,17 @@ function getCell(row: GradeRow, subject: string): GradeScoreCell {
   return row.scores[subject] || { score: null, rankClass: null, rankSchool: null };
 }
 
+function ScoreValue({ cell }: { cell: GradeScoreCell }) {
+  const hasAssigned = typeof cell.assignedScore === "number" && Number.isFinite(cell.assignedScore);
+  const hasRaw = typeof cell.rawScore === "number" && Number.isFinite(cell.rawScore);
+  return <span className="flex min-h-10 flex-col items-center justify-center px-2 py-1.5 text-gray-700">
+    <span className="font-semibold">{formatScore(cell.score)}</span>
+    {hasAssigned && hasRaw && <span className="mt-0.5 text-[9px] text-gray-400">赋分 · 原 {cell.rawScore}</span>}
+    {hasAssigned && !hasRaw && <span className="mt-0.5 text-[9px] text-gray-400">赋分</span>}
+    {!hasAssigned && hasRaw && <span className="mt-0.5 text-[9px] text-gray-400">原始分</span>}
+  </span>;
+}
+
 export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
   const [query, setQuery] = useState("");
   const rows = useMemo(() => {
@@ -48,7 +59,7 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
 
         <div className="shrink-0 px-6 py-3 border-b border-gray-50 flex items-center justify-between gap-3">
           <div className="text-xs text-gray-400">
-            每个科目包含成绩、班排、校排；总分区域用浅紫色区分。
+            每个科目包含成绩、班排、校排；同时存在赋分与原始分时，主值显示赋分。
           </div>
           <div className="relative w-64">
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -105,7 +116,7 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
                     return (
                       <td key={`${row.id}-${subject}`} colSpan={3} className="border-l border-gray-50">
                         <div className="grid grid-cols-3 text-center">
-                          <span className="px-2 py-3 text-gray-700">{formatScore(cell.score)}</span>
+                          <ScoreValue cell={cell} />
                           <span className="px-2 py-3 text-blue-600 bg-blue-50/40">{formatRank(cell.rankClass)}</span>
                           <span className="px-2 py-3 text-gray-500">{formatRank(cell.rankSchool)}</span>
                         </div>
@@ -114,7 +125,7 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
                   })}
                   <td colSpan={3} className="border-l border-violet-100 bg-violet-50/50">
                     <div className="grid grid-cols-3 text-center">
-                      <span className="px-2 py-3 text-violet-700" style={{ fontWeight: 800 }}>{formatScore(row.total)}</span>
+                      <span className="text-violet-700" style={{ fontWeight: 800 }}><ScoreValue cell={row.totalCell || { score: row.total }} /></span>
                       <span className="px-2 py-3 text-violet-600">{formatRank(row.rankClass)}</span>
                       <span className="px-2 py-3 text-gray-500">{formatRank(row.rankSchool)}</span>
                     </div>

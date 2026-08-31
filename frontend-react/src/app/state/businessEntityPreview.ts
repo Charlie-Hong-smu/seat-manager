@@ -1,3 +1,4 @@
+import { followupStudentLabel } from "./followupStudents";
 import { listDormitoryEvents } from "./dormitoryPeriods";
 import type {
   AppStudent,
@@ -90,7 +91,6 @@ function scorePreview(state: SeatManagerState, ref: BusinessEntityRef, fallback?
   );
   const total = summary ? totalForExam(summary) : grade?.row.total;
   const previous = summaryIndex > 0 ? summaries[summaryIndex - 1] : undefined;
-  const change = previous && typeof total === "number" ? Math.round((total - totalForExam(previous)) * 10) / 10 : undefined;
   const subjectSummary = Object.entries(scores)
     .sort(([, left], [, right]) => right - left)
     .slice(0, 4)
@@ -99,14 +99,17 @@ function scorePreview(state: SeatManagerState, ref: BusinessEntityRef, fallback?
   const rank = summary?.rank
     ? (/名|第/.test(summary.rank) ? summary.rank : `班级第 ${summary.rank} 名`)
     : grade?.row.rankClass ? `班级第 ${grade.row.rankClass} 名` : "";
+  const previousRank = Number.parseInt(previous?.rank || "", 10);
+  const currentRank = Number.parseInt(summary?.rank || String(grade?.row.rankClass || ""), 10);
+  const rankImprovement = Number.isFinite(previousRank) && Number.isFinite(currentRank) ? previousRank - currentRank : undefined;
 
   return {
     ref,
     domainLabel: DOMAIN_LABELS.score,
     title: summary?.name || grade?.examName || fallback?.title || "考试成绩",
     subtitle: summary?.date || grade?.examDate,
-    status: change === undefined ? "成绩记录" : change >= 0 ? `较上次进步 ${change} 分` : `较上次回落 ${Math.abs(change)} 分`,
-    statusTone: change === undefined ? "default" : change >= 0 ? "success" : "warning",
+    status: rankImprovement === undefined ? "成绩记录" : rankImprovement > 0 ? `较上次排名进步 ${rankImprovement} 名` : rankImprovement < 0 ? `较上次排名退步 ${Math.abs(rankImprovement)} 名` : "较上次排名持平",
+    statusTone: rankImprovement === undefined || rankImprovement === 0 ? "default" : rankImprovement > 0 ? "success" : "warning",
     facts: [
       ...(typeof total === "number" ? [{ label: "总分", value: String(total) }] : []),
       ...(rank ? [{ label: "排名", value: rank }] : []),
@@ -127,7 +130,7 @@ export function resolveBusinessEntityPreview(
     const task = state.followupTasks.find(item => item.id === ref.entityId);
     if (!task) return unavailable(ref, fallback);
     const status = task.status === "pending" ? "待处理" : task.status === "completed" ? "已完成" : "已取消";
-    return { ref, domainLabel: DOMAIN_LABELS.followup, title: task.title, subtitle: task.type, status, statusTone: task.status === "pending" ? "warning" : task.status === "completed" ? "success" : "muted", facts: [{ label: "计划日期", value: task.plannedDate || "未设置" }, { label: "截止日期", value: task.dueDate || "未设置" }, { label: "来源", value: task.source === "ai" ? "AI 建议" : task.source === "manual" ? "手动创建" : task.source }], description: task.resolutionNote ? `${task.description ? `${task.description}\n` : ""}处理结果：${task.resolutionNote}` : task.description, availability: "available", navigationLabel: NAVIGATION_LABELS.followup };
+    return { ref, domainLabel: DOMAIN_LABELS.followup, title: task.title, subtitle: task.type, status, statusTone: task.status === "pending" ? "warning" : task.status === "completed" ? "success" : "muted", facts: [{ label: "关联学生", value: followupStudentLabel(task, new Map(state.students.map(student => [student.id, student.name]))) }, { label: "计划日期", value: task.plannedDate || "未设置" }, { label: "截止日期", value: task.dueDate || "未设置" }, { label: "来源", value: task.source === "ai" ? "AI 建议" : task.source === "manual" ? "手动创建" : task.source }], description: task.resolutionNote ? `${task.description ? `${task.description}\n` : ""}处理结果：${task.resolutionNote}` : task.description, availability: "available", navigationLabel: NAVIGATION_LABELS.followup };
   }
 
   if (ref.domain === "homework") {

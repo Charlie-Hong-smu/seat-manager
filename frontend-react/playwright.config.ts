@@ -7,7 +7,7 @@ const basePath = commercial ? "/" : "/seat-manager/";
 export default defineConfig({
   workers: process.env.CI ? undefined : 1,
   testDir: "./e2e",
-  testMatch: commercial ? "commercial.spec.ts" : ["app-state.spec.ts", "pwa.spec.ts"],
+  testMatch: commercial ? ["commercial.spec.ts", "followup-grouping.spec.ts"] : ["app-state.spec.ts", "pwa.spec.ts", "followup-grouping.spec.ts"],
   outputDir: "./test-results",
   reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   use: {

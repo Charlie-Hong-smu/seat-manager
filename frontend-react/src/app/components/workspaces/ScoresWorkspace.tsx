@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { FileUp, PanelLeftClose, PanelLeftOpen, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
+import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 
 import { hasStoredAiScoreMappingAuth, suggestScoreMappingWithAi, type AiScoreMappingSuggestion } from "../../state/aiScoreMappingService";
+import { applyAutomaticClassRanks, getMissingClassRankSummary } from "../../state/gradeRanking";
 import {
   buildScoreImportDraftFromRows,
   createSavedGradeExamRecord,
@@ -21,7 +22,7 @@ import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuest
 import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, IconButton, InlineStatus, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
+import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, IconButton, InlineStatus, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 import { toLocalDateKey } from "../../state/dateKey";
@@ -78,11 +79,14 @@ export function ScoresWorkspace({
 }) {
   const actionToast = useActionToast();
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
+  const [sourceDraft, setSourceDraft] = useState<ScoreImportDraft | null>(null);
   const [scoreRows, setScoreRows] = useState<string[][]>([]);
   const [scoreFilename, setScoreFilename] = useState("");
   const [manualMapping, setManualMapping] = useState<ScoreMapping | null>(null);
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const mappingModalRef = useModalFocus(mappingModalOpen, () => setMappingModalOpen(false));
+  const [rankChoice, setRankChoice] = useState<"pending" | "auto" | "source">("pending");
+  const [rankDialogOpen, setRankDialogOpen] = useState(false);
   const [scoreStatus, setScoreStatus] = useState("");
   const [examName, setExamName] = useState("");
   const [examDate, setExamDate] = useState(toLocalDateKey());
@@ -126,6 +130,10 @@ export function ScoresWorkspace({
       setScoreRows(rows);
       setScoreFilename(file.name);
       setDraft(nextDraft);
+      setSourceDraft(nextDraft);
+      const missingRanks = getMissingClassRankSummary(nextDraft);
+      setRankChoice(missingRanks.missingCellCount ? "pending" : "source");
+      setRankDialogOpen(missingRanks.missingCellCount > 0);
       if (!remappingExamId) {
         setExamName(file.name.replace(/\.[^.]+$/, "") || "考试");
         setExamDate(toLocalDateKey());
@@ -147,6 +155,9 @@ export function ScoresWorkspace({
         setManualMapping(null);
       }
       setDraft(null);
+      setSourceDraft(null);
+      setRankChoice("pending");
+      setRankDialogOpen(false);
       const reason = error instanceof Error ? error.message : "";
       setScoreStatus({
         mapping_failed: "未能自动识别姓名或科目列，可打开映射设置。",
@@ -174,13 +185,27 @@ export function ScoresWorkspace({
     }
     try {
       const nextDraft = buildScoreImportDraftFromRows(scoreRows, scoreFilename, manualMapping);
-      setDraft(nextDraft);
+      setSourceDraft(nextDraft);
+      setDraft(rankChoice === "auto" ? applyAutomaticClassRanks(nextDraft) : nextDraft);
       setMappingModalOpen(false);
       setAiMappingSuggestion(null);
+      if (rankChoice === "pending" && getMissingClassRankSummary(nextDraft).missingCellCount) {
+        setRankDialogOpen(true);
+      }
       setScoreStatus(`已应用手动映射：${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。`);
     } catch {
       setScoreStatus("手动映射无法应用，请至少选择姓名列和一个科目分数列。");
     }
+  }
+
+  function applyRankChoice(choice: "auto" | "source") {
+    if (!sourceDraft) return;
+    setRankChoice(choice);
+    setDraft(choice === "auto" ? applyAutomaticClassRanks(sourceDraft) : sourceDraft);
+    setRankDialogOpen(false);
+    setScoreStatus(choice === "auto"
+      ? "已按有效成绩补全缺失班排；已有班排和校排保持原值。"
+      : "已保留原表排名，缺失班排不会自动补全。");
   }
 
   function getAiMappingErrorMessage(reason: string): string {
@@ -224,33 +249,50 @@ export function ScoresWorkspace({
   }
 
   function saveDraft() {
-    if (!draft || !examName.trim()) {
+    if (!draft || !sourceDraft || !examName.trim()) {
       setScoreStatus("请先上传成绩表并填写考试名称。");
       return;
     }
-    const saved = onSaveScoreImport(createSavedGradeExamRecord(draft, {
+    if (rankChoice === "pending" && getMissingClassRankSummary(sourceDraft).missingCellCount) {
+      setRankDialogOpen(true);
+      setScoreStatus("请先确认是否自动补全缺失班排。");
+      return;
+    }
+    const saved = onSaveScoreImport(createSavedGradeExamRecord(sourceDraft, {
       id: remappingExamId || undefined,
       name: examName,
       date: examDate,
       rows: scoreRows,
       mapping: manualMapping || undefined,
+      rankConfig: { autoClassRank: rankChoice === "auto", scoreBasis: "effective" },
     }));
+    if (!saved) {
+      setScoreStatus("保存失败，当前导入内容已保留，请检查存储空间后重试。");
+      return;
+    }
     setDraft(null);
+    setSourceDraft(null);
     setScoreRows([]);
     setScoreFilename("");
     setManualMapping(null);
     setRemappingExamId("");
+    setRankChoice("pending");
+    setRankDialogOpen(false);
     setMappingModalOpen(false);
     setAiMappingSuggestion(null);
-    setScoreStatus(saved ? `已保存「${saved.name}」。` : "保存失败。");
+    setScoreStatus(`已保存「${saved.name}」。`);
+    actionToast.show({ message: `考试“${saved.name}”已保存`, duration: 4000 });
   }
 
   function editExam(exam: GradeExam) {
     if (!exam.importSource) {
       setDraft(null);
+      setSourceDraft(null);
       setScoreRows([]);
       setScoreFilename("");
       setManualMapping(null);
+      setRankChoice("pending");
+      setRankDialogOpen(false);
       setExamName(exam.name);
       setExamDate(exam.date || toLocalDateKey());
       setRemappingExamId(exam.id);
@@ -261,22 +303,36 @@ export function ScoresWorkspace({
       return;
     }
     const rows = exam.importSource.rows;
-    const mapping = {
+    const mapping: ScoreMapping = {
       ...exam.importSource.mapping,
       headers: rows[0] || exam.importSource.mapping.headers,
-      subjectMappings: exam.importSource.mapping.subjectMappings.map(item => ({ ...item })),
-      totalMapping: { ...exam.importSource.mapping.totalMapping },
+      subjectMappings: exam.importSource.mapping.subjectMappings.map(item => ({
+        ...item,
+        rawScoreCol: item.rawScoreCol ?? -1,
+        assignedScoreCol: item.assignedScoreCol ?? -1,
+      })),
+      totalMapping: {
+        ...exam.importSource.mapping.totalMapping,
+        rawScoreCol: exam.importSource.mapping.totalMapping.rawScoreCol ?? -1,
+        assignedScoreCol: exam.importSource.mapping.totalMapping.assignedScoreCol ?? -1,
+      },
       warnings: [...exam.importSource.mapping.warnings],
     };
     try {
-      const nextDraft = buildScoreImportDraftFromRows(rows, exam.importSource.filename || `${exam.name}.csv`, mapping);
-      setDraft(nextDraft);
+      const nextSourceDraft = buildScoreImportDraftFromRows(rows, exam.importSource.filename || `${exam.name}.csv`, mapping);
+      const nextRankChoice = exam.rankConfig
+        ? exam.rankConfig.autoClassRank ? "auto" : "source"
+        : getMissingClassRankSummary(nextSourceDraft).missingCellCount ? "pending" : "source";
+      setSourceDraft(nextSourceDraft);
+      setDraft(nextRankChoice === "auto" ? applyAutomaticClassRanks(nextSourceDraft) : nextSourceDraft);
       setScoreRows(rows);
-      setScoreFilename(exam.importSource.filename || nextDraft.filename);
+      setScoreFilename(exam.importSource.filename || nextSourceDraft.filename);
       setManualMapping(mapping);
       setExamName(exam.name);
       setExamDate(exam.date || toLocalDateKey());
       setRemappingExamId(exam.id);
+      setRankChoice(nextRankChoice);
+      setRankDialogOpen(false);
       setMappingModalOpen(true);
       setAiMappingSuggestion(null);
       setScoreStatus(`正在重新映射「${exam.name}」，应用映射后可覆盖保存。`);
@@ -333,6 +389,8 @@ export function ScoresWorkspace({
     label: `${index + 1}. ${header || "空列"}`,
   }));
   const scorePreviewRows = scoreRows.slice(1, 13);
+  const missingRankSummary = sourceDraft ? getMissingClassRankSummary(sourceDraft) : null;
+  const rankChoiceLabel = rankChoice === "auto" ? "自动补全" : rankChoice === "source" ? "保留原表" : "待确认";
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
@@ -369,10 +427,13 @@ export function ScoresWorkspace({
                         type="button"
                         onClick={() => {
                           setDraft(null);
+                          setSourceDraft(null);
                           setScoreRows([]);
                           setScoreFilename("");
                           setManualMapping(null);
                           setRemappingExamId("");
+                          setRankChoice("pending");
+                          setRankDialogOpen(false);
                           setScoreStatus("");
                         }}
                         className="shrink-0 font-semibold text-blue-500 hover:text-blue-700"
@@ -395,6 +456,17 @@ export function ScoresWorkspace({
                 >
                   <span>映射设置</span>
                   <span className="text-xs text-gray-400">{manualMapping.subjectMappings.length} 个科目</span>
+                </button>
+              )}
+              {missingRankSummary && missingRankSummary.missingCellCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setRankDialogOpen(true)}
+                  className="flex w-full items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-left text-sm text-blue-800 hover:bg-blue-100"
+                  style={{ fontWeight: 900 }}
+                >
+                  <span className="flex items-center gap-2"><ListOrdered className="h-4 w-4" />排名设置</span>
+                  <span className="text-xs text-blue-500">{rankChoiceLabel}</span>
                 </button>
               )}
               {draft?.warnings.length ? (
@@ -578,7 +650,7 @@ export function ScoresWorkspace({
                         type="button"
                         onClick={() => updateManualMapping(mapping => ({
                           ...mapping,
-                          subjectMappings: [...mapping.subjectMappings, { subject: "科目", scoreCol: 0, rankClassCol: -1, rankSchoolCol: -1 }],
+                          subjectMappings: [...mapping.subjectMappings, { subject: "科目", scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }],
                         }))}
                         className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
                         style={{ fontWeight: 800 }}
@@ -588,7 +660,7 @@ export function ScoresWorkspace({
                     </div>
                     {manualMapping.subjectMappings.map((item, index) => (
                       <div key={`${item.subject}-${index}`} className="space-y-2 rounded-2xl border border-gray-100 bg-gray-50 p-3">
-                        <div className="grid grid-cols-[1fr_1.35fr_auto] gap-2">
+                        <div className="grid grid-cols-[1fr_auto] gap-2">
                           <SelectMenu
                             value={item.subject}
                             onChange={value => updateManualMapping(mapping => ({
@@ -598,16 +670,6 @@ export function ScoresWorkspace({
                             ariaLabel="科目"
                             className="w-full"
                             options={[...SUBJECT_ORDER.map(subject => ({ value: subject, label: subject })), ...(!SUBJECT_ORDER.includes(item.subject) ? [{ value: item.subject, label: item.subject }] : [])]}
-                          />
-                          <SelectMenu
-                            value={item.scoreCol}
-                            onChange={value => updateManualMapping(mapping => ({
-                              ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, scoreCol: Number(value) } : subjectItem),
-                            }))}
-                            ariaLabel="分数列"
-                            className="w-full"
-                            options={columnOptions}
                           />
                           <button
                             type="button"
@@ -620,6 +682,38 @@ export function ScoresWorkspace({
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                          <SelectMenu
+                            value={item.scoreCol}
+                            onChange={value => updateManualMapping(mapping => ({
+                              ...mapping,
+                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, scoreCol: Number(value) } : subjectItem),
+                            }))}
+                            ariaLabel={`${item.subject}普通成绩列`}
+                            className="w-full"
+                            options={[{ value: -1, label: "普通成绩列" }, ...columnOptions]}
+                          />
+                          <SelectMenu
+                            value={item.rawScoreCol}
+                            onChange={value => updateManualMapping(mapping => ({
+                              ...mapping,
+                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, rawScoreCol: Number(value) } : subjectItem),
+                            }))}
+                            ariaLabel={`${item.subject}原始分列`}
+                            className="w-full"
+                            options={[{ value: -1, label: "原始分列" }, ...columnOptions]}
+                          />
+                          <SelectMenu
+                            value={item.assignedScoreCol}
+                            onChange={value => updateManualMapping(mapping => ({
+                              ...mapping,
+                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, assignedScoreCol: Number(value) } : subjectItem),
+                            }))}
+                            ariaLabel={`${item.subject}赋分列`}
+                            className="w-full"
+                            options={[{ value: -1, label: "赋分列" }, ...columnOptions]}
+                          />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <SelectMenu
@@ -649,16 +743,38 @@ export function ScoresWorkspace({
 
                   <div className="grid grid-cols-1 gap-2">
                     <label className="block text-xs text-gray-500">总分与总排名</label>
-                    <SelectMenu
-                      value={manualMapping.totalMapping.scoreCol}
-                      onChange={value => updateManualMapping(mapping => ({
-                        ...mapping,
-                        totalMapping: { ...mapping.totalMapping, scoreCol: Number(value) },
-                      }))}
-                      ariaLabel="总分列"
-                      className="w-full"
-                      options={[{ value: -1, label: "总分列（可选）" }, ...columnOptions]}
-                    />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <SelectMenu
+                        value={manualMapping.totalMapping.scoreCol}
+                        onChange={value => updateManualMapping(mapping => ({
+                          ...mapping,
+                          totalMapping: { ...mapping.totalMapping, scoreCol: Number(value) },
+                        }))}
+                        ariaLabel="普通总分列"
+                        className="w-full"
+                        options={[{ value: -1, label: "普通总分列" }, ...columnOptions]}
+                      />
+                      <SelectMenu
+                        value={manualMapping.totalMapping.rawScoreCol}
+                        onChange={value => updateManualMapping(mapping => ({
+                          ...mapping,
+                          totalMapping: { ...mapping.totalMapping, rawScoreCol: Number(value) },
+                        }))}
+                        ariaLabel="原始总分列"
+                        className="w-full"
+                        options={[{ value: -1, label: "原始总分列" }, ...columnOptions]}
+                      />
+                      <SelectMenu
+                        value={manualMapping.totalMapping.assignedScoreCol}
+                        onChange={value => updateManualMapping(mapping => ({
+                          ...mapping,
+                          totalMapping: { ...mapping.totalMapping, assignedScoreCol: Number(value) },
+                        }))}
+                        ariaLabel="赋分总分列"
+                        className="w-full"
+                        options={[{ value: -1, label: "赋分总分列" }, ...columnOptions]}
+                      />
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <SelectMenu
                         value={manualMapping.totalMapping.rankClassCol}
@@ -707,6 +823,26 @@ export function ScoresWorkspace({
           </div>
         </div>
       )}
+      <ModalShell
+        open={rankDialogOpen && Boolean(sourceDraft) && Boolean(missingRankSummary?.missingCellCount)}
+        title="自动补全班级排名？"
+        description={`这份成绩表有 ${missingRankSummary?.missingCellCount || 0} 处班排缺失，涉及 ${missingRankSummary?.missingMetricCount || 0} 个科目或总分。自动计算会优先使用赋分，其次原始分；同分并列采用 1、1、3，已有班排和校排保持原值。`}
+        onClose={() => setRankDialogOpen(false)}
+        footer={<>
+          <Button variant="ghost" onClick={() => setRankDialogOpen(false)}>稍后决定</Button>
+          <Button variant="secondary" onClick={() => applyRankChoice("source")}>保留原表</Button>
+          <Button onClick={() => applyRankChoice("auto")}>应用自动排名</Button>
+        </>}
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+            只补齐可计算的缺失班排，科目成绩不完整时不生成总排名。
+          </div>
+          <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-5 text-gray-600">
+            关闭后可随时从导入面板的“排名设置”重新选择。
+          </div>
+        </div>
+      </ModalShell>
       {examTable && <ExamTableModal exam={examTable} onClose={() => setExamTable(null)} />}
       <ConfirmDialog open={Boolean(pendingDeleteExam)} title="删除这场考试？" description={`将删除“${pendingDeleteExam?.name || "当前考试"}”及其对应的全部学生成绩记录；操作后可在 6 秒内撤销。`} confirmLabel="确认删除考试" error={deleteExamError} onCancel={() => { setPendingDeleteExam(null); setDeleteExamError(""); }} onConfirm={() => pendingDeleteExam && deleteExam(pendingDeleteExam)} />
       {actionToast.toast}

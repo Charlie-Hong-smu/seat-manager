@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
+import { SeatLayoutDesigner } from "../SeatLayoutDesigner";
 import { Button, SegmentedControl, SelectMenu, ToolDrawer } from "../ui";
 import type {
   AppStudent,
@@ -76,6 +77,7 @@ export function DailyWorkspace({
   onOpenFollowups: () => void;
 }) {
   const [showSeatSettings, setShowSeatSettings] = useState(false);
+  const [editingLayout, setEditingLayout] = useState(false);
   const [activeTool, setActiveTool] = useState<"student" | "draw" | null>(null);
   const [cardMode, setCardMode] = useState<"compact" | "detail">("compact");
   const [name, setName] = useState("");
@@ -141,7 +143,7 @@ export function DailyWorkspace({
         </div>
 
         <div className="daily-toolbar-actions ml-auto flex shrink-0 items-center justify-end gap-2 whitespace-nowrap">
-          <SegmentedControl
+          {!editingLayout && <SegmentedControl
             value={cardMode}
             ariaLabel="座位卡显示方式"
             onChange={value => setCardMode(value as "compact" | "detail")}
@@ -149,26 +151,31 @@ export function DailyWorkspace({
               { value: "compact", label: "简洁", icon: <Minimize2 className="h-3.5 w-3.5" /> },
               { value: "detail", label: "详细", icon: <Maximize2 className="h-3.5 w-3.5" /> },
             ]}
-          />
-          <Button size="sm" onClick={() => setShowSeatSettings(true)}>
+          />}
+          {!editingLayout && <Button id="seat-layout-editor-trigger" size="sm" variant="secondary" onClick={() => { setActiveTool(null); setEditingLayout(true); }}>
+            <LayoutGrid className="h-4 w-4" />编辑布局
+          </Button>}
+          {!editingLayout && <Button size="sm" onClick={() => setShowSeatSettings(true)}>
             <Shuffle className="h-4 w-4" />排座
             {activeConstraintCount > 0 && <span className="text-[11px] font-medium text-blue-100">· {activeConstraintCount} 条规则</span>}
-          </Button>
-          <Button size="sm" variant="ghost" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}>
+          </Button>}
+          {!editingLayout && <Button size="sm" variant="ghost" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}>
             <Undo2 className="h-4 w-4" />撤销
-          </Button>
-          <Button id="daily-student-tool-trigger" size="sm" variant={activeTool === "student" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "student" ? null : "student")}>
+          </Button>}
+          {!editingLayout && <Button id="daily-student-tool-trigger" size="sm" variant={activeTool === "student" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "student" ? null : "student")}>
             <UserPlus className="h-4 w-4" />新增学生
-          </Button>
-          <Button id="daily-draw-tool-trigger" size="sm" variant={activeTool === "draw" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
+          </Button>}
+          {!editingLayout && <Button id="daily-draw-tool-trigger" size="sm" variant={activeTool === "draw" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
             <Dices className="h-4 w-4" />抽签
-          </Button>
+          </Button>}
         </div>
       </div>
 
       <div className="min-h-0 flex-1 p-4">
-        <div className="h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-4 shadow-[var(--app-shadow-card)]">
-          <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onMoveStudentToWaiting={onMoveStudentToWaiting} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+        <div className={`h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-card)] ${editingLayout ? "" : "p-4"}`}>
+          {editingLayout
+            ? <SeatLayoutDesigner current={seatSettings.layout} seatCount={seatOrder.length} onApply={onApplySeatLayout} onCancel={() => setEditingLayout(false)} />
+            : <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onMoveStudentToWaiting={onMoveStudentToWaiting} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />}
         </div>
       </div>
 
@@ -244,10 +251,8 @@ export function DailyWorkspace({
         open={showSeatSettings}
         students={students}
         settings={seatSettings}
-        seatCount={seatOrder.length}
         canUndo={canUndoSeatOrder}
         onUpdate={onUpdateSeatSettings}
-        onApplyLayout={onApplySeatLayout}
         onRandomize={onRandomizeSeats}
         onOrderByList={onOrderSeatsByList}
         onUndo={onUndoSeatOrder}

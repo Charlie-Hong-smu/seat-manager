@@ -119,7 +119,7 @@ function buildPayload(student: AppStudent) {
   }));
   return {
     student: "学生A",
-    orderInstruction: "recentExams 包含当前学期该生全部考试，已按考试先后从早到晚排列；最后一项是最新考试。所有升降变化都必须用最新考试减最早考试来判断。",
+    orderInstruction: "recentExams 包含当前学期该生全部考试，已按考试先后从早到晚排列；最后一项是最新考试。进步、退步和持平只按班级排名判断，名次数值越小越好；总分与各科分数仅作变化背景，不可替代排名下结论。",
     recentExams,
     localAnalysis: {
       summary: context.trend.summary,
@@ -260,21 +260,20 @@ function buildFocusReason(item: {
   const reasons: string[] = [];
   if (typeof item.rankDiff === "number" && item.rankDiff > 0) {
     reasons.push(`排名退步${item.rankDiff}`);
+  } else if (typeof item.rankDiff === "number" && item.rankDiff < 0) {
+    reasons.push(`排名进步${Math.abs(item.rankDiff)}`);
+  } else if (item.rankDiff === 0) {
+    reasons.push("排名持平");
+  } else {
+    reasons.push("排名数据不足");
   }
-  if (item.totalDiff < 0) {
-    reasons.push(`总分下降${Math.abs(item.totalDiff)}`);
+  if (item.totalDiff !== 0) {
+    reasons.push(`总分变化${item.totalDiff > 0 ? "+" : ""}${item.totalDiff}`);
   }
   reasons.push(...item.subjectChanges
-    .filter(change => change.diff < 0)
-    .sort((a, b) => a.diff - b.diff)
+    .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
     .slice(0, 2)
-    .map(change => `${change.subject}下降${Math.abs(change.diff)}`));
-  if (!reasons.length && typeof item.rankDiff === "number" && item.rankDiff < 0) {
-    reasons.push("排名进步但需巩固");
-  }
-  if (!reasons.length && item.totalDiff > 0) {
-    reasons.push("总分提升后需保持");
-  }
+    .map(change => `${change.subject}变化${change.diff > 0 ? "+" : ""}${change.diff}`));
   return reasons.slice(0, 2).join("，") || "需继续观察";
 }
 
@@ -356,8 +355,8 @@ function buildClassPayload(students: AppStudent[], exams: GradeExam[]) {
       examStats: buildExamStats(exams),
       focusCandidates: focusCandidates.map(({ concernScore: _concernScore, ...item }) => item),
       localAnalysis: {
-        totalImproved: compared.filter(item => item.totalDiff > 0).length,
-        totalDeclined: compared.filter(item => item.totalDiff < 0).length,
+        scoreIncreased: compared.filter(item => item.totalDiff > 0).length,
+        scoreDecreased: compared.filter(item => item.totalDiff < 0).length,
         rankImproved: compared.filter(item => typeof item.rankDiff === "number" && item.rankDiff < 0).length,
         rankDeclined: compared.filter(item => typeof item.rankDiff === "number" && item.rankDiff > 0).length,
       },

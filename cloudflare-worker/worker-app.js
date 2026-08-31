@@ -549,7 +549,7 @@ async function handleAnalyzeTrend(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的教师助手。只根据提供的匿名成绩摘要生成温和、可参考的趋势建议，不做绝对判断。recentExams 包含当前学期该学生全部考试，按考试先后从早到晚排列，最后一项是最新考试；所有升降必须用最新考试减最早考试判断，不要把顺序反过来。必须返回 JSON，字段为 overall、changes、suggestions、disclaimer。所有字段值必须使用面向中国教师的自然中文，禁止在字段值中输出 totalScore、classRank、subjects、score 等 JSON 输入字段名或其他英文指标名；变化应写成“总分下降51分、班级排名退步29名、物理下降35分”这类中文句子。"
+              "你是谨慎的教师助手。只根据提供的匿名成绩摘要生成温和、可参考的趋势建议，不做绝对判断。recentExams 包含当前学期该学生全部考试，按考试先后从早到晚排列，最后一项是最新考试。进步、退步和持平只按班级排名判断，名次数值越小越好；总分与各科分数只能作为变化背景，排名缺失时不得用分数替代判断。必须返回 JSON，字段为 overall、changes、suggestions、disclaimer。所有字段值必须使用面向中国教师的自然中文，禁止在字段值中输出 totalScore、classRank、subjects、score 等 JSON 输入字段名或其他英文指标名。"
           },
           {
             role: "user",
@@ -607,7 +607,7 @@ async function handleAnalyzeClass(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是谨慎的班主任成绩分析助手。只根据提供的全班成绩变化摘要、考试统计和重点候选学生序列，概括班级趋势，并指出需要教师重点关注的学生。不要声称看到了完整全班逐科明细。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。所有字段值必须使用面向中国教师的自然中文，禁止输出 totalScore、classRank、subjects、score 等 JSON 输入字段名或其他英文指标名。focusStudents 必须逐行列出，格式为“姓名（简短原因）”，原因控制在 12 个字以内，例如“化学下降26分”或“排名退步35名”。"
+              "你是谨慎的班主任成绩分析助手。只根据提供的全班成绩变化摘要、考试统计和重点候选学生序列，概括班级趋势，并指出需要教师重点关注的学生。学生进步、退步和持平只按班级排名判断，名次数值越小越好；总分与各科分数仅作背景，排名缺失时不得用分数替代判断。不要声称看到了完整全班逐科明细。必须返回 JSON，字段为 overall、classChanges、focusStudents、suggestions、disclaimer。所有字段值必须使用面向中国教师的自然中文，禁止输出 totalScore、classRank、subjects、score 等 JSON 输入字段名或其他英文指标名。focusStudents 必须逐行列出，格式为“姓名（简短原因）”，原因控制在 12 个字以内。"
           },
           {
             role: "user",
@@ -725,7 +725,7 @@ async function handleSuggestScoreMapping(request, env, corsHeaders) {
           {
             role: "system",
             content:
-              "你是成绩表列映射助手。根据表头和少量样例，返回 JSON。列索引必须使用用户提供的 index，无法判断填 -1。字段：nameCol、subjectMappings、totalMapping、note。subjectMappings 数组元素字段：subject、scoreCol、rankClassCol、rankSchoolCol。只使用 knownSubjects 中的科目。不要编造不存在的列。"
+              "你是成绩表列映射助手。根据表头和少量样例，返回 JSON。列索引必须使用用户提供的 index，无法判断填 -1。字段：nameCol、subjectMappings、totalMapping、note。subjectMappings 数组元素字段：subject、scoreCol、rawScoreCol、assignedScoreCol、rankClassCol、rankSchoolCol；totalMapping 使用相同的分数与排名字段。scoreCol 表示未注明类型的成绩，rawScoreCol 表示原始分或卷面分，assignedScoreCol 表示赋分、等级分或转换分。只使用 knownSubjects 中的科目，不要编造不存在的列。"
           },
           { role: "user", content: JSON.stringify(body.value) }
         ]
@@ -1648,10 +1648,12 @@ function sanitizeScoreMappingResult(result, payload) {
         .map((item) => ({
           subject: knownSubjects.has(item?.subject) ? item.subject : "",
           scoreCol: safeIndex(item?.scoreCol),
+          rawScoreCol: safeIndex(item?.rawScoreCol),
+          assignedScoreCol: safeIndex(item?.assignedScoreCol),
           rankClassCol: safeIndex(item?.rankClassCol),
           rankSchoolCol: safeIndex(item?.rankSchoolCol)
         }))
-        .filter((item) => item.subject && item.scoreCol !== -1)
+        .filter((item) => item.subject && [item.scoreCol, item.rawScoreCol, item.assignedScoreCol].some((index) => index !== -1))
         .slice(0, 12)
     : [];
   return {
@@ -1659,6 +1661,8 @@ function sanitizeScoreMappingResult(result, payload) {
     subjectMappings,
     totalMapping: {
       scoreCol: safeIndex(result.totalMapping?.scoreCol),
+      rawScoreCol: safeIndex(result.totalMapping?.rawScoreCol),
+      assignedScoreCol: safeIndex(result.totalMapping?.assignedScoreCol),
       rankClassCol: safeIndex(result.totalMapping?.rankClassCol),
       rankSchoolCol: safeIndex(result.totalMapping?.rankSchoolCol)
     },

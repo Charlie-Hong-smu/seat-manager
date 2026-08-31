@@ -98,4 +98,22 @@ describe("legacyWriteAdapter roster retention", () => {
     expect(next?.fundTransactions.map(item => item.id)).toEqual(["fund-new"]);
     expect(next?.attendanceRecords.map(item => item.id)).toEqual(["attendance-new"]);
   });
+
+  it("persists raw scores, assigned scores, per-subject ranks and ranking choice", () => {
+    const student = createTestStudent("s1", "张三");
+    seedSlice([student]);
+    const input = examRecord("张三");
+    input.rankConfig = { autoClassRank: true, scoreBasis: "effective" };
+    input.entries[0].scores.语文 = { score: 92, rawScore: 88, assignedScore: 92, rankClass: 2, rankSchool: 18 };
+    input.entries[0].total = { score: 175, rawScore: 168, assignedScore: 175, rankClass: 3, rankSchool: 27 };
+
+    const next = saveGradeExamRecord({ record: input, students: [student], seatOrder: [student.id], lockedSeats: [] });
+
+    expect(next?.gradeExams[0]).toMatchObject({ rankConfig: { autoClassRank: true, scoreBasis: "effective" } });
+    expect(next?.gradeExams[0].rows[0].scores.语文).toEqual({ score: 92, rawScore: 88, assignedScore: 92, rankClass: 2, rankSchool: 18 });
+    expect(next?.gradeExams[0].rows[0].totalCell).toEqual({ score: 175, rawScore: 168, assignedScore: 175, rankClass: 3, rankSchool: 27 });
+    expect(next?.students[0].exams[0].scoreCells?.语文).toEqual({ score: 92, rawScore: 88, assignedScore: 92, rankClass: 2, rankSchool: 18 });
+    const stored = readCurrentSliceData() as { savedExams: SavedGradeExamRecord[] };
+    expect(stored.savedExams[0].entries[0].scores.语文.assignedScore).toBe(92);
+  });
 });

@@ -1,3 +1,4 @@
+import { getFollowupStudentIds, removeStudentFromFollowups } from "./followupStudents";
 import { createActivityEvent } from "./activityEvents";
 import { removeStudentFromSavedGradeExams } from "./gradeStudentIdentity";
 import type { ActivityEvent, AttendanceRecord, AttendanceStatus, FollowupTask, HomeworkAssignment, SeatManagerState, StudentId } from "./types";
@@ -5,7 +6,7 @@ import type { ActivityEvent, AttendanceRecord, AttendanceStatus, FollowupTask, H
 export function completeFollowupTask(task: FollowupTask, resolutionNote = ""): { task: FollowupTask; event: ActivityEvent } {
   const now = new Date().toISOString();
   const next = { ...task, status: "completed" as const, completedAt: now, updatedAt: now, resolutionNote: resolutionNote.trim() || task.resolutionNote, resolutionUpdatedAt: resolutionNote.trim() ? now : task.resolutionUpdatedAt };
-  return { task: next, event: createActivityEvent({ action: "status_changed", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: task.studentId ? [task.studentId] : [], title: `完成跟进：${task.title}`, detail: resolutionNote.trim() || "已完成" }) };
+  return { task: next, event: createActivityEvent({ action: "status_changed", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: getFollowupStudentIds(task), title: `完成跟进：${task.title}`, detail: resolutionNote.trim() || "已完成" }) };
 }
 
 export function changeFollowupTaskStatus(task: FollowupTask, status: FollowupTask["status"]): { task: FollowupTask; event: ActivityEvent } {
@@ -14,14 +15,14 @@ export function changeFollowupTaskStatus(task: FollowupTask, status: FollowupTas
   const action = status === "cancelled" ? "取消" : "恢复";
   return {
     task: { ...task, status, updatedAt: now, completedAt: undefined },
-    event: createActivityEvent({ action: "status_changed", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: task.studentId ? [task.studentId] : [], title: `${action}跟进：${task.title}`, detail: status === "cancelled" ? "已取消" : "恢复为待处理" }),
+    event: createActivityEvent({ action: "status_changed", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: getFollowupStudentIds(task), title: `${action}跟进：${task.title}`, detail: status === "cancelled" ? "已取消" : "恢复为待处理" }),
   };
 }
 
 export function syncCompletedFollowupHomework(task: FollowupTask, assignments: HomeworkAssignment[]): { assignments: HomeworkAssignment[]; event: ActivityEvent } | null {
-  if (task.sourceRef?.domain !== "homework" || !task.studentId) return null;
+  if (task.sourceRef?.domain !== "homework" || getFollowupStudentIds(task).length !== 1 || !task.studentId || (task.sourceRef.studentId && task.sourceRef.studentId !== task.studentId)) return null;
   const assignment = assignments.find(item => item.id === task.sourceRef?.entityId);
-  if (!assignment || assignment.studentStates[task.studentId]?.status === "submitted") return null;
+  if (!assignment || !assignment.studentStates[task.studentId] || ["submitted", "resubmitted", "excused"].includes(assignment.studentStates[task.studentId].status)) return null;
   const updatedAt = new Date().toISOString();
   return {
     assignments: assignments.map(item => item.id === assignment.id ? { ...item, studentStates: { ...item.studentStates, [task.studentId]: { status: "submitted", note: item.studentStates[task.studentId]?.note || "", updatedAt } }, updatedAt } : item),
@@ -32,7 +33,7 @@ export function syncCompletedFollowupHomework(task: FollowupTask, assignments: H
 export function updateFollowupResolution(task: FollowupTask, resolutionNote: string): { task: FollowupTask; event: ActivityEvent } {
   const now = new Date().toISOString();
   const note = resolutionNote.trim();
-  return { task: { ...task, resolutionNote: note || undefined, resolutionUpdatedAt: now, updatedAt: now }, event: createActivityEvent({ action: "updated", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: task.studentId ? [task.studentId] : [], title: `更新处理结果：${task.title}`, detail: note || "清空处理结果" }) };
+  return { task: { ...task, resolutionNote: note || undefined, resolutionUpdatedAt: now, updatedAt: now }, event: createActivityEvent({ action: "updated", ref: { domain: "followup", entityId: task.id, studentId: task.studentId || undefined }, studentIds: getFollowupStudentIds(task), title: `更新处理结果：${task.title}`, detail: note || "清空处理结果" }) };
 }
 
 export function normalizeAttendancePatch(current: AttendanceRecord | undefined, status: AttendanceStatus): Pick<AttendanceRecord, "status" | "late" | "earlyLeave" | "leaveStart" | "leaveEnd"> {
@@ -81,7 +82,7 @@ export function permanentlyDeleteStudent(state: SeatManagerState, studentId: Stu
     seatOrder: state.seatOrder.map(id => id === studentId ? null : id),
     seatSettings: { ...state.seatSettings, constraints: { ...state.seatSettings.constraints, lockedDeskmatePairs: state.seatSettings.constraints.lockedDeskmatePairs.filter(pair => pair.a !== studentId && pair.b !== studentId), noDeskmatePairs: state.seatSettings.constraints.noDeskmatePairs.filter(pair => pair.a !== studentId && pair.b !== studentId), frontRowStudentIds: state.seatSettings.constraints.frontRowStudentIds.filter(id => id !== studentId) } },
     attendanceRecords: state.attendanceRecords.filter(record => record.studentId !== studentId),
-    followupTasks: state.followupTasks.filter(task => task.studentId !== studentId),
+    followupTasks: removeStudentFromFollowups(state.followupTasks, studentId),
     communicationDrafts: state.communicationDrafts.filter(draft => draft.studentId !== studentId),
     homeworkAssignments: state.homeworkAssignments.map(assignment => { const studentStates = { ...assignment.studentStates }; delete studentStates[studentId]; return { ...assignment, studentStates, participantStudentIds: remove(assignment.participantStudentIds) }; }),
     drawSessions: state.drawSessions.map(session => ({ ...session, studentIds: session.studentIds.filter(id => id !== studentId) })).filter(session => session.studentIds.length > 0),

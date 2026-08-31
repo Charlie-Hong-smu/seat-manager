@@ -1,3 +1,4 @@
+import { followupHasStudent } from "../state/followupStudents";
 import { Archive, Check, CheckCircle2, LayoutGrid, List, Pencil, Plus, RotateCcw, Search, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -250,8 +251,8 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
 
   function linkedTask(studentId: StudentId) {
     if (!selected) return undefined;
-    return tasks.find(task => task.studentId === studentId && task.sourceRef?.domain === "homework" && task.sourceRef.entityId === selected.id && task.status === "pending")
-      || tasks.find(task => task.studentId === studentId && task.sourceRef?.domain === "homework" && task.sourceRef.entityId === selected.id);
+    return tasks.find(task => followupHasStudent(task, studentId) && task.sourceRef?.domain === "homework" && task.sourceRef.entityId === selected.id && task.status === "pending")
+      || tasks.find(task => followupHasStudent(task, studentId) && task.sourceRef?.domain === "homework" && task.sourceRef.entityId === selected.id);
   }
 
   return <>

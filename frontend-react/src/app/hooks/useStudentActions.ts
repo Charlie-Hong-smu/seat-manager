@@ -1,3 +1,4 @@
+import { removeStudentFromFollowups } from "../state/followupStudents";
 import { useCallback } from "react";
 import { placeStudentInFirstEmptySeat, type SeatOrder } from "../state/seatActions";
 import type { SeatManagerController } from "../state/seatManagerController";
@@ -57,7 +58,7 @@ export function useStudentActions({ students, seatOrder, seatLayout, setStudents
     commitSeatOrder(seatOrder.map((id) => id === studentId ? null : id));
     setSeatSettings((current) => ({ ...current, constraints: { ...current.constraints, lockedDeskmatePairs: current.constraints.lockedDeskmatePairs.filter((pair) => pair.a !== studentId && pair.b !== studentId), noDeskmatePairs: current.constraints.noDeskmatePairs.filter((pair) => pair.a !== studentId && pair.b !== studentId), frontRowStudentIds: current.constraints.frontRowStudentIds.filter((id) => id !== studentId) } }));
     setAttendanceRecords(current => current.filter(record => record.studentId !== studentId));
-    setFollowupTasks(current => current.filter(task => task.studentId !== studentId));
+    setFollowupTasks(current => removeStudentFromFollowups(current, studentId));
     closeStudentDetail();
   }, [closeStudentDetail, commitSeatOrder, seatOrder, setAttendanceRecords, setDormitories, setFollowupTasks, setSeatSettings, setStudents]);
 

@@ -8,6 +8,7 @@ import { normalizeSeatLayout } from "./seatLayout";
 import { createDefaultQuickRecordPresets, createDefaultSchedule, normalizeCommunicationDrafts, normalizeGradeItemAnalysis, normalizeHomeworkAssignments, normalizeQuickRecordPresets, normalizeSchedule } from "./teacherWorkbench";
 import type {
   AppStudent,
+  ActivityEvent,
   ComplementRuleId,
   DormEvent,
   DormPeriodArchive,
@@ -188,12 +189,12 @@ function normalizeDormitories(value: unknown, validStudentIds: Set<StudentId>): 
     .filter((item): item is Dormitory => Boolean(item));
 }
 
-function pickScores(value: Record<string, unknown>): Record<string, number> {
-  const explicitScores = isRecord(value.scores) ? value.scores : value;
-  return SUBJECT_ORDER.reduce<Record<string, number>>((scores, subject) => {
-    const score = parseScoreCell(explicitScores[subject]).score;
-    if (score !== null) {
-      scores[subject] = score;
+function pickScoreCells(value: Record<string, unknown>): Record<string, GradeScoreCell> {
+  const explicitScores = isRecord(value.scoreCells) ? value.scoreCells : isRecord(value.scores) ? value.scores : value;
+  return SUBJECT_ORDER.reduce<Record<string, GradeScoreCell>>((scores, subject) => {
+    const cell = parseScoreCell(explicitScores[subject]);
+    if (cell.score !== null) {
+      scores[subject] = cell;
     }
     return scores;
   }, {});
@@ -206,8 +207,13 @@ function toRank(value: unknown): number | null {
 
 function parseScoreCell(value: unknown): GradeScoreCell {
   if (isRecord(value)) {
+    const rawScore = toNumber(value.rawScore) ?? null;
+    const assignedScore = toNumber(value.assignedScore) ?? null;
+    const compatibleScore = toNumber(value.score) ?? null;
     return {
-      score: toNumber(value.score) ?? null,
+      score: assignedScore ?? rawScore ?? compatibleScore,
+      ...(Object.prototype.hasOwnProperty.call(value, "rawScore") ? { rawScore } : {}),
+      ...(Object.prototype.hasOwnProperty.call(value, "assignedScore") ? { assignedScore } : {}),
       rankClass: toRank(value.rankClass),
       rankSchool: toRank(value.rankSchool),
     };
@@ -237,18 +243,22 @@ function normalizeExam(value: unknown, index: number): StudentExamSummary | null
     return null;
   }
 
-  const scores = pickScores(value);
-  if (!Object.keys(scores).length) {
+  const scoreCells = pickScoreCells(value);
+  if (!Object.keys(scoreCells).length) {
     return null;
   }
-  const totalCell = parseScoreCell(value.total);
+  const scores = Object.fromEntries(Object.entries(scoreCells).map(([subject, cell]) => [subject, cell.score as number]));
+  const totalCell = parseScoreCell(value.totalCell ?? value.total);
 
   return {
     id: toStringValue(value.id, `exam-${index}`),
     name: toStringValue(value.name) || toStringValue(value.examName) || toStringValue(value.title) || "考试记录",
     date: toStringValue(value.date),
+    ...(value.source === "savedExamRecord" ? { source: "savedExamRecord" as const } : {}),
     scores,
+    scoreCells,
     total: totalCell.score ?? toNumber(value.total) ?? toNumber(value.totalScore),
+    totalCell,
     rank: toStringValue(value.rank) || toStringValue(value.classRank) || toStringValue(value.schoolRank) || (totalCell.rankClass ? String(totalCell.rankClass) : ""),
   };
 }
@@ -573,6 +583,7 @@ function normalizeSavedExamRecord(record: unknown, index: number, students: AppS
       studentId: matchedStudent?.id,
       scores,
       total: totalCell.score ?? sumScoreCells(scores),
+      totalCell,
       rankClass: totalCell.rankClass,
       rankSchool: totalCell.rankSchool,
     });
@@ -590,6 +601,10 @@ function normalizeSavedExamRecord(record: unknown, index: number, students: AppS
     savedAt: toStringValue(record.savedAt),
     subjects,
     rows,
+    rankConfig: isRecord(record.rankConfig) ? {
+      autoClassRank: record.rankConfig.autoClassRank === true,
+      scoreBasis: "effective",
+    } : undefined,
     importSource: normalizeImportSource(record.importSource),
     itemAnalysis: normalizeGradeItemAnalysis(record.itemAnalysis),
   };
@@ -620,13 +635,17 @@ function normalizeImportSource(value: unknown): ScoreImportSource | undefined {
             .map(item => ({
               subject: toStringValue(item.subject),
               scoreCol: Number.isInteger(item.scoreCol) ? item.scoreCol as number : -1,
+              rawScoreCol: Number.isInteger(item.rawScoreCol) ? item.rawScoreCol as number : -1,
+              assignedScoreCol: Number.isInteger(item.assignedScoreCol) ? item.assignedScoreCol as number : -1,
               rankClassCol: Number.isInteger(item.rankClassCol) ? item.rankClassCol as number : -1,
               rankSchoolCol: Number.isInteger(item.rankSchoolCol) ? item.rankSchoolCol as number : -1,
             }))
-            .filter(item => item.subject && item.scoreCol >= 0)
+            .filter(item => item.subject && [item.scoreCol, item.rawScoreCol, item.assignedScoreCol].some(index => index >= 0))
         : [],
       totalMapping: {
         scoreCol: Number.isInteger(totalMapping.scoreCol) ? totalMapping.scoreCol as number : -1,
+        rawScoreCol: Number.isInteger(totalMapping.rawScoreCol) ? totalMapping.rawScoreCol as number : -1,
+        assignedScoreCol: Number.isInteger(totalMapping.assignedScoreCol) ? totalMapping.assignedScoreCol as number : -1,
         rankClassCol: Number.isInteger(totalMapping.rankClassCol) ? totalMapping.rankClassCol as number : -1,
         rankSchoolCol: Number.isInteger(totalMapping.rankSchoolCol) ? totalMapping.rankSchoolCol as number : -1,
       },
@@ -640,14 +659,10 @@ function normalizeGradeExams(rawSavedExams: unknown, students: AppStudent[]): Gr
     .map((record, index) => normalizeSavedExamRecord(record, index, students))
     .filter((item): item is GradeExam => Boolean(item));
 
-  if (exams.length) {
-    return exams;
-  }
-
-  // savedExams 为空时,尝试从学生各自的 exams 数据重建成绩看板。
-  // 这样:演示数据/老数据(学生自带成绩)能正常显示;
-  // 而真实新学期(升学期时已清空学生 exams)或空班仍显示空,符合预期。
-  return rebuildGradeExamsFromStudents(students);
+  // 学生自带的旧考试也可管理；新增导入或撤销删除不能让其他旧考试从列表消失。
+  // 同一 ID 优先使用完整保存记录；确认删除的残留已在读取学生时排除。
+  const savedIds = new Set(exams.map(exam => exam.id));
+  return [...exams, ...rebuildGradeExamsFromStudents(students).filter(exam => !savedIds.has(exam.id))];
 }
 
 function rebuildGradeExamsFromStudents(students: AppStudent[]): GradeExam[] {
@@ -663,7 +678,7 @@ function rebuildGradeExamsFromStudents(students: AppStudent[]): GradeExam[] {
       const scores: Record<string, GradeScoreCell> = {};
       Object.entries(exam.scores).forEach(([subject, score]) => {
         group!.subjects.add(subject);
-        scores[subject] = { score: typeof score === "number" ? score : null };
+        scores[subject] = exam.scoreCells?.[subject] || { score: typeof score === "number" ? score : null };
       });
       group.rows.push({
         id: `${exam.id}-${student.id}`,
@@ -671,7 +686,9 @@ function rebuildGradeExamsFromStudents(students: AppStudent[]): GradeExam[] {
         studentId: student.id,
         scores,
         total: typeof exam.total === "number" ? exam.total : sumScoreCells(scores),
-        rankClass: exam.rank ? Number.parseInt(exam.rank, 10) || null : null,
+        totalCell: exam.totalCell,
+        rankClass: exam.totalCell?.rankClass ?? (exam.rank ? Number.parseInt(exam.rank, 10) || null : null),
+        rankSchool: exam.totalCell?.rankSchool,
       });
     });
   });
@@ -748,14 +765,29 @@ export function createEmptySeatManagerState(): SeatManagerState {
   };
 }
 
+function getConfirmedDeletedExamIds(rawSavedExams: unknown, events: ActivityEvent[]): Set<string> {
+  const savedIds = new Set(toUnknownArray(rawSavedExams).filter(isRecord).map(record => String(record.id)));
+  const latest = new Map<string, ActivityEvent>();
+  for (const event of events) {
+    if (event.ref.domain !== "score" || event.ref.subEntityId || event.ref.studentId) continue;
+    const previous = latest.get(event.ref.entityId);
+    if (!previous || Date.parse(event.occurredAt) > Date.parse(previous.occurredAt)) latest.set(event.ref.entityId, event);
+  }
+  return new Set([...latest].filter(([id, event]) => event.action === "deleted" && !savedIds.has(id)).map(([id]) => id));
+}
+
 export function createSeatManagerState(raw: unknown): SeatManagerState {
   if (!isRecord(raw)) {
     return createMockSeatManagerState();
   }
 
+  const activityEvents = normalizeActivityEvents(raw.activityEvents);
+  // 仅依据明确的整场考试删除流水修复旧残留。缺少流水或已恢复的历史成绩不猜测删除。
+  const deletedExamIds = getConfirmedDeletedExamIds(raw.savedExams, activityEvents);
   const students = toUnknownArray(raw.students)
     .map((student, index) => normalizeStudent(student, index, getCommentRubricTagLabels(raw.commentRubric)))
-    .filter((item): item is AppStudent => Boolean(item));
+    .filter((item): item is AppStudent => Boolean(item))
+    .map(student => ({ ...student, exams: student.exams.filter(exam => !deletedExamIds.has(exam.id)) }));
 
   if (!students.length) {
     // raw 是一个真实存在的对象(哪怕是空班级/新学期),就返回空状态,不塞演示数据。
@@ -807,10 +839,10 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     homeworkAssignments: normalizeHomeworkAssignments(raw.homeworkAssignments),
     quickRecordPresets: normalizeQuickRecordPresets(raw.quickRecordPresets),
     communicationDrafts: normalizeCommunicationDrafts(raw.communicationDrafts),
-    activityEvents: normalizeActivityEvents(raw.activityEvents),
+    activityEvents,
     seatHistory: normalizeSeatHistory(raw.seatHistory),
     savedExams,
-    exams: toUnknownArray(raw.exams),
+    exams: toUnknownArray(raw.exams).filter(exam => !isRecord(exam) || !deletedExamIds.has(String(exam.id))),
     manualTags: toUnknownArray(raw.manualTags),
     autoTags: toUnknownArray(raw.autoTags),
     aiComments: raw.aiComments ?? null,

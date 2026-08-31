@@ -1,3 +1,4 @@
+import { followupHasStudent } from "../state/followupStudents";
 import { BarChart3, ChevronDown, ChevronUp, FileSpreadsheet, HelpCircle, ListPlus, Sparkles, Tags } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -33,8 +34,8 @@ export function ScoreItemAnalysisPanel({ exams, students, tasks, onSave, onCreat
   });
 
   function linkedTask(studentId: StudentId, questionId: string) {
-    return tasks.find(task => task.studentId === studentId && task.sourceRef?.domain === "score" && task.sourceRef.entityId === exam?.id && task.sourceRef.subEntityId === questionId && task.status === "pending")
-      || tasks.find(task => task.studentId === studentId && task.sourceRef?.domain === "score" && task.sourceRef.entityId === exam?.id && task.sourceRef.subEntityId === questionId);
+    return tasks.find(task => followupHasStudent(task, studentId) && task.sourceRef?.domain === "score" && task.sourceRef.entityId === exam?.id && task.sourceRef.subEntityId === questionId && task.status === "pending")
+      || tasks.find(task => followupHasStudent(task, studentId) && task.sourceRef?.domain === "score" && task.sourceRef.entityId === exam?.id && task.sourceRef.subEntityId === questionId);
   }
 
   function importQuestions() {

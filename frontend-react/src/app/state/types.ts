@@ -233,8 +233,12 @@ export type FollowupTaskSource = "manual" | "ai" | "score" | "attendance" | "dor
 
 export interface FollowupTask {
   id: string;
-  /** 空字符串表示不绑定具体学生的班级事项。 */
+  /** 兼容旧数据的首位关联学生；空字符串表示班级事项。 */
   studentId: StudentId;
+  /** 存在时为完整关联名单，空数组表示班级事项。 */
+  studentIds?: StudentId[];
+  /** 共同事项共享状态；逐人跟进保留独立状态。旧记录按来源判断。 */
+  studentMode?: "shared" | "individual";
   title: string;
   type: string;
   description: string;
@@ -263,15 +267,29 @@ export interface StudentExamSummary {
   id: string;
   name: string;
   date: string;
+  source?: "savedExamRecord";
   scores: Record<string, number>;
+  /** 导入成绩保留每科原始分、赋分及排名，旧记录可缺省。 */
+  scoreCells?: Record<string, GradeScoreCell>;
   total?: number;
+  totalCell?: GradeScoreCell;
   rank?: string;
 }
 
 export interface GradeScoreCell {
+  /** 当前用于成绩展示和默认排名的分数；新导入同时保留下方原始分/赋分。 */
   score: number | null;
+  rawScore?: number | null;
+  assignedScore?: number | null;
   rankClass?: number | null;
   rankSchool?: number | null;
+}
+
+export interface GradeRankConfig {
+  /** 仅补齐缺失的班级排名，原表已有班排和全部校排保持原值。 */
+  autoClassRank: boolean;
+  /** effective 固定表示赋分优先，其次原始分，最后普通成绩列。 */
+  scoreBasis: "effective";
 }
 
 export interface GradeRow {
@@ -281,6 +299,8 @@ export interface GradeRow {
   studentId?: StudentId;
   scores: Record<string, GradeScoreCell>;
   total: number | null;
+  /** 保留总分的原始分/赋分形态；旧数据缺失时继续读取 total/rankClass/rankSchool。 */
+  totalCell?: GradeScoreCell;
   rankClass?: number | null;
   rankSchool?: number | null;
 }
@@ -292,6 +312,7 @@ export interface GradeExam {
   savedAt?: string;
   subjects: string[];
   rows: GradeRow[];
+  rankConfig?: GradeRankConfig;
   importSource?: ScoreImportSource;
   itemAnalysis?: GradeItemAnalysis;
 }
@@ -340,7 +361,11 @@ export interface SeatLayoutNode {
 export interface SeatLayoutGroup {
   id: string;
   name: string;
+  /** 教师手动编辑的组名不参与自动编号。 */
+  nameIsCustom?: boolean;
   shape: "columns" | "grid" | "round" | "custom";
+  /** 被新范围裁切后，沿剩余座位绘制轮廓，允许凹形或分离区域。 */
+  outline?: "seats";
   seatIds: string[];
 }
 
@@ -349,11 +374,21 @@ export interface SeatLayoutEdge {
   b: string;
 }
 
+export interface SeatLayoutPodium {
+  x: number;
+  y: number;
+}
+
 export interface SeatLayoutV1 {
   version: 1;
+  /** 固定槽位坐标版本；缺省表示需要从旧布局重新对齐。 */
+  slotGridVersion?: 1 | 2;
+  slotGridColumns?: number;
+  slotGridRows?: number;
   template: SeatLayoutTemplate;
   frontEdge: SeatFrontEdge;
   canvas: { width: number; height: number };
+  podium?: SeatLayoutPodium;
   seats: SeatLayoutNode[];
   groups: SeatLayoutGroup[];
   neighborEdges: SeatLayoutEdge[];
@@ -413,6 +448,7 @@ export interface SavedGradeExamRecord {
   subjectCount: number;
   subjects: string[];
   entries: SavedGradeExamEntry[];
+  rankConfig?: GradeRankConfig;
   importSource?: ScoreImportSource;
   itemAnalysis?: GradeItemAnalysis;
 }
@@ -432,8 +468,8 @@ export interface ScoreImportSource {
     headers: string[];
     nameCol: number;
     studentNoCol: number;
-    subjectMappings: Array<{ subject: string; scoreCol: number; rankClassCol: number; rankSchoolCol: number }>;
-    totalMapping: { scoreCol: number; rankClassCol: number; rankSchoolCol: number };
+    subjectMappings: Array<{ subject: string; scoreCol: number; rawScoreCol?: number; assignedScoreCol?: number; rankClassCol: number; rankSchoolCol: number }>;
+    totalMapping: { scoreCol: number; rawScoreCol?: number; assignedScoreCol?: number; rankClassCol: number; rankSchoolCol: number };
     warnings: string[];
   };
 }

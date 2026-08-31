@@ -1,3 +1,4 @@
+import { followupStudentLabel, getFollowupStudentIds } from "./followupStudents";
 import type { ActivityEvent, BusinessEntityRef, FollowupTask, SeatManagerState, StudentId } from "./types";
 import { toLocalDateKey } from "./dateKey";
 import { resolveGradeStudent } from "./gradeStudentIdentity";
@@ -159,7 +160,7 @@ export function buildTimeline(state: SeatManagerState, today = toLocalDateKey())
   });
   state.followupTasks.filter(task => !activityKeys.has(`followup:${task.id}`)).forEach(task => items.push(finishItem({
     id: `task-${task.id}`, date: task.updatedAt.slice(0, 10) || task.plannedDate, occurredAt: safeOccurredAt(task.updatedAt.slice(0, 10) || task.plannedDate, task.updatedAt), type: "跟进", title: task.title,
-    studentId: task.studentId || undefined, studentName: task.studentId ? studentMap.get(task.studentId) || "未知学生" : "班级事项",
+    studentId: task.studentId || undefined, studentIds: getFollowupStudentIds(task), studentName: followupStudentLabel(task, studentMap),
     detail: `旧数据汇总 · ${task.status === "completed" ? "已完成" : task.status === "cancelled" ? "已取消" : `截止 ${task.dueDate || "未设置"}`}`,
     tone: taskTone(task, today), isAi: task.source === "ai",
     target: { kind: "workspace", workspace: "followups", entityId: task.id, studentId: task.studentId || undefined },
@@ -195,7 +196,7 @@ export function inspectStateHealth(state: SeatManagerState): HealthIssue[] {
   const dormOwner = new Map<string, string>(); state.dormitories.forEach(dorm => dorm.memberIds.forEach(id => { if (!ids.has(id)) issues.push({ id: `dorm-missing-${dorm.id}-${id}`, severity: "warning", title: "宿舍成员不存在", detail: dorm.name }); const prior = dormOwner.get(id); if (prior && prior !== dorm.name) issues.push({ id: `dorm-duplicate-${id}`, severity: "critical", title: "学生被分配到多个宿舍", detail: `${prior}、${dorm.name}` }); dormOwner.set(id, dorm.name); }));
   state.students.filter(student => student.enrollmentStatus !== "archived").forEach(student => { const listedDormitory = state.dormitories.find(dorm => dorm.memberIds.includes(student.id)); if ((student.dormitoryId || "") !== (listedDormitory?.id || "")) issues.push({ id: `dorm-profile-mismatch-${student.id}`, severity: "critical", title: "学生档案与宿舍名单不一致", detail: `${student.name} · 档案：${state.dormitories.find(dorm => dorm.id === student.dormitoryId)?.name || "未分配"} · 名单：${listedDormitory?.name || "未分配"}` }); });
   state.attendanceRecords.forEach(record => { if (!ids.has(record.studentId)) issues.push({ id: `attendance-orphan-${record.id}`, severity: "warning", title: "出勤记录引用了不存在的学生", detail: record.date }); });
-  state.followupTasks.forEach(task => { if (task.studentId && !ids.has(task.studentId)) issues.push({ id: `task-orphan-${task.id}`, severity: "warning", title: "跟进任务引用了不存在的学生", detail: task.title }); });
+  state.followupTasks.forEach(task => { if (getFollowupStudentIds(task).some(id => !ids.has(id))) issues.push({ id: `task-orphan-${task.id}`, severity: "warning", title: "跟进任务引用了不存在的学生", detail: task.title }); });
   state.homeworkAssignments.forEach(assignment => Object.keys(assignment.studentStates).forEach(id => { if (!ids.has(id)) issues.push({ id: `homework-orphan-${assignment.id}-${id}`, severity: "warning", title: "作业引用了不存在的学生", detail: assignment.title }); }));
   state.drawSessions.forEach(session => session.studentIds.forEach(id => { if (!ids.has(id)) issues.push({ id: `draw-orphan-${session.id}-${id}`, severity: "warning", title: "抽签记录引用了不存在的学生", detail: session.date }); }));
   state.fundTransactions.forEach(tx => [...(tx.relatedStudentIds || []), ...(tx.relatedStudentId ? [tx.relatedStudentId] : [])].forEach(id => { if (!ids.has(id)) issues.push({ id: `fund-orphan-${tx.id}-${id}`, severity: "warning", title: "班费记录引用了不存在的学生", detail: tx.category }); }));

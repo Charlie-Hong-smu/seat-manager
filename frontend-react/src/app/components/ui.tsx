@@ -54,23 +54,28 @@ export function IconButton({
   label,
   size = "md",
   active = false,
+  tone = "default",
   className = "",
   children,
   ...props
 }: {
   label: string;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   active?: boolean;
+  tone?: "default" | "success" | "danger";
   className?: string;
   children: ReactNode;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const sizeClass = { sm: "h-8 w-8", md: "h-10 w-10", lg: "h-11 w-11" }[size];
+  const sizeClass = { xs: "h-5 w-5", sm: "h-8 w-8", md: "h-10 w-10", lg: "h-11 w-11" }[size];
+  const toneClass = tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-600 hover:border-emerald-300 hover:bg-emerald-100"
+    : tone === "danger" ? "border-red-200 bg-red-50 text-red-500 hover:border-red-300 hover:bg-red-100"
+      : active ? "border-blue-100 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800";
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-grid shrink-0 place-items-center rounded-[var(--app-radius-sm)] border transition-[background-color,border-color,color,box-shadow,transform] duration-200 hover:-translate-y-px active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 ${sizeClass} ${active ? "border-blue-100 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800"} ${className}`}
+      className={`inline-grid shrink-0 place-items-center rounded-[var(--app-radius-sm)] border transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-200 hover:-translate-y-px active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 ${sizeClass} ${toneClass} ${className}`}
       {...props}
     >
       {children}
@@ -112,7 +117,8 @@ export function useModalFocus(open: boolean, onEscape: () => void) {
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const panel = panelRef.current;
     const first = panel?.querySelector<HTMLElement>("[autofocus]") || panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) || panel;
-    window.setTimeout(() => first?.focus(), 0);
+    // React 的 autoFocus 不会输出 autofocus 属性；保留已在弹窗内的输入焦点。
+    const focusTimer = window.setTimeout(() => { if (!panel?.contains(document.activeElement)) first?.focus(); }, 0);
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -133,6 +139,7 @@ export function useModalFocus(open: boolean, onEscape: () => void) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => {
+      window.clearTimeout(focusTimer);
       window.removeEventListener("keydown", handleKeyDown);
       restoreRef.current?.focus();
     };
@@ -214,14 +221,18 @@ type AppDialogRequest = AppDialogOptions & {
   resolve: (confirmed: boolean) => void;
 };
 
-function PromptDialog({ open, title, description, defaultValue = "", confirmLabel = "保存", onCancel, onConfirm }: {
-  open: boolean; title: string; description: string; defaultValue?: string; confirmLabel?: string;
+type AppPromptOptions = AppDialogOptions & { defaultValue?: string; validate?: (value: string) => string | undefined };
+
+function PromptDialog({ open, title, description, defaultValue = "", confirmLabel = "保存", validate, onCancel, onConfirm }: {
+  open: boolean; title: string; description: string; defaultValue?: string; confirmLabel?: string; validate?: AppPromptOptions["validate"];
   onCancel: () => void; onConfirm: (value: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue);
   useEffect(() => { if (open) setValue(defaultValue); }, [defaultValue, open]);
-  return <ModalShell open={open} title={title} description={description} onClose={onCancel} className="max-w-sm" footer={<><Button variant="ghost" onClick={onCancel}>取消</Button><Button onClick={() => onConfirm(value)}>{confirmLabel}</Button></>}>
-    <label className="block text-sm font-semibold text-[var(--app-text-muted)]">名称<input autoFocus value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === "Enter") onConfirm(value); }} className="mt-2 h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 text-[var(--app-text)] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15" /></label>
+  const error = validate?.(value);
+  return <ModalShell open={open} title={title} description={description} onClose={onCancel} className="max-w-sm" footer={<><Button variant="ghost" onClick={onCancel}>取消</Button><Button disabled={Boolean(error)} onClick={() => onConfirm(value)}>{confirmLabel}</Button></>}>
+    <label className="block text-sm font-semibold text-[var(--app-text-muted)]">名称<input autoFocus value={value} aria-invalid={Boolean(error)} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !error) onConfirm(value); }} className="mt-2 h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 text-[var(--app-text)] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15" /></label>
+    {error && <InlineStatus message={error} tone="error" className="mt-3" />}
   </ModalShell>;
 }
 
@@ -229,7 +240,7 @@ function PromptDialog({ open, title, description, defaultValue = "", confirmLabe
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAppDialog() {
   const [request, setRequest] = useState<AppDialogRequest | null>(null);
-  const [promptRequest, setPromptRequest] = useState<(AppDialogOptions & { defaultValue?: string; resolve: (value: string | null) => void }) | null>(null);
+  const [promptRequest, setPromptRequest] = useState<(AppPromptOptions & { resolve: (value: string | null) => void }) | null>(null);
   const open = useCallback((mode: AppDialogRequest["mode"], options: AppDialogOptions) => new Promise<boolean>(resolve => setRequest({ ...options, mode, resolve })), []);
   const close = useCallback((confirmed: boolean) => {
     setRequest(current => {
@@ -240,8 +251,8 @@ export function useAppDialog() {
   return {
     confirm: useCallback((options: AppDialogOptions) => open("confirm", options), [open]),
     notice: useCallback((options: AppDialogOptions) => open("notice", options).then(() => undefined), [open]),
-    prompt: useCallback((options: AppDialogOptions & { defaultValue?: string }) => new Promise<string | null>(resolve => setPromptRequest({ ...options, resolve })), []),
-    dialog: <><ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} /><PromptDialog open={Boolean(promptRequest)} title={promptRequest?.title || "请输入"} description={promptRequest?.description || ""} defaultValue={promptRequest?.defaultValue} confirmLabel={promptRequest?.confirmLabel} onCancel={() => { promptRequest?.resolve(null); setPromptRequest(null); }} onConfirm={value => { promptRequest?.resolve(value); setPromptRequest(null); }} /></>,
+    prompt: useCallback((options: AppPromptOptions) => new Promise<string | null>(resolve => setPromptRequest({ ...options, resolve })), []),
+    dialog: <><ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} /><PromptDialog open={Boolean(promptRequest)} title={promptRequest?.title || "请输入"} description={promptRequest?.description || ""} defaultValue={promptRequest?.defaultValue} confirmLabel={promptRequest?.confirmLabel} validate={promptRequest?.validate} onCancel={() => { promptRequest?.resolve(null); setPromptRequest(null); }} onConfirm={value => { promptRequest?.resolve(value); setPromptRequest(null); }} /></>,
   };
 }
 
