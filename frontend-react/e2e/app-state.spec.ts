@@ -884,10 +884,10 @@ test("weekly communication surfaces keep only AI polish and copy actions", async
   const studentPolish = page.getByRole("button", { name: "AI 润色" });
   await expect(studentPolish).toBeVisible();
   await expect.poll(() => studentPolish.evaluate(button => ({
-    background: getComputedStyle(button).backgroundColor,
-    aiToken: getComputedStyle(document.documentElement).getPropertyValue("--app-ai").trim(),
+    gradient: getComputedStyle(button).backgroundImage.includes("linear-gradient"),
+    aiTone: button.classList.contains("app-button-ai"),
     alignment: getComputedStyle(button.parentElement!).justifyContent,
-  }))).toEqual({ background: "rgb(124, 58, 237)", aiToken: "#7c3aed", alignment: "center" });
+  }))).toEqual({ gradient: true, aiTone: true, alignment: "center" });
   await expect(page.getByRole("button", { name: "复制", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /保存沟通稿|标记已分享|创建后续家校沟通任务/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "分享渠道" })).toHaveCount(0);
@@ -899,9 +899,10 @@ test("weekly communication surfaces keep only AI polish and copy actions", async
   const classPolish = weeklyDrawer.getByRole("button", { name: "AI 润色" });
   await expect(classPolish).toBeVisible();
   await expect.poll(() => classPolish.evaluate(button => ({
-    background: getComputedStyle(button).backgroundColor,
+    gradient: getComputedStyle(button).backgroundImage.includes("linear-gradient"),
+    aiTone: button.classList.contains("app-button-ai"),
     alignment: getComputedStyle(button.parentElement!).justifyContent,
-  }))).toEqual({ background: "rgb(124, 58, 237)", alignment: "center" });
+  }))).toEqual({ gradient: true, aiTone: true, alignment: "center" });
   await expect(weeklyDrawer.getByRole("button", { name: "复制", exact: true })).toBeVisible();
   await expect(weeklyDrawer.getByRole("button", { name: "保存草稿" })).toHaveCount(0);
 });
@@ -1314,4 +1315,55 @@ test("roster, exam, cloud sync and workspace switching keep data isolated", asyn
   await page.getByRole("button", { name: new RegExp(originalWorkspace) }).last().click();
   await page.getByRole("button", { name: /^成绩/ }).click();
   await expect(page.getByText("E2E 期中测试", { exact: true }).first()).toBeVisible();
+});
+
+
+test("BoardUI AI waiting and reduced motion preserve usable results", async ({ page }, testInfo) => {
+  let release!: () => void;
+  const responseGate = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/chat-assistant", async route => {
+    await responseGate;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ message: "动画验收测试建议，请教师确认。", suggestedPrompts: [] }) });
+  });
+  await login(page);
+  await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "AI助手浮窗" });
+  await dialog.getByRole("textbox").fill("动画验收");
+  await dialog.getByRole("button", { name: "发送", exact: true }).click();
+  const status = dialog.getByRole("status", { name: "AI 正在分析" });
+  await expect(status).toBeVisible();
+  await expect(status.locator(".ai-loading-track > span")).toHaveCSS("animation-name", "ai-loading-slide");
+  await expect(status.locator(".ai-generation-orbit, .ai-generation-scan")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("ai-waiting.png"), animations: "disabled" });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(status.locator(".ai-loading-track > span")).toHaveCSS("animation-name", "none");
+  release();
+  await expect(dialog.getByText("动画验收测试建议，请教师确认。", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "关闭AI助手", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "打开 AI 助手", exact: true })).toBeFocused();
+});
+
+test("compact legacy seat rows and podium fit the desktop viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 1310, height: 690 });
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  await page.getByPlaceholder("姓名", { exact: true }).fill("布局验收学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1")!);
+    const slice = book.slices.find((item: { id: string }) => item.id === book.currentSliceId);
+    slice.data.students = Array.from({ length: 60 }, (_, index) => ({ ...slice.data.students[0], id: `audit-${index}`, name: `验收${index + 1}` }));
+    delete slice.data.settings.seatLayout;
+    slice.data.seatOrder = Array.from({ length: 64 }, (_, index) => slice.data.students[index]?.id || null);
+    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify(book));
+  });
+  await page.reload();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: /^座位/ }).click();
+  const seats = page.locator("[data-seat-index]");
+  await expect(seats).toHaveCount(64);
+  await expect.poll(() => seats.evaluateAll(nodes => nodes.every(node => { const rect = node.getBoundingClientRect(); return rect.top >= 120 && rect.bottom <= innerHeight - 50 && rect.height >= 32; }))).toBe(true);
+  await expect(page.getByText("讲台", { exact: true })).toBeInViewport({ ratio: 1 });
 });

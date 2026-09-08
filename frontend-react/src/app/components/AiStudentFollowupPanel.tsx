@@ -168,7 +168,7 @@ export function AiStudentFollowupPanel({
   }
 
   return <>
-    <section className={`surface-enter overflow-hidden rounded-2xl border border-status-ai-100 bg-background-primary-default shadow-sm ${compact ? "" : "shadow-violet-100/40"}`}>
+    <section className={`surface-enter overflow-hidden rounded-2xl border border-status-ai-100 bg-background-primary-default shadow-sm ${compact ? "" : "shadow-status-ai-100/40"}`}>
       <div className="flex items-start justify-between gap-3 border-b border-status-ai-50 bg-status-ai-50/50 px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

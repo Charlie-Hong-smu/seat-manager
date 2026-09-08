@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
  * 统一按钮组件
  * variant:
  *  - primary: 蓝色主按钮（常用操作）
- *  - ai: 紫色 AI 主按钮（显式智能操作）
+ *  - ai: 石墨灰 AI 主按钮（显式智能操作）
  *  - secondary: 灰色次要按钮（取消/返回）
  *  - danger: 红色危险按钮（删除）
  *  - ghost: 透明边框按钮（轻操作）
@@ -282,12 +282,12 @@ export function AiGenerationPanel({ title, steps, compact = false }: { title: st
     const timer = window.setInterval(() => setActiveStep(current => Math.min(current + 1, steps.length - 1)), 1200);
     return () => window.clearInterval(timer);
   }, [steps.length]);
-  return <div className={`ai-generation-panel ai-followup-loading-enter relative overflow-hidden rounded-[var(--app-radius-md)] border border-status-ai-100 bg-gradient-to-br from-status-ai-50 via-white to-accent-50 text-left ${compact ? "p-3" : "p-4"}`} role="status" aria-live="polite" aria-label={title}>
-    <span aria-hidden="true" className="ai-generation-scan absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-white/75 to-transparent" />
+  return <div className={`ai-generation-panel ai-followup-loading-enter relative overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default text-left ${compact ? "p-3" : "p-4"}`} role="status" aria-live="polite" aria-label={title}>
     <div className="relative flex items-center gap-3">
-      <span className="ai-generation-core relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-status-ai-600 text-text-white shadow-lg shadow-violet-200/70"><Sparkles className="h-5 w-5"/><span className="ai-generation-orbit absolute -inset-1 rounded-[18px] border border-status-ai-300/70"/></span>
-      <span className="min-w-0 flex-1"><strong className="block text-body-regular text-status-ai-800">{title}</strong><span className="mt-1 block text-caption-1-semibold text-status-ai-600" key={activeStep}>{steps[activeStep] || "正在生成内容"}</span></span>
+      <span aria-hidden="true" className="relative grid h-10 w-10 shrink-0 place-items-center rounded-[var(--app-radius-sm)] border border-status-ai-100 bg-status-ai-50 text-status-ai-600"><Sparkles className="h-5 w-5"/></span>
+      <span className="min-w-0 flex-1"><strong className="block text-body-regular text-status-ai-800">{title}</strong><span className="ai-message-enter mt-1 block text-caption-1-regular text-text-secondary" key={activeStep}>{steps[activeStep] || "正在生成内容"}</span></span>
     </div>
+    <div aria-hidden="true" className="ai-loading-track mt-3"><span /></div>
     {!compact && <div className="relative mt-4 grid gap-2 sm:grid-cols-3">{steps.map((step, index) => <div key={step} className={`flex items-center gap-2 rounded-[var(--app-radius-sm)] border px-2.5 py-2 text-[11px] font-semibold transition-colors duration-300 ${index < activeStep ? "border-status-success-100 bg-status-success-50 text-status-success-700" : index === activeStep ? "border-status-ai-200 bg-background-primary-default text-status-ai-700 shadow-sm" : "border-white/70 bg-background-primary-default/55 text-text-tertiary"}`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${index < activeStep ? "bg-status-success-500 text-text-white" : index === activeStep ? "bg-status-ai-600 text-text-white" : "bg-background-tertiary-default text-text-tertiary"}`}>{index < activeStep ? "✓" : index + 1}</span><span className="truncate">{step}</span></div>)}</div>}
   </div>;
 }
@@ -340,8 +340,8 @@ export function SegmentedControl<T extends string>({
 }) {
   return <div role="group" aria-label={ariaLabel} className={cx("inline-flex", className)}><BoardSegments aria-label={ariaLabel} selectedKeys={[value]} isDisabled={disabled}
     onSelectionChange={keys => { const selected = Array.from(keys).find(key => String(key) !== value); if (selected !== undefined) onChange(String(selected) as T); }}
-    className="app-segments w-full">
-    {options.map(option => <SegmentedControlItem key={option.value} id={option.value} className="min-h-8 min-w-0 flex-1 gap-1.5 px-3">
+    className="app-segments w-full flex-wrap">
+    {options.map(option => <SegmentedControlItem key={option.value} id={option.value} className="min-h-8 min-w-max flex-1 gap-1.5 px-2.5">
       {option.icon}{option.label}
     </SegmentedControlItem>)}
   </BoardSegments></div>;
@@ -596,6 +596,13 @@ export function ToolDrawer({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  const [present, setPresent] = useState(open);
+  useEffect(() => {
+    if (open) { setPresent(true); return; }
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : 150);
+    return () => window.clearTimeout(timer);
+  }, [open]);
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -617,11 +624,11 @@ export function ToolDrawer({
     };
   }, [open, returnFocusId]);
 
-  if (!open) return null;
+  if (!open && !present) return null;
   return (
     <>
-      <button type="button" aria-label="关闭工具面板" className={`soft-backdrop-enter inset-0 bg-text-primary/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
-      <aside className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-16px)] flex-col border-l border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
+      <button type="button" aria-label="关闭工具面板" tabIndex={-1} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-backdrop soft-backdrop-enter inset-0 bg-text-primary/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
+      <aside ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-16px)] flex-col border-l border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--app-border)] px-4">
           <h2 className="text-headline-semibold text-[var(--app-text)]">{title}</h2>
           <button

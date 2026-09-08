@@ -109,7 +109,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
             <div className="text-caption-1-regular text-accent-500 mb-0.5" style={{ fontWeight: 700 }}>手动云端同步</div>
             <h2 className="text-text-primary" style={{ fontSize: "1.125rem", fontWeight: 800 }}>云端备份与恢复</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default">
+          <button type="button" aria-label="关闭云同步" onClick={onClose} className="p-2 rounded-xl text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default">
             <X className="w-4 h-4" />
           </button>
         </div>

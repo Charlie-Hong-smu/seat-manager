@@ -708,7 +708,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
-      <div className="flex min-h-full min-w-[760px] flex-col">
+      <div className="flex h-full min-h-full min-w-[760px] flex-col">
         {/* Column group headers */}
         <div className="mb-2 flex shrink-0 gap-3 pl-12">
           {groups.map((_, gi) => (
@@ -720,8 +720,8 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
 
         {/* Rows */}
         <div
-          className="grid min-h-[384px] flex-1 content-center gap-2 transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-          style={{ gridTemplateRows: `repeat(${rowCount}, ${cardMode === "compact" ? "48px" : "72px"})` }}
+          className="grid shrink-0 flex-1 content-center gap-2 transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          style={{ minHeight: rowCount * (cardMode === "compact" ? 32 : 72) + (rowCount - 1) * 8, gridTemplateRows: `repeat(${rowCount}, ${cardMode === "compact" ? "minmax(32px, 1fr)" : "72px"})` }}
         >
           {rows.map((_, displayIdx) => {
             const rowIdx = rows.length - 1 - displayIdx;

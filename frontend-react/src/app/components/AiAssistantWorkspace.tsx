@@ -407,11 +407,11 @@ export function AiAssistantCompanion({
     if (open) {
       setRendered(true);
       setTransitionState("opening");
-      const timer = window.setTimeout(() => setTransitionState("open"), reducedMotion ? 0 : 280);
+      const timer = window.setTimeout(() => setTransitionState("open"), reducedMotion ? 0 : 240);
       return () => window.clearTimeout(timer);
     }
     setTransitionState("closing");
-    const timer = window.setTimeout(() => setRendered(false), reducedMotion ? 0 : 220);
+    const timer = window.setTimeout(() => setRendered(false), reducedMotion ? 0 : 150);
     return () => window.clearTimeout(timer);
   }, [open]);
 

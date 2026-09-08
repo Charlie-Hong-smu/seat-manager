@@ -151,7 +151,7 @@ export function TopHeader({
           <IconButton label="搜索学生" className="min-[1100px]:hidden" onClick={openSearch}>
             <Search className="h-[18px] w-[18px]" />
           </IconButton>
-          <IconButton label="云同步" onClick={onOpenCloudSync}>
+          <IconButton label="云同步" onClick={() => { onCloseAccount(); onOpenCloudSync(); }}>
             <Cloud className="h-[18px] w-[18px]" />
           </IconButton>
 

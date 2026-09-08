@@ -202,7 +202,7 @@ export function AiCommentDrawer({ open, student, onClose, elevated = false }: Ai
   }
 
   const footer = <div className="flex gap-2">
-    <Button disabled={phase !== "idle"} onClick={handleGenerate} className="flex-1 bg-status-ai-600 hover:bg-status-ai-700 disabled:bg-status-ai-300">
+    <Button variant="ai" disabled={phase !== "idle"} onClick={handleGenerate} className="flex-1">
       <Sparkles className="h-4 w-4" />{phase === "idle" ? (savedText ? "重新生成" : "生成评语") : "生成中"}
     </Button>
     <Button variant="ghost" disabled={!dirty || phase !== "idle"} onClick={handleSave} aria-label="保存评语草稿"><Save className="h-4 w-4" /></Button>

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConfirmDialog, IconButton, InlineStatus, SegmentedControl, useAppDialog } from "./ui";
+import { ConfirmDialog, IconButton, InlineStatus, SegmentedControl, ToolDrawer, useAppDialog } from "./ui";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -104,5 +104,25 @@ describe("BoardUI segmented compatibility", () => {
     expect(screen.getByRole("button", { name: "快速" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "详细" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "详细" })).toBeDisabled();
+  });
+});
+
+
+describe("ToolDrawer presence", () => {
+  it("keeps the closing surface inert, restores focus and handles reopening", async () => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    trigger.focus();
+    const { rerender, container } = render(<ToolDrawer open title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
+    expect(screen.getByRole("complementary", { name: "测试抽屉" })).toBeVisible();
+    rerender(<ToolDrawer open={false} title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
+    expect(trigger).toHaveFocus();
+    expect(container.querySelector("aside")?.inert).toBe(true);
+    expect(screen.queryByRole("complementary")).toBeNull();
+    rerender(<ToolDrawer open title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
+    expect(container.querySelector("aside")?.inert).toBe(false);
+    rerender(<ToolDrawer open={false} title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
+    await waitFor(() => expect(container.querySelector("aside")).toBeNull());
+    trigger.remove();
   });
 });

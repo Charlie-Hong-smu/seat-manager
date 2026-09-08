@@ -1207,7 +1207,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               </div>
               {refinementPhase === "ready" && commentSelection && refinementSuggestion && (
                 <div className="mt-3 flex shrink-0 justify-end">
-                  <Button type="button" size="sm" onClick={applyCommentRefinement} className="bg-status-ai-600 hover:bg-status-ai-700 disabled:bg-status-ai-300">应用 AI 修改</Button>
+                  <Button type="button" variant="ai" size="sm" onClick={applyCommentRefinement}>应用 AI 修改</Button>
                 </div>
               )}
               {aiStatus && <div className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] bg-accent-50/70 px-3 py-2 text-caption-1-regular leading-5 text-accent-700" role="status">{aiStatus}</div>}
@@ -1215,9 +1215,9 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
 
             <div className="shrink-0 border-t border-[var(--app-border)] bg-background-primary-default px-4 py-3 xl:px-6">
               <div className="flex items-center justify-end gap-2">
-                <button type="button" onClick={selectedComment.generated ? saveAndGoNext : generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="flex h-10 min-w-[168px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-accent-600 px-4 text-body-semibold text-text-white transition-colors hover:bg-accent-700 disabled:opacity-60">
+                <Button type="button" variant={selectedComment.generated ? "primary" : "ai"} onClick={selectedComment.generated ? saveAndGoNext : generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="h-10 min-w-[168px]">
                   {selectedComment.generated ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{selectedComment.generated ? "保存并下一位" : "生成评语"}
-                </button>
+                </Button>
                 {selectedComment.generated && <button type="button" aria-label="重新生成" title="重新生成" onClick={generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover disabled:opacity-50"><Sparkles className="h-4 w-4" /></button>}
                 <button type="button" onClick={saveSelectedComment} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover" title="保存"><Save className="h-4 w-4" /></button>
                 <button type="button" onClick={() => { if (selectedComment.text) navigator.clipboard.writeText(selectedComment.text).catch(() => {}); }} disabled={!selectedComment.text} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover disabled:opacity-40" title="复制"><Copy className="h-4 w-4" /></button>
