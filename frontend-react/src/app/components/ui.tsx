@@ -1,8 +1,17 @@
+import { AgentThinking } from "@/components/application/agent-thinking/agent-thinking";
+import { Input } from "@/components/base/input/input";
+export { Input };
+export { Checkbox } from "@/components/base/checkbox/checkbox";
+import { Select as BoardSelect, SelectItem } from "@/components/base/select/select";
+import { MENU_ITEM, MENU_ITEM_ACTIVE, MENU_POPOVER_SURFACE } from "@/components/base/dropdown/menu-styles";
+export { Textarea } from "@/components/base/textarea/textarea";
+export { Chip } from "@/components/base/badges/chip";
+export { StatCards as DashboardStats } from "@/components/application/dashboard/stat-cards";
 import { Button as BoardButton } from "@/components/base/buttons/button";
 import { SegmentedControl as BoardSegments, SegmentedControlItem } from "@/components/base/segmented-control/segmented-control";
 import { cx } from "@/utils/cx";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Search, Sparkles, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
 /**
@@ -77,16 +86,20 @@ const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]
 export function useModalFocus(open: boolean, onEscape: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  // Capture before descendant autoFocus runs during the DOM commit.
+  if (open && !wasOpenRef.current) restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  wasOpenRef.current = open;
   const escapeRef = useRef(onEscape);
   escapeRef.current = onEscape;
   useEffect(() => {
     if (!open) return;
-    restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const panel = panelRef.current;
-    const first = panel?.querySelector<HTMLElement>("[autofocus]") || panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) || panel;
+    const first = panel?.querySelector<HTMLElement>("[autofocus], [data-autofocus=true]") || panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) || panel;
     // React 的 autoFocus 不会输出 autofocus 属性；保留已在弹窗内的输入焦点。
     const focusTimer = window.setTimeout(() => { if (!panel?.contains(document.activeElement)) first?.focus(); }, 0);
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
         event.preventDefault();
         escapeRef.current();
@@ -114,6 +127,21 @@ export function useModalFocus(open: boolean, onEscape: () => void) {
   return panelRef;
 }
 
+// Retain the rendered content during exit, including titles cleared by callers.
+function DialogPresence({ open, children }: { open: boolean; children: ReactNode }) {
+  const [present, setPresent] = useState(open);
+  const lastContent = useRef(children);
+  if (open) lastContent.current = children;
+  useEffect(() => {
+    if (open) { setPresent(true); return; }
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : 150);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+  if (!open && !present) return null;
+  return <div ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className="dialog-presence contents">{open ? children : lastContent.current}</div>;
+}
+
 export function ModalShell({ open, title, description, children, footer, onClose, className = "max-w-lg" }: {
   open: boolean;
   title: string;
@@ -126,14 +154,13 @@ export function ModalShell({ open, title, description, children, footer, onClose
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useModalFocus(open, onClose);
-  if (!open) return null;
-  return createPortal(<div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+  return createPortal(<DialogPresence open={open}><div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter w-full overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)] outline-none ${className}`}>
       <header className="flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-headline-semibold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
       <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
       {footer && <footer className="flex flex-wrap justify-end gap-2 border-t border-[var(--app-border)] p-4">{footer}</footer>}
     </div>
-  </div>, document.body);
+  </div></DialogPresence>, document.body);
 }
 
 export function ConfirmDialog({
@@ -165,15 +192,14 @@ export function ConfirmDialog({
   const descriptionId = useId();
   const panelRef = useModalFocus(open, onCancel);
 
-  if (!open) return null;
-  return createPortal(<div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
+  return createPortal(<DialogPresence open={open}><div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
     <div ref={panelRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default p-5 shadow-[var(--app-shadow-float)] outline-none">
       <h2 id={titleId} className="text-headline-semibold text-[var(--app-text)]">{title}</h2>
       <p id={descriptionId} className="mt-2 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>
       {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-status-danger-50 px-3 py-2 text-caption-1-semibold text-status-danger-600">{error}</p>}
       <div className="mt-5 flex flex-wrap justify-end gap-2">{showCancel && <Button variant="ghost" onClick={onCancel}>取消</Button>}{alternateLabel && onAlternate && <Button variant="secondary" onClick={onAlternate}>{alternateLabel}</Button>}<Button autoFocus variant={variant} onClick={onConfirm}>{confirmLabel}</Button></div>
     </div>
-  </div>, document.body);
+  </div></DialogPresence>, document.body);
 }
 
 type AppDialogOptions = {
@@ -198,7 +224,7 @@ function PromptDialog({ open, title, description, defaultValue = "", confirmLabe
   useEffect(() => { if (open) setValue(defaultValue); }, [defaultValue, open]);
   const error = validate?.(value);
   return <ModalShell open={open} title={title} description={description} onClose={onCancel} className="max-w-sm" footer={<><Button variant="ghost" onClick={onCancel}>取消</Button><Button disabled={Boolean(error)} onClick={() => onConfirm(value)}>{confirmLabel}</Button></>}>
-    <label className="block text-body-semibold text-[var(--app-text-muted)]">名称<input autoFocus value={value} aria-invalid={Boolean(error)} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !error) onConfirm(value); }} className="mt-2 h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 text-[var(--app-text)] outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-500/15" /></label>
+    <Input label="名称" autoFocus value={value} isInvalid={Boolean(error)} onChange={setValue} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !error) onConfirm(value); }} />
     {error && <InlineStatus message={error} tone="error" className="mt-3" />}
   </ModalShell>;
 }
@@ -284,8 +310,8 @@ export function AiGenerationPanel({ title, steps, compact = false }: { title: st
   }, [steps.length]);
   return <div className={`ai-generation-panel ai-followup-loading-enter relative overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default text-left ${compact ? "p-3" : "p-4"}`} role="status" aria-live="polite" aria-label={title}>
     <div className="relative flex items-center gap-3">
-      <span aria-hidden="true" className="relative grid h-10 w-10 shrink-0 place-items-center rounded-[var(--app-radius-sm)] border border-status-ai-100 bg-status-ai-50 text-status-ai-600"><Sparkles className="h-5 w-5"/></span>
-      <span className="min-w-0 flex-1"><strong className="block text-body-regular text-status-ai-800">{title}</strong><span className="ai-message-enter mt-1 block text-caption-1-regular text-text-secondary" key={activeStep}>{steps[activeStep] || "正在生成内容"}</span></span>
+
+      <span className="min-w-0 flex-1"><AgentThinking label={title} variant="wave" tone="primary" shimmer={false} showTimer={false} /><span className="ai-message-enter mt-1 block text-caption-1-regular text-text-secondary" key={activeStep}>{steps[activeStep] || "正在生成内容"}</span></span>
     </div>
     <div aria-hidden="true" className="ai-loading-track mt-3"><span /></div>
     {!compact && <div className="relative mt-4 grid gap-2 sm:grid-cols-3">{steps.map((step, index) => <div key={step} className={`flex items-center gap-2 rounded-[var(--app-radius-sm)] border px-2.5 py-2 text-[11px] font-semibold transition-colors duration-300 ${index < activeStep ? "border-status-success-100 bg-status-success-50 text-status-success-700" : index === activeStep ? "border-status-ai-200 bg-background-primary-default text-status-ai-700 shadow-sm" : "border-white/70 bg-background-primary-default/55 text-text-tertiary"}`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${index < activeStep ? "bg-status-success-500 text-text-white" : index === activeStep ? "bg-status-ai-600 text-text-white" : "bg-background-tertiary-default text-text-tertiary"}`}>{index < activeStep ? "✓" : index + 1}</span><span className="truncate">{step}</span></div>)}</div>}
@@ -311,10 +337,10 @@ export function Card({
   overflow?: "hidden" | "visible";
 }) {
   return (
-    <section className={`${overflow === "visible" ? "overflow-visible" : "overflow-hidden"} rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-[var(--app-surface)] shadow-[var(--app-shadow-card)] ${className}`}>
+    <section className={`${overflow === "visible" ? "overflow-visible" : "overflow-hidden"} rounded-3xl border border-border-button-default bg-background-primary-default ${className}`}>
       {title && (
-        <div className="flex h-16 items-center justify-between gap-3 border-b border-separator-border px-5 py-4">
-          <h2 className="text-headline-semibold text-text-primary">{title}</h2>
+        <div className="flex h-16 items-center justify-between gap-3 px-5 py-4">
+          <h2 className="text-headline-medium text-text-primary">{title}</h2>
           {action}
         </div>
       )}
@@ -436,7 +462,7 @@ export function AnimatedPopover({
   );
 }
 
-export function SelectMenu({ value, options, onChange, ariaLabel, placeholder = "请选择", className = "", searchable }: {
+type SelectMenuProps = {
   value: string | number;
   options: Array<{ value: string | number; label: string; disabled?: boolean }>;
   onChange: (value: string) => void;
@@ -444,14 +470,25 @@ export function SelectMenu({ value, options, onChange, ariaLabel, placeholder = 
   placeholder?: string;
   className?: string;
   searchable?: boolean;
-}) {
+};
+
+export function SelectMenu(props: SelectMenuProps) {
+  const { value, options, onChange, ariaLabel, placeholder = "请选择", className = "", searchable } = props;
+  if (searchable ?? options.length > 8) return <SearchableSelectMenu {...props} />;
+  // Prefix keys so an intentional empty-string choice stays selectable.
+  return <BoardSelect aria-label={ariaLabel} selectedKey={`value:${value}`} onSelectionChange={key => { if (key !== null) onChange(String(key).slice(6)); }} placeholder={placeholder} className={className} popoverClassName="z-[125] min-w-[var(--trigger-width)] w-auto" disabledKeys={options.filter(option => option.disabled).map(option => `value:${option.value}`)}>
+    {options.map(option => <SelectItem key={`value:${option.value}`} id={`value:${option.value}`} textValue={option.label}>{option.label}</SelectItem>)}
+  </BoardSelect>;
+}
+
+function SearchableSelectMenu({ value, options, onChange, ariaLabel, placeholder = "请选择", className = "" }: SelectMenuProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: 0, top: 0, width: 0, maxHeight: 280 });
   const selected = options.find(option => String(option.value) === String(value));
-  const showSearch = searchable ?? options.length > 8;
+  const showSearch = true;
   const filtered = options.filter(option => !search.trim() || option.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
 
   useLayoutEffect(() => {
@@ -491,15 +528,15 @@ export function SelectMenu({ value, options, onChange, ariaLabel, placeholder = 
   }, [open]);
 
   return <>
-    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default px-3 text-left text-body-regular text-[var(--app-text)] transition-colors hover:border-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20 ${className}`}>
+    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={cx("flex min-w-0 items-center gap-1.5 rounded-2lg border border-border-button-default bg-background-primary-default px-2.5 py-2 text-left text-body-medium text-text-primary shadow-xs transition-colors hover:bg-background-primary-hover hover:border-border-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring", className)}>
       <span className={`min-w-0 flex-1 truncate ${selected ? "" : "text-[var(--app-text-muted)]"}`}>{selected?.label || placeholder}</span>
       <ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
     </button>
-    {createPortal(<AnimatedPopover open={open} className="fixed z-[120] overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-2 shadow-[var(--app-shadow-float)]" style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}><div ref={panelRef}>
-      {showSearch && <div className="relative mb-2"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-text-tertiary"/><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索选项" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-[var(--app-surface-muted)] pl-9 pr-3 text-body-regular outline-none focus:border-accent-300 focus:bg-background-primary-default"/></div>}
+    {createPortal(<AnimatedPopover open={open} className={cx(MENU_POPOVER_SURFACE, "fixed z-[125] p-2")} style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}><div ref={panelRef}>
+      {showSearch && <Input autoFocus value={search} onChange={setSearch} leadingIcon={Search} placeholder="搜索选项" className="mb-2" />}
       <div role="listbox" aria-label={ariaLabel} className="max-h-[min(16rem,var(--select-menu-max-height,16rem))] space-y-1 overflow-y-auto">{filtered.map(option => {
         const active = String(option.value) === String(value);
-        return <button key={String(option.value)} type="button" role="option" aria-selected={active} disabled={option.disabled} onClick={() => { onChange(String(option.value)); setOpen(false); setSearch(""); triggerRef.current?.focus(); }} className={`flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-body-regular transition-colors disabled:opacity-40 ${active ? "bg-accent-50 font-bold text-accent-700" : "text-text-primary hover:bg-[var(--app-surface-muted)]"}`}><span className="min-w-0 flex-1 truncate text-left">{option.label}</span>{active && <Check className="h-4 w-4 shrink-0"/>}</button>;
+        return <button key={String(option.value)} type="button" role="option" aria-selected={active} disabled={option.disabled} onClick={() => { onChange(String(option.value)); setOpen(false); setSearch(""); triggerRef.current?.focus(); }} className={cx(MENU_ITEM, "flex w-full items-center text-body-medium disabled:opacity-40", active && MENU_ITEM_ACTIVE)}><span className="min-w-0 flex-1 truncate text-left">{option.label}</span>{active && <Check className="h-4 w-4 shrink-0"/>}</button>;
       })}{!filtered.length && <div className="py-6 text-center text-body-regular text-[var(--app-text-muted)]">没有匹配选项</div>}</div>
     </div></AnimatedPopover>, document.body)}
   </>;
@@ -576,7 +613,7 @@ export function ToolDrawer({
   title,
   onClose,
   returnFocusId,
-  widthClassName = "w-[340px]",
+  widthClassName = "w-[400px]",
   bodyClassName = "p-4",
   positionClassName = "absolute",
   backdropLayerClassName = "z-20",
@@ -613,6 +650,7 @@ export function ToolDrawer({
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") onCloseRef.current();
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -628,8 +666,8 @@ export function ToolDrawer({
   return (
     <>
       <button type="button" aria-label="关闭工具面板" tabIndex={-1} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-backdrop soft-backdrop-enter inset-0 bg-text-primary/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
-      <aside ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-16px)] flex-col border-l border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--app-border)] px-4">
+      <aside ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-enter inset-y-3 right-3 flex max-w-[calc(100%-24px)] flex-col overflow-hidden rounded-3xl border border-border-button-default bg-background-secondary-default p-2.5 shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
+        <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-3">
           <h2 className="text-headline-semibold text-[var(--app-text)]">{title}</h2>
           <button
             ref={closeRef}
@@ -642,8 +680,8 @@ export function ToolDrawer({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className={`min-h-0 flex-1 overflow-y-auto ${bodyClassName}`}>{children}</div>
-        {footer && <div className="shrink-0 border-t border-[var(--app-border)] bg-background-primary-default p-4">{footer}</div>}
+        <div className={cx("min-h-0 flex-1 overflow-y-auto rounded-2xl bg-background-primary-default", bodyClassName)}>{children}</div>
+        {footer && <div className="mt-2.5 shrink-0 rounded-2xl bg-background-primary-default p-3">{footer}</div>}
       </aside>
     </>
   );

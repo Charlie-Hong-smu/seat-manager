@@ -2,7 +2,7 @@ import { ArrowUpRight, CheckCircle2, Link2, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { BusinessEntityRef, FollowupTask } from "../state/types";
-import { Button } from "./ui";
+import { Button, Textarea } from "./ui";
 
 const SOURCE_LABEL: Record<string, string> = { manual: "手动", ai: "AI 建议", score: "成绩", attendance: "出勤", dormitory: "宿舍", homework: "作业", student: "学生", communication: "沟通稿" };
 
@@ -23,5 +23,5 @@ export function LinkedTaskBadge({ task, onOpen }: { task?: FollowupTask; onOpen?
 export function ResolutionEditor({ task, onSave, onContinue }: { task: FollowupTask; onSave: (note: string) => void; onContinue: () => void }) {
   const [note, setNote] = useState(task.resolutionNote || "");
   useEffect(() => setNote(task.resolutionNote || ""), [task.id, task.resolutionNote]);
-  return <div className="view-switch-enter mt-3 rounded-[var(--app-radius-sm)] border border-status-success-100 bg-status-success-50/50 p-3"><label className="text-caption-1-semibold text-status-success-800">处理结果（可选）<textarea rows={2} value={note} onChange={event => setNote(event.target.value)} placeholder="例如：已与家长沟通，学生将在周五前补交" className="mt-2 w-full resize-none rounded-[var(--app-radius-sm)] border border-status-success-100 bg-background-primary-default px-3 py-2 text-body-regular text-text-primary outline-none focus:border-status-success-300"/></label><div className="mt-2 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={onContinue}>继续跟进</Button><Button size="sm" onClick={() => onSave(note)}><Save className="h-3.5 w-3.5"/>保存结果</Button></div></div>;
+  return <div className="view-switch-enter flex flex-col gap-3"><Textarea label="处理结果（可选）" rows={3} value={note} onChange={setNote} placeholder="例如：已与家长沟通，学生将在周五前补交"/><div className="mt-2 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={onContinue}>继续跟进</Button><Button size="sm" onClick={() => onSave(note)}><Save className="h-3.5 w-3.5"/>保存结果</Button></div></div>;
 }

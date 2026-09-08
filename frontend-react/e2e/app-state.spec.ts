@@ -656,7 +656,7 @@ test("corrupt local workspace stays untouched until an explicit recovery", async
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).not.toBe(corruptRaw);
 });
 
-test("preloads the comment workbench and uses the Open Design entry and exit motion", async ({ page }) => {
+test("preloads the comment workbench and uses the shared BoardUI entry and exit motion", async ({ page }) => {
   await login(page);
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((entry) => entry.name.includes("CommentWorkbench-")))).toBe(true);
   await page.getByRole("button", { name: /新增学生/ }).click();
@@ -677,7 +677,7 @@ test("preloads the comment workbench and uses the Open Design entry and exit mot
     const style = getComputedStyle(element);
     return { transitionProperty: style.transitionProperty, transitionDuration: style.transitionDuration };
   });
-  expect(shellStyle).toEqual({ transitionProperty: "opacity, transform, border-radius", transitionDuration: "0.22s, 0.42s, 0.42s" });
+  expect(shellStyle).toEqual({ transitionProperty: "opacity, transform, border-radius", transitionDuration: "0.24s, 0.24s, 0.24s" });
   const paneStyle = await Promise.all([
     dialog.locator(".comment-workbench-roster"),
     dialog.locator(".comment-workbench-editor"),
@@ -687,9 +687,9 @@ test("preloads the comment workbench and uses the Open Design entry and exit mot
     return { animationName: style.animationName, animationDuration: style.animationDuration, animationDelay: style.animationDelay };
   })));
   expect(paneStyle).toEqual([
-    { animationName: "comment-workbench-pane-enter", animationDuration: "0.48s", animationDelay: "0s" },
-    { animationName: "comment-workbench-pane-enter", animationDuration: "0.48s", animationDelay: "0.055s" },
-    { animationName: "comment-workbench-pane-enter", animationDuration: "0.48s", animationDelay: "0.11s" },
+    { animationName: "comment-workbench-pane-enter", animationDuration: "0.24s", animationDelay: "0s" },
+    { animationName: "comment-workbench-pane-enter", animationDuration: "0.24s", animationDelay: "0s" },
+    { animationName: "comment-workbench-pane-enter", animationDuration: "0.24s", animationDelay: "0s" },
   ]);
   await dialog.getByRole("button", { name: "关闭评语工作台" }).click();
   await expect(dialog).toHaveAttribute("data-transition-state", "closing");
@@ -700,10 +700,10 @@ test("preloads the comment workbench and uses the Open Design entry and exit mot
     dialog.locator(".comment-workbench-materials"),
   ].map(locator => locator.evaluate((element) => getComputedStyle(element).animationName)));
   expect(exitMotion).toEqual([
-    "comment-workbench-topbar-exit",
-    "comment-workbench-roster-exit",
-    "comment-workbench-editor-exit",
-    "comment-workbench-materials-exit",
+    "comment-workbench-pane-enter",
+    "comment-workbench-pane-enter",
+    "comment-workbench-pane-enter",
+    "comment-workbench-pane-enter",
   ]);
   await expect(dialog).toBeHidden();
 });
@@ -1337,6 +1337,11 @@ test("BoardUI AI waiting and reduced motion preserve usable results", async ({ p
   await page.screenshot({ path: testInfo.outputPath("ai-waiting.png"), animations: "disabled" });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(status.locator(".ai-loading-track > span")).toHaveCSS("animation-name", "none");
+  const wave = status.locator("[data-agent-thinking-indicator=wave] > span");
+  await expect(wave).toHaveCount(9);
+  const reducedOpacities = await wave.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).style.opacity));
+  await page.waitForTimeout(320);
+  expect(await wave.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).style.opacity))).toEqual(reducedOpacities);
   release();
   await expect(dialog.getByText("动画验收测试建议，请教师确认。", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "关闭AI助手", exact: true }).click();
@@ -1366,4 +1371,47 @@ test("compact legacy seat rows and podium fit the desktop viewport", async ({ pa
   await expect(seats).toHaveCount(64);
   await expect.poll(() => seats.evaluateAll(nodes => nodes.every(node => { const rect = node.getBoundingClientRect(); return rect.top >= 120 && rect.bottom <= innerHeight - 50 && rect.height >= 32; }))).toBe(true);
   await expect(page.getByText("讲台", { exact: true })).toBeInViewport({ ratio: 1 });
+});
+
+test("BoardUI select preserves empty choices and keyboard dismissal inside a drawer", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: /新增学生/ }).click();
+  const drawer = page.getByRole("complementary", { name: "学生工具" });
+  await page.getByPlaceholder("姓名", { exact: true }).fill("控件验收学生");
+  const gender = page.getByRole("button", { name: /学生性别/ });
+  await gender.click();
+  await page.getByRole("option", { name: "男", exact: true }).click();
+  await expect(gender).toContainText("男");
+  await gender.click();
+  await page.getByRole("option", { name: "未知", exact: true }).click();
+  await expect(gender).toContainText("未知");
+  await gender.click();
+  await expect(page.getByRole("listbox", { name: "学生性别" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox", { name: "学生性别" })).toBeHidden();
+  await expect(drawer).toBeVisible();
+  await expect(gender).toBeFocused();
+  await expect(page.getByPlaceholder("姓名", { exact: true })).toHaveValue("控件验收学生");
+  await page.getByRole("button", { name: "添加到班级" }).click();
+  await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
+  await page.reload();
+  const book = await page.evaluate(() => JSON.parse(localStorage.getItem("seat-manager-workspaces-v1")!));
+  const student = book.slices[0].data.students.find((item: { name: string }) => item.name === "控件验收学生");
+  expect(student.gender).toBe("");
+});
+
+test("BoardUI narrow today page and weekly draft stay usable with reduced motion", async ({ page }) => {
+  await login(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "今日班务" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "本周复盘", exact: true }).click();
+  const drawer = page.getByRole("complementary", { name: "本周班级复盘" });
+  const draft = drawer.getByRole("textbox", { name: "复盘草稿" });
+  await draft.fill("教师自行整理的本周复盘");
+  await expect(draft).toHaveValue("教师自行整理的本周复盘");
+  await expect(drawer.getByRole("button", { name: "AI 润色", exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(drawer.getByRole("button", { name: "复制", exact: true })).toBeInViewport({ ratio: 1 });
 });

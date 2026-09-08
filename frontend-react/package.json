@@ -24,6 +24,7 @@
     "check": "pnpm check:design && pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
+    "@remixicon/react": "4.9.0",
     "@vitejs/plugin-react": "4.7.0",
     "lucide-react": "0.487.0",
     "react": "18.3.1",

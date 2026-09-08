@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConfirmDialog, IconButton, InlineStatus, SegmentedControl, ToolDrawer, useAppDialog } from "./ui";
+import { ConfirmDialog, IconButton, InlineStatus, ModalShell, SegmentedControl, ToolDrawer, useAppDialog } from "./ui";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -39,7 +39,7 @@ describe("ConfirmDialog", () => {
     );
 
     const dialog = screen.getByRole("alertdialog");
-    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(dialog.closest(".dialog-presence")?.parentElement).toBe(document.body);
     expect(screen.getByTestId("nested-surface")).not.toContainElement(dialog);
 
     fireEvent.click(screen.getByRole("button", { name: "确认" }));
@@ -123,6 +123,32 @@ describe("ToolDrawer presence", () => {
     expect(container.querySelector("aside")?.inert).toBe(false);
     rerender(<ToolDrawer open={false} title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
     await waitFor(() => expect(container.querySelector("aside")).toBeNull());
+    trigger.remove();
+  });
+});
+
+describe("shared modal exit motion", () => {
+  it.each(["modal", "confirm"])("retains %s content while closing, blocks interaction and cancels stale exit timers", async kind => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    trigger.focus();
+    const view = (open: boolean, title: string) => kind === "modal"
+      ? <ModalShell open={open} title={title} onClose={() => {}}>原始内容</ModalShell>
+      : <ConfirmDialog open={open} title={title} description="原始内容" onCancel={() => {}} onConfirm={() => {}} />;
+    const { rerender } = render(view(true, "原始标题"));
+    await waitFor(() => expect(document.querySelector(".dialog-presence")).toContainElement(document.activeElement as HTMLElement));
+    rerender(view(false, "已清理标题"));
+    const closing = document.querySelector<HTMLElement>(".dialog-presence")!;
+    expect(closing.inert).toBe(true);
+    expect(closing).toHaveAttribute("aria-hidden", "true");
+    expect(closing).toHaveTextContent("原始标题");
+    expect(closing).not.toHaveTextContent("已清理标题");
+    expect(trigger).toHaveFocus();
+    rerender(view(true, "重新打开"));
+    expect(document.querySelector<HTMLElement>(".dialog-presence")?.inert).toBe(false);
+    expect(screen.getByRole(kind === "modal" ? "dialog" : "alertdialog")).toHaveAccessibleName("重新打开");
+    rerender(view(false, ""));
+    await waitFor(() => expect(document.querySelector(".dialog-presence")).toBeNull());
     trigger.remove();
   });
 });

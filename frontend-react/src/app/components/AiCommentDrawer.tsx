@@ -15,7 +15,7 @@ import {
   resolveCommentWordCount,
   toggleCommentCriterion,
 } from "./commentEditor";
-import { AiGenerationPanel, Button, SegmentedControl, ToolDrawer } from "./ui";
+import { Checkbox, AiGenerationPanel, Button, SegmentedControl, ToolDrawer, Input, Textarea } from "./ui";
 
 interface AiCommentDrawerProps {
   open: boolean;
@@ -229,21 +229,21 @@ export function AiCommentDrawer({ open, student, onClose, elevated = false }: Ai
                     {criterion.options.map(option => <button key={option.id} type="button" onClick={() => updateProfileWith(profile => toggleCommentCriterion(profile, criterion, option.id))} className={`h-8 rounded-full border px-3 text-caption-1-semibold transition-colors ${selected.has(option.id) ? "border-status-ai-200 bg-status-ai-50 text-status-ai-700" : "border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}>{option.label}</button>)}
                     {customOptions.map(option => <button key={option.id} type="button" title="点击移除自定义素材" onClick={() => updateProfileWith(profile => removeCommentCustomOption(profile, criterion.id, option.id))} className="inline-flex h-8 items-center gap-1 rounded-full border border-status-success-100 bg-status-success-50 px-3 text-caption-1-semibold text-status-success-700">{option.label}<X className="h-3 w-3" /></button>)}
                   </div>
-                  {customCriterionId === criterion.id && <div className="mt-2 flex gap-2"><input autoFocus value={customLabel} onChange={event => setCustomLabel(event.target.value)} onKeyDown={event => { if (event.key === "Enter") submitCustomOption(criterion); if (event.key === "Escape") setCustomCriterionId(""); }} maxLength={30} placeholder={`补充${criterion.label}素材`} className="h-9 min-w-0 flex-1 rounded-[var(--app-radius-sm)] border border-border-button-default px-3 text-body-regular outline-none focus:border-accent-300"/><Button size="sm" onClick={() => submitCustomOption(criterion)}>添加</Button></div>}
+                  {customCriterionId === criterion.id && <div className="mt-2 flex gap-2"><Input autoFocus value={customLabel} onChange={setCustomLabel} onKeyDown={event => { if (event.key === "Enter") submitCustomOption(criterion); if (event.key === "Escape") setCustomCriterionId(""); }} maxLength={30} placeholder={`补充${criterion.label}素材`} className="min-w-0 flex-1" /><Button size="sm" onClick={() => submitCustomOption(criterion)}>添加</Button></div>}
                 </div>;
               })}
             </div></div>
           </div>
         </section>
 
-        <label className="block"><span className="mb-1.5 block text-caption-1-semibold text-text-secondary">教师补充</span><textarea value={commentProfile.teacherNote} onChange={event => updateProfile({ teacherNote: event.target.value })} rows={3} className="w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-status-ai-300 focus:bg-background-primary-default" placeholder="补充学生近期表现、性格特点或需要强调的进步点。" /></label>
+        <Textarea label="教师补充" value={commentProfile.teacherNote} onChange={value => updateProfile({ teacherNote: value })} rows={3} placeholder="补充学生近期表现、性格特点或需要强调的进步点。"  resize="none" />
 
         <section className="space-y-3 rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-4">
           <div><span className="mb-2 block text-caption-1-semibold text-text-secondary">字数目标</span><SegmentedControl value={commentProfile.lengthMode} ariaLabel="评语字数目标" onChange={value => updateProfile({ lengthMode: value, targetWordCount: resolveCommentWordCount(value, commentProfile.targetWordCount) })} options={COMMENT_LENGTH_MODES} className="flex w-full" />{commentProfile.lengthMode === "custom" && <input type="number" min={10} max={999} value={commentProfile.targetWordCount} onChange={event => updateProfile({ targetWordCount: clampCommentWordCount(event.target.value) })} className="mt-2 h-9 w-full rounded-[var(--app-radius-sm)] border border-border-button-default px-3 text-body-regular outline-none focus:border-accent-300" aria-label="自定义评语字数" />}</div>
           <div><span className="mb-2 block text-caption-1-semibold text-text-secondary">评语风格</span><SegmentedControl value={commentProfile.style} ariaLabel="评语风格" onChange={value => updateProfile({ style: value })} options={COMMENT_STYLES} className="flex w-full" /></div>
         </section>
 
-        {!hasAuth && <section className="rounded-[var(--app-radius-md)] border border-status-ai-100 bg-status-ai-50 p-4"><div className="mb-2 text-caption-1-semibold text-status-ai-600">AI 授权</div><input type="password" value={accessCode} onChange={event => setAccessCode(event.target.value)} className="h-10 w-full rounded-[var(--app-radius-sm)] border border-status-ai-100 bg-background-primary-default px-3 text-body-regular outline-none focus:border-status-ai-300" placeholder="输入 AI 授权码"/><label className="mt-2 flex items-center gap-2 text-caption-1-regular text-status-ai-700"><input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-status-ai-600"/>记住授权 30 天</label></section>}
+        {!hasAuth && <section className="rounded-[var(--app-radius-md)] border border-status-ai-100 bg-status-ai-50 p-4"><div className="mb-2 text-caption-1-semibold text-status-ai-600">AI 授权</div><Input type="password" value={accessCode} onChange={setAccessCode} placeholder="输入 AI 授权码"  /><Checkbox isSelected={rememberAuth} onChange={setRememberAuth} className="mt-2">记住授权 30 天</Checkbox></section>}
 
         <section><div className="mb-1.5 flex items-center justify-between"><span className="text-caption-1-semibold text-text-secondary">评语草稿</span><span className={`text-caption-1-semibold ${dirty ? "text-status-warning-600" : "text-status-success-600"}`}>{dirty ? "已缓存，未正式保存" : savedText ? "已保存" : "暂无草稿"}</span></div><div className="relative min-h-[210px] overflow-hidden rounded-[var(--app-radius-sm)]">
           <textarea rows={9} value={draftState.generatedComment} readOnly={phase !== "idle"} onChange={event => updateCachedComment(event.target.value)} className={`min-h-[210px] w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default px-3.5 py-3 text-body-regular leading-6 outline-none transition-opacity focus:border-status-ai-300 focus:bg-background-primary-default ${phase === "loading" ? "opacity-0" : "opacity-100"}`} placeholder="生成后可在这里继续编辑评语草稿。" />

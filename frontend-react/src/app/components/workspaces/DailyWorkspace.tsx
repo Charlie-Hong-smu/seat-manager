@@ -15,7 +15,7 @@ import {
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
 import { SeatLayoutDesigner } from "../SeatLayoutDesigner";
-import { Button, SegmentedControl, SelectMenu, ToolDrawer } from "../ui";
+import { Checkbox, Button, SegmentedControl, SelectMenu, ToolDrawer, Input } from "../ui";
 import type {
   AppStudent,
   Gender,
@@ -186,9 +186,9 @@ export function DailyWorkspace({
             <p className="mt-1 text-caption-1-regular leading-5 text-text-tertiary">新学生会自动安排到第一个空座位。</p>
           </div>
           <div className="space-y-3 rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-secondary-default p-3">
-            <input value={name} onChange={event => setName(event.target.value)} className="h-10 w-full rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 text-body-regular outline-none focus:border-accent-300" placeholder="姓名" />
+            <Input value={name} onChange={setName} placeholder="姓名"   />
             <div className="grid grid-cols-[1fr_6rem] gap-2">
-              <input value={alias} onChange={event => setAlias(event.target.value)} className="h-10 min-w-0 rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 text-body-regular outline-none focus:border-accent-300" placeholder="别名 / 拼音（可选）" />
+              <Input value={alias} onChange={setAlias} placeholder="别名 / 拼音（可选）"  className="min-w-0" />
               <SelectMenu value={gender} onChange={value => setGender(value as Gender)} ariaLabel="学生性别" options={[{ value: "", label: "未知" }, { value: "男", label: "男" }, { value: "女", label: "女" }]} />
             </div>
             <Button className="w-full" disabled={!name.trim()} onClick={addStudent}><Plus className="h-4 w-4" />添加到班级</Button>
@@ -196,10 +196,7 @@ export function DailyWorkspace({
 
           <div>
             <h3 className="mb-2 text-body-semibold text-text-primary">查找已有学生</h3>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
-              <input value={drawerSearch} onChange={event => setDrawerSearch(event.target.value)} className="h-10 w-full rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default pl-9 pr-3 text-body-regular outline-none focus:border-accent-300 focus:bg-background-primary-default" placeholder="姓名或别名" />
-            </div>
+            <Input value={drawerSearch} onChange={setDrawerSearch} leadingIcon={Search} placeholder="姓名或别名" className="" />
             {drawerSearch && (
               <div className="mt-2 divide-y divide-separator-border overflow-hidden rounded-[var(--app-radius-sm)] border border-[var(--app-border)]">
                 {drawerStudents.map(student => (
@@ -222,9 +219,7 @@ export function DailyWorkspace({
                 人数
                 <input type="number" min={1} max={Math.max(1, students.length)} value={drawCount} onChange={event => setDrawCount(Number(event.target.value) || 1)} className="h-9 w-16 rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-2 text-center outline-none focus:border-accent-300" />
               </label>
-              <label className="ml-auto flex items-center gap-2 text-body-regular text-text-secondary">
-                <input type="checkbox" checked={noRepeat} onChange={event => setNoRepeat(event.target.checked)} className="h-4 w-4 accent-accent-600" />去重
-              </label>
+              <Checkbox isSelected={noRepeat} onChange={setNoRepeat} className="ml-auto">去重</Checkbox>
             </div>
             <Button className="mt-4 w-full" onClick={draw}><Dices className="h-4 w-4" />开始抽签</Button>
           </div>
