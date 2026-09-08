@@ -132,14 +132,14 @@ export function Sidebar({
   }, [activeTab, collapsed, updateActiveIndicator]);
 
   return (
-    <aside className="flex h-full w-full flex-col border-r border-[var(--app-border)] bg-white">
+    <aside className="app-sidebar flex h-full w-full flex-col border border-[var(--app-border)] bg-background-primary-default">
       <div className="flex h-14 shrink-0 items-center gap-3 overflow-hidden border-b border-[var(--app-border)] px-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-gray-900 text-white">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-text-primary text-text-white">
           <PanelsTopLeft className="h-[18px] w-[18px]" />
         </span>
         <span className={`min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${collapsed ? "max-w-0 translate-x-2 opacity-0" : "max-w-32 translate-x-0 opacity-100"}`}>
-          <span className="block text-xs font-semibold text-gray-400">工作台</span>
-          <span className="block truncate text-sm font-bold text-[var(--app-text)]">班级管理</span>
+          <span className="block text-caption-1-semibold text-text-tertiary">工作台</span>
+          <span className="block truncate text-body-semibold text-[var(--app-text)]">班级管理</span>
         </span>
       </div>
 
@@ -151,7 +151,7 @@ export function Sidebar({
         <span
           data-testid="sidebar-active-indicator"
           aria-hidden="true"
-          className={`pointer-events-none absolute top-0 z-0 rounded-[var(--app-radius-sm)] bg-[var(--app-primary)] transition-[left,right,height,transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${collapsed ? "left-2 right-2" : "left-3 right-3"} ${activeIndicator.ready ? "opacity-100" : "opacity-0"}`}
+          className={`pointer-events-none absolute top-0 z-0 rounded-[var(--app-radius-sm)] bg-button-ghost-background transition-[left,right,height,transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${collapsed ? "left-2 right-2" : "left-3 right-3"} ${activeIndicator.ready ? "opacity-100" : "opacity-0"}`}
           style={{
             height: activeIndicator.height,
             transform: `translate3d(0, ${activeIndicator.top}px, 0)`,
@@ -160,7 +160,7 @@ export function Sidebar({
         {NAV_GROUPS.map((group, groupIndex) => (
           <div key={group.label} className={`relative z-10 ${groupIndex ? "mt-3" : ""}`}>
             <div className={`grid transition-[grid-template-rows,opacity,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${collapsed ? "mb-0 grid-rows-[0fr] opacity-0" : "mb-1.5 grid-rows-[1fr] opacity-100"}`}>
-              <div className="overflow-hidden px-2 text-[11px] font-bold tracking-wide text-gray-400">{group.label}</div>
+              <div className="overflow-hidden px-2 text-[11px] font-bold tracking-wide text-text-tertiary">{group.label}</div>
             </div>
             <div className="space-y-1">
               {group.items.map(item => {
@@ -174,16 +174,16 @@ export function Sidebar({
                     title={collapsed ? item.label : undefined}
                     aria-current={active ? "page" : undefined}
                     onClick={() => item.key === "comments" ? onOpenCommentWorkbench() : onTabChange(item.key)}
-                    className={`group relative flex h-10 w-full items-center gap-2.5 overflow-hidden rounded-[var(--app-radius-sm)] px-2.5 text-sm font-semibold [-webkit-tap-highlight-color:transparent] transition-[color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 motion-reduce:transition-none ${active ? "text-white" : item.key === "comments" ? "text-violet-600 hover:translate-x-px hover:bg-violet-50" : "text-gray-600 hover:translate-x-px hover:bg-gray-100 hover:text-gray-900"}`}
+                    className={`group relative flex h-10 w-full items-center gap-2.5 overflow-hidden rounded-[var(--app-radius-sm)] px-2.5 text-body-semibold [-webkit-tap-highlight-color:transparent] transition-[color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30 motion-reduce:transition-none ${active ? "text-button-ghost-foreground" : item.key === "comments" ? "text-status-ai-600  hover:bg-status-ai-50" : "text-text-secondary  hover:bg-background-tertiary-default hover:text-text-primary"}`}
                   >
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-[background-color,transform] duration-200 group-hover:scale-[1.03] ${active ? "bg-white/12" : item.key === "comments" ? "bg-violet-50 group-hover:bg-violet-100" : "bg-gray-50 group-hover:bg-white"}`}>
+                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-[background-color,transform] duration-200  ${active ? "bg-background-primary-default" : item.key === "comments" ? "bg-status-ai-50 group-hover:bg-status-ai-100" : "bg-background-secondary-default group-hover:bg-background-primary-default"}`}>
                       {item.icon}
                     </span>
                     <span className={`min-w-0 flex-1 truncate text-left whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${collapsed ? "max-w-0 translate-x-2 opacity-0" : "max-w-28 translate-x-0 opacity-100"}`}>{item.label}</span>
                     {badge !== undefined && (
-                      <span className={`min-w-5 shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold transition-[max-width,opacity,transform,padding] duration-300 ${collapsed ? "max-w-0 translate-x-2 overflow-hidden px-0 opacity-0" : "max-w-10 translate-x-0 opacity-100"} ${active ? "bg-white/15 text-white" : "bg-gray-100 text-gray-500"}`}>{badge}</span>
+                      <span className={`min-w-5 shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold transition-[max-width,opacity,transform,padding] duration-300 ${collapsed ? "max-w-0 translate-x-2 overflow-hidden px-0 opacity-0" : "max-w-10 translate-x-0 opacity-100"} ${active ? "bg-background-primary-default text-button-ghost-foreground" : "bg-background-tertiary-default text-text-secondary"}`}>{badge}</span>
                     )}
-                    <span className={`absolute -left-2 h-5 w-1 rounded-r-full bg-blue-500 transition-[opacity,transform] duration-300 ${collapsed && active ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-0"}`} />
+                    <span className={`absolute -left-2 h-5 w-1 rounded-r-full bg-accent-500 transition-[opacity,transform] duration-300 ${collapsed && active ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-0"}`} />
                   </button>
                 );
               })}

@@ -1075,7 +1075,7 @@ export default function App() {
                 onAppendCommentMaterial: handleAppendAiAssistantMaterial,
               }}
               fallback={
-                <div role="status" aria-label="正在打开 AI 助手" className="fixed inset-x-2 bottom-2 top-16 z-[70] grid place-items-center rounded-[var(--app-radius-lg)] border border-violet-100 bg-white text-sm font-semibold text-violet-600 shadow-[var(--app-shadow-float)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-[72px] sm:w-[420px]">
+                <div role="status" aria-label="正在打开 AI 助手" className="fixed inset-x-2 bottom-2 top-16 z-[70] grid place-items-center rounded-[var(--app-radius-lg)] border border-status-ai-100 bg-background-primary-default text-body-semibold text-status-ai-600 shadow-[var(--app-shadow-float)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-[72px] sm:w-[420px]">
                   正在打开 AI 助手…
                 </div>
               }

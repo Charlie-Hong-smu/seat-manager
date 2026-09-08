@@ -564,15 +564,15 @@ export function AiAssistantCompanion({
         role="dialog"
         aria-modal={false}
         aria-label="AI助手浮窗"
-        className="ai-companion-panel fixed inset-x-2 bottom-2 top-16 z-[70] flex min-w-0 flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-violet-100 bg-white shadow-[var(--app-shadow-float)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-[72px] sm:w-[420px]"
+        className="ai-companion-panel fixed inset-x-2 bottom-2 top-16 z-[70] flex min-w-0 flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-status-ai-100 bg-background-primary-default shadow-[var(--app-shadow-float)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-[72px] sm:w-[420px]"
       >
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--app-border)] px-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-violet-50 text-violet-600">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-status-ai-50 text-status-ai-600">
             <Sparkles className="h-[18px] w-[18px]" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-[var(--app-text)]">AI 助手</h2>
-            <p className="truncate text-xs text-[var(--app-text-muted)]">{className} · {termLabel} · {activeSurfaceLabel}</p>
+            <h2 className="text-body-semibold text-[var(--app-text)]">AI 助手</h2>
+            <p className="truncate text-caption-1-regular text-[var(--app-text-muted)]">{className} · {termLabel} · {activeSurfaceLabel}</p>
           </div>
           <IconButton label="新对话" size="sm" disabled={!messages.length || busy} onClick={() => setConfirmClearMessages(true)}>
             <Trash2 className="h-4 w-4" />
@@ -588,67 +588,67 @@ export function AiAssistantCompanion({
             aria-expanded={contextExpanded}
             aria-controls="ai-assistant-context"
             onClick={() => setContextExpanded(value => !value)}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-violet-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-status-ai-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-status-ai-300"
           >
             <span className="min-w-0 flex-1">
-              <span className="block text-xs font-bold text-gray-700">当前上下文 · {activeSurfaceLabel}</span>
-              <span className="mt-0.5 block truncate text-[11px] text-gray-400">
+              <span className="block text-caption-1-semibold text-text-primary">当前上下文 · {activeSurfaceLabel}</span>
+              <span className="mt-0.5 block truncate text-[11px] text-text-tertiary">
                 {contextPackLabels.length ? `将附带：${contextPackLabels.join("、")}` : `学生 ${baseContext.studentCount} 人 · 考试 ${exams.length} 次 · 重点候选 ${baseContext.focusStudents.length} 人`}
               </span>
             </span>
-            <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-600">{evidenceMode}</span>
-            <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${contextExpanded ? "rotate-180" : ""}`} />
+            <span className="rounded-full bg-status-ai-50 px-2 py-1 text-[10px] font-bold text-status-ai-600">{evidenceMode}</span>
+            <ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${contextExpanded ? "rotate-180" : ""}`} />
           </button>
           {contextExpanded && (
-            <div id="ai-assistant-context" className="surface-enter max-h-48 overflow-y-auto border-t border-violet-100 bg-white px-3 py-3">
+            <div id="ai-assistant-context" className="surface-enter max-h-48 overflow-y-auto border-t border-status-ai-100 bg-background-primary-default px-3 py-3">
               <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                <div className="rounded-[var(--app-radius-sm)] bg-gray-50 px-2 py-2"><strong className="block text-sm text-gray-800">{baseContext.studentCount}</strong><span className="text-gray-400">学生</span></div>
-                <div className="rounded-[var(--app-radius-sm)] bg-gray-50 px-2 py-2"><strong className="block text-sm text-gray-800">{exams.length}</strong><span className="text-gray-400">考试</span></div>
-                <div className="rounded-[var(--app-radius-sm)] bg-gray-50 px-2 py-2"><strong className="block text-sm text-gray-800">{baseContext.focusStudents.length}</strong><span className="text-gray-400">重点候选</span></div>
+                <div className="rounded-[var(--app-radius-sm)] bg-background-secondary-default px-2 py-2"><strong className="block text-body-regular text-text-primary">{baseContext.studentCount}</strong><span className="text-text-tertiary">学生</span></div>
+                <div className="rounded-[var(--app-radius-sm)] bg-background-secondary-default px-2 py-2"><strong className="block text-body-regular text-text-primary">{exams.length}</strong><span className="text-text-tertiary">考试</span></div>
+                <div className="rounded-[var(--app-radius-sm)] bg-background-secondary-default px-2 py-2"><strong className="block text-body-regular text-text-primary">{baseContext.focusStudents.length}</strong><span className="text-text-tertiary">重点候选</span></div>
               </div>
               {activeEvidence.length > 0 && <div className="mt-2 space-y-1.5">{activeEvidence.slice(0, 4).map(item => (
-                <div key={`${item.title}-${item.detail}`} className="rounded-[var(--app-radius-sm)] border border-violet-100 bg-violet-50/50 px-2.5 py-2">
-                  <div className="truncate text-xs font-bold text-gray-700">{item.title}</div>
-                  <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-gray-400">{item.detail}</div>
+                <div key={`${item.title}-${item.detail}`} className="rounded-[var(--app-radius-sm)] border border-status-ai-100 bg-status-ai-50/50 px-2.5 py-2">
+                  <div className="truncate text-caption-1-semibold text-text-primary">{item.title}</div>
+                  <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-text-tertiary">{item.detail}</div>
                 </div>
               ))}</div>}
             </div>
           )}
         </div>
 
-        <section ref={messagesScrollRef} aria-label="AI 对话内容" className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white p-3.5">
+        <section ref={messagesScrollRef} aria-label="AI 对话内容" className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background-primary-default p-3.5">
           {messages.length === 0 && (
             <div className="flex min-h-full flex-col justify-center py-4">
               <div className="text-center">
-                <span className="mx-auto grid h-12 w-12 place-items-center rounded-[var(--app-radius-md)] bg-violet-50 text-violet-600"><Bot className="h-6 w-6" /></span>
-                <h3 className="mt-3 text-base font-bold text-gray-900">问问当前班级</h3>
-                <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-gray-400">AI 会按问题附带有限的班级摘要，不会在打开面板时自动请求，也不会自动写入数据。</p>
+                <span className="mx-auto grid h-12 w-12 place-items-center rounded-[var(--app-radius-md)] bg-status-ai-50 text-status-ai-600"><Bot className="h-6 w-6" /></span>
+                <h3 className="mt-3 text-headline-semibold text-text-primary">问问当前班级</h3>
+                <p className="mx-auto mt-1 max-w-xs text-caption-1-regular leading-5 text-text-tertiary">AI 会按问题附带有限的班级摘要，不会在打开面板时自动请求，也不会自动写入数据。</p>
               </div>
               <div className="mt-4 space-y-2">{suggestedPrompts.slice(0, 4).map(prompt => (
-                <button key={prompt} type="button" disabled={busy} onClick={() => void sendPrompt(prompt)} className="w-full rounded-[var(--app-radius-sm)] border border-violet-100 bg-violet-50/70 px-3 py-2.5 text-left text-xs font-semibold leading-5 text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50">{prompt}</button>
+                <button key={prompt} type="button" disabled={busy} onClick={() => void sendPrompt(prompt)} className="w-full rounded-[var(--app-radius-sm)] border border-status-ai-100 bg-status-ai-50/70 px-3 py-2.5 text-left text-caption-1-semibold leading-5 text-status-ai-700 transition-colors hover:bg-status-ai-100 disabled:opacity-50">{prompt}</button>
               ))}</div>
             </div>
           )}
 
           {messages.map((message, index) => (
             <div key={message.id} className={`ai-message-enter flex gap-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-              {message.role === "assistant" && <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-600"><Bot className="h-3.5 w-3.5" /></span>}
-              <div className={`max-w-[88%] rounded-[var(--app-radius-md)] px-3 py-2.5 text-sm leading-6 ${message.role === "user" ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-700"}`}>
+              {message.role === "assistant" && <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-status-ai-50 text-status-ai-600"><Bot className="h-3.5 w-3.5" /></span>}
+              <div className={`max-w-[88%] rounded-[var(--app-radius-md)] px-3 py-2.5 text-body-regular leading-6 ${message.role === "user" ? "bg-text-primary text-text-white" : "bg-background-secondary-default text-text-primary"}`}>
                 <div className="whitespace-pre-wrap">{formatChatDisplayText(message)}</div>
                 {message.role === "assistant" && index === messages.length - 1 && message.suggestedPrompts?.length ? (
-                  <div className="mt-2.5 space-y-1.5 border-t border-gray-100 pt-2.5">{message.suggestedPrompts.slice(0, 3).map(prompt => (
-                    <button key={prompt} type="button" disabled={busy} onClick={() => void sendPrompt(prompt)} className="block w-full rounded-lg border border-violet-100 bg-white px-2.5 py-1.5 text-left text-[11px] leading-4 text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50">{prompt}</button>
+                  <div className="mt-2.5 space-y-1.5 border-t border-separator-border pt-2.5">{message.suggestedPrompts.slice(0, 3).map(prompt => (
+                    <button key={prompt} type="button" disabled={busy} onClick={() => void sendPrompt(prompt)} className="block w-full rounded-lg border border-status-ai-100 bg-background-primary-default px-2.5 py-1.5 text-left text-[11px] leading-4 text-status-ai-700 transition-colors hover:bg-status-ai-50 disabled:opacity-50">{prompt}</button>
                   ))}</div>
                 ) : null}
-                <div className={`mt-2 flex flex-wrap items-center gap-3 text-[11px] ${message.role === "user" ? "text-gray-400" : "text-gray-400"}`}>
-                  <button type="button" onClick={() => copyMessage(message)} aria-label={message.role === "user" ? "复制老师发送的问题" : "复制 AI 回复"} className={`inline-flex items-center gap-1 ${message.role === "user" ? "hover:text-white" : "hover:text-gray-600"}`}>
+                <div className={`mt-2 flex flex-wrap items-center gap-3 text-[11px] ${message.role === "user" ? "text-text-tertiary" : "text-text-tertiary"}`}>
+                  <button type="button" onClick={() => copyMessage(message)} aria-label={message.role === "user" ? "复制老师发送的问题" : "复制 AI 回复"} className={`inline-flex items-center gap-1 ${message.role === "user" ? "hover:text-text-white" : "hover:text-text-secondary"}`}>
                     {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{copiedMessageId === message.id ? "已复制" : "复制"}
                   </button>
                   {message.role === "assistant" && findMessageTargetStudent(message) && <>
-                    <button type="button" onClick={() => { const target = findMessageTargetStudent(message); if (target) void saveAssistantRecord(message, target); }} aria-label="保存为学生跟进记录" className="inline-flex items-center gap-1 hover:text-gray-600">{savedActionKey === `${message.id}:record` ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}{savedActionKey === `${message.id}:record` ? "已存记录" : "存记录"}</button>
-                    <button type="button" onClick={() => { const target = findMessageTargetStudent(message); if (target) void appendAssistantMaterial(message, target); }} aria-label="加入评语素材" className="inline-flex items-center gap-1 hover:text-gray-600">{savedActionKey === `${message.id}:material` ? <Check className="h-3.5 w-3.5" /> : <FilePlus2 className="h-3.5 w-3.5" />}{savedActionKey === `${message.id}:material` ? "已加素材" : "加素材"}</button>
+                    <button type="button" onClick={() => { const target = findMessageTargetStudent(message); if (target) void saveAssistantRecord(message, target); }} aria-label="保存为学生跟进记录" className="inline-flex items-center gap-1 hover:text-text-secondary">{savedActionKey === `${message.id}:record` ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}{savedActionKey === `${message.id}:record` ? "已存记录" : "存记录"}</button>
+                    <button type="button" onClick={() => { const target = findMessageTargetStudent(message); if (target) void appendAssistantMaterial(message, target); }} aria-label="加入评语素材" className="inline-flex items-center gap-1 hover:text-text-secondary">{savedActionKey === `${message.id}:material` ? <Check className="h-3.5 w-3.5" /> : <FilePlus2 className="h-3.5 w-3.5" />}{savedActionKey === `${message.id}:material` ? "已加素材" : "加素材"}</button>
                   </>}
-                  {message.role === "user" && <button type="button" disabled={busy} onClick={() => void sendPrompt(message.content)} aria-label="重试这条问题" className="inline-flex items-center gap-1 hover:text-white disabled:opacity-50"><RotateCcw className="h-3.5 w-3.5" />重试</button>}
+                  {message.role === "user" && <button type="button" disabled={busy} onClick={() => void sendPrompt(message.content)} aria-label="重试这条问题" className="inline-flex items-center gap-1 hover:text-text-white disabled:opacity-50"><RotateCcw className="h-3.5 w-3.5" />重试</button>}
                 </div>
               </div>
             </div>
@@ -658,16 +658,16 @@ export function AiAssistantCompanion({
           <div ref={messagesEndRef} />
         </section>
 
-        <footer className="shrink-0 border-t border-[var(--app-border)] bg-white p-3">
-          <p className="mb-2 line-clamp-2 text-[11px] leading-4 text-violet-600" aria-live="polite">{status}</p>
+        <footer className="shrink-0 border-t border-[var(--app-border)] bg-background-primary-default p-3">
+          <p className="mb-2 line-clamp-2 text-[11px] leading-4 text-status-ai-600" aria-live="polite">{status}</p>
           <form className="relative flex items-end gap-2" onSubmit={event => { event.preventDefault(); void sendPrompt(input); }}>
             {showStudentSuggestions && (
-              <div className="ai-suggestion-enter absolute bottom-full left-0 right-0 z-10 mb-2 overflow-hidden rounded-[var(--app-radius-md)] border border-violet-100 bg-white shadow-[var(--app-shadow-float)]">
-                <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2"><span className="text-xs font-bold text-gray-500">可能想问的学生</span><span className="text-[11px] text-violet-500">点击插入姓名</span></div>
+              <div className="ai-suggestion-enter absolute bottom-full left-0 right-0 z-10 mb-2 overflow-hidden rounded-[var(--app-radius-md)] border border-status-ai-100 bg-background-primary-default shadow-[var(--app-shadow-float)]">
+                <div className="flex items-center justify-between border-b border-separator-border px-3 py-2"><span className="text-caption-1-semibold text-text-secondary">可能想问的学生</span><span className="text-[11px] text-status-ai-500">点击插入姓名</span></div>
                 <div className="max-h-48 overflow-y-auto p-1.5">{studentSuggestions.map(item => (
-                  <button key={item.student.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseStudentSuggestion(item.student)} className="flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2 text-left transition-colors hover:bg-violet-50">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-violet-50 text-sm font-bold text-violet-700">{item.student.name.slice(0, 1)}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-gray-900">{item.student.name}</span><span className="block truncate text-xs text-gray-400">{item.reason}{item.student.aliases.length ? ` · ${item.student.aliases.slice(0, 2).join(" / ")}` : ""}</span></span>
+                  <button key={item.student.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseStudentSuggestion(item.student)} className="flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2 text-left transition-colors hover:bg-status-ai-50">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-status-ai-50 text-body-semibold text-status-ai-700">{item.student.name.slice(0, 1)}</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-body-semibold text-text-primary">{item.student.name}</span><span className="block truncate text-caption-1-regular text-text-tertiary">{item.reason}{item.student.aliases.length ? ` · ${item.student.aliases.slice(0, 2).join(" / ")}` : ""}</span></span>
                   </button>
                 ))}</div>
               </div>
@@ -688,7 +688,7 @@ export function AiAssistantCompanion({
               }}
               disabled={busy}
               placeholder="输入问题，Enter 发送，Shift+Enter 换行"
-              className="min-h-11 min-w-0 flex-1 resize-none overflow-y-auto rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-6 text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-violet-300 focus:bg-white disabled:opacity-60"
+              className="min-h-11 min-w-0 flex-1 resize-none overflow-y-auto rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default px-3 py-2.5 text-body-regular leading-6 text-text-primary outline-none transition-colors placeholder:text-text-tertiary focus:border-status-ai-300 focus:bg-background-primary-default disabled:opacity-60"
             />
             <IconButton label="发送" size="lg" disabled={busy || !input.trim()} className="ai-companion-primary-action" type="submit">
               {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Send className="h-4 w-4" />}

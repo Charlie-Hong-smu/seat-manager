@@ -393,7 +393,7 @@ export function ScoresWorkspace({
   const rankChoiceLabel = rankChoice === "auto" ? "自动补全" : rankChoice === "source" ? "保留原表" : "待确认";
 
   return (
-    <div className="flex h-full flex-col bg-gray-50">
+    <div className="flex h-full flex-col bg-background-secondary-default">
       <div className="score-workspace-grid relative grid min-h-0 flex-1 overflow-hidden p-4" data-management-open={managementOpen}>
         <IconButton
           label={managementOpen ? "收起成绩管理" : "展开成绩管理"}
@@ -413,13 +413,13 @@ export function ScoresWorkspace({
           <Panel title="成绩导入">
             <div className="space-y-3">
               <FileDropZone accept=".xlsx,.xls,.xlsm,.csv,.tsv" onChange={file => { if (file) void readScoreFile(file); }}>
-                <FileUp className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm text-gray-500">{draft ? draft.filename : "拖拽或选择成绩文件"}</span>
+                <FileUp className="h-4 w-4 text-text-tertiary" />
+                  <span className="text-body-regular text-text-secondary">{draft ? draft.filename : "拖拽或选择成绩文件"}</span>
               </FileDropZone>
               {draft && (
                 <div className="space-y-2">
                   {remappingExamId && (
-                    <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    <div className="flex items-start gap-2 rounded-xl border border-accent-100 bg-accent-50 px-3 py-2 text-caption-1-regular text-accent-700">
                       <span className="min-w-0 flex-1">
                         正在重新映射已保存考试，保存后会覆盖原考试。
                       </span>
@@ -436,14 +436,14 @@ export function ScoresWorkspace({
                           setRankDialogOpen(false);
                           setScoreStatus("");
                         }}
-                        className="shrink-0 font-semibold text-blue-500 hover:text-blue-700"
+                        className="shrink-0 font-semibold text-accent-500 hover:text-accent-700"
                       >
                         取消
                       </button>
                     </div>
                   )}
-                  <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
-                  <DatePicker value={examDate} onChange={setExamDate} ariaLabel="考试日期" className="w-full bg-gray-50" />
+                  <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
+                  <DatePicker value={examDate} onChange={setExamDate} ariaLabel="考试日期" className="w-full bg-background-secondary-default" />
                   <Button onClick={saveDraft} className="w-full">{remappingExamId ? "保存修改" : "保存考试"}</Button>
                 </div>
               )}
@@ -451,40 +451,40 @@ export function ScoresWorkspace({
                 <button
                   type="button"
                   onClick={() => setMappingModalOpen(true)}
-                  className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-100"
+                  className="flex w-full items-center justify-between rounded-2xl border border-border-button-default bg-background-secondary-default px-4 py-3 text-left text-body-regular text-text-primary hover:bg-background-tertiary-default"
                   style={{ fontWeight: 900 }}
                 >
                   <span>映射设置</span>
-                  <span className="text-xs text-gray-400">{manualMapping.subjectMappings.length} 个科目</span>
+                  <span className="text-caption-1-regular text-text-tertiary">{manualMapping.subjectMappings.length} 个科目</span>
                 </button>
               )}
               {missingRankSummary && missingRankSummary.missingCellCount > 0 && (
                 <button
                   type="button"
                   onClick={() => setRankDialogOpen(true)}
-                  className="flex w-full items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-left text-sm text-blue-800 hover:bg-blue-100"
+                  className="flex w-full items-center justify-between rounded-2xl border border-accent-100 bg-accent-50 px-4 py-3 text-left text-body-regular text-accent-800 hover:bg-accent-100"
                   style={{ fontWeight: 900 }}
                 >
                   <span className="flex items-center gap-2"><ListOrdered className="h-4 w-4" />排名设置</span>
-                  <span className="text-xs text-blue-500">{rankChoiceLabel}</span>
+                  <span className="text-caption-1-regular text-accent-500">{rankChoiceLabel}</span>
                 </button>
               )}
               {draft?.warnings.length ? (
-                <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+                <div className="rounded-xl border border-status-warning-100 bg-status-warning-50 px-3 py-2 text-caption-1-regular leading-5 text-status-warning-700">
                   {draft.warnings.join(" ")}
                 </div>
               ) : null}
-              {scoreStatus && <InlineStatus message={scoreStatus} className="text-sm" />}
+              {scoreStatus && <InlineStatus message={scoreStatus} className="text-body-regular" />}
             </div>
           </Panel>
 
           <Panel title="历史考试">
             <div className="space-y-2">
               {exams.map(exam => (
-                <div key={exam.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <div key={exam.id} className="rounded-xl border border-separator-border bg-background-secondary-default p-3">
                   {editingExamId === exam.id ? (
                     <div className="space-y-2">
-                      <input value={editExamName} onChange={e => setEditExamName(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300" placeholder="考试名称" />
+                      <input value={editExamName} onChange={e => setEditExamName(e.target.value)} className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
                       <DatePicker value={editExamDate} onChange={setEditExamDate} ariaLabel="修改考试日期" className="w-full" />
                       <div className="grid grid-cols-2 gap-2">
                         <Button
@@ -501,8 +501,8 @@ export function ScoresWorkspace({
                     </div>
                   ) : (
                     <>
-                      <div className="truncate text-sm font-bold text-gray-800">{exam.name}</div>
-                      <div className="mt-1 text-xs text-gray-400">{exam.date || "未填写日期"} · {exam.rows.length} 人 · {exam.subjects.length} 科</div>
+                      <div className="truncate text-body-semibold text-text-primary">{exam.name}</div>
+                      <div className="mt-1 text-caption-1-regular text-text-tertiary">{exam.date || "未填写日期"} · {exam.rows.length} 人 · {exam.subjects.length} 科</div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
                         <Button size="sm" variant="secondary" onClick={() => setExamTable(exam)}>表格</Button>
                         <Button size="sm" variant="secondary" onClick={() => editExam(exam)}>编辑</Button>
@@ -512,22 +512,22 @@ export function ScoresWorkspace({
                   )}
                 </div>
               ))}
-              {exams.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-8 text-center text-sm text-gray-400">暂无考试</div>}
+              {exams.length === 0 && <div className="rounded-xl border border-dashed border-border-button-default bg-background-secondary-default px-3 py-8 text-center text-body-regular text-text-tertiary">暂无考试</div>}
             </div>
           </Panel>
 
           <Panel title="分析与建议">
             <div className="space-y-2">
-              <button disabled={classAnalysisBusy} onClick={generateClassAnalysis} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-60" style={{ fontWeight: 800 }}>{classAnalysisBusy ? "生成中" : "生成班级分析"}</button>
-              <button disabled={studentAdviceProgress.busy} onClick={() => void onGenerateStudentTrendAdvice()} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-60" style={{ fontWeight: 800 }}>
+              <button disabled={classAnalysisBusy} onClick={generateClassAnalysis} className="w-full rounded-xl border border-border-button-default bg-background-secondary-default py-2 text-body-regular text-text-primary hover:bg-background-tertiary-default disabled:opacity-60" style={{ fontWeight: 800 }}>{classAnalysisBusy ? "生成中" : "生成班级分析"}</button>
+              <button disabled={studentAdviceProgress.busy} onClick={() => void onGenerateStudentTrendAdvice()} className="w-full rounded-xl border border-border-button-default bg-background-secondary-default py-2 text-body-regular text-text-primary hover:bg-background-tertiary-default disabled:opacity-60" style={{ fontWeight: 800 }}>
                 <Sparkles className="mr-1.5 inline h-4 w-4 -mt-0.5" />{studentAdviceProgress.busy ? "生成中" : "生成学生建议"}
               </button>
               {classAnalysisBusy && <AiGenerationPanel compact title="正在生成班级趋势分析" steps={["汇总考试变化", "识别班级趋势", "形成关注建议"]} />}
               {studentAdviceProgress.busy && <AiGenerationPanel compact title="正在生成学生建议" steps={["筛选变化学生", "整理个人趋势", "写入建议草稿"]} />}
               {classAnalysis && !classAnalysisBusy && (
-                <div className="ai-followup-result-enter rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-700">
+                <div className="ai-followup-result-enter rounded-xl border border-accent-100 bg-accent-50 px-3 py-2 text-caption-1-regular leading-relaxed text-accent-700">
                   <div>{classAnalysis.overall}</div>
-                  {classAnalysis.disclaimer && <div className="mt-1 text-blue-500">{classAnalysis.disclaimer}</div>}
+                  {classAnalysis.disclaimer && <div className="mt-1 text-accent-500">{classAnalysis.disclaimer}</div>}
                 </div>
               )}
               {classAnalysisStatus && <InlineStatus message={classAnalysisStatus} />}
@@ -536,23 +536,23 @@ export function ScoresWorkspace({
           </Panel>
         </aside>
 
-        <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-white pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
+        <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
+          <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-background-primary-default pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
           {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}
         </main>
       </div>
       {mappingModalOpen && manualMapping && (
-        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-5">
-          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none">
-            <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
+        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-text-primary/35 p-5">
+          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-background-primary-default shadow-2xl outline-none">
+            <div className="flex items-start justify-between gap-4 border-b border-separator-border px-5 py-4">
               <div>
-                <h3 className="text-lg text-gray-900" style={{ fontWeight: 900 }}>成绩列映射</h3>
-                <p className="mt-1 text-sm text-gray-500">AI 会读取表头和最多 80 行样例，生成后仍可手动调整。</p>
+                <h3 className="text-title-3-regular text-text-primary" style={{ fontWeight: 900 }}>成绩列映射</h3>
+                <p className="mt-1 text-body-regular text-text-secondary">AI 会读取表头和最多 80 行样例，生成后仍可手动调整。</p>
               </div>
               <button
                 type="button"
                 onClick={() => setMappingModalOpen(false)}
-                className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                className="rounded-xl p-2 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-primary"
                 aria-label="关闭"
               >
                 <X className="h-5 w-5" />
@@ -560,20 +560,20 @@ export function ScoresWorkspace({
             </div>
 
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_25rem] gap-0 overflow-hidden">
-              <div className="min-h-0 border-r border-gray-100 bg-gray-50 p-4">
+              <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>表格预览</div>
-                    <div className="mt-0.5 text-xs text-gray-400">{scoreFilename || "成绩表"} · 共 {Math.max(scoreRows.length - 1, 0)} 行数据</div>
+                    <div className="text-body-regular text-text-primary" style={{ fontWeight: 900 }}>表格预览</div>
+                    <div className="mt-0.5 text-caption-1-regular text-text-tertiary">{scoreFilename || "成绩表"} · 共 {Math.max(scoreRows.length - 1, 0)} 行数据</div>
                   </div>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs text-gray-500 shadow-sm">显示前 12 行</span>
+                  <span className="rounded-full bg-background-primary-default px-3 py-1 text-caption-1-regular text-text-secondary shadow-sm">显示前 12 行</span>
                 </div>
-                <div className="max-h-[58vh] overflow-auto rounded-2xl border border-gray-200 bg-white">
-                  <table className="min-w-full border-separate border-spacing-0 text-left text-xs">
-                    <thead className="sticky top-0 bg-gray-100 text-gray-500">
+                <div className="max-h-[58vh] overflow-auto rounded-2xl border border-border-button-default bg-background-primary-default">
+                  <table className="min-w-full border-separate border-spacing-0 text-left text-caption-1-regular">
+                    <thead className="sticky top-0 bg-background-tertiary-default text-text-secondary">
                       <tr>
                         {scoreHeaders.map((header, index) => (
-                          <th key={`${header}-${index}`} className="whitespace-nowrap border-b border-gray-200 px-3 py-2 font-semibold">
+                          <th key={`${header}-${index}`} className="whitespace-nowrap border-b border-border-button-default px-3 py-2 font-semibold">
                             {index + 1}. {header || "空列"}
                           </th>
                         ))}
@@ -581,9 +581,9 @@ export function ScoresWorkspace({
                     </thead>
                     <tbody>
                       {scorePreviewRows.map((row, rowIndex) => (
-                        <tr key={rowIndex} className="odd:bg-white even:bg-gray-50/70">
+                        <tr key={rowIndex} className="odd:bg-background-primary-default even:bg-background-secondary-default/70">
                           {scoreHeaders.map((_, colIndex) => (
-                            <td key={colIndex} className="whitespace-nowrap border-b border-gray-100 px-3 py-2 text-gray-600">
+                            <td key={colIndex} className="whitespace-nowrap border-b border-separator-border px-3 py-2 text-text-secondary">
                               {row[colIndex] || ""}
                             </td>
                           ))}
@@ -596,17 +596,17 @@ export function ScoresWorkspace({
 
               <div className="min-h-0 overflow-y-auto p-4">
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-violet-100 bg-violet-50 p-3">
+                  <div className="rounded-2xl border border-status-ai-100 bg-status-ai-50 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <div className="text-sm text-violet-900" style={{ fontWeight: 900 }}>AI 映射</div>
-                        <div className="mt-0.5 text-xs leading-5 text-violet-600">先让 AI 填好右侧映射，再由你确认或继续改。</div>
+                        <div className="text-body-regular text-status-ai-900" style={{ fontWeight: 900 }}>AI 映射</div>
+                        <div className="mt-0.5 text-caption-1-regular leading-5 text-status-ai-600">先让 AI 填好右侧映射，再由你确认或继续改。</div>
                       </div>
                       <button
                         type="button"
                         disabled={aiMappingBusy}
                         onClick={() => void generateAiMapping()}
-                        className="rounded-xl bg-violet-600 px-3 py-2 text-xs text-white hover:bg-violet-700 disabled:opacity-60"
+                        className="rounded-xl bg-status-ai-600 px-3 py-2 text-caption-1-regular text-text-white hover:bg-status-ai-700 disabled:opacity-60"
                         style={{ fontWeight: 900 }}
                       >
                         {aiMappingBusy ? "识别中" : "AI 识别"}
@@ -617,49 +617,49 @@ export function ScoresWorkspace({
                         <input
                           value={aiMappingAccessCode}
                           onChange={event => setAiMappingAccessCode(event.target.value)}
-                          className="w-full rounded-xl border border-violet-100 bg-white px-3 py-2 text-sm outline-none focus:border-violet-300"
+                          className="w-full rounded-xl border border-status-ai-100 bg-background-primary-default px-3 py-2 text-body-regular outline-none focus:border-status-ai-300"
                           placeholder="输入 AI 授权码"
                         />
-                        <label className="flex items-center gap-2 text-xs text-violet-700">
+                        <label className="flex items-center gap-2 text-caption-1-regular text-status-ai-700">
                           <input type="checkbox" checked={aiMappingRemember} onChange={event => setAiMappingRemember(event.target.checked)} />
                           记住授权码
                         </label>
                       </div>
                     )}
                     {aiMappingSuggestion && (
-                      <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-violet-700">
+                      <div className="mt-3 rounded-xl bg-background-primary-default px-3 py-2 text-caption-1-regular leading-5 text-status-ai-700">
                         {aiMappingSuggestion.note || "AI 已填入映射，可继续手动修改或直接应用。"}
                       </div>
                     )}
                   </div>
 
                   <div className="space-y-3">
-                    <label className="block text-xs text-gray-500">姓名列</label>
+                    <label className="block text-caption-1-regular text-text-secondary">姓名列</label>
                     <SelectMenu value={manualMapping.nameCol} onChange={value => updateManualMapping(mapping => ({ ...mapping, nameCol: Number(value) }))} ariaLabel="姓名列" className="w-full" options={columnOptions} />
                   </div>
 
                   <div className="space-y-3">
-                    <label className="block text-xs text-gray-500">学号列（可选）</label>
+                    <label className="block text-caption-1-regular text-text-secondary">学号列（可选）</label>
                     <SelectMenu value={manualMapping.studentNoCol} onChange={value => updateManualMapping(mapping => ({ ...mapping, studentNoCol: Number(value) }))} ariaLabel="学号列" className="w-full" options={[{ value: -1, label: "未识别学号" }, ...columnOptions]} />
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm text-gray-900" style={{ fontWeight: 900 }}>科目分数列</div>
+                      <div className="text-body-regular text-text-primary" style={{ fontWeight: 900 }}>科目分数列</div>
                       <button
                         type="button"
                         onClick={() => updateManualMapping(mapping => ({
                           ...mapping,
                           subjectMappings: [...mapping.subjectMappings, { subject: "科目", scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }],
                         }))}
-                        className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                        className="rounded-xl border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-regular text-text-secondary hover:bg-background-secondary-default"
                         style={{ fontWeight: 800 }}
                       >
                         添加科目
                       </button>
                     </div>
                     {manualMapping.subjectMappings.map((item, index) => (
-                      <div key={`${item.subject}-${index}`} className="space-y-2 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                      <div key={`${item.subject}-${index}`} className="space-y-2 rounded-2xl border border-separator-border bg-background-secondary-default p-3">
                         <div className="grid grid-cols-[1fr_auto] gap-2">
                           <SelectMenu
                             value={item.subject}
@@ -677,7 +677,7 @@ export function ScoresWorkspace({
                               ...mapping,
                               subjectMappings: mapping.subjectMappings.filter((_, subjectIndex) => subjectIndex !== index),
                             }))}
-                            className="rounded-xl px-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+                            className="rounded-xl px-2 text-status-danger-400 hover:bg-status-danger-50 hover:text-status-danger-600"
                             aria-label="删除科目"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -742,7 +742,7 @@ export function ScoresWorkspace({
                   </div>
 
                   <div className="grid grid-cols-1 gap-2">
-                    <label className="block text-xs text-gray-500">总分与总排名</label>
+                    <label className="block text-caption-1-regular text-text-secondary">总分与总排名</label>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <SelectMenu
                         value={manualMapping.totalMapping.scoreCol}
@@ -802,11 +802,11 @@ export function ScoresWorkspace({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-5 py-4">
+            <div className="flex items-center justify-end gap-2 border-t border-separator-border px-5 py-4">
               <button
                 type="button"
                 onClick={() => setMappingModalOpen(false)}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                className="rounded-xl border border-border-button-default bg-background-primary-default px-4 py-2 text-body-regular text-text-secondary hover:bg-background-secondary-default"
                 style={{ fontWeight: 800 }}
               >
                 先不应用
@@ -814,7 +814,7 @@ export function ScoresWorkspace({
               <button
                 type="button"
                 onClick={applyManualMapping}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+                className="rounded-xl bg-accent-600 px-4 py-2 text-body-regular text-text-white hover:bg-accent-700"
                 style={{ fontWeight: 900 }}
               >
                 应用映射
@@ -835,10 +835,10 @@ export function ScoresWorkspace({
         </>}
       >
         <div className="grid gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+          <div className="rounded-xl border border-accent-100 bg-accent-50 px-3 py-2.5 text-caption-1-regular leading-5 text-accent-700">
             只补齐可计算的缺失班排，科目成绩不完整时不生成总排名。
           </div>
-          <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-5 text-gray-600">
+          <div className="rounded-xl border border-separator-border bg-background-secondary-default px-3 py-2.5 text-caption-1-regular leading-5 text-text-secondary">
             关闭后可随时从导入面板的“排名设置”重新选择。
           </div>
         </div>

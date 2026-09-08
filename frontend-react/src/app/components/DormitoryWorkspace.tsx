@@ -33,7 +33,7 @@ import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
 import { ConfirmDialog, DatePicker, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
-  return value > 0 ? "text-emerald-600" : value < 0 ? "text-red-500" : "text-gray-500";
+  return value > 0 ? "text-status-success-600" : value < 0 ? "text-status-danger-500" : "text-text-secondary";
 }
 
 function formatSigned(value: number): string {
@@ -462,7 +462,7 @@ export function DormitoryWorkspace({
   }
 
   return (
-    <div className="flex h-full flex-col bg-gray-50">
+    <div className="flex h-full flex-col bg-background-secondary-default">
       <DormitoryPeriodToolbar
         mode={periodMode}
         onModeChange={setPeriodMode}
@@ -498,27 +498,27 @@ export function DormitoryWorkspace({
               <div className="flex items-start justify-between gap-4 shrink-0">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold text-gray-900">{selectedDormitory.name}</h2>
+                    <h2 className="text-title-2-semibold text-text-primary">{selectedDormitory.name}</h2>
                     <button
                       onClick={() => setPendingDeleteDormitory(selectedDormitory)}
-                      className="text-gray-300 hover:text-red-500 transition-colors"
+                      className="text-text-tertiary hover:text-status-danger-500 transition-colors"
                       title="删除宿舍"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  <p className="mt-0.5 text-xs text-gray-400">统计范围：{periodRange.start} 至 {periodRange.end}</p>
+                  <p className="mt-0.5 text-caption-1-regular text-text-tertiary">统计范围：{periodRange.start} 至 {periodRange.end}</p>
                 </div>
                 <div className="flex shrink-0 gap-4">
                   <div className="text-right">
-                    <div className="text-[10px] text-gray-400">所选周期得分</div>
-                    <div className={`text-xl font-bold ${scoreClass(selectedPeriodScore)}`}>
+                    <div className="text-[10px] text-text-tertiary">所选周期得分</div>
+                    <div className={`text-title-2-semibold ${scoreClass(selectedPeriodScore)}`}>
                       {formatSigned(selectedPeriodScore)}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] text-gray-400">所选周期事件</div>
-                    <div className="text-xl font-bold text-gray-900">
+                    <div className="text-[10px] text-text-tertiary">所选周期事件</div>
+                    <div className="text-title-2-semibold text-text-primary">
                       {selectedPeriodEvents.length}
                     </div>
                   </div>
@@ -527,16 +527,16 @@ export function DormitoryWorkspace({
 
               <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
                 {/* 事件录入 */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="bg-background-primary-default rounded-2xl border border-separator-border shadow-sm p-5">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-bold text-gray-800">记录宿舍事件</div>
-                      <div className="mt-0.5 text-[11px] text-gray-400">先选择事件类型，再补充得分与相关信息</div>
+                      <div className="text-body-semibold text-text-primary">记录宿舍事件</div>
+                      <div className="mt-0.5 text-[11px] text-text-tertiary">先选择事件类型，再补充得分与相关信息</div>
                     </div>
                     <button
                       type="button"
                       onClick={openPresetManager}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border-button-default bg-background-secondary-default px-2.5 py-1.5 text-caption-1-semibold text-text-secondary transition-colors hover:border-accent-200 hover:bg-accent-50 hover:text-accent-600"
                     >
                       <Settings2 className="h-3.5 w-3.5" />
                       管理类型
@@ -555,26 +555,26 @@ export function DormitoryWorkspace({
                           onClick={() => selectPreset(preset.label)}
                           className={`group flex min-h-14 items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 active:scale-[.98] ${
                             active
-                              ? "border-blue-300 bg-blue-50 shadow-[0_6px_18px_rgba(37,99,235,0.10)]"
-                              : "border-gray-200 bg-white hover:-translate-y-px hover:border-blue-200 hover:bg-blue-50/40"
+                              ? "border-accent-300 bg-accent-50 shadow-[0_6px_18px_rgba(37,99,235,0.10)]"
+                              : "border-border-button-default bg-background-primary-default  hover:border-accent-200 hover:bg-accent-50/40"
                           }`}
                         >
-                          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold transition-colors ${
+                          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-caption-1-semibold transition-colors ${
                             active
-                              ? "bg-blue-600 text-white"
+                              ? "bg-accent-600 text-text-white"
                               : memScore > 0
-                                ? "bg-emerald-50 text-emerald-600"
+                                ? "bg-status-success-50 text-status-success-600"
                                 : memScore < 0
-                                  ? "bg-amber-50 text-amber-600"
-                                  : "bg-gray-100 text-gray-500"
+                                  ? "bg-status-warning-50 text-status-warning-600"
+                                  : "bg-background-tertiary-default text-text-secondary"
                           }`}>
                             {memScore > 0 ? `+${memScore}` : memScore}
                           </span>
                           <span className="min-w-0">
-                            <span className={`block truncate text-xs font-bold ${active ? "text-blue-700" : "text-gray-700"}`}>{preset.label}</span>
-                            <span className={`mt-0.5 block text-[10px] ${active ? "text-blue-500" : "text-gray-400"}`}>{active ? "已选择，再点可收起" : "点击记录"}</span>
+                            <span className={`block truncate text-caption-1-semibold ${active ? "text-accent-700" : "text-text-primary"}`}>{preset.label}</span>
+                            <span className={`mt-0.5 block text-[10px] ${active ? "text-accent-500" : "text-text-tertiary"}`}>{active ? "已选择，再点可收起" : "点击记录"}</span>
                           </span>
-                          {active && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-blue-600" />}
+                          {active && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-accent-600" />}
                         </button>
                       );
                     })}
@@ -586,7 +586,7 @@ export function DormitoryWorkspace({
                     <div className="space-y-4 pt-4">
                       {/* 当前事件标签 + 分数 */}
                       <div className="flex items-center gap-3">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-600">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-50 border border-accent-200 px-3 py-1 text-caption-1-semibold text-accent-600">
                           {reason}
                         </span>
                         <div className="ml-auto flex items-center gap-2">
@@ -594,19 +594,19 @@ export function DormitoryWorkspace({
                             type="number"
                             value={score}
                             onChange={e => setScore(Number(e.target.value) || 0)}
-                            className={`w-20 rounded-lg border bg-white px-2 py-1.5 text-center text-sm font-semibold outline-none focus:border-blue-300 ${
-                              score > 0 ? "border-emerald-200 text-emerald-600" : score < 0 ? "border-red-200 text-red-500" : "border-gray-200 text-gray-600"
+                            className={`w-20 rounded-lg border bg-background-primary-default px-2 py-1.5 text-center text-body-semibold outline-none focus:border-accent-300 ${
+                              score > 0 ? "border-status-success-200 text-status-success-600" : score < 0 ? "border-status-danger-200 text-status-danger-500" : "border-border-button-default text-text-secondary"
                             }`}
                           />
                           <div className="flex gap-1">
-                            <button onClick={() => setScore(s => s - 1)} className="grid h-7 w-7 place-items-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:bg-red-50 hover:text-red-500 text-sm">−</button>
-                            <button onClick={() => setScore(s => s + 1)} className="grid h-7 w-7 place-items-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:bg-emerald-50 hover:text-emerald-500 text-sm">+</button>
+                            <button onClick={() => setScore(s => s - 1)} className="grid h-7 w-7 place-items-center rounded-lg border border-border-button-default bg-background-primary-default text-text-tertiary hover:bg-status-danger-50 hover:text-status-danger-500 text-body-regular">−</button>
+                            <button onClick={() => setScore(s => s + 1)} className="grid h-7 w-7 place-items-center rounded-lg border border-border-button-default bg-background-primary-default text-text-tertiary hover:bg-status-success-50 hover:text-status-success-500 text-body-regular">+</button>
                           </div>
                         </div>
                       </div>
 
                       <label className="block">
-                        <span className="mb-1.5 block text-xs font-bold text-gray-400">发生日期</span>
+                        <span className="mb-1.5 block text-caption-1-semibold text-text-tertiary">发生日期</span>
                         <DatePicker value={eventDate} onChange={setEventDate} ariaLabel="宿舍事件发生日期" className="w-full" max={localDateKey()} />
                       </label>
 
@@ -614,7 +614,7 @@ export function DormitoryWorkspace({
                       <input
                         value={note}
                         onChange={event => setNote(event.target.value)}
-                        className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-blue-300"
+                        className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-colors focus:border-accent-300"
                         placeholder="备注（可选）"
                       />
 
@@ -622,22 +622,22 @@ export function DormitoryWorkspace({
                       <input
                         value={punishment}
                         onChange={event => setPunishment(event.target.value)}
-                        className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-blue-300"
+                        className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-colors focus:border-accent-300"
                         placeholder="处罚措施（可选）"
                       />
-                      {punishment.trim() && <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3"><label className={`flex items-center gap-2 text-sm font-semibold ${responsibleIds.length ? "text-blue-700" : "text-gray-400"}`}><input type="checkbox" checked={createFollowup && responsibleIds.length > 0} disabled={!responsibleIds.length} onChange={event => setCreateFollowup(event.target.checked)} className="accent-blue-600"/><ListPlus className="h-4 w-4"/>同时为责任人创建跟进任务</label>{createFollowup && responsibleIds.length > 0 && <div className="mt-2 flex items-center gap-2 text-xs text-blue-600"><span>截止日期</span><DatePicker value={followupDueDate} onChange={setFollowupDueDate} ariaLabel="宿舍跟进截止日期" className="w-44 border-blue-100"/></div>} {!responsibleIds.length && <p className="mt-1 text-xs text-gray-400">选择责任人后才能关联任务。</p>}</div>}
+                      {punishment.trim() && <div className="rounded-xl border border-accent-100 bg-accent-50/60 p-3"><label className={`flex items-center gap-2 text-body-semibold ${responsibleIds.length ? "text-accent-700" : "text-text-tertiary"}`}><input type="checkbox" checked={createFollowup && responsibleIds.length > 0} disabled={!responsibleIds.length} onChange={event => setCreateFollowup(event.target.checked)} className="accent-accent-600"/><ListPlus className="h-4 w-4"/>同时为责任人创建跟进任务</label>{createFollowup && responsibleIds.length > 0 && <div className="mt-2 flex items-center gap-2 text-caption-1-regular text-accent-600"><span>截止日期</span><DatePicker value={followupDueDate} onChange={setFollowupDueDate} ariaLabel="宿舍跟进截止日期" className="w-44 border-accent-100"/></div>} {!responsibleIds.length && <p className="mt-1 text-caption-1-regular text-text-tertiary">选择责任人后才能关联任务。</p>}</div>}
 
                       {/* 责任人（可展开，带动画） */}
                       <div>
                         <button
                           type="button"
                           onClick={() => setShowResponsible(!showResponsible)}
-                          className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-600"
+                          className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary transition-colors hover:text-text-secondary"
                         >
                           <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showResponsible ? "rotate-180" : ""}`} />
                           责任人（可选，可多选）
                           {responsibleIds.length > 0 && (
-                            <span className="text-blue-500">· 已选 {responsibleIds.length} 人</span>
+                            <span className="text-accent-500">· 已选 {responsibleIds.length} 人</span>
                           )}
                         </button>
                         <div
@@ -646,41 +646,41 @@ export function DormitoryWorkspace({
                           }`}
                         >
                           {/* 已选责任人：同时作为名字飞入的落点 */}
-                          <div ref={responsibleSelectedRef} className="mb-2 flex min-h-8 flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-indigo-100 bg-indigo-50/40 px-2 py-1.5">
+                          <div ref={responsibleSelectedRef} className="mb-2 flex min-h-8 flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-status-indigo-100 bg-status-indigo-50/40 px-2 py-1.5">
                             {selectedResponsibleStudents.length > 0 ? selectedResponsibleStudents.map(student => (
                               <span
                                 key={student.id}
                                 data-selection-motion-id={student.id}
-                                className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-white py-1 pl-2.5 pr-1 text-xs font-semibold text-indigo-700 shadow-sm"
+                                className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-status-indigo-200 bg-background-primary-default py-1 pl-2.5 pr-1 text-caption-1-semibold text-status-indigo-700 shadow-sm"
                               >
                                 {student.name}
                                 <button
                                   type="button"
                                   onClick={event => removeResponsibleWithAnimation(event, student)}
-                                  className="grid h-4 w-4 place-items-center rounded-full text-indigo-300 hover:bg-red-100 hover:text-red-500"
+                                  className="grid h-4 w-4 place-items-center rounded-full text-status-indigo-300 hover:bg-status-danger-100 hover:text-status-danger-500"
                                   title={`取消选择 ${student.name}`}
                                 >
                                   <X className="h-2.5 w-2.5" />
                                 </button>
                               </span>
                             )) : (
-                              <span className="text-[11px] text-indigo-300">点击下方成员，添加责任人</span>
+                              <span className="text-[11px] text-status-indigo-300">点击下方成员，添加责任人</span>
                             )}
                           </div>
                           {/* 搜索 */}
                           <div className="relative">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
                             <input
                               value={responsibleSearch}
                               onChange={e => setResponsibleSearch(e.target.value)}
-                              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-blue-300"
+                              className="w-full rounded-xl border border-border-button-default bg-background-primary-default py-2.5 pl-9 pr-3 text-body-regular outline-none transition-colors focus:border-accent-300"
                               placeholder="搜索宿舍成员"
                             />
                           </div>
                           {/* 成员列表（多选切换） */}
-                          <div ref={responsibleCandidatesRef} className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-white py-1">
+                          <div ref={responsibleCandidatesRef} className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-separator-border bg-background-primary-default py-1">
                             {filteredMembers.length === 0 ? (
-                              <div className="py-3 text-center text-xs text-gray-400">无匹配成员</div>
+                              <div className="py-3 text-center text-caption-1-regular text-text-tertiary">无匹配成员</div>
                             ) : (
                               filteredMembers.map(student => {
                                 const selected = responsibleIds.includes(student.id);
@@ -690,30 +690,30 @@ export function DormitoryWorkspace({
                                     data-selection-motion-id={student.id}
                                     type="button"
                                     onClick={event => selectResponsibleWithAnimation(event, student, selected)}
-                                    className={`group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-[background-color,color,transform] duration-200 hover:bg-indigo-50 active:scale-[.99] ${
-                                      selected ? "bg-blue-50 text-blue-600" : "text-gray-700"
+                                    className={`group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-body-regular transition-[background-color,color,transform] duration-200 hover:bg-status-indigo-50 active:scale-[.99] ${
+                                      selected ? "bg-accent-50 text-accent-600" : "text-text-primary"
                                     }`}
                                   >
                                     <span className="flex min-w-0 items-center gap-2">
-                                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${student.gender === "男" ? "bg-blue-50 text-blue-500" : student.gender === "女" ? "bg-pink-50 text-pink-500" : "bg-gray-100 text-gray-500"}`}>
+                                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${student.gender === "男" ? "bg-accent-50 text-accent-500" : student.gender === "女" ? "bg-status-pink-50 text-status-pink-500" : "bg-background-tertiary-default text-text-secondary"}`}>
                                         {student.name.slice(0, 1)}
                                       </span>
                                       <span className="truncate font-semibold">{student.name}</span>
                                     </span>
-                                    {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : <Plus className="h-3.5 w-3.5 shrink-0 text-indigo-300 transition-transform group-hover:scale-110" />}
+                                    {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : <Plus className="h-3.5 w-3.5 shrink-0 text-status-indigo-300 transition-transform group-hover:scale-110" />}
                                   </button>
                                 );
                               })
                             )}
                           </div>
                           {/* 同时记入个人档案 */}
-                          <label className={`mt-2 flex items-center gap-2 text-xs ${responsibleIds.length > 0 ? "text-gray-600" : "text-gray-300"}`}>
+                          <label className={`mt-2 flex items-center gap-2 text-caption-1-regular ${responsibleIds.length > 0 ? "text-text-secondary" : "text-text-tertiary"}`}>
                             <input
                               type="checkbox"
                               checked={responsibleIds.length > 0 ? recordToStudent : false}
                               disabled={responsibleIds.length === 0}
                               onChange={event => setRecordToStudent(event.target.checked)}
-                              className="accent-blue-600"
+                              className="accent-accent-600"
                             />
                             同时记入责任人个人档案
                           </label>
@@ -724,14 +724,14 @@ export function DormitoryWorkspace({
                       <div className="flex gap-2">
                         <button
                           onClick={resetForm}
-                          className="flex-1 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-500 hover:bg-gray-50"
+                          className="flex-1 rounded-xl border border-border-button-default bg-background-primary-default py-2.5 text-body-semibold text-text-secondary hover:bg-background-secondary-default"
                         >
                           取消
                         </button>
                         <button
                           onClick={submitEvent}
                           disabled={!reason.trim()}
-                          className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"
+                          className="flex-[2] rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"
                         >
                           保存事件
                         </button>
@@ -742,37 +742,37 @@ export function DormitoryWorkspace({
                 </div>
 
                 {/* 事件列表 */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <div className="px-5 py-3 border-b border-gray-100">
-                    <h3 className="text-sm font-bold text-gray-700">所选周期事件</h3>
+                <div className="bg-background-primary-default rounded-2xl border border-separator-border shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b border-separator-border">
+                    <h3 className="text-body-semibold text-text-primary">所选周期事件</h3>
                   </div>
                   {selectedPeriodEvents.length === 0 ? (
-                    <div className="px-5 py-8 text-center text-sm text-gray-400">
+                    <div className="px-5 py-8 text-center text-body-regular text-text-tertiary">
                       所选周期暂无事件
                     </div>
                   ) : (
-                    <div className="divide-y divide-gray-50">
+                    <div className="divide-y divide-separator-border">
                       {selectedPeriodEvents.map(({ event }) =>
                         editingEventId === event.id ? (
-                          <div key={event.id} data-dormitory-event-id={event.id} className={`bg-blue-50/40 px-5 py-3 space-y-2 ${focusedEventId === event.id ? "entity-focus-highlight" : ""}`}>
+                          <div key={event.id} data-dormitory-event-id={event.id} className={`bg-accent-50/40 px-5 py-3 space-y-2 ${focusedEventId === event.id ? "entity-focus-highlight" : ""}`}>
                             <div className="flex gap-2">
                               <input
                                 value={editReason}
                                 onChange={e => setEditReason(e.target.value)}
-                                className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300"
+                                className="flex-1 rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300"
                                 placeholder="原因"
                               />
                               <input
                                 type="number"
                                 value={editScore}
                                 onChange={e => setEditScore(Number(e.target.value) || 0)}
-                                className="w-16 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm outline-none focus:border-blue-300"
+                                className="w-16 rounded-lg border border-border-button-default bg-background-primary-default px-2 py-1.5 text-center text-body-regular outline-none focus:border-accent-300"
                               />
                             </div>
                             <input
                               value={editNote}
                               onChange={e => setEditNote(e.target.value)}
-                              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300"
+                              className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300"
                               placeholder="备注"
                             />
                             <DatePicker value={editDate} onChange={setEditDate} ariaLabel="修改宿舍事件日期" className="w-full" max={localDateKey()} />
@@ -780,40 +780,40 @@ export function DormitoryWorkspace({
                               <input
                                 value={editPunishment}
                                 onChange={e => setEditPunishment(e.target.value)}
-                                className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-300"
+                                className="flex-1 rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300"
                                 placeholder="处罚措施（可选）"
                               />
                               <button
                                 onClick={saveEditEvent}
-                                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                                className="rounded-lg bg-accent-600 px-3 py-1.5 text-caption-1-semibold text-text-white hover:bg-accent-700"
                               >
                                 <Check className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 onClick={() => setEditingEventId("")}
-                                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50"
+                                className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-semibold text-text-secondary hover:bg-background-secondary-default"
                               >
                                 <X className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <div key={event.id} data-dormitory-event-id={event.id} className={`group px-5 py-3 hover:bg-gray-50/60 transition-colors ${focusedEventId === event.id ? "entity-focus-highlight" : ""}`}>
+                          <div key={event.id} data-dormitory-event-id={event.id} className={`group px-5 py-3 hover:bg-background-secondary-default/60 transition-colors ${focusedEventId === event.id ? "entity-focus-highlight" : ""}`}>
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <span className="text-[10px] text-gray-400 shrink-0">{event.date}</span>
-                                <span className="text-xs font-semibold text-gray-800 truncate">
+                                <span className="text-[10px] text-text-tertiary shrink-0">{event.date}</span>
+                                <span className="text-caption-1-semibold text-text-primary truncate">
                                   {event.reason}
                                 </span>
                                 {event.note && (
-                                  <span className="text-xs text-gray-400 truncate">· {event.note}</span>
+                                  <span className="text-caption-1-regular text-text-tertiary truncate">· {event.note}</span>
                                 )}
-                                <span className="text-[10px] text-gray-400 shrink-0">
+                                <span className="text-[10px] text-text-tertiary shrink-0">
                                   {resolveReferencedStudentNames({ students, studentIds: event.responsibleStudentIds, studentId: event.responsibleStudentId, snapshotNames: event.responsibleStudentNames, snapshotName: event.responsibleStudentName }).join("、") || "宿舍"}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
-                                <span className={`text-sm font-bold ${scoreClass(event.score)}`}>
+                                <span className={`text-body-semibold ${scoreClass(event.score)}`}>
                                   {formatSigned(event.score)}
                                 </span>
                                 <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -821,13 +821,13 @@ export function DormitoryWorkspace({
                                     onClick={() =>
                                       startEditEvent(event.id, event.reason, event.score, event.note, event.punishment || "", event.date)
                                     }
-                                    className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                                    className="rounded-md p-1 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-primary"
                                   >
                                     <Pencil className="h-3 w-3" />
                                   </button>
                                   <button
                                     onClick={() => deleteEvent(event)}
-                                    className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                                    className="rounded-md p-1 text-text-tertiary hover:bg-status-danger-50 hover:text-status-danger-500"
                                   >
                                     <Trash2 className="h-3 w-3" />
                                   </button>
@@ -836,17 +836,17 @@ export function DormitoryWorkspace({
                             </div>
                             {event.punishment && (
                               <div
-                                className={`mt-2 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs ${
+                                className={`mt-2 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-caption-1-regular ${
                                   event.punishmentDone
-                                    ? "border-emerald-100 bg-emerald-50 text-emerald-600"
-                                    : "border-amber-100 bg-amber-50 text-amber-700"
+                                    ? "border-status-success-100 bg-status-success-50 text-status-success-600"
+                                    : "border-status-warning-100 bg-status-warning-50 text-status-warning-700"
                                 }`}
                               >
                                 <input
                                   type="checkbox"
                                   checked={Boolean(event.punishmentDone)}
                                   onChange={() => { void togglePunishment(event); }}
-                                  className="accent-emerald-600"
+                                  className="accent-status-success-600"
                                 />
                                 <span className="font-semibold">处罚</span>
                                 <span
@@ -859,7 +859,7 @@ export function DormitoryWorkspace({
                                 <span className="shrink-0 font-semibold">
                                   {event.punishmentDone ? "已执行" : "待执行"}
                                 </span>
-                                {!event.punishmentDone && (event.responsibleStudentIds?.length || event.responsibleStudentId) && <button type="button" onClick={() => { const ids = event.responsibleStudentIds ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []); const studentId = ids[0]; const linked = findMatchingFollowupTask(followupTasks, { studentId, studentIds: ids, title: event.punishment || event.reason, source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }); onRequestFollowupTask(linked ? { id: linked.id, studentIds: getFollowupStudentIds(linked), studentMode: linked.studentMode, studentId: linked.studentId, title: linked.title, type: linked.type, description: linked.description, plannedDate: linked.plannedDate, dueDate: linked.dueDate, source: linked.source, sourceRef: linked.sourceRef } : { studentId, studentIds: ids, title: `宿舍处理：${event.punishment}`, description: `${selectedDormitory.name} · ${event.reason}`, plannedDate: localDateKey(), dueDate: localDateKey(), type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }, taskIds => { onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: Array.from(new Set([...(event.followupTaskIds || []), ...taskIds])) }); return () => onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: event.followupTaskIds || [] }); }); }} className="ml-1 rounded-lg bg-white px-2 py-1 font-bold text-blue-600 shadow-sm hover:bg-blue-50"><ListPlus className="mr-1 inline h-3 w-3"/>{event.followupTaskIds?.length ? "查看任务" : "转为任务"}</button>}
+                                {!event.punishmentDone && (event.responsibleStudentIds?.length || event.responsibleStudentId) && <button type="button" onClick={() => { const ids = event.responsibleStudentIds ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []); const studentId = ids[0]; const linked = findMatchingFollowupTask(followupTasks, { studentId, studentIds: ids, title: event.punishment || event.reason, source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }); onRequestFollowupTask(linked ? { id: linked.id, studentIds: getFollowupStudentIds(linked), studentMode: linked.studentMode, studentId: linked.studentId, title: linked.title, type: linked.type, description: linked.description, plannedDate: linked.plannedDate, dueDate: linked.dueDate, source: linked.source, sourceRef: linked.sourceRef } : { studentId, studentIds: ids, title: `宿舍处理：${event.punishment}`, description: `${selectedDormitory.name} · ${event.reason}`, plannedDate: localDateKey(), dueDate: localDateKey(), type: "行为处理", source: "dormitory", sourceRef: { domain: "dormitory", entityId: event.id } }, taskIds => { onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: Array.from(new Set([...(event.followupTaskIds || []), ...taskIds])) }); return () => onUpdateDormitoryEvent(selectedDormitory.id, event.id, { followupTaskIds: event.followupTaskIds || [] }); }); }} className="ml-1 rounded-lg bg-background-primary-default px-2 py-1 font-bold text-accent-600 shadow-sm hover:bg-accent-50"><ListPlus className="mr-1 inline h-3 w-3"/>{event.followupTaskIds?.length ? "查看任务" : "转为任务"}</button>}
                               </div>
                             )}
                           </div>
@@ -872,7 +872,7 @@ export function DormitoryWorkspace({
               </div>
             </div>
           ) : (
-            <div className="flex h-full items-center justify-center text-gray-400 text-sm">
+            <div className="flex h-full items-center justify-center text-text-tertiary text-body-regular">
               请先选择或创建一个宿舍
             </div>
           )}
@@ -893,7 +893,7 @@ export function DormitoryWorkspace({
 
       {presetManagerOpen && (
         <div
-          className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/35 p-4 backdrop-blur-[2px]"
+          className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-text-primary/35 p-4 backdrop-blur-[2px]"
           role="dialog"
           aria-modal="true"
           aria-label="管理宿舍事件类型"
@@ -904,11 +904,11 @@ export function DormitoryWorkspace({
             }
           }}
         >
-          <div ref={presetManagerRef} tabIndex={-1} className="modal-panel-enter flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white bg-white shadow-2xl outline-none">
-            <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+          <div ref={presetManagerRef} tabIndex={-1} className="modal-panel-enter flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white bg-background-primary-default shadow-2xl outline-none">
+            <div className="flex items-start justify-between border-b border-separator-border px-5 py-4">
               <div>
-                <h3 className="text-base font-bold text-gray-900">管理事件类型</h3>
-                <p className="mt-1 text-xs text-gray-400">在这里统一改名、设置默认分数或删除，避免在记录时误触。</p>
+                <h3 className="text-headline-semibold text-text-primary">管理事件类型</h3>
+                <p className="mt-1 text-caption-1-regular text-text-tertiary">在这里统一改名、设置默认分数或删除，避免在记录时误触。</p>
               </div>
               <button
                 type="button"
@@ -916,20 +916,20 @@ export function DormitoryWorkspace({
                   setPresetManagerOpen(false);
                   setPendingDeletePreset("");
                 }}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-text-tertiary transition-colors hover:bg-background-tertiary-default hover:text-text-primary"
                 aria-label="关闭管理事件类型窗口"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-gray-50/60 p-4">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-background-secondary-default/60 p-4">
               {presetDrafts.map((preset, index) => {
                 const deletePending = pendingDeletePreset === preset.originalLabel;
                 return (
-                  <div key={`${preset.originalLabel}-${index}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <div key={`${preset.originalLabel}-${index}`} className="overflow-hidden rounded-xl border border-border-button-default bg-background-primary-default shadow-sm">
                     <div className="flex items-center gap-2 p-3">
-                      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold ${preset.score > 0 ? "bg-emerald-50 text-emerald-600" : preset.score < 0 ? "bg-amber-50 text-amber-600" : "bg-gray-100 text-gray-500"}`}>
+                      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-caption-1-semibold ${preset.score > 0 ? "bg-status-success-50 text-status-success-600" : preset.score < 0 ? "bg-status-warning-50 text-status-warning-600" : "bg-background-tertiary-default text-text-secondary"}`}>
                         {preset.score > 0 ? `+${preset.score}` : preset.score}
                       </span>
                       <label className="min-w-0 flex-1">
@@ -937,22 +937,22 @@ export function DormitoryWorkspace({
                         <input
                           value={preset.label}
                           onChange={event => setPresetDrafts(previous => previous.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))}
-                          className="w-full rounded-lg border border-transparent bg-gray-50 px-2.5 py-1.5 text-sm font-semibold text-gray-700 outline-none transition-colors focus:border-blue-200 focus:bg-white"
+                          className="w-full rounded-lg border border-transparent bg-background-secondary-default px-2.5 py-1.5 text-body-semibold text-text-primary outline-none transition-colors focus:border-accent-200 focus:bg-background-primary-default"
                         />
                       </label>
-                      <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-gray-400">
+                      <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-text-tertiary">
                         默认分
                         <input
                           type="number"
                           value={preset.score}
                           onChange={event => setPresetDrafts(previous => previous.map((item, itemIndex) => itemIndex === index ? { ...item, score: Number(event.target.value) || 0 } : item))}
-                          className="w-14 rounded-lg border border-gray-200 bg-white px-1.5 py-1.5 text-center text-sm font-semibold text-gray-700 outline-none focus:border-blue-300"
+                          className="w-14 rounded-lg border border-border-button-default bg-background-primary-default px-1.5 py-1.5 text-center text-body-semibold text-text-primary outline-none focus:border-accent-300"
                         />
                       </label>
                       <button
                         type="button"
                         onClick={() => setPendingDeletePreset(deletePending ? "" : preset.originalLabel)}
-                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors ${deletePending ? "bg-red-50 text-red-500" : "text-gray-300 hover:bg-red-50 hover:text-red-500"}`}
+                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors ${deletePending ? "bg-status-danger-50 text-status-danger-500" : "text-text-tertiary hover:bg-status-danger-50 hover:text-status-danger-500"}`}
                         aria-label={`删除事件类型 ${preset.label}`}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -962,36 +962,36 @@ export function DormitoryWorkspace({
                 );
               })}
               {presetDrafts.length === 0 && (
-                <div className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-xs text-gray-400">暂无事件类型，可在下方新增</div>
+                <div className="rounded-xl border border-dashed border-border-button-default bg-background-primary-default px-4 py-6 text-center text-caption-1-regular text-text-tertiary">暂无事件类型，可在下方新增</div>
               )}
             </div>
 
-            <div className="border-t border-gray-100 bg-white p-4">
+            <div className="border-t border-separator-border bg-background-primary-default p-4">
               <div className="mb-3 flex gap-2">
                 <input
                   value={customLabel}
                   onChange={event => setCustomLabel(event.target.value)}
                   onKeyDown={event => { if (event.key === "Enter") addCustomPresetDraft(); }}
-                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none transition-colors focus:border-blue-300 focus:bg-white"
+                  className="min-w-0 flex-1 rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2 text-body-regular outline-none transition-colors focus:border-accent-300 focus:bg-background-primary-default"
                   placeholder="新增事件类型名称"
                 />
                 <button
                   type="button"
                   onClick={addCustomPresetDraft}
                   disabled={!customLabel.trim() || presetDrafts.some(preset => preset.label.trim() === customLabel.trim())}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-600 hover:bg-blue-100 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-300"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-accent-200 bg-accent-50 px-3 text-body-semibold text-accent-600 hover:bg-accent-100 disabled:border-border-button-default disabled:bg-background-secondary-default disabled:text-text-tertiary"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   新增
                 </button>
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setPresetManagerOpen(false)} className="flex-1 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-500 hover:bg-gray-50">取消</button>
+                <button type="button" onClick={() => setPresetManagerOpen(false)} className="flex-1 rounded-xl border border-border-button-default bg-background-primary-default py-2.5 text-body-semibold text-text-secondary hover:bg-background-secondary-default">取消</button>
                 <button
                   type="button"
                   onClick={savePresetManager}
                   disabled={presetDrafts.some((preset, index, list) => !preset.label.trim() || list.findIndex(item => item.label.trim() === preset.label.trim()) !== index)}
-                  className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400"
+                  className="flex-[2] rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-hover disabled:text-text-tertiary"
                 >
                   保存类型设置
                 </button>

@@ -27,13 +27,13 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
 
   const presets = type === "income" ? FUND_INCOME_PRESETS : FUND_EXPENSE_PRESETS;
   const activeClass = type === "income"
-    ? "bg-emerald-500 text-white"
-    : "bg-red-500 text-white";
-  const inactiveClass = "bg-gray-100 text-gray-500 hover:bg-gray-200";
+    ? "bg-status-success-500 text-text-white"
+    : "bg-status-danger-500 text-text-white";
+  const inactiveClass = "bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover";
   const selectedPresetClass = type === "income"
-    ? "bg-emerald-500 text-white border-emerald-500"
-    : "bg-red-500 text-white border-red-500";
-  const unselectedPresetClass = "bg-white text-gray-600 border-gray-200 hover:border-gray-300";
+    ? "bg-status-success-500 text-text-white border-status-success-500"
+    : "bg-status-danger-500 text-text-white border-status-danger-500";
+  const unselectedPresetClass = "bg-background-primary-default text-text-secondary border-border-button-default hover:border-border-button-hover";
 
   function switchType(next: FundTxType) {
     if (next === type) return;
@@ -110,7 +110,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
         <button
           type="button"
           onClick={() => switchType("expense")}
-          className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+          className={`rounded-xl px-4 py-2.5 text-body-semibold transition-colors ${
             type === "expense" ? activeClass : inactiveClass
           }`}
         >
@@ -119,7 +119,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
         <button
           type="button"
           onClick={() => switchType("income")}
-          className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+          className={`rounded-xl px-4 py-2.5 text-body-semibold transition-colors ${
             type === "income" ? activeClass : inactiveClass
           }`}
         >
@@ -129,12 +129,12 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
 
       {/* 金额 */}
       <div className="relative">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400">¥</span>
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-body-regular text-text-tertiary">¥</span>
         <input
           type="number"
           value={amount}
           onChange={e => setAmount(e.target.value)}
-          className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-8 pr-3 text-lg font-semibold text-gray-900 outline-none transition-colors focus:border-blue-300"
+          className="w-full rounded-xl border border-border-button-default bg-background-primary-default py-3 pl-8 pr-3 text-title-3-semibold text-text-primary outline-none transition-colors focus:border-accent-300"
           placeholder="0.00"
           min="0"
           step="0.01"
@@ -143,14 +143,14 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
 
       {/* 类别 */}
       <div>
-        <div className="mb-2 text-xs text-gray-400">类别</div>
+        <div className="mb-2 text-caption-1-regular text-text-tertiary">类别</div>
         <div className="flex flex-wrap gap-2">
           {presets.map(preset => (
             <button
               key={preset.category}
               type="button"
               onClick={() => setCategory(preset.category)}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+              className={`rounded-full border px-3 py-1 text-caption-1-semibold transition-colors ${
                 category === preset.category ? selectedPresetClass : unselectedPresetClass
               }`}
             >
@@ -164,7 +164,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
       <input
         value={note}
         onChange={e => setNote(e.target.value)}
-        className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-700 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-300"
+        className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 py-2.5 text-body-regular text-text-primary outline-none transition-colors placeholder:text-text-tertiary focus:border-accent-300"
         placeholder="说明（可选）"
       />
 
@@ -176,11 +176,11 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
         <button
           type="button"
           onClick={() => setShowRelated(!showRelated)}
-          className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-600"
+          className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary transition-colors hover:text-text-secondary"
         >
           <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showRelated ? "rotate-180" : ""}`} />
           关联学生（可选，可多选）
-          {relatedIds.length > 0 && <span className="text-blue-500">· 已选 {relatedIds.length} 人</span>}
+          {relatedIds.length > 0 && <span className="text-accent-500">· 已选 {relatedIds.length} 人</span>}
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${
@@ -188,41 +188,41 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
           }`}
         >
           {/* 已选学生：精确飞入落点，删除时反向返回候选列表 */}
-          <div ref={selectedStudentsRef} className="mb-2 flex min-h-9 flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-blue-100 bg-blue-50/40 px-2 py-1.5">
+          <div ref={selectedStudentsRef} className="mb-2 flex min-h-9 flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-accent-100 bg-accent-50/40 px-2 py-1.5">
             {selectedRelatedStudents.length > 0 ? selectedRelatedStudents.map(student => (
               <span
                 key={student.id}
                 data-selection-motion-id={student.id}
-                className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-blue-200 bg-white py-1 pl-2.5 pr-1 text-xs font-semibold text-blue-700 shadow-sm"
+                className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-accent-200 bg-background-primary-default py-1 pl-2.5 pr-1 text-caption-1-semibold text-accent-700 shadow-sm"
               >
                 {student.name}
                 <button
                   type="button"
                   onClick={event => removeRelatedWithAnimation(event, student)}
-                  className="grid h-4 w-4 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"
+                  className="grid h-4 w-4 place-items-center rounded-full text-accent-300 hover:bg-status-danger-100 hover:text-status-danger-500"
                   title={`取消关联 ${student.name}`}
                 >
                   <X className="h-2.5 w-2.5" />
                 </button>
               </span>
             )) : (
-              <span className="text-[11px] text-blue-300">点击下方学生添加关联</span>
+              <span className="text-[11px] text-accent-300">点击下方学生添加关联</span>
             )}
           </div>
           {/* 搜索 */}
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
             <input
               value={studentSearch}
               onChange={e => setStudentSearch(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-blue-300"
+              className="w-full rounded-xl border border-border-button-default bg-background-primary-default py-2.5 pl-9 pr-3 text-body-regular outline-none transition-colors focus:border-accent-300"
               placeholder="搜索学生姓名"
             />
           </div>
           {/* 学生列表（多选切换） */}
-          <div ref={studentCandidatesRef} className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-white py-1">
+          <div ref={studentCandidatesRef} className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-separator-border bg-background-primary-default py-1">
             {filteredStudents.length === 0 ? (
-              <div className="py-3 text-center text-xs text-gray-400">无匹配学生</div>
+              <div className="py-3 text-center text-caption-1-regular text-text-tertiary">无匹配学生</div>
             ) : (
               filteredStudents.map(student => {
                 const selected = relatedIds.includes(student.id);
@@ -232,17 +232,17 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
                     data-selection-motion-id={student.id}
                     type="button"
                     onClick={event => toggleRelatedWithAnimation(event, student, selected)}
-                    className={`group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-[background-color,color,transform] duration-200 hover:bg-blue-50 active:scale-[.99] ${
-                      selected ? "bg-blue-50 text-blue-600" : "text-gray-700"
+                    className={`group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-body-regular transition-[background-color,color,transform] duration-200 hover:bg-accent-50 active:scale-[.99] ${
+                      selected ? "bg-accent-50 text-accent-600" : "text-text-primary"
                     }`}
                   >
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${student.gender === "男" ? "bg-blue-50 text-blue-500" : student.gender === "女" ? "bg-pink-50 text-pink-500" : "bg-gray-100 text-gray-500"}`}>
+                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${student.gender === "男" ? "bg-accent-50 text-accent-500" : student.gender === "女" ? "bg-status-pink-50 text-status-pink-500" : "bg-background-tertiary-default text-text-secondary"}`}>
                         {student.name.slice(0, 1)}
                       </span>
                       <span className="truncate font-semibold">{student.name}</span>
                     </span>
-                    {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : <span className="text-[10px] font-semibold text-blue-300 group-hover:text-blue-500">加入</span>}
+                    {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : <span className="text-[10px] font-semibold text-accent-300 group-hover:text-accent-500">加入</span>}
                   </button>
                 );
               })
@@ -256,8 +256,8 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
         type="button"
         onClick={submit}
         disabled={!amount || Number(amount) <= 0}
-        className={`w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-colors disabled:bg-gray-100 disabled:text-gray-300 ${
-          type === "income" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"
+        className={`w-full rounded-xl py-2.5 text-body-semibold text-text-white transition-colors disabled:bg-background-tertiary-default disabled:text-text-tertiary ${
+          type === "income" ? "bg-status-success-500 hover:bg-status-success-600" : "bg-status-danger-500 hover:bg-status-danger-600"
         }`}
       >
         — 记录{type === "income" ? "收入" : "支出"}

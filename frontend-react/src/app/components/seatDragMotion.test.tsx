@@ -54,17 +54,20 @@ describe.each(["board", "preview"] as const)("%s empty-seat motion", surface => 
       const seat = (index: number) => document.querySelector<HTMLElement>(`[${selector}="${index}"]`)!;
       for (let index = 0; index < 8; index++) seat(index).animate = animate;
       const move = (index: number) => fireEvent.pointerMove(window, { pointerId: 1, clientX: 292 + index * 110, clientY: 204 });
-      const drop = (index: number) => {
+      const release = (index: number) => {
         fireEvent.pointerUp(window, { pointerId: 1, clientX: 292 + index * 110, clientY: 204 });
+      };
+      const drop = (index: number) => {
+        release(index);
         act(() => vi.advanceTimersByTime(500));
         act(() => vi.runAllTimers());
       };
       fireEvent.pointerDown(seat(0), { button: 0, pointerId: 1, clientX: 292, clientY: 204 });
-      return { seat, move, drop, animate, onCommit, studentAttribute };
+      return { seat, move, release, drop, animate, onCommit, studentAttribute };
     }
 
     it("keeps empty targets and neighbors fixed, with one snap and no second fade", () => {
-      const { seat, move, drop, animate, onCommit, studentAttribute } = setup();
+      const { seat, move, release, animate, onCommit, studentAttribute } = setup();
       const source = seat(0);
       const entrance = source.parentElement;
       move(2);
@@ -74,14 +77,21 @@ describe.each(["board", "preview"] as const)("%s empty-seat motion", surface => 
       move(1);
       for (let index = 0; index < 8; index++) expect(seat(index).style.transform).toBe("");
       expect(onCommit).not.toHaveBeenCalled();
-      drop(1);
+      release(1);
+      if (surface === "preview") act(() => vi.runAllTimers());
       expect(onCommit).toHaveBeenCalledExactlyOnceWith([null, "s1", "s2", "s3", null, null, null, null]);
+      if (surface === "board") {
+        for (let index = 0; index < 8; index++) expect(seat(index).style.transform).toBe("");
+        expect(seat(1)).toHaveClass("invisible");
+      }
+      act(() => vi.runAllTimers());
       expect(seat(0)).toBe(source);
       expect(seat(0).parentElement).toBe(entrance);
       expect(seat(0)).not.toHaveAttribute(studentAttribute);
       expect(seat(0)).not.toHaveClass("seat-card-enter");
       expect(seat(0)).not.toHaveClass("opacity-25");
       expect(seat(1)).toHaveAttribute(studentAttribute, "s1");
+      if (surface === "board") expect(seat(1)).not.toHaveClass("invisible");
       expect(animate).not.toHaveBeenCalled();
       if (surface === "board") {
         expect(entrance).toHaveClass("seat-card-enter");

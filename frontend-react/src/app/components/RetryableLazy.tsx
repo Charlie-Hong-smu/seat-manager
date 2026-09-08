@@ -22,11 +22,11 @@ class LazyErrorBoundary extends Component<{
   render() {
     if (this.state.error) {
       return (
-        <div className="flex h-full min-h-48 items-center justify-center bg-gray-50 p-6">
-          <div className="max-w-sm rounded-2xl border border-red-100 bg-white p-5 text-center shadow-sm">
-            <p className="text-sm font-bold text-gray-800">功能模块加载失败</p>
-            <p className="mt-2 text-xs leading-5 text-gray-500">网络恢复后可直接重试，当前班级数据不会被清空。</p>
-            <button type="button" onClick={this.props.onRetry} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">重新加载模块</button>
+        <div className="flex h-full min-h-48 items-center justify-center bg-background-secondary-default p-6">
+          <div className="max-w-sm rounded-2xl border border-status-danger-100 bg-background-primary-default p-5 text-center shadow-sm">
+            <p className="text-body-semibold text-text-primary">功能模块加载失败</p>
+            <p className="mt-2 text-caption-1-regular leading-5 text-text-secondary">网络恢复后可直接重试，当前班级数据不会被清空。</p>
+            <button type="button" onClick={this.props.onRetry} className="mt-4 rounded-xl bg-accent-600 px-4 py-2 text-body-semibold text-text-white hover:bg-accent-700">重新加载模块</button>
           </div>
         </div>
       );
@@ -37,11 +37,11 @@ class LazyErrorBoundary extends Component<{
 
 function FeatureSkeleton() {
   return (
-    <div className="h-full animate-pulse space-y-4 bg-gray-50 p-5" aria-label="正在加载功能模块">
-      <div className="h-12 rounded-2xl bg-gray-200/80" />
+    <div className="h-full animate-pulse space-y-4 bg-background-secondary-default p-5" aria-label="正在加载功能模块">
+      <div className="h-12 rounded-2xl bg-background-tertiary-hover/80" />
       <div className="grid h-[calc(100%-4rem)] grid-cols-[16rem_1fr] gap-4">
-        <div className="rounded-2xl bg-gray-200/70" />
-        <div className="rounded-2xl bg-gray-200/60" />
+        <div className="rounded-2xl bg-background-tertiary-hover/70" />
+        <div className="rounded-2xl bg-background-tertiary-hover/60" />
       </div>
     </div>
   );

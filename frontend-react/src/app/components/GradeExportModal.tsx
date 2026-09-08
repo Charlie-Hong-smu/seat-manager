@@ -135,16 +135,16 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
   }
 
   return (
-    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30 px-4">
-      <div className="modal-panel-enter flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-text-primary/30 px-4">
+      <div className="modal-panel-enter flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-xl">
+        <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
           <div className="flex items-center gap-2">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600">
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-accent-50 text-accent-600">
               <FileSpreadsheet className="h-4 w-4" />
             </div>
-            <h3 className="text-base text-gray-900" style={{ fontWeight: 900 }}>成绩导出设置</h3>
+            <h3 className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>成绩导出设置</h3>
           </div>
-          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -152,11 +152,11 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="space-y-5">
             <section>
-              <h4 className="mb-2 text-sm text-gray-800" style={{ fontWeight: 900 }}>导出对象</h4>
+              <h4 className="mb-2 text-body-regular text-text-primary" style={{ fontWeight: 900 }}>导出对象</h4>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => update({ object: "class" })}
-                  className={`rounded-xl border px-3 py-3 text-left text-sm ${options.object === "class" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                  className={`rounded-xl border px-3 py-3 text-left text-body-regular ${options.object === "class" ? "border-accent-200 bg-accent-50 text-accent-700" : "border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}
                   style={{ fontWeight: 800 }}
                 >
                   全班汇总
@@ -170,53 +170,53 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
                       selectedStudentIds: current.selectedStudentIds.length ? current.selectedStudentIds : students.map(student => student.id),
                     }));
                   }}
-                  className={`rounded-xl border px-3 py-3 text-left text-sm ${options.object === "students" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                  className={`rounded-xl border px-3 py-3 text-left text-body-regular ${options.object === "students" ? "border-accent-200 bg-accent-50 text-accent-700" : "border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}
                   style={{ fontWeight: 800 }}
                 >
                   个人成绩
                 </button>
               </div>
               {options.object === "students" && (
-                <div className="mt-3 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                <div className="mt-3 rounded-2xl border border-separator-border bg-background-secondary-default p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div className="relative min-w-0 flex-1">
-                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
                       <input
                         value={studentSearch}
                         onChange={event => setStudentSearch(event.target.value)}
                         placeholder="搜索学生姓名"
-                        className="h-9 w-full rounded-xl border border-gray-200 bg-white pl-8 pr-3 text-sm outline-none focus:border-blue-300"
+                        className="h-9 w-full rounded-xl border border-border-button-default bg-background-primary-default pl-8 pr-3 text-body-regular outline-none focus:border-accent-300"
                       />
                     </div>
-                    <button onClick={toggleAllStudents} className="h-9 rounded-xl bg-white px-3 text-xs text-blue-600 hover:bg-blue-50" style={{ fontWeight: 800 }}>
+                    <button onClick={toggleAllStudents} className="h-9 rounded-xl bg-background-primary-default px-3 text-caption-1-regular text-accent-600 hover:bg-accent-50" style={{ fontWeight: 800 }}>
                       {selectedStudentCount === students.length ? "取消全选" : "全选"}
                     </button>
                   </div>
-                  <div className={`mb-2 text-xs ${needsStudentSelection ? "text-red-500" : "text-gray-400"}`}>
+                  <div className={`mb-2 text-caption-1-regular ${needsStudentSelection ? "text-status-danger-500" : "text-text-tertiary"}`}>
                     已选择 {selectedStudentCount} 人
                     {needsStudentSelection && <span className="ml-2" style={{ fontWeight: 800 }}>请至少勾选 1 名学生</span>}
                   </div>
                   <div className="grid max-h-48 grid-cols-2 gap-2 overflow-y-auto">
                     {filteredStudents.map(student => (
-                      <label key={student.id} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm text-gray-600">
+                      <label key={student.id} className="flex items-center gap-2 rounded-xl bg-background-primary-default px-3 py-2 text-body-regular text-text-secondary">
                         <input
                           type="checkbox"
                           checked={options.selectedStudentIds.includes(student.id)}
                           onChange={() => toggleStudent(student.id)}
-                          className="accent-blue-600"
+                          className="accent-accent-600"
                         />
                         <span className="truncate">{student.name}</span>
-                        {student.gender && <span className="ml-auto text-xs text-gray-300">{student.gender}</span>}
+                        {student.gender && <span className="ml-auto text-caption-1-regular text-text-tertiary">{student.gender}</span>}
                       </label>
                     ))}
                   </div>
-                  {!filteredStudents.length && <div className="py-6 text-center text-sm text-gray-400">没有匹配的学生</div>}
+                  {!filteredStudents.length && <div className="py-6 text-center text-body-regular text-text-tertiary">没有匹配的学生</div>}
                 </div>
               )}
             </section>
 
             <section>
-              <h4 className="mb-2 text-sm text-gray-800" style={{ fontWeight: 900 }}>考试范围</h4>
+              <h4 className="mb-2 text-body-regular text-text-primary" style={{ fontWeight: 900 }}>考试范围</h4>
               <div className="flex flex-wrap gap-2">
                 {[
                   ["all", "全部考试"],
@@ -226,7 +226,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
                   <button
                     key={value}
                     onClick={() => update({ range: value as GradeExportOptions["range"] })}
-                    className={`h-9 rounded-xl border px-3 text-sm ${options.range === value ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                    className={`h-9 rounded-xl border px-3 text-body-regular ${options.range === value ? "border-accent-200 bg-accent-50 text-accent-700" : "border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}
                     style={{ fontWeight: 800 }}
                   >
                     {label}
@@ -235,10 +235,10 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
               </div>
 
               {options.range === "specific" && (
-                <div className="mt-3 grid max-h-44 grid-cols-2 gap-2 overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                <div className="mt-3 grid max-h-44 grid-cols-2 gap-2 overflow-y-auto rounded-2xl border border-separator-border bg-background-secondary-default p-3">
                   {exams.map(exam => (
-                    <label key={exam.id} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm text-gray-600">
-                      <input type="checkbox" checked={options.selectedExamIds.includes(exam.id)} onChange={() => toggleExam(exam.id)} className="accent-blue-600" />
+                    <label key={exam.id} className="flex items-center gap-2 rounded-xl bg-background-primary-default px-3 py-2 text-body-regular text-text-secondary">
+                      <input type="checkbox" checked={options.selectedExamIds.includes(exam.id)} onChange={() => toggleExam(exam.id)} className="accent-accent-600" />
                       <span className="truncate">{exam.name} · {exam.date || "未填写日期"}</span>
                     </label>
                   ))}
@@ -246,12 +246,12 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
               )}
 
               {options.range === "date" && (
-                <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-3">
-                  <label className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-separator-border bg-background-secondary-default p-3">
+                  <label className="flex items-center gap-2 text-body-regular text-text-secondary">
                     开始日期
                     <DatePicker value={options.startDate} onChange={startDate => update({ startDate })} ariaLabel="导出开始日期" className="w-full" />
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-500">
+                  <label className="flex items-center gap-2 text-body-regular text-text-secondary">
                     结束日期
                     <DatePicker value={options.endDate} onChange={endDate => update({ endDate })} ariaLabel="导出结束日期" className="w-full" min={options.startDate} />
                   </label>
@@ -260,11 +260,11 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
             </section>
 
             <section>
-              <h4 className="mb-2 text-sm text-gray-800" style={{ fontWeight: 900 }}>导出内容</h4>
+              <h4 className="mb-2 text-body-regular text-text-primary" style={{ fontWeight: 900 }}>导出内容</h4>
               <div className="grid grid-cols-2 gap-2">
                 {CONTENT_OPTIONS.map(item => (
-                  <label key={item.key} className="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-                    <input type="checkbox" checked={options.contents[item.key]} onChange={event => updateContent(item.key, event.target.checked)} className="accent-blue-600" />
+                  <label key={item.key} className="flex items-center gap-2 rounded-xl border border-separator-border bg-background-secondary-default px-3 py-2 text-body-regular text-text-secondary">
+                    <input type="checkbox" checked={options.contents[item.key]} onChange={event => updateContent(item.key, event.target.checked)} className="accent-accent-600" />
                     {item.label}
                   </label>
                 ))}
@@ -273,12 +273,12 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-gray-100 bg-gray-50 px-5 py-4">
-          {errorMessage && <p className="mr-auto text-xs text-red-500">{errorMessage}</p>}
+        <div className="flex items-center gap-2 border-t border-separator-border bg-background-secondary-default px-5 py-4">
+          {errorMessage && <p className="mr-auto text-caption-1-regular text-status-danger-500">{errorMessage}</p>}
           <button
             onClick={handleExport}
             disabled={exporting || !exams.length || needsStudentSelection}
-            className="flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            className="flex h-10 items-center gap-2 rounded-xl border border-border-button-default bg-background-primary-default px-4 text-body-regular text-text-primary hover:bg-background-secondary-default disabled:opacity-60"
             style={{ fontWeight: 800 }}
           >
             <FileSpreadsheet className="h-4 w-4" />
@@ -287,7 +287,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
           <button
             onClick={handlePrintPreview}
             disabled={!exams.length || needsStudentSelection}
-            className="flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm text-white hover:bg-blue-700 disabled:opacity-60"
+            className="flex h-10 items-center gap-2 rounded-xl bg-accent-600 px-4 text-body-regular text-text-white hover:bg-accent-700 disabled:opacity-60"
             style={{ fontWeight: 800 }}
           >
             <Printer className="h-4 w-4" />
@@ -297,16 +297,16 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
       </div>
 
       {printHtml && (
-        <div className="soft-backdrop-enter fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/40 px-4">
-          <div className="modal-panel-enter flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-              <h3 className="text-base text-gray-900" style={{ fontWeight: 900 }}>PDF/打印预览</h3>
+        <div className="soft-backdrop-enter fixed inset-0 z-[60] flex items-center justify-center bg-text-primary/40 px-4">
+          <div className="modal-panel-enter flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl">
+            <div className="flex items-center justify-between border-b border-separator-border px-5 py-3">
+              <h3 className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>PDF/打印预览</h3>
               <div className="flex items-center gap-2">
-                <button onClick={printPreview} className="flex h-9 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>
+                <button onClick={printPreview} className="flex h-9 items-center gap-2 rounded-xl bg-accent-600 px-4 text-body-regular text-text-white hover:bg-accent-700" style={{ fontWeight: 800 }}>
                   <Printer className="h-4 w-4" />
                   打印 / 另存为 PDF
                 </button>
-                <button onClick={() => setPrintHtml("")} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <button onClick={() => setPrintHtml("")} className="grid h-9 w-9 place-items-center rounded-xl text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary">
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -315,7 +315,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
               ref={printFrameRef}
               title="成绩打印预览"
               srcDoc={printHtml}
-              className="min-h-0 flex-1 border-0 bg-white"
+              className="min-h-0 flex-1 border-0 bg-background-primary-default"
             />
           </div>
         </div>

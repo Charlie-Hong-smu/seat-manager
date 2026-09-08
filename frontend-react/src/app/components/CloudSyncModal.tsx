@@ -103,13 +103,13 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
 
   return (
     <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="modal-panel-enter w-full max-w-lg overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between">
+      <div className="modal-panel-enter w-full max-w-lg overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl">
+        <div className="px-5 py-4 border-b border-separator-border flex items-start justify-between">
           <div>
-            <div className="text-xs text-blue-500 mb-0.5" style={{ fontWeight: 700 }}>手动云端同步</div>
-            <h2 className="text-gray-900" style={{ fontSize: "1.125rem", fontWeight: 800 }}>云端备份与恢复</h2>
+            <div className="text-caption-1-regular text-accent-500 mb-0.5" style={{ fontWeight: 700 }}>手动云端同步</div>
+            <h2 className="text-text-primary" style={{ fontSize: "1.125rem", fontWeight: 800 }}>云端备份与恢复</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-xl text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -117,28 +117,28 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 700 }}>设备名称</span>
+              <span className="block text-caption-1-regular text-text-secondary mb-1.5" style={{ fontWeight: 700 }}>设备名称</span>
               <input
                 value={deviceName}
                 onChange={event => setDeviceName(event.target.value)}
-                className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                className="w-full px-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
               />
             </label>
             {productSync ? (
-              <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
-                <span className="block text-xs text-blue-500 mb-1" style={{ fontWeight: 700 }}>同步空间</span>
-                <span className="text-sm text-blue-700">当前授权码独立空间</span>
+              <div className="rounded-xl border border-accent-100 bg-accent-50 px-3 py-2">
+                <span className="block text-caption-1-regular text-accent-500 mb-1" style={{ fontWeight: 700 }}>同步空间</span>
+                <span className="text-body-regular text-accent-700">当前授权码独立空间</span>
               </div>
             ) : (
               <label className="block">
-                <span className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 700 }}>同步码</span>
+                <span className="block text-caption-1-regular text-text-secondary mb-1.5" style={{ fontWeight: 700 }}>同步码</span>
                 <div className="relative">
-                  <KeyRound className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <KeyRound className="w-3.5 h-3.5 text-text-tertiary absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="password"
                     value={syncCode}
                     onChange={event => setSyncCode(event.target.value)}
-                    className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                    className="w-full pl-8 pr-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
                     placeholder="输入同步码"
                   />
                 </div>
@@ -147,43 +147,43 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
           </div>
 
           {!productSync && (
-            <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
-              <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} className="accent-blue-600" />
+            <label className="flex items-center gap-2 text-body-regular text-text-secondary cursor-pointer">
+              <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} className="accent-accent-600" />
               记住同步授权 30 天
             </label>
           )}
 
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-            <div className="flex items-center gap-2 text-sm text-gray-700" style={{ fontWeight: 700 }}>
-              <Cloud className="w-4 h-4 text-blue-500" />
+          <div className="rounded-2xl border border-separator-border bg-background-secondary-default p-4">
+            <div className="flex items-center gap-2 text-body-regular text-text-primary" style={{ fontWeight: 700 }}>
+              <Cloud className="w-4 h-4 text-accent-500" />
               云端状态
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-gray-500">
+            <div className="mt-2 grid grid-cols-2 gap-2 text-body-regular text-text-secondary">
               <span>状态：{status?.exists ? "已有备份" : status ? "暂无备份" : "未查询"}</span>
               <span>设备：{status?.deviceName || "--"}</span>
               <span className="col-span-2">时间：{formatTime(status?.updatedAt)}</span>
             </div>
-            <p className="mt-3 text-sm text-blue-600">{message}</p>
+            <p className="mt-3 text-body-regular text-accent-600">{message}</p>
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-100 flex flex-wrap gap-2">
+        <div className="p-4 border-t border-separator-border flex flex-wrap gap-2">
           {!productSync && (
-            <button disabled={busy} onClick={() => run("auth")} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 text-sm" style={{ fontWeight: 700 }}>
+            <button disabled={busy} onClick={() => run("auth")} className="px-3 py-2 rounded-xl border border-border-button-default text-text-secondary hover:bg-background-secondary-default disabled:opacity-50 text-body-regular" style={{ fontWeight: 700 }}>
               授权
             </button>
           )}
-          <button disabled={busy} onClick={() => run("status")} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 text-sm inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+          <button disabled={busy} onClick={() => run("status")} className="px-3 py-2 rounded-xl border border-border-button-default text-text-secondary hover:bg-background-secondary-default disabled:opacity-50 text-body-regular inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
             <RefreshCw className="w-3.5 h-3.5" />状态
           </button>
-          <button disabled={busy} onClick={() => run("upload")} className="px-3 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 text-sm inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+          <button disabled={busy} onClick={() => run("upload")} className="px-3 py-2 rounded-xl bg-accent-600 text-text-white hover:bg-accent-700 disabled:opacity-50 text-body-regular inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
             <UploadCloud className="w-3.5 h-3.5" />上传本机
           </button>
-          <button disabled={busy} onClick={() => run("restore")} className="px-3 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 text-sm inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+          <button disabled={busy} onClick={() => run("restore")} className="px-3 py-2 rounded-xl bg-status-warning-500 text-text-white hover:bg-status-warning-600 disabled:opacity-50 text-body-regular inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
             <DownloadCloud className="w-3.5 h-3.5" />恢复云端
           </button>
           {!productSync && (
-            <button disabled={busy} onClick={() => { clearSyncAuth(); setMessage("同步授权已清除。"); }} className="ml-auto px-3 py-2 rounded-xl text-gray-400 hover:bg-gray-50 disabled:opacity-50 text-sm">
+            <button disabled={busy} onClick={() => { clearSyncAuth(); setMessage("同步授权已清除。"); }} className="ml-auto px-3 py-2 rounded-xl text-text-tertiary hover:bg-background-secondary-default disabled:opacity-50 text-body-regular">
               清除授权
             </button>
           )}

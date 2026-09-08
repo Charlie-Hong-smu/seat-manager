@@ -14,17 +14,17 @@ export function AppShell({ header, sidebar, mainTabs, children, overlays, sideba
     <div className="h-screen flex flex-col overflow-hidden bg-[var(--app-bg)]">
       {header}
 
-      <div className="flex-1 min-h-0 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex gap-3 overflow-hidden p-3">
         <div
           className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-[320ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width]"
           style={{
-            width: sidebarCollapsed ? 64 : 200,
+            width: sidebarCollapsed ? 64 : 212,
           }}
         >
           {sidebar}
         </div>
 
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+        <div className="app-work-surface flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
           {mainTabs}
           <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
         </div>

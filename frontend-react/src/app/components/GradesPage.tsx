@@ -182,15 +182,15 @@ function StatCard({ icon, label, value, sub, accent }: {
   accent: string;
 }) {
   return (
-    <div className="surface-enter flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-gray-200 hover:shadow-md">
+    <div className="surface-enter flex flex-col gap-2 rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200  hover:border-border-button-default hover:shadow-md">
       <div className="flex items-center gap-2">
         <div className={`p-1.5 rounded-lg shrink-0 ${accent}`}>{icon}</div>
-        <span className="text-xs text-gray-400" style={{ fontWeight: 600 }}>{label}</span>
+        <span className="text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600 }}>{label}</span>
       </div>
-      <p className="text-gray-900 leading-none" style={{ fontSize: "1.75rem", fontWeight: 700 }}>
+      <p className="text-text-primary leading-none" style={{ fontSize: "1.75rem", fontWeight: 700 }}>
         {value}
       </p>
-      {sub && <p className="text-xs text-gray-400">{sub}</p>}
+      {sub && <p className="text-caption-1-regular text-text-tertiary">{sub}</p>}
     </div>
   );
 }
@@ -374,8 +374,8 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
   if (!selectedExam) {
     return (
-      <div className="h-full bg-gray-50 p-6">
-        <div className="bg-white border border-gray-100 rounded-2xl p-8 text-center text-gray-400">
+      <div className="h-full bg-background-secondary-default p-6">
+        <div className="bg-background-primary-default border border-separator-border rounded-2xl p-8 text-center text-text-tertiary">
           暂无考试数据
         </div>
       </div>
@@ -383,8 +383,8 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   }
 
   return (
-    <div className="grade-dashboard flex min-h-full flex-col bg-gray-50">
-      <div className="grade-toolbar bg-white border-b border-gray-100 px-6 py-3 space-y-3" data-mode={activeTab}>
+    <div className="grade-dashboard flex min-h-full flex-col bg-background-secondary-default">
+      <div className="grade-toolbar bg-background-primary-default border-b border-separator-border px-6 py-3 space-y-3" data-mode={activeTab}>
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative min-w-0 shrink basis-[280px]">
             <button
@@ -393,10 +393,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               aria-haspopup={activeTab === "single" ? "listbox" : undefined}
               aria-expanded={activeTab === "single" ? examOpen : undefined}
               onClick={() => { if (activeTab === "single") setExamOpen(v => !v); }}
-              className={`flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border px-3 text-sm text-gray-700 transition-[background-color,border-color,box-shadow] duration-300 ${
+              className={`flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border px-3 text-body-regular text-text-primary transition-[background-color,border-color,box-shadow] duration-300 ${
                 activeTab === "single"
-                  ? "cursor-pointer border-gray-200 bg-gray-50 hover:border-blue-200 hover:bg-white hover:shadow-sm"
-                  : "cursor-default border-blue-100 bg-blue-50/50"
+                  ? "cursor-pointer border-border-button-default bg-background-secondary-default hover:border-accent-200 hover:bg-background-primary-default hover:shadow-sm"
+                  : "cursor-default border-accent-100 bg-accent-50/50"
               }`}
               style={{ fontWeight: 600 }}
             >
@@ -405,11 +405,11 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                   ? `${selectedExam.name} · ${selectedExam.date || "未填写日期"}`
                   : `全部考试 · ${exams.length} 场趋势`}
               </span>
-              <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-[opacity,transform] duration-300 ${activeTab === "single" ? "opacity-100" : "-translate-y-0.5 opacity-0"}`} />
+              <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-tertiary transition-[opacity,transform] duration-300 ${activeTab === "single" ? "opacity-100" : "-translate-y-0.5 opacity-0"}`} />
             </button>
             <AnimatedPopover
               open={activeTab === "single" && examOpen}
-              className="absolute left-0 top-full z-20 mt-1 min-w-72 max-w-96 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg"
+              className="absolute left-0 top-full z-20 mt-1 min-w-72 max-w-96 overflow-hidden rounded-xl border border-separator-border bg-background-primary-default shadow-lg"
             >
                 {exams.map(exam => (
                   <button
@@ -420,7 +420,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                       setSelectedSubject("total");
                       setSortKey("total");
                     }}
-                    className={`w-full truncate text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${exam.id === selectedExam.id ? "text-blue-600 bg-blue-50" : "text-gray-700"}`}
+                    className={`w-full truncate text-left px-4 py-2.5 text-body-regular hover:bg-background-secondary-default transition-colors ${exam.id === selectedExam.id ? "text-accent-600 bg-accent-50" : "text-text-primary"}`}
                   >
                     {exam.name} · {exam.date || "未填写日期"}
                   </button>
@@ -458,12 +458,12 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               aria-haspopup={activeTab === "single" ? "dialog" : undefined}
               aria-expanded={activeTab === "single" ? thresholdOpen : undefined}
               onClick={() => { if (activeTab === "single") setThresholdOpen(v => !v); }}
-              className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs transition-[color,background-color,border-color] duration-300 ${
+              className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-caption-1-regular transition-[color,background-color,border-color] duration-300 ${
                 activeTab === "single"
                   ? thresholdOpen
-                    ? "border-blue-200 bg-blue-50 text-blue-700"
-                    : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
-                  : "cursor-default border-gray-200 bg-gray-50 text-gray-400"
+                    ? "border-accent-200 bg-accent-50 text-accent-700"
+                    : "border-border-button-default bg-background-secondary-default text-text-secondary hover:bg-background-tertiary-default"
+                  : "cursor-default border-border-button-default bg-background-secondary-default text-text-tertiary"
               }`}
               style={{ fontWeight: 700 }}
             >
@@ -475,7 +475,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
             <AnimatedPopover
               open={activeTab === "single" && thresholdOpen}
-              className="absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border border-gray-100 bg-white p-4 shadow-xl shadow-gray-200/70"
+              className="absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border border-separator-border bg-background-primary-default p-4 shadow-xl shadow-gray-200/70"
             >
                 <div className="grid grid-cols-3 gap-3">
                   {(([
@@ -483,7 +483,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                     ["good", "良好"],
                     ["excellent", "优秀"],
                   ]) as Array<[keyof GradeThresholds, string]>).map(([key, label]) => (
-                    <label key={key} className="space-y-1.5 text-xs text-gray-500" style={{ fontWeight: 700 }}>
+                    <label key={key} className="space-y-1.5 text-caption-1-regular text-text-secondary" style={{ fontWeight: 700 }}>
                       <span>{label}</span>
                       <input
                         type="number"
@@ -491,20 +491,20 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                         max={100}
                         value={thresholds[key]}
                         onChange={event => updateThreshold(key, Number(event.target.value))}
-                        className="h-9 w-full rounded-xl border border-gray-200 bg-gray-50 px-2 text-center text-sm text-gray-900 outline-none transition-colors focus:border-blue-300 focus:bg-white"
+                        className="h-9 w-full rounded-xl border border-border-button-default bg-background-secondary-default px-2 text-center text-body-regular text-text-primary outline-none transition-colors focus:border-accent-300 focus:bg-background-primary-default"
                         style={{ fontWeight: 800 }}
                       />
                     </label>
                   ))}
                 </div>
-                <p className="mt-3 truncate text-xs text-gray-400">{metricKey === "total" ? totalThresholdHint : subjectThresholdHint}</p>
+                <p className="mt-3 truncate text-caption-1-regular text-text-tertiary">{metricKey === "total" ? totalThresholdHint : subjectThresholdHint}</p>
             </AnimatedPopover>
           </div>
 
           <button
             onClick={() => setExportOpen(true)}
             disabled={!exams.length}
-            className="flex shrink-0 items-center gap-1.5 px-3 py-2 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 px-3 py-2 text-caption-1-regular text-text-secondary bg-background-secondary-default hover:bg-background-tertiary-default border border-border-button-default rounded-xl transition-colors disabled:opacity-50"
             style={{ fontWeight: 700 }}
           >
             <Download className="w-3.5 h-3.5" />导出成绩
@@ -525,39 +525,39 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           <>
             <div className="grade-stat-grid grid grid-cols-4 gap-4">
               <StatCard
-                icon={<Users className="w-4 h-4 text-blue-600" />}
+                icon={<Users className="w-4 h-4 text-accent-600" />}
                 label="参考人数"
                 value={`${rows.length} 人`}
                 sub={`${subjects.length} 个科目`}
-                accent="bg-blue-50"
+                accent="bg-accent-50"
               />
               <StatCard
-                icon={<TrendingUp className="w-4 h-4 text-violet-600" />}
+                icon={<TrendingUp className="w-4 h-4 text-status-ai-600" />}
                 label={metricKey === "total" ? "班级平均分" : `${metricLabel}平均分`}
                 value={formatScore(avgMetric ?? avgTotal)}
                 sub={`满分 ${metricKey === "total" ? subjects.length * 100 : 100}`}
-                accent="bg-violet-50"
+                accent="bg-status-ai-50"
               />
               <StatCard
-                icon={<Trophy className="w-4 h-4 text-amber-600" />}
+                icon={<Trophy className="w-4 h-4 text-status-warning-600" />}
                 label="最高 / 最低分"
                 value={`${formatScore(maxMetric ?? maxTotal)} / ${formatScore(minMetric ?? minTotal)}`}
                 sub={`${metricLabel}区间`}
-                accent="bg-amber-50"
+                accent="bg-status-warning-50"
               />
               <StatCard
-                icon={<Award className="w-4 h-4 text-emerald-600" />}
+                icon={<Award className="w-4 h-4 text-status-success-600" />}
                 label="优秀率"
                 value={`${rows.length ? Math.round((excellentCount / rows.length) * 100) : 0}%`}
                 sub={`及格率 ${rows.length ? Math.round((passCount / rows.length) * 100) : 0}%`}
-                accent="bg-emerald-50"
+                accent="bg-status-success-50"
               />
             </div>
 
             <div className={`grade-chart-grid ${metricKey === "total" ? "grid grid-cols-5 gap-4" : "grid grid-cols-1 gap-4"}`}>
-              <div className={`grade-main-chart surface-enter ${metricKey === "total" ? "col-span-3" : ""} rounded-2xl border border-gray-100 bg-white p-5 shadow-sm`}>
-                <h3 className="text-gray-700 mb-1">{metricKey === "total" ? "各科平均分对比" : `${metricLabel}分数分布`}</h3>
-                <p className="text-xs text-gray-400 mb-4">
+              <div className={`grade-main-chart surface-enter ${metricKey === "total" ? "col-span-3" : ""} rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm`}>
+                <h3 className="text-text-primary mb-1">{metricKey === "total" ? "各科平均分对比" : `${metricLabel}分数分布`}</h3>
+                <p className="text-caption-1-regular text-text-tertiary mb-4">
                   {metricKey === "total" ? "不同科目的班级平均表现" : `共 ${rows.length} 名学生的成绩区间分布`}
                 </p>
                 <ResponsiveContainer width="100%" height={metricKey === "total" ? 200 : 260}>
@@ -576,9 +576,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               </div>
 
               {metricKey === "total" && (
-                <div className="grade-distribution-chart surface-enter col-span-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                  <h3 className="text-gray-700 mb-1">全部分布</h3>
-                  <p className="text-xs text-gray-400 mb-4">{totalThresholdHint}</p>
+                <div className="grade-distribution-chart surface-enter col-span-2 rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
+                  <h3 className="text-text-primary mb-1">全部分布</h3>
+                  <p className="text-caption-1-regular text-text-tertiary mb-4">{totalThresholdHint}</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={distributionData} barSize={26}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
@@ -594,38 +594,38 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               )}
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
+            <div className="bg-background-primary-default rounded-2xl border border-separator-border shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-separator-border">
                 <div>
-                  <h3 className="text-gray-700">{metricKey === "total" ? "学生成绩" : `${metricLabel} · 成绩排名`}</h3>
-                  {metricKey !== "total" && <p className="text-xs text-gray-400 mt-0.5">按 {metricLabel} 成绩从高到低排列</p>}
+                  <h3 className="text-text-primary">{metricKey === "total" ? "学生成绩" : `${metricLabel} · 成绩排名`}</h3>
+                  {metricKey !== "total" && <p className="text-caption-1-regular text-text-tertiary mt-0.5">按 {metricLabel} 成绩从高到低排列</p>}
                 </div>
                 <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-3.5 h-3.5 text-text-tertiary absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     placeholder="搜索学生姓名"
-                    className="pl-8 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 w-44"
+                    className="pl-8 pr-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300 w-44"
                   />
                 </div>
               </div>
 
               <div className="overflow-x-auto">
                 {metricKey === "total" ? (
-                  <table className="w-full min-w-[940px] table-fixed text-sm">
+                  <table className="w-full min-w-[940px] table-fixed text-body-regular">
                     <thead>
-                      <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
+                      <tr className="bg-background-secondary-default text-text-tertiary" style={{ fontSize: "0.8125rem" }}>
                         <th className="text-left px-6 py-3 w-10">#</th>
-                        <th className="text-left px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("name")}>
+                        <th className="text-left px-4 py-3 cursor-pointer hover:text-text-secondary" onClick={() => handleSort("name")}>
                           <span className="flex items-center gap-1">姓名 <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
                         {subjects.map(subject => (
-                          <th key={subject} className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort(subject)}>
+                          <th key={subject} className="text-center px-4 py-3 cursor-pointer hover:text-text-secondary" onClick={() => handleSort(subject)}>
                             <span className="flex items-center justify-center gap-1">{subject} <ArrowUpDown className="w-3 h-3" /></span>
                           </th>
                         ))}
-                        <th className="text-center px-4 py-3 cursor-pointer hover:text-gray-600" onClick={() => handleSort("total")}>
+                        <th className="text-center px-4 py-3 cursor-pointer hover:text-text-secondary" onClick={() => handleSort("total")}>
                           <span className="flex items-center justify-center gap-1">全部 <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
                         <th className="w-[78px] whitespace-nowrap px-2 py-3 text-center">等级</th>
@@ -638,31 +638,31 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                         const rank = rankById.get(row.id);
                         const grade = getGradeLabel(getMetricBandValue(row, metricKey, subjects), thresholds);
                         const gradeColor = {
-                          优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
-                          良好: "text-blue-600 bg-blue-50 border border-blue-100",
-                          及格: "text-amber-600 bg-amber-50 border border-amber-100",
-                          不及格: "text-red-500 bg-red-50 border border-red-100",
-                          缺考: "text-gray-500 bg-gray-50 border border-gray-100",
+                          优秀: "text-status-success-600 bg-status-success-50 border border-status-success-100",
+                          良好: "text-accent-600 bg-accent-50 border border-accent-100",
+                          及格: "text-status-warning-600 bg-status-warning-50 border border-status-warning-100",
+                          不及格: "text-status-danger-500 bg-status-danger-50 border border-status-danger-100",
+                          缺考: "text-text-secondary bg-background-secondary-default border border-separator-border",
                         }[grade];
                         return (
                           <tr
                             key={row.id}
                             onClick={() => matchedStudent && onSelectStudent(matchedStudent)}
                             title={matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
-                            className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${matchedStudent ? "cursor-pointer" : ""}`}
+                            className={`border-t border-separator-border hover:bg-background-secondary-default/60 transition-colors ${matchedStudent ? "cursor-pointer" : ""}`}
                           >
-                            <td className="px-6 py-3 text-gray-300 tabular-nums">{row.rankClass ?? rank ?? "—"}</td>
-                            <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{row.name}</td>
+                            <td className="px-6 py-3 text-text-tertiary tabular-nums">{row.rankClass ?? rank ?? "—"}</td>
+                            <td className="px-4 py-3 text-text-primary" style={{ fontWeight: 600 }}>{row.name}</td>
                             {subjects.map(subject => {
                               const score = row.scores[subject]?.score ?? null;
-                              const color = score === null ? "text-gray-300" : score >= 90 ? "text-emerald-600" : score >= 75 ? "text-blue-600" : score >= 60 ? "text-gray-700" : "text-red-500";
+                              const color = score === null ? "text-text-tertiary" : score >= 90 ? "text-status-success-600" : score >= 75 ? "text-accent-600" : score >= 60 ? "text-text-primary" : "text-status-danger-500";
                               return (
                                 <td key={subject} className={`text-center px-4 py-3 tabular-nums ${color}`}>{formatScore(score)}</td>
                               );
                             })}
-                            <td className="text-center px-4 py-3 tabular-nums text-gray-800 bg-blue-50/50" style={{ fontWeight: 700 }}>{formatScore(row.totalScore)}</td>
+                            <td className="text-center px-4 py-3 tabular-nums text-text-primary bg-accent-50/50" style={{ fontWeight: 700 }}>{formatScore(row.totalScore)}</td>
                             <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
-                              <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs ${gradeColor}`}>{grade}</span>
+                              <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption-1-regular ${gradeColor}`}>{grade}</span>
                             </td>
                             <td className="w-[84px] whitespace-nowrap px-2 py-3 text-center">
                               <button
@@ -674,7 +674,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                     onOpenStudentFollowup(matchedStudent);
                                   }
                                 }}
-                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-status-ai-100 bg-status-ai-50 px-2.5 text-caption-1-regular text-status-ai-600 transition-colors hover:bg-status-ai-100 disabled:border-separator-border disabled:bg-background-secondary-default disabled:text-text-tertiary"
                                 style={{ fontWeight: 800 }}
                                 title={matchedStudent ? "查看 AI 建议" : "未匹配到学生档案"}
                               >
@@ -687,9 +687,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                     </tbody>
                   </table>
                 ) : (
-                  <table className="w-full min-w-[640px] table-fixed text-sm">
+                  <table className="w-full min-w-[640px] table-fixed text-body-regular">
                     <thead>
-                      <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
+                      <tr className="bg-background-secondary-default text-text-tertiary" style={{ fontSize: "0.8125rem" }}>
                         <th className="text-left px-6 py-3 w-16">排名</th>
                         <th className="text-left px-4 py-3">姓名</th>
                         <th className="text-center px-4 py-3">{metricLabel} 成绩</th>
@@ -701,24 +701,24 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                       {subjectRankingRows.map(item => {
                         const grade = getGradeLabel(item.value, thresholds);
                         const gradeColor = {
-                          优秀: "text-emerald-600 bg-emerald-50 border border-emerald-100",
-                          良好: "text-blue-600 bg-blue-50 border border-blue-100",
-                          及格: "text-amber-600 bg-amber-50 border border-amber-100",
-                          不及格: "text-red-500 bg-red-50 border border-red-100",
-                          缺考: "text-gray-500 bg-gray-50 border border-gray-100",
+                          优秀: "text-status-success-600 bg-status-success-50 border border-status-success-100",
+                          良好: "text-accent-600 bg-accent-50 border border-accent-100",
+                          及格: "text-status-warning-600 bg-status-warning-50 border border-status-warning-100",
+                          不及格: "text-status-danger-500 bg-status-danger-50 border border-status-danger-100",
+                          缺考: "text-text-secondary bg-background-secondary-default border border-separator-border",
                         }[grade];
                         return (
                           <tr
                             key={item.row.id}
                             onClick={() => item.matchedStudent && onSelectStudent(item.matchedStudent)}
                             title={item.matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
-                            className={`border-t border-gray-50 hover:bg-gray-50/60 transition-colors ${item.matchedStudent ? "cursor-pointer" : ""}`}
+                            className={`border-t border-separator-border hover:bg-background-secondary-default/60 transition-colors ${item.matchedStudent ? "cursor-pointer" : ""}`}
                           >
-                            <td className="px-6 py-3 text-gray-400 tabular-nums">{item.row.scores[metricKey]?.rankClass ?? metricRankById.get(item.row.id) ?? "—"}</td>
-                            <td className="px-4 py-3 text-gray-800" style={{ fontWeight: 600 }}>{item.row.name}</td>
-                            <td className="text-center px-4 py-3 tabular-nums text-blue-700" style={{ fontWeight: 700 }}>{formatScore(item.value)}</td>
+                            <td className="px-6 py-3 text-text-tertiary tabular-nums">{item.row.scores[metricKey]?.rankClass ?? metricRankById.get(item.row.id) ?? "—"}</td>
+                            <td className="px-4 py-3 text-text-primary" style={{ fontWeight: 600 }}>{item.row.name}</td>
+                            <td className="text-center px-4 py-3 tabular-nums text-accent-700" style={{ fontWeight: 700 }}>{formatScore(item.value)}</td>
                             <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
-                              <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs ${gradeColor}`}>{grade}</span>
+                              <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption-1-regular ${gradeColor}`}>{grade}</span>
                             </td>
                             <td className="w-[84px] whitespace-nowrap px-2 py-3 text-center">
                               <button
@@ -730,7 +730,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                     onOpenStudentFollowup(item.matchedStudent);
                                   }
                                 }}
-                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-100 bg-violet-50 px-2.5 text-xs text-violet-600 transition-colors hover:bg-violet-100 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-status-ai-100 bg-status-ai-50 px-2.5 text-caption-1-regular text-status-ai-600 transition-colors hover:bg-status-ai-100 disabled:border-separator-border disabled:bg-background-secondary-default disabled:text-text-tertiary"
                                 style={{ fontWeight: 800 }}
                                 title={item.matchedStudent ? "查看 AI 建议" : "未匹配到学生档案"}
                               >
@@ -752,29 +752,29 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               <TrendDashboard exams={exams} subjects={visibleTrendSubjects} />
             </div>
             {trendFollowupCandidates.length > 0 && (
-              <div className="surface-enter rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+              <div className="surface-enter rounded-2xl border border-status-ai-100 bg-background-primary-default p-5 shadow-sm">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-gray-800" style={{ fontWeight: 900 }}>AI 跟进候选</h3>
-                    <p className="mt-0.5 text-sm text-gray-400">按最近两次考试班排变化挑出需要先看的学生，分数仅作说明</p>
+                    <h3 className="text-text-primary" style={{ fontWeight: 900 }}>AI 跟进候选</h3>
+                    <p className="mt-0.5 text-body-regular text-text-tertiary">按最近两次考试班排变化挑出需要先看的学生，分数仅作说明</p>
                   </div>
-                  <Sparkles className="h-5 w-5 text-violet-500" />
+                  <Sparkles className="h-5 w-5 text-status-ai-500" />
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
                   {trendFollowupCandidates.map(item => (
                     <button
                       key={item.student.id}
                       onClick={() => onOpenStudentFollowup(item.student)}
-                      className="group rounded-2xl border border-gray-100 bg-gray-50 p-3 text-left transition-all hover:-translate-y-0.5 hover:border-violet-100 hover:bg-violet-50/60 hover:shadow-sm"
+                      className="group rounded-2xl border border-separator-border bg-background-secondary-default p-3 text-left transition-all hover:-translate-y-0.5 hover:border-status-ai-100 hover:bg-status-ai-50/60 hover:shadow-sm"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-gray-900" style={{ fontWeight: 900 }}>{item.student.name}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs ${item.diff !== null && item.diff < 0 ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-400"}`} style={{ fontWeight: 800 }}>
+                        <span className="text-body-regular text-text-primary" style={{ fontWeight: 900 }}>{item.student.name}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-caption-1-regular ${item.diff !== null && item.diff < 0 ? "bg-status-danger-50 text-status-danger-500" : "bg-background-tertiary-default text-text-tertiary"}`} style={{ fontWeight: 800 }}>
                           {item.diff !== null ? `↓${Math.abs(item.diff)}名` : "关注"}
                         </span>
                       </div>
-                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-gray-500">{item.reason}</p>
-                      <div className="mt-3 flex items-center gap-1.5 text-xs text-violet-600 opacity-80 group-hover:opacity-100" style={{ fontWeight: 800 }}>
+                      <p className="mt-2 line-clamp-2 text-caption-1-regular leading-5 text-text-secondary">{item.reason}</p>
+                      <div className="mt-3 flex items-center gap-1.5 text-caption-1-regular text-status-ai-600 opacity-80 group-hover:opacity-100" style={{ fontWeight: 800 }}>
                         <Sparkles className="h-3.5 w-3.5" />打开跟进建议
                       </div>
                     </button>

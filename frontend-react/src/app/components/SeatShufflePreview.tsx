@@ -57,28 +57,28 @@ function PreviewStat({ active, label, value, onClick }: { active: boolean; label
       type="button"
       onClick={onClick}
       className={`rounded-2xl border px-3 py-3 text-left transition-colors ${
-        active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-100 bg-white text-gray-600 hover:bg-gray-50"
+        active ? "border-accent-200 bg-accent-50 text-accent-700" : "border-separator-border bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"
       }`}
     >
-      <span className="block text-xs opacity-70" style={{ fontWeight: 700 }}>{label}</span>
-      <strong className="block mt-1 text-sm">{value}</strong>
+      <span className="block text-caption-1-regular opacity-70" style={{ fontWeight: 700 }}>{label}</span>
+      <strong className="block mt-1 text-body-regular">{value}</strong>
     </button>
   );
 }
 
 function DetailItem({ children, tone = "muted" }: { children: React.ReactNode; tone?: "ok" | "warn" | "muted" }) {
   const className = {
-    ok: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    warn: "bg-amber-50 text-amber-700 border-amber-100",
-    muted: "bg-gray-50 text-gray-500 border-gray-100",
+    ok: "bg-status-success-50 text-status-success-700 border-status-success-100",
+    warn: "bg-status-warning-50 text-status-warning-700 border-status-warning-100",
+    muted: "bg-background-secondary-default text-text-secondary border-separator-border",
   }[tone];
-  return <div className={`rounded-xl border px-3 py-2 text-xs ${className}`}>{children}</div>;
+  return <div className={`rounded-xl border px-3 py-2 text-caption-1-regular ${className}`}>{children}</div>;
 }
 
 function DetailBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <div className="text-xs text-gray-400" style={{ fontWeight: 800 }}>{title}</div>
+      <div className="text-caption-1-regular text-text-tertiary" style={{ fontWeight: 800 }}>{title}</div>
       {children}
     </div>
   );
@@ -366,30 +366,30 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
 
   return (
     <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm">
-      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="随机排座预览" className="modal-panel-enter flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white bg-white shadow-2xl outline-none">
-        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100">
+      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="随机排座预览" className="modal-panel-enter flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white bg-background-primary-default shadow-2xl outline-none">
+        <div className="flex items-start justify-between px-6 py-5 border-b border-separator-border">
           <div>
-            <div className="text-xs text-blue-500 mb-1" style={{ fontWeight: 800 }}>座位调整</div>
-            <h3 className="text-gray-900" style={{ fontSize: "1.25rem", fontWeight: 800 }}>随机排座预览</h3>
-            <p className="text-sm text-gray-400 mt-1">可拖动交换座位，采用前不会影响当前座位。</p>
+            <div className="text-caption-1-regular text-accent-500 mb-1" style={{ fontWeight: 800 }}>座位调整</div>
+            <h3 className="text-text-primary" style={{ fontSize: "1.25rem", fontWeight: 800 }}>随机排座预览</h3>
+            <p className="text-body-regular text-text-tertiary mt-1">可拖动交换座位，采用前不会影响当前座位。</p>
           </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors" aria-label="关闭预览">
+          <button onClick={onClose} className="p-2 text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default rounded-xl transition-colors" aria-label="关闭预览">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-[1fr_19rem] gap-4 p-5 overflow-auto bg-gray-50">
-          <div ref={boardRef} className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 overflow-x-auto ${dragVisual ? "select-none" : ""}`}>
-{seatSettings.layout ? <SeatLayoutSurface layout={layout} renderSeat={(seat, index) => { const studentId = candidate.order[index] ?? null; const student = studentId ? studentById.get(studentId) : null; const genderColor = student?.gender === "男" ? "bg-blue-400" : student?.gender === "女" ? "bg-pink-400" : "bg-gray-300"; return <button key={seat.id} type="button" data-preview-seat-index={index} data-preview-student-id={student?.id} onPointerDown={event => beginPointerDrag(event, index)} onClick={() => student && onSelectStudent?.(student)} className={`h-full w-full rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-300 ${student ? "border-gray-200 bg-white" : "border-dashed border-gray-200 bg-gray-50 text-gray-300"} ${changedSet.has(index) ? "ring-2 ring-blue-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-blue-400 bg-blue-50" : ""}`} style={{ transform: seatVisualTransform(index), transitionProperty: student ? undefined : "background-color, border-color, box-shadow" }} title={getSeatPositionLabel(index, seatSettings, candidate.order.length)}><span className="flex min-w-0 items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${genderColor}`}/><span className="truncate text-sm font-bold text-gray-800">{student?.name || "空"}</span></span><span className="mt-0.5 block text-[10px] text-gray-300">{seat.label}</span></button>; }} /> :
+        <div className="grid grid-cols-[1fr_19rem] gap-4 p-5 overflow-auto bg-background-secondary-default">
+          <div ref={boardRef} className={`bg-background-primary-default rounded-2xl border border-separator-border shadow-sm p-4 overflow-x-auto ${dragVisual ? "select-none" : ""}`}>
+{seatSettings.layout ? <SeatLayoutSurface layout={layout} renderSeat={(seat, index) => { const studentId = candidate.order[index] ?? null; const student = studentId ? studentById.get(studentId) : null; const genderColor = student?.gender === "男" ? "bg-accent-400" : student?.gender === "女" ? "bg-status-pink-400" : "bg-background-primary-disabled"; return <button key={seat.id} type="button" data-preview-seat-index={index} data-preview-student-id={student?.id} onPointerDown={event => beginPointerDrag(event, index)} onClick={() => student && onSelectStudent?.(student)} className={`h-full w-full rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-300 ${student ? "border-border-button-default bg-background-primary-default" : "border-dashed border-border-button-default bg-background-secondary-default text-text-tertiary"} ${changedSet.has(index) ? "ring-2 ring-accent-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-accent-400 bg-accent-50" : ""}`} style={{ transform: seatVisualTransform(index), transitionProperty: student ? undefined : "background-color, border-color, box-shadow" }} title={getSeatPositionLabel(index, seatSettings, candidate.order.length)}><span className="flex min-w-0 items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${genderColor}`}/><span className="truncate text-body-semibold text-text-primary">{student?.name || "空"}</span></span><span className="mt-0.5 block text-[10px] text-text-tertiary">{seat.label}</span></button>; }} /> :
             <div className="grid gap-2 min-w-[760px]" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}>
               {Array.from({ length: rows }).map((_, row) => (
                 <div key={`row-${row}`} className="col-span-8 grid gap-2 items-center" style={{ gridTemplateColumns: `3.25rem repeat(${COLS}, minmax(0, 1fr))` }}>
-                  <div className="text-xs text-gray-400 text-right pr-1" style={{ fontWeight: 700 }}>第{row + 1}排</div>
+                  <div className="text-caption-1-regular text-text-tertiary text-right pr-1" style={{ fontWeight: 700 }}>第{row + 1}排</div>
                   {Array.from({ length: COLS }).map((__, col) => {
                     const index = row * COLS + col;
                     const studentId = candidate.order[index] ?? null;
                     const student = studentId ? studentById.get(studentId) : null;
-                    const genderColor = student?.gender === "男" ? "bg-blue-400" : student?.gender === "女" ? "bg-pink-400" : "bg-gray-300";
+                    const genderColor = student?.gender === "男" ? "bg-accent-400" : student?.gender === "女" ? "bg-status-pink-400" : "bg-background-primary-disabled";
                     return (
                       <button
                         key={index}
@@ -407,16 +407,16 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
                           }
                         }}
                         className={`h-12 rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                          student ? "bg-white border-gray-200 hover:border-blue-200" : "bg-gray-50 border-dashed border-gray-200 text-gray-300"
-                        } ${changedSet.has(index) ? "ring-2 ring-blue-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-blue-400 bg-blue-50/90 shadow-[0_0_0_4px_rgba(59,130,246,0.16),0_12px_28px_rgba(37,99,235,0.14)]" : ""}`}
+                          student ? "bg-background-primary-default border-border-button-default hover:border-accent-200" : "bg-background-secondary-default border-dashed border-border-button-default text-text-tertiary"
+                        } ${changedSet.has(index) ? "ring-2 ring-accent-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-accent-400 bg-accent-50/90 shadow-[0_0_0_4px_rgba(59,130,246,0.16),0_12px_28px_rgba(37,99,235,0.14)]" : ""}`}
                         style={{ transform: seatVisualTransform(index), touchAction: "manipulation", transitionProperty: student ? undefined : "background-color, border-color, box-shadow" }}
                         title={getSeatPositionLabel(index, seatSettings, candidate.order.length)}
                       >
                         <span className="flex items-center gap-1.5 min-w-0">
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${genderColor}`} />
-                          <span className="truncate text-sm text-gray-800" style={{ fontWeight: 700 }}>{student?.name || "空"}</span>
+                          <span className="truncate text-body-regular text-text-primary" style={{ fontWeight: 700 }}>{student?.name || "空"}</span>
                         </span>
-                        <span className="block text-[10px] text-gray-300 mt-0.5">{row + 1}-{col + 1}</span>
+                        <span className="block text-[10px] text-text-tertiary mt-0.5">{row + 1}-{col + 1}</span>
                       </button>
                     );
                   })}
@@ -431,7 +431,7 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
                 <PreviewStat key={key} active={activeDetail === key} label={label} value={value} onClick={() => setActiveDetail(key)} />
               ))}
             </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4 max-h-[23rem] overflow-y-auto">
+            <div className="bg-background-primary-default rounded-2xl border border-separator-border shadow-sm p-4 space-y-4 max-h-[23rem] overflow-y-auto">
               {activeDetail === "changed" && (
                 <DetailBlock title="发生变化的座位">
                   {stats.changedCount ? getChangedSeatIndices(currentOrder, candidate.order).map(index => {
@@ -449,18 +449,18 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
           </aside>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-white">
-          <button onClick={onRegenerate} className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm" style={{ fontWeight: 700 }}>
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-separator-border bg-background-primary-default">
+          <button onClick={onRegenerate} className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border-button-default text-text-secondary hover:bg-background-secondary-default text-body-regular" style={{ fontWeight: 700 }}>
             <RefreshCw className="w-3.5 h-3.5" />再随机一次
           </button>
-          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm" style={{ fontWeight: 700 }}>取消</button>
-          <button onClick={onApply} className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm" style={{ fontWeight: 800 }}>采用方案</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-border-button-default text-text-secondary hover:bg-background-secondary-default text-body-regular" style={{ fontWeight: 700 }}>取消</button>
+          <button onClick={onApply} className="px-4 py-2 rounded-xl bg-accent-600 text-text-white hover:bg-accent-700 text-body-regular" style={{ fontWeight: 800 }}>采用方案</button>
         </div>
       </div>
       {dragVisual && createPortal(
         <div
           aria-hidden="true"
-          className={`pointer-events-none fixed z-[100] overflow-hidden rounded-xl border border-blue-300 bg-white/95 shadow-[0_18px_45px_rgba(37,99,235,0.24)] backdrop-blur-sm transition-[transform,opacity,box-shadow] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${dragVisual.phase === "settling" ? "duration-[440ms]" : "duration-150"}`}
+          className={`pointer-events-none fixed z-[100] overflow-hidden rounded-xl border border-accent-300 bg-background-primary-default/95 shadow-[0_18px_45px_rgba(37,99,235,0.24)] backdrop-blur-sm transition-[transform,opacity,box-shadow] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${dragVisual.phase === "settling" ? "duration-[440ms]" : "duration-150"}`}
           style={{
             left: 0,
             top: 0,
@@ -470,11 +470,11 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
             transform: `translate3d(${overlayLeft || 0}px, ${overlayTop || 0}px, 0) scale(${dragVisual.phase === "settling" ? 0.985 : 1.025})`,
           }}
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white to-violet-50/60" />
+          <div className="absolute inset-0 bg-gradient-to-br from-accent-50/80 via-white to-status-ai-50/60" />
           <div className="relative flex h-full min-w-0 items-center gap-2 px-2">
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${draggedStudent?.gender === "男" ? "bg-blue-400" : draggedStudent?.gender === "女" ? "bg-pink-400" : "bg-gray-300"}`} />
-            <span className="min-w-0 flex-1 truncate text-sm font-bold text-gray-900">{draggedStudent?.name || "空"}</span>
-            <span className="text-[10px] font-semibold text-blue-500">换座</span>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${draggedStudent?.gender === "男" ? "bg-accent-400" : draggedStudent?.gender === "女" ? "bg-status-pink-400" : "bg-background-primary-disabled"}`} />
+            <span className="min-w-0 flex-1 truncate text-body-semibold text-text-primary">{draggedStudent?.name || "空"}</span>
+            <span className="text-[10px] font-semibold text-accent-500">换座</span>
           </div>
         </div>,
         document.body

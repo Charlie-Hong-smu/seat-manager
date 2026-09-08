@@ -41,16 +41,16 @@ export function ChangePasswordModal({ onClose, onPasswordChanged }: ChangePasswo
 
   return (
     <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="modal-panel-enter w-full max-w-md overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between">
+      <form onSubmit={handleSubmit} className="modal-panel-enter w-full max-w-md overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl">
+        <div className="px-5 py-4 border-b border-separator-border flex items-start justify-between">
           <div>
-            <div className="text-xs text-blue-500 mb-0.5" style={{ fontWeight: 700 }}>账户安全</div>
-            <h2 className="text-gray-900 flex items-center gap-2" style={{ fontSize: "1.125rem", fontWeight: 800 }}>
-              <KeyRound className="w-4 h-4 text-blue-500" />
+            <div className="text-caption-1-regular text-accent-500 mb-0.5" style={{ fontWeight: 700 }}>账户安全</div>
+            <h2 className="text-text-primary flex items-center gap-2" style={{ fontSize: "1.125rem", fontWeight: 800 }}>
+              <KeyRound className="w-4 h-4 text-accent-500" />
               修改密码
             </h2>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+          <button type="button" onClick={onClose} className="p-2 rounded-xl text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -62,7 +62,7 @@ export function ChangePasswordModal({ onClose, onPasswordChanged }: ChangePasswo
             ["确认新密码", confirmPassword, setConfirmPassword, "new-password"],
           ].map(([label, value, setter, autoComplete]) => (
             <label key={label as string} className="block">
-              <span className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 700 }}>{label as string}</span>
+              <span className="block text-caption-1-regular text-text-secondary mb-1.5" style={{ fontWeight: 700 }}>{label as string}</span>
               <input
                 type="password"
                 value={value as string}
@@ -71,18 +71,18 @@ export function ChangePasswordModal({ onClose, onPasswordChanged }: ChangePasswo
                   setMessage("修改后需要重新登录。");
                 }}
                 autoComplete={autoComplete as string}
-                className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+                className="w-full px-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
               />
             </label>
           ))}
-          <p className="text-sm text-blue-600">{message}</p>
+          <p className="text-body-regular text-accent-600">{message}</p>
         </div>
 
-        <div className="p-4 border-t border-gray-100 flex gap-2 justify-end">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm" style={{ fontWeight: 700 }}>
+        <div className="p-4 border-t border-separator-border flex gap-2 justify-end">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-border-button-default text-text-secondary hover:bg-background-secondary-default text-body-regular" style={{ fontWeight: 700 }}>
             取消
           </button>
-          <button disabled={busy} className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 text-sm" style={{ fontWeight: 700 }}>
+          <button disabled={busy} className="px-4 py-2 rounded-xl bg-accent-600 text-text-white hover:bg-accent-700 disabled:opacity-60 text-body-regular" style={{ fontWeight: 700 }}>
             保存新密码
           </button>
         </div>

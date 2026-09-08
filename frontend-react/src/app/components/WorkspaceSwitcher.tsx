@@ -112,20 +112,20 @@ function TermForm({
 
   return (
     <div className="p-4 space-y-3">
-      <p className="text-sm text-gray-800" style={{ fontWeight: 700 }}>{title}</p>
+      <p className="text-body-regular text-text-primary" style={{ fontWeight: 700 }}>{title}</p>
 
       {showNameField && (
         <div className="space-y-2">
           <div>
-            <span className="text-xs text-gray-500 mb-1 block">学段</span>
+            <span className="text-caption-1-regular text-text-secondary mb-1 block">学段</span>
             <div className="flex gap-2">
               {(["primary", "junior", "senior"] as SchoolStage[]).map(item => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => pickStage(item)}
-                  className={`flex-1 py-1.5 text-sm rounded-xl border transition-colors ${
-                    stage === item ? "bg-blue-600 text-white border-blue-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                  className={`flex-1 py-1.5 text-body-regular rounded-xl border transition-colors ${
+                    stage === item ? "bg-accent-600 text-text-white border-accent-600" : "bg-background-secondary-default text-text-secondary border-border-button-default hover:bg-background-tertiary-default"
                   }`}
                   style={{ fontWeight: 600 }}
                 >
@@ -137,15 +137,15 @@ function TermForm({
 
           <div className="flex gap-2">
             <div className="flex-1">
-              <span className="text-xs text-gray-500 mb-1 block">年级</span>
+              <span className="text-caption-1-regular text-text-secondary mb-1 block">年级</span>
               <div className="flex flex-wrap gap-1.5">
                 {stageGradeOptions(stage).map(item => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => pickGrade(item)}
-                    className={`px-2.5 py-1 text-sm rounded-lg border transition-colors ${
-                      grade === item ? "bg-blue-600 text-white border-blue-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                    className={`px-2.5 py-1 text-body-regular rounded-lg border transition-colors ${
+                      grade === item ? "bg-accent-600 text-text-white border-accent-600" : "bg-background-secondary-default text-text-secondary border-border-button-default hover:bg-background-tertiary-default"
                     }`}
                   >
                     {item}
@@ -154,24 +154,24 @@ function TermForm({
               </div>
             </div>
             <label className="w-20">
-              <span className="text-xs text-gray-500 mb-1 block">班号</span>
+              <span className="text-caption-1-regular text-text-secondary mb-1 block">班号</span>
               <input
                 value={classNo}
                 onChange={e => pickClassNo(e.target.value)}
                 inputMode="numeric"
                 placeholder="如 3"
-                className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:border-blue-400"
+                className="w-full px-3 py-1.5 bg-background-secondary-default border border-border-button-default rounded-xl outline-none text-body-regular text-text-primary focus:border-accent-400"
               />
             </label>
           </div>
 
           <label className="block">
-            <span className="text-xs text-gray-500 mb-1 block">班级名称（可手动修改）</span>
+            <span className="text-caption-1-regular text-text-secondary mb-1 block">班级名称（可手动修改）</span>
             <input
               value={className}
               onChange={e => { setClassName(e.target.value); setNameEdited(true); }}
               placeholder="例如：高二(1)班"
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:border-blue-400"
+              className="w-full px-3 py-2 bg-background-secondary-default border border-border-button-default rounded-xl outline-none text-body-regular text-text-primary focus:border-accent-400"
             />
           </label>
         </div>
@@ -179,15 +179,15 @@ function TermForm({
 
       {showTerm && (
       <div>
-        <span className="text-xs text-gray-500 mb-1 block">学期</span>
+        <span className="text-caption-1-regular text-text-secondary mb-1 block">学期</span>
         <div className="flex gap-2 mb-2">
           {(["autumn", "spring", "custom"] as TermSeason[]).map(item => (
             <button
               key={item}
               type="button"
               onClick={() => setSeason(item)}
-              className={`flex-1 py-1.5 text-sm rounded-xl border transition-colors ${
-                season === item ? "bg-blue-600 text-white border-blue-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+              className={`flex-1 py-1.5 text-body-regular rounded-xl border transition-colors ${
+                season === item ? "bg-accent-600 text-text-white border-accent-600" : "bg-background-secondary-default text-text-secondary border-border-button-default hover:bg-background-tertiary-default"
               }`}
               style={{ fontWeight: 600 }}
             >
@@ -200,18 +200,18 @@ function TermForm({
             value={customLabel}
             onChange={e => setCustomLabel(e.target.value)}
             placeholder="自定义学期名，如：2024 暑期班"
-            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:border-blue-400"
+            className="w-full px-3 py-2 bg-background-secondary-default border border-border-button-default rounded-xl outline-none text-body-regular text-text-primary focus:border-accent-400"
           />
         ) : (
           <label className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">学年</span>
+            <span className="text-caption-1-regular text-text-secondary">学年</span>
             <input
               type="number"
               value={year}
               onChange={e => setYear(Number.parseInt(e.target.value, 10) || guessed.year)}
-              className="w-24 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:border-blue-400"
+              className="w-24 px-3 py-2 bg-background-secondary-default border border-border-button-default rounded-xl outline-none text-body-regular text-text-primary focus:border-accent-400"
             />
-            <span className="text-sm text-gray-500">年 {seasonLabel(season)}季</span>
+            <span className="text-body-regular text-text-secondary">年 {seasonLabel(season)}季</span>
           </label>
         )}
       </div>
@@ -221,7 +221,7 @@ function TermForm({
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+          className="flex-1 py-2 text-body-regular text-text-secondary bg-background-tertiary-default hover:bg-background-tertiary-hover rounded-xl transition-colors"
           style={{ fontWeight: 600 }}
         >
           取消
@@ -243,7 +243,7 @@ function TermForm({
               label: season === "custom" ? customLabel.trim() : "",
             });
           }}
-          className="flex-1 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex-1 py-2 text-body-regular text-text-white bg-accent-600 hover:bg-accent-700 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ fontWeight: 600 }}
         >
           {confirmLabel}
@@ -369,20 +369,20 @@ export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
     <div className="relative">
       <button
         onClick={() => { setOpen(v => !v); setMode("menu"); }}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 text-body-regular text-text-primary bg-background-secondary-default hover:bg-background-tertiary-default rounded-xl border border-border-button-default transition-colors"
         style={{ fontWeight: 600 }}
       >
-        <School className="w-3.5 h-3.5 text-blue-500" />
+        <School className="w-3.5 h-3.5 text-accent-500" />
         <span className="max-w-48 truncate">{currentName}</span>
-        <span className="text-gray-300">·</span>
-        <span className="text-gray-500">{current.term.label}</span>
-        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+        <span className="text-text-tertiary">·</span>
+        <span className="text-text-secondary">{current.term.label}</span>
+        <ChevronDown className="w-3.5 h-3.5 text-text-tertiary" />
       </button>
 
       {open && <div className="fixed inset-0 z-10" onClick={closeAll} />}
       <AnimatedPopover
         open={open}
-        className="absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg"
+        className="absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-lg"
       >
             {mode === "menu" && (
               <div className="max-h-[70vh] overflow-y-auto">
@@ -390,13 +390,13 @@ export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
                   {classViews.map(view => (
                     <div key={view.classId} className="mb-1">
                       <div className="flex items-center gap-1 px-3 py-1.5">
-                        <School className="w-3 h-3 text-gray-400" />
-                        <span className="flex-1 text-xs text-gray-400 truncate" style={{ fontWeight: 700 }}>{view.className}</span>
+                        <School className="w-3 h-3 text-text-tertiary" />
+                        <span className="flex-1 text-caption-1-regular text-text-tertiary truncate" style={{ fontWeight: 700 }}>{view.className}</span>
                         <button
                           type="button"
                           aria-label={`编辑 ${view.className} 班级信息`}
                           onClick={e => { e.stopPropagation(); handleOpenEdit(view.classId); }}
-                          className="p-1 text-gray-300 hover:text-blue-400 rounded-lg transition-colors"
+                          className="p-1 text-text-tertiary hover:text-accent-400 rounded-lg transition-colors"
                           title="编辑班级信息"
                         >
                           <Pencil className="w-3 h-3" />
@@ -411,15 +411,15 @@ export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
                             <div
                               key={slice.id}
                               className={`group flex items-center gap-1 rounded-xl ${
-                                slice.id === current.id ? "bg-blue-50" : "hover:bg-gray-50"
+                                slice.id === current.id ? "bg-accent-50" : "hover:bg-background-secondary-default"
                               }`}
                             >
                               <button
                                 type="button"
                                 aria-label={`删除 ${displayName} ${slice.term.label}`}
                                 onClick={() => handleSwitch(slice.id)}
-                                className={`flex-1 flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                                  slice.id === current.id ? "text-blue-600" : "text-gray-600"
+                                className={`flex-1 flex items-center gap-2 px-3 py-2 text-body-regular transition-colors ${
+                                  slice.id === current.id ? "text-accent-600" : "text-text-secondary"
                                 }`}
                               >
                                 <GraduationCap className="w-3.5 h-3.5 shrink-0" />
@@ -428,7 +428,7 @@ export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
                               </button>
                               <button
                                 onClick={e => { e.stopPropagation(); setDeleteError(""); setPendingDeleteSlice({ id: slice.id, label: `${displayName} ${slice.term.label}` }); }}
-                                className="opacity-0 group-hover:opacity-100 mr-2 p-1 text-gray-300 hover:text-red-400 rounded-lg transition-all"
+                                className="opacity-0 group-hover:opacity-100 mr-2 p-1 text-text-tertiary hover:text-status-danger-400 rounded-lg transition-all"
                                 title="删除这个学期"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -440,21 +440,21 @@ export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
                   ))}
                 </div>
 
-                <div className="border-t border-gray-100 p-2 space-y-0.5">
+                <div className="border-t border-separator-border p-2 space-y-0.5">
                   <button
                     onClick={() => setMode("nextTerm")}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-body-regular text-text-primary hover:bg-background-secondary-default rounded-xl transition-colors"
                     style={{ fontWeight: 600 }}
                   >
-                    <GraduationCap className="w-3.5 h-3.5 text-green-500" />
+                    <GraduationCap className="w-3.5 h-3.5 text-status-success-500" />
                     进入下一学期（当前班级）
                   </button>
                   <button
                     onClick={() => setMode("newClass")}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-body-regular text-text-primary hover:bg-background-secondary-default rounded-xl transition-colors"
                     style={{ fontWeight: 600 }}
                   >
-                    <Plus className="w-3.5 h-3.5 text-blue-500" />
+                    <Plus className="w-3.5 h-3.5 text-accent-500" />
                     新建班级
                   </button>
                 </div>

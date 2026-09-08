@@ -472,10 +472,10 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel }: Pr
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--app-border)] px-4 py-3">
         <div className="min-w-[15rem] flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-[var(--app-text)]">编辑座位槽位</h2>
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">{draft.seats.length} 个已启用</span>
-            {rangePreview && rangeMode && <span aria-live="polite" className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">{rangePreview.column + 1} 列 × {rangePreview.row + 1} 行</span>}
-            {groupDrag && groupMode && <span aria-live="polite" className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900">{groupPreviewSeatIds.size} 个座位</span>}
+            <h2 className="text-body-semibold text-[var(--app-text)]">编辑座位槽位</h2>
+            <span className="rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-700">{draft.seats.length} 个已启用</span>
+            {rangePreview && rangeMode && <span aria-live="polite" className="rounded-full bg-accent-600 px-2 py-0.5 text-[11px] font-bold text-text-white">{rangePreview.column + 1} 列 × {rangePreview.row + 1} 行</span>}
+            {groupDrag && groupMode && <span aria-live="polite" className="rounded-full bg-status-warning-100 px-2 py-0.5 text-[11px] font-bold text-status-warning-900">{groupPreviewSeatIds.size} 个座位</span>}
           </div>
         </div>
         <Button size="sm" variant={rangeMode ? "secondary" : "ghost"} aria-pressed={rangeMode} onClick={() => { setRangeMode(value => !value); setRangePreview(null); setGroupMode(false); setGroupDrag(null); }}>
@@ -527,7 +527,7 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel }: Pr
                       onMouseEnter={() => moveGroupDragTo(slot)}
                       onMouseDown={event => { beginGroupDrag(event, slot); }}
                       onClick={event => { if (!groupMode) toggleSlot(slot, event.shiftKey || event.metaKey); }}
-                      className={`seat-layout-slot__face grid h-full w-full place-items-center rounded-lg border text-[11px] font-bold outline-none transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:ring-2 focus-visible:ring-blue-500/30 motion-reduce:transition-none ${podium ? "border-blue-400 bg-blue-50 text-blue-700" : active ? "seat-layout-slot--active border-blue-500 bg-blue-600 text-white" : preview ? "scale-[0.98] border-blue-300 bg-blue-200 text-blue-700" : "border-gray-200 bg-gray-100 text-gray-300 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-400"} ${selectedSlot || (seat && groupPreviewSeatIds.has(seat.id)) ? "ring-2 ring-amber-500 ring-offset-1" : ""}`}
+                      className={`seat-layout-slot__face grid h-full w-full place-items-center rounded-lg border text-[11px] font-bold outline-none transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:ring-2 focus-visible:ring-accent-500/30 motion-reduce:transition-none ${podium ? "border-accent-400 bg-accent-50 text-accent-700" : active ? "seat-layout-slot--active border-accent-500 bg-accent-600 text-text-white" : preview ? "scale-[0.98] border-accent-300 bg-accent-200 text-accent-700" : "border-border-button-default bg-background-tertiary-default text-text-tertiary hover:border-accent-200 hover:bg-accent-50 hover:text-accent-400"} ${selectedSlot || (seat && groupPreviewSeatIds.has(seat.id)) ? "ring-2 ring-status-warning-500 ring-offset-1" : ""}`}
                       style={{ animationDelay: `${Math.min(index, 24) * 8}ms` }}
                     >
                       {podium ? <span className="flex items-center gap-1"><Presentation className="h-3.5 w-3.5" />讲台</span> : active ? <span className="max-w-full truncate px-1">{seat?.label}</span> : preview ? <span>{slot.column + 1} × {slot.row + 1}</span> : <span aria-hidden="true">＋</span>}
@@ -537,7 +537,7 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel }: Pr
                       aria-label={podium ? "取消讲台" : `将第 ${slot.row + 1} 行第 ${slot.column + 1} 列设为讲台`}
                       title={podium ? "取消讲台" : "设为讲台"}
                       onClick={event => { event.stopPropagation(); setPodium(slot); }}
-                      className={`absolute right-1 top-1 z-10 grid h-5 w-5 place-items-center rounded-full border bg-white text-blue-600 shadow-sm transition-[opacity,transform,border-color] duration-200 hover:scale-105 hover:border-blue-300 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25 motion-reduce:transition-none ${podium ? "border-blue-300 opacity-100" : "pointer-events-none scale-90 border-gray-200 opacity-0 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:scale-100 group-focus-within:opacity-100"}`}
+                      className={`absolute right-1 top-1 z-10 grid h-5 w-5 place-items-center rounded-full border bg-background-primary-default text-accent-600 shadow-sm transition-[opacity,transform,border-color] duration-200 hover:scale-105 hover:border-accent-300 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 motion-reduce:transition-none ${podium ? "border-accent-300 opacity-100" : "pointer-events-none scale-90 border-border-button-default opacity-0 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:scale-100 group-focus-within:opacity-100"}`}
                     ><Presentation className="h-3.5 w-3.5" /></button>
                   </div>
                 );
@@ -546,7 +546,7 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel }: Pr
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 text-xs">
+          <div className="flex shrink-0 items-center gap-2 text-caption-1-regular">
             {selected.size > 0 ? <>
               <span>已选 {selected.size} 座</span>
               <Button size="sm" variant="ghost" disabled={selected.size < 2} onClick={groupSelected}><UsersRound className="h-4 w-4" />组成小组</Button>
@@ -556,7 +556,7 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel }: Pr
               <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>取消选择</Button>
             </> : null}
             <span className="flex-1" />
-            <span className={waitingCount ? "font-semibold text-amber-600" : "font-semibold text-emerald-600"}>{waitingCount ? `应用后 ${waitingCount} 名学生进入待排区` : "当前槽位可容纳全部学生"}</span>
+            <span className={waitingCount ? "font-semibold text-status-warning-600" : "font-semibold text-status-success-600"}>{waitingCount ? `应用后 ${waitingCount} 名学生进入待排区` : "当前槽位可容纳全部学生"}</span>
           </div>
         </div>
       </div>

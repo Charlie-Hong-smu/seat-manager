@@ -46,7 +46,7 @@ export function DormitoryPeriodToolbar({
           <IconButton size="sm" label="上一个周期" onClick={() => onAnchorChange("previous")}><ChevronLeft className="h-4 w-4" /></IconButton>
           <DatePicker value={anchor} onChange={onAnchorChange} ariaLabel="宿舍统计日期" className="h-9 w-44 bg-[var(--app-surface-muted)]" />
           <IconButton size="sm" label="下一个周期" onClick={() => onAnchorChange("next")}><ChevronRight className="h-4 w-4" /></IconButton>
-          <span className="min-w-0 flex-1 text-xs font-bold text-[var(--app-text-muted)]">{range.label}</span>
+          <span className="min-w-0 flex-1 text-caption-1-semibold text-[var(--app-text-muted)]">{range.label}</span>
           <div
             data-testid="dormitory-period-settings-entry"
             aria-hidden={mode !== "custom"}
@@ -66,25 +66,25 @@ export function DormitoryPeriodToolbar({
           <div className="min-h-0 overflow-hidden">
             <div className={`mt-3 flex flex-wrap items-end gap-3 border-t border-[var(--app-border)] pt-3 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${settingsOpen ? "translate-y-0" : "-translate-y-2"}`}>
               <label className="min-w-44">
-                <span className="mb-1.5 block text-xs font-bold text-[var(--app-text-muted)]">周期起始日</span>
+                <span className="mb-1.5 block text-caption-1-semibold text-[var(--app-text-muted)]">周期起始日</span>
                 <DatePicker value={draft.anchorDate} onChange={anchorDate => setDraft(current => ({ ...current, anchorDate }))} ariaLabel="自定义周期起始日" className="w-full" />
               </label>
               <div>
-                <span className="mb-1.5 block text-xs font-bold text-[var(--app-text-muted)]">重复单位</span>
+                <span className="mb-1.5 block text-caption-1-semibold text-[var(--app-text-muted)]">重复单位</span>
                 <SegmentedControl value={draft.unit} onChange={unit => setDraft(current => ({ ...current, unit }))} ariaLabel="自定义周期单位" options={[{ value: "week", label: "周" }, { value: "month", label: "月" }]} />
               </div>
               <label className="w-28">
-                <span className="mb-1.5 block text-xs font-bold text-[var(--app-text-muted)]">每 N 个单位</span>
+                <span className="mb-1.5 block text-caption-1-semibold text-[var(--app-text-muted)]">每 N 个单位</span>
                 <input
                   type="number"
                   min={1}
                   max={12}
                   value={draft.intervalCount}
                   onChange={event => setDraft(current => ({ ...current, intervalCount: Math.min(12, Math.max(1, Number(event.target.value) || 1)) }))}
-                  className="h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-sm outline-none focus:border-blue-300"
+                  className="h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default px-3 text-body-regular outline-none focus:border-accent-300"
                 />
               </label>
-              <div className="pb-0.5 text-xs text-[var(--app-text-muted)]">当前规则：每 {draft.intervalCount} {draft.unit === "week" ? "周" : "个月"}一个周期</div>
+              <div className="pb-0.5 text-caption-1-regular text-[var(--app-text-muted)]">当前规则：每 {draft.intervalCount} {draft.unit === "week" ? "周" : "个月"}一个周期</div>
               <div className="ml-auto flex gap-2">
                 <Button variant="secondary" size="sm" onClick={() => { setDraft(settings); setSettingsOpen(false); }}>取消</Button>
                 <Button size="sm" onClick={() => { onSettingsChange(draft); onModeChange("custom"); onAnchorChange(draft.anchorDate); setSettingsOpen(false); }}>保存周期</Button>

@@ -55,16 +55,16 @@ export function DormEventForm({ members, lockedResponsible, submitLabel = "保�
                 setReason(preset.label);
                 setScore(preset.score);
               }}
-              className={`flex items-center justify-between gap-1 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+              className={`flex items-center justify-between gap-1 rounded-xl border px-3 py-2 text-body-semibold transition-colors ${
                 active
                   ? positive
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-red-200 bg-red-50 text-red-600"
-                  : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    ? "border-status-success-200 bg-status-success-50 text-status-success-700"
+                    : "border-status-danger-200 bg-status-danger-50 text-status-danger-600"
+                  : "border-border-button-default bg-background-secondary-default text-text-secondary hover:bg-background-tertiary-default"
               }`}
             >
               <span className="truncate">{preset.label}</span>
-              <span className={positive ? "text-emerald-600" : "text-red-500"}>{positive ? "+" : ""}{preset.score}</span>
+              <span className={positive ? "text-status-success-600" : "text-status-danger-500"}>{positive ? "+" : ""}{preset.score}</span>
             </button>
           );
         })}
@@ -74,15 +74,15 @@ export function DormEventForm({ members, lockedResponsible, submitLabel = "保�
         <input
           value={reason}
           onChange={event => setReason(event.target.value)}
-          className="min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300"
+          className="min-w-0 rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300"
           placeholder="原因"
         />
         <input
           type="number"
           value={score}
           onChange={event => setScore(Number(event.target.value) || 0)}
-          className={`rounded-xl border bg-gray-50 px-2 py-2 text-center text-sm font-semibold outline-none focus:border-blue-300 ${
-            score > 0 ? "border-emerald-200 text-emerald-600" : score < 0 ? "border-red-200 text-red-500" : "border-gray-200 text-gray-600"
+          className={`rounded-xl border bg-background-secondary-default px-2 py-2 text-center text-body-semibold outline-none focus:border-accent-300 ${
+            score > 0 ? "border-status-success-200 text-status-success-600" : score < 0 ? "border-status-danger-200 text-status-danger-500" : "border-border-button-default text-text-secondary"
           }`}
         />
       </div>
@@ -92,34 +92,34 @@ export function DormEventForm({ members, lockedResponsible, submitLabel = "保�
       <input
         value={note}
         onChange={event => setNote(event.target.value)}
-        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300"
+        className="w-full rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300"
         placeholder="备注（可选）"
       />
 
       <input
         value={punishment}
         onChange={event => setPunishment(event.target.value)}
-        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-300"
+        className="w-full rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300"
         placeholder="处罚措施（可选，例如：打扫宿舍一周）"
       />
 
-      <label className={`flex items-center gap-2 text-sm ${canSync ? "text-gray-600" : "text-gray-300"}`}>
+      <label className={`flex items-center gap-2 text-body-regular ${canSync ? "text-text-secondary" : "text-text-tertiary"}`}>
         <input
           type="checkbox"
           checked={canSync && recordToStudent}
           disabled={!canSync}
           onChange={event => setRecordToStudent(event.target.checked)}
-          className="accent-blue-600"
+          className="accent-accent-600"
         />
         同时记入责任人个人档案
-        {!canSync && <span className="text-xs text-gray-300">（需先指定责任人）</span>}
+        {!canSync && <span className="text-caption-1-regular text-text-tertiary">（需先指定责任人）</span>}
       </label>
 
       <button
         type="button"
         onClick={submit}
         disabled={!reason.trim()}
-        className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"
+        className="w-full rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"
       >
         {submitLabel}
       </button>

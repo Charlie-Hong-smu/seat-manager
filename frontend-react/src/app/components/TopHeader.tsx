@@ -121,33 +121,33 @@ export function TopHeader({
 
   return (
     <>
-      <header className="relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--app-border)] bg-white px-3 sm:px-4">
+      <header className="relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--app-border)] bg-background-primary-default px-3 sm:px-4">
         <IconButton label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} onClick={onToggleSidebar}>
           {sidebarCollapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" /> : <PanelLeftClose className="h-[18px] w-[18px]" />}
         </IconButton>
 
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-blue-600 text-white">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-accent-600 text-text-white">
             <BookOpen className="h-[18px] w-[18px]" />
           </div>
-          <span className="hidden whitespace-nowrap text-sm font-bold text-[var(--app-text)] min-[1180px]:block">{APP_NAME}</span>
+          <span className="hidden whitespace-nowrap text-body-semibold text-[var(--app-text)] min-[1180px]:block">{APP_NAME}</span>
           <WorkspaceSwitcher onChanged={onWorkspaceChanged} onBeforeMutate={onBeforeWorkspaceMutate} />
         </div>
 
         <div className="relative ml-auto hidden w-full max-w-sm min-[1100px]:block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
           <button
             type="button"
             onClick={openSearch}
-            className="flex h-10 w-full items-center rounded-[var(--app-radius-sm)] border border-gray-200 bg-gray-50 pl-9 pr-3 text-left text-sm text-gray-400 transition-colors hover:border-gray-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
+            className="flex h-10 w-full items-center rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default pl-9 pr-3 text-left text-body-regular text-text-tertiary transition-colors hover:border-border-button-hover hover:bg-background-primary-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
           >
             搜索学生姓名或别名
-            <span className="ml-auto rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] text-gray-400">{SEARCH_SHORTCUT_LABEL}</span>
+            <span className="ml-auto rounded-md border border-border-button-default bg-background-primary-default px-1.5 py-0.5 text-[10px] text-text-tertiary">{SEARCH_SHORTCUT_LABEL}</span>
           </button>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <button type="button" onClick={saveStatus === "failed" || saveStatus === "quota" ? onRetrySave : undefined} className={`hidden rounded-full px-2.5 py-1 text-[11px] font-bold sm:block ${saveStatus === "failed" || saveStatus === "quota" ? "bg-red-50 text-red-600" : saveStatus === "saving" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"}`} title={saveStatus === "quota" ? "本机空间不足，点击重试" : saveStatus === "failed" ? "保存失败，点击重试" : undefined}>{saveStatus === "saving" ? "保存中…" : saveStatus === "quota" ? "空间不足" : saveStatus === "failed" ? "保存失败 · 重试" : "已保存"}</button>
+          <button type="button" onClick={saveStatus === "failed" || saveStatus === "quota" ? onRetrySave : undefined} className={`hidden rounded-full px-2.5 py-1 text-[11px] font-bold sm:block ${saveStatus === "failed" || saveStatus === "quota" ? "bg-status-danger-50 text-status-danger-600" : saveStatus === "saving" ? "bg-accent-50 text-accent-600" : "bg-status-success-50 text-status-success-600"}`} title={saveStatus === "quota" ? "本机空间不足，点击重试" : saveStatus === "failed" ? "保存失败，点击重试" : undefined}>{saveStatus === "saving" ? "保存中…" : saveStatus === "quota" ? "空间不足" : saveStatus === "failed" ? "保存失败 · 重试" : "已保存"}</button>
           <IconButton label="搜索学生" className="min-[1100px]:hidden" onClick={openSearch}>
             <Search className="h-[18px] w-[18px]" />
           </IconButton>
@@ -160,15 +160,15 @@ export function TopHeader({
               type="button"
               onClick={onToggleAccount}
               aria-expanded={accountOpen}
-              className="inline-flex h-10 items-center gap-2 rounded-[var(--app-radius-sm)] border border-gray-200 bg-white px-2.5 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
+              className="inline-flex h-10 items-center gap-2 rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-2.5 text-body-semibold text-text-secondary transition-colors hover:bg-background-secondary-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
             >
-              <span className="grid h-6 w-6 place-items-center rounded-lg bg-gray-100"><UserRound className="h-3.5 w-3.5" /></span>
+              <span className="grid h-6 w-6 place-items-center rounded-lg bg-background-tertiary-default"><UserRound className="h-3.5 w-3.5" /></span>
               <span className="hidden sm:inline">账户</span>
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${accountOpen ? "rotate-180" : ""}`} />
             </button>
             <AnimatedPopover
               open={accountOpen}
-              className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-1.5 shadow-[var(--app-shadow-float)]"
+              className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-1.5 shadow-[var(--app-shadow-float)]"
             >
                 {accountItems.map(item => (
                   <button
@@ -181,7 +181,7 @@ export function TopHeader({
                       if (item.key === "unbind") onUnbindDevice?.();
                       if (item.key === "logout") onLogout();
                     }}
-                    className={`flex h-10 w-full items-center gap-2.5 rounded-[var(--app-radius-sm)] px-3 text-sm transition-colors hover:bg-gray-50 ${item.danger ? "text-red-500" : "text-gray-600"}`}
+                    className={`flex h-10 w-full items-center gap-2.5 rounded-[var(--app-radius-sm)] px-3 text-body-regular transition-colors hover:bg-background-secondary-default ${item.danger ? "text-status-danger-500" : "text-text-secondary"}`}
                   >
                     {item.icon}{item.label}
                   </button>
@@ -192,10 +192,10 @@ export function TopHeader({
       </header>
 
       {searchOpen && (
-        <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-start justify-center bg-gray-950/20 px-4 pt-[12vh] backdrop-blur-[2px]" onMouseDown={event => event.currentTarget === event.target && closeSearch()}>
-          <div className="modal-panel-enter w-full max-w-xl overflow-hidden rounded-[var(--app-radius-lg)] border border-white bg-white shadow-[var(--app-shadow-float)]" role="dialog" aria-label="搜索学生">
+        <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-start justify-center bg-text-primary/20 px-4 pt-[12vh] backdrop-blur-[2px]" onMouseDown={event => event.currentTarget === event.target && closeSearch()}>
+          <div className="modal-panel-enter w-full max-w-xl overflow-hidden rounded-[var(--app-radius-lg)] border border-white bg-background-primary-default shadow-[var(--app-shadow-float)]" role="dialog" aria-label="搜索学生">
             <div className="flex items-center gap-3 border-b border-[var(--app-border)] px-4">
-              <Search className="h-5 w-5 text-gray-400" />
+              <Search className="h-5 w-5 text-text-tertiary" />
               <input
                 ref={searchRef}
                 value={query}
@@ -219,10 +219,10 @@ export function TopHeader({
                     if (target) chooseStudent(target);
                   }
                 }}
-                className="h-14 min-w-0 flex-1 bg-transparent text-base text-gray-900 outline-none placeholder:text-gray-400"
+                className="h-14 min-w-0 flex-1 bg-transparent text-headline-regular text-text-primary outline-none placeholder:text-text-tertiary"
                 placeholder="输入学生姓名或别名"
               />
-              <button type="button" onClick={closeSearch} className="rounded-lg px-2 py-1 text-xs text-gray-400 hover:bg-gray-100">ESC</button>
+              <button type="button" onClick={closeSearch} className="rounded-lg px-2 py-1 text-caption-1-regular text-text-tertiary hover:bg-background-tertiary-default">ESC</button>
             </div>
             <div id="global-student-search-results" role="listbox" aria-label="学生搜索结果" className="max-h-80 overflow-y-auto p-2">
               {results.map((student, index) => (
@@ -234,16 +234,16 @@ export function TopHeader({
                   aria-selected={index === activeIndex}
                   onClick={() => chooseStudent(student)}
                   onMouseEnter={() => setActiveIndex(index)}
-                  className={`flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2.5 text-left transition-colors hover:bg-blue-50 focus-visible:bg-blue-50 focus-visible:outline-none ${index === activeIndex ? "bg-blue-50" : ""}`}
+                  className={`flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2.5 text-left transition-colors hover:bg-accent-50 focus-visible:bg-accent-50 focus-visible:outline-none ${index === activeIndex ? "bg-accent-50" : ""}`}
                 >
-                  <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-50 text-sm font-bold text-blue-600">{student.name.slice(0, 1)}</span>
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-accent-50 text-body-semibold text-accent-600">{student.name.slice(0, 1)}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold text-gray-800">{student.name}</span>
-                    <span className="block truncate text-xs text-gray-400">{student.aliases.length ? student.aliases.join(" · ") : student.gender || "未填写别名"}</span>
+                    <span className="block truncate text-body-semibold text-text-primary">{student.name}</span>
+                    <span className="block truncate text-caption-1-regular text-text-tertiary">{student.aliases.length ? student.aliases.join(" · ") : student.gender || "未填写别名"}</span>
                   </span>
                 </button>
               ))}
-              {results.length === 0 && <div className="px-4 py-10 text-center text-sm text-gray-400">没有找到匹配的学生</div>}
+              {results.length === 0 && <div className="px-4 py-10 text-center text-body-regular text-text-tertiary">没有找到匹配的学生</div>}
             </div>
           </div>
         </div>

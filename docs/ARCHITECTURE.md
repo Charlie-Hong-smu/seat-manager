@@ -127,3 +127,8 @@ Scores、AI Companion 面板、Comment Workbench 和学生详情的成绩趋势�
 - 保持内部纯函数与 I/O 边界分离，先测试数据转换，再调整组件。
 - 不把 secret、DeepSeek key、产品码或管理员 token 放入前端或 Git。
 - 不通过提交 `dist` 发布；两个前端都由 CI 重新构建。
+
+
+## BoardUI 预览适配
+
+独立预览分支通过 `ui.tsx` 包装 `src/components/base/` 下的 BoardUI 按钮与分段控件源码，继续保留应用原有 props 和状态边界。`src/utils/cx.ts` 使用 tailwind-merge；分段控件使用 react-aria-components。React 保持18，按钮使用 forwardRef。BoardUI 主题与字体合并到现有 `src/styles/theme.css`，没有第二套主题入口。迁移范围和实际验证记录见 `docs/BOARDUI_PREVIEW.md`。

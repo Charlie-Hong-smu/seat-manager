@@ -87,27 +87,27 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds, but
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(value => !value)}
-        className="flex w-full items-center justify-between gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-left text-sm outline-none focus:border-blue-300"
+        className="flex w-full items-center justify-between gap-1 rounded-lg border border-border-button-default bg-background-primary-default px-2.5 py-2 text-left text-body-regular outline-none focus:border-accent-300"
       >
-        <span className={`truncate ${selected ? "text-gray-800" : "text-gray-400"}`}>{selected?.name || placeholder}</span>
-        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        <span className={`truncate ${selected ? "text-text-primary" : "text-text-tertiary"}`}>{selected?.name || placeholder}</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-tertiary transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
       {typeof document !== "undefined" && createPortal(
         <>
           {open && <button type="button" aria-label="关闭学生选择" className="fixed inset-0 z-[80] cursor-default" onClick={() => setOpen(false)} />}
           <AnimatedPopover
             open={open}
-            className={`fixed z-[90] overflow-hidden rounded-xl border border-gray-100 bg-white shadow-xl ${popoverLayout.openUp ? "origin-bottom" : "origin-top"}`}
+            className={`fixed z-[90] overflow-hidden rounded-xl border border-separator-border bg-background-primary-default shadow-xl ${popoverLayout.openUp ? "origin-bottom" : "origin-top"}`}
             style={{ left: popoverLayout.left, top: popoverLayout.top, width: popoverLayout.width }}
           >
-            <div className="relative border-b border-gray-100">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            <div className="relative border-b border-separator-border">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
               <input
                 ref={searchRef}
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 placeholder="搜索学生"
-                className="w-full py-2 pl-8 pr-2 text-sm outline-none"
+                className="w-full py-2 pl-8 pr-2 text-body-regular outline-none"
               />
             </div>
             <div className="overflow-y-auto" style={{ maxHeight: popoverLayout.maxHeight }}>
@@ -116,13 +116,13 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds, but
                   key={student.id}
                   type="button"
                   onClick={() => { onChange(student.id); setOpen(false); setQuery(""); }}
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-blue-50"
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-left text-body-regular hover:bg-accent-50"
                 >
-                  <span className="text-gray-700">{student.name}</span>
-                  <span className="text-xs text-gray-400">{student.gender || ""}</span>
+                  <span className="text-text-primary">{student.name}</span>
+                  <span className="text-caption-1-regular text-text-tertiary">{student.gender || ""}</span>
                 </button>
               ))}
-              {filtered.length === 0 && <div className="px-3 py-3 text-center text-xs text-gray-400">无匹配学生</div>}
+              {filtered.length === 0 && <div className="px-3 py-3 text-center text-caption-1-regular text-text-tertiary">无匹配学生</div>}
             </div>
           </AnimatedPopover>
         </>,
@@ -134,10 +134,10 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds, but
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="surface-enter rounded-xl border border-gray-100 bg-gray-50 p-4">
+    <section className="surface-enter rounded-xl border border-separator-border bg-background-secondary-default p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-bold text-gray-800">{title}</h3>
-        {hint && <span className="rounded-full bg-white px-2.5 py-1 text-xs text-gray-400">{hint}</span>}
+        <h3 className="text-body-semibold text-text-primary">{title}</h3>
+        {hint && <span className="rounded-full bg-background-primary-default px-2.5 py-1 text-caption-1-regular text-text-tertiary">{hint}</span>}
       </div>
       {children}
     </section>
@@ -259,32 +259,32 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
-      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="seat-settings-title" className="modal-panel-enter flex max-h-[88vh] w-full max-w-lg flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl outline-none">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="seat-settings-title" className="modal-panel-enter flex max-h-[88vh] w-full max-w-lg flex-col rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl outline-none">
+        <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
           <div>
-            <h2 id="seat-settings-title" className="text-base font-bold text-gray-900">排座</h2>
+            <h2 id="seat-settings-title" className="text-headline-semibold text-text-primary">排座</h2>
           </div>
-          <button type="button" aria-label="关闭排座设置" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
+          <button type="button" aria-label="关闭排座设置" onClick={onClose} className="rounded-lg p-1 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary"><X className="h-4 w-4" /></button>
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <Section title="基础规则">
             <div className="space-y-2.5">
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={settings.pairByGender} onChange={e => onUpdate(c => ({ ...c, pairByGender: e.target.checked }))} className="accent-blue-600" />
+              <label className="flex items-center gap-2 text-body-regular text-text-primary">
+                <input type="checkbox" checked={settings.pairByGender} onChange={e => onUpdate(c => ({ ...c, pairByGender: e.target.checked }))} className="accent-accent-600" />
                 尽量男女同桌
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={settings.keepLockedEmpty} onChange={e => onUpdate(c => ({ ...c, keepLockedEmpty: e.target.checked }))} className="accent-blue-600" />
+              <label className="flex items-center gap-2 text-body-regular text-text-primary">
+                <input type="checkbox" checked={settings.keepLockedEmpty} onChange={e => onUpdate(c => ({ ...c, keepLockedEmpty: e.target.checked }))} className="accent-accent-600" />
                 随机排座时保留锁定的空座
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={settings.groupBalanceMode === "neighbor-and-group"} onChange={e => onUpdate(current => ({ ...current, groupBalanceMode: e.target.checked ? "neighbor-and-group" : "off" }))} className="accent-blue-600" />
+              <label className="flex items-center gap-2 text-body-regular text-text-primary">
+                <input type="checkbox" checked={settings.groupBalanceMode === "neighbor-and-group"} onChange={e => onUpdate(current => ({ ...current, groupBalanceMode: e.target.checked ? "neighbor-and-group" : "off" }))} className="accent-accent-600" />
                 同时优化整组男女与互补构成
               </label>
-              <label className="flex items-center justify-between gap-3 text-sm text-gray-700">
+              <label className="flex items-center justify-between gap-3 text-body-regular text-text-primary">
                 <span>前排排数（用于"必须前排"）</span>
-                <input type="number" min={0} max={20} value={constraints.frontRows} onChange={e => updateConstraints({ frontRows: Math.max(0, Number(e.target.value) || 0) })} className="w-20 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-sm outline-none focus:border-blue-300" />
+                <input type="number" min={0} max={20} value={constraints.frontRows} onChange={e => updateConstraints({ frontRows: Math.max(0, Number(e.target.value) || 0) })} className="w-20 rounded-lg border border-border-button-default bg-background-primary-default px-2 py-1.5 text-center text-body-regular outline-none focus:border-accent-300" />
               </label>
             </div>
           </Section>
@@ -294,7 +294,7 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
               {COMPLEMENT_RULES.map(rule => {
                 const active = settings.complementRuleIds.includes(rule.id);
                 return (
-                  <button key={rule.id} onClick={() => toggleComplement(rule.id)} className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-[background,border-color,color,transform] active:scale-95 ${active ? "border-blue-600 bg-blue-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50/40"}`}>
+                  <button key={rule.id} onClick={() => toggleComplement(rule.id)} className={`rounded-lg border px-3 py-2 text-left text-caption-1-semibold transition-[background,border-color,color,transform] active:scale-95 ${active ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-default bg-background-primary-default text-text-secondary hover:border-accent-200 hover:bg-accent-50/40"}`}>
                     {rule.label}
                   </button>
                 );
@@ -305,14 +305,14 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
           <Section title="必须坐前排" hint={`前 ${constraints.frontRows} 排`}>
             <div className="flex gap-2">
               <StudentPicker students={students} value={frontStudentId} onChange={setFrontStudentId} placeholder="搜索并选择学生" excludeIds={constraints.frontRowStudentIds} buttonRef={frontPickerRef} />
-              <button onClick={addFrontStudent} disabled={!frontStudentId} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" /></button>
+              <button onClick={addFrontStudent} disabled={!frontStudentId} className="shrink-0 rounded-lg bg-accent-600 px-3 py-2 text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"><Plus className="h-4 w-4" /></button>
             </div>
             {constraints.frontRowStudentIds.length > 0 && (
               <div ref={frontSelectedRef} className="mt-2 flex flex-wrap gap-2">
                 {constraints.frontRowStudentIds.map(id => (
-                  <span key={id} data-selection-motion-id={id} className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 py-1 pl-3 pr-1.5 text-sm font-semibold text-blue-700">
+                  <span key={id} data-selection-motion-id={id} className="inline-flex items-center gap-1 rounded-full border border-accent-100 bg-accent-50 py-1 pl-3 pr-1.5 text-body-semibold text-accent-700">
                     {nameById.get(id) || "未知"}
-                    <button onClick={event => removeFrontStudent(id, event.currentTarget.parentElement || event.currentTarget)} className="grid h-4 w-4 place-items-center rounded-full text-blue-300 hover:bg-red-100 hover:text-red-500"><X className="h-3 w-3" /></button>
+                    <button onClick={event => removeFrontStudent(id, event.currentTarget.parentElement || event.currentTarget)} className="grid h-4 w-4 place-items-center rounded-full text-accent-300 hover:bg-status-danger-100 hover:text-status-danger-500"><X className="h-3 w-3" /></button>
                   </span>
                 ))}
               </div>
@@ -324,13 +324,13 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
               <StudentPicker students={students} value={pairA} onChange={setPairA} placeholder="学生 A" excludeIds={pairB ? [pairB] : []} />
               <StudentPicker students={students} value={pairB} onChange={setPairB} placeholder="学生 B" excludeIds={pairA ? [pairA] : []} />
               <SelectMenu value={lockedScope} onChange={value => setLockedScope(value as "neighbor" | "group")} ariaLabel="固定搭配范围" options={[{ value: "neighbor", label: "必须相邻" }, { value: "group", label: "必须同组" }]} />
-              <button onClick={() => addPair("locked")} disabled={!pairA || !pairB || pairA === pairB} className="flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" />添加</button>
+              <button onClick={() => addPair("locked")} disabled={!pairA || !pairB || pairA === pairB} className="flex items-center justify-center rounded-lg bg-accent-600 px-3 py-2 text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"><Plus className="h-4 w-4" />添加</button>
             </div>
             <div ref={lockedSelectedRef} className="mt-2 space-y-1.5">
               {constraints.lockedDeskmatePairs.map(pair => (
-                <div key={`${pair.a}-${pair.b}`} data-selection-motion-id={`locked-${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-sm">
-                  <span className="text-gray-700">{nameById.get(pair.a) || "未知"} <span className="text-emerald-500">＋</span> {nameById.get(pair.b) || "未知"} · {pair.scope === "group" ? "同组" : "相邻"}</span>
-                  <button onClick={event => removePair("locked", pair.a, pair.b, event.currentTarget.parentElement || event.currentTarget)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+                <div key={`${pair.a}-${pair.b}`} data-selection-motion-id={`locked-${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-separator-border bg-background-primary-default px-3 py-1.5 text-body-regular">
+                  <span className="text-text-primary">{nameById.get(pair.a) || "未知"} <span className="text-status-success-500">＋</span> {nameById.get(pair.b) || "未知"} · {pair.scope === "group" ? "同组" : "相邻"}</span>
+                  <button onClick={event => removePair("locked", pair.a, pair.b, event.currentTarget.parentElement || event.currentTarget)} className="text-text-tertiary hover:text-status-danger-500"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}
             </div>
@@ -341,27 +341,27 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
               <StudentPicker students={students} value={noPairA} onChange={setNoPairA} placeholder="学生 A" excludeIds={noPairB ? [noPairB] : []} />
               <StudentPicker students={students} value={noPairB} onChange={setNoPairB} placeholder="学生 B" excludeIds={noPairA ? [noPairA] : []} />
               <SelectMenu value={noScope} onChange={value => setNoScope(value as "neighbor" | "group")} ariaLabel="避免搭配范围" options={[{ value: "neighbor", label: "不能相邻" }, { value: "group", label: "不能同组" }]} />
-              <button onClick={() => addPair("no")} disabled={!noPairA || !noPairB || noPairA === noPairB} className="flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-300"><Plus className="h-4 w-4" />添加</button>
+              <button onClick={() => addPair("no")} disabled={!noPairA || !noPairB || noPairA === noPairB} className="flex items-center justify-center rounded-lg bg-accent-600 px-3 py-2 text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"><Plus className="h-4 w-4" />添加</button>
             </div>
             <div ref={noSelectedRef} className="mt-2 space-y-1.5">
               {constraints.noDeskmatePairs.map(pair => (
-                <div key={`${pair.a}-${pair.b}`} data-selection-motion-id={`no-${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-sm">
-                  <span className="text-gray-700">{nameById.get(pair.a) || "未知"} <span className="text-red-400">✕</span> {nameById.get(pair.b) || "未知"} · {pair.scope === "group" ? "不同组" : "不相邻"}</span>
-                  <button onClick={event => removePair("no", pair.a, pair.b, event.currentTarget.parentElement || event.currentTarget)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+                <div key={`${pair.a}-${pair.b}`} data-selection-motion-id={`no-${pair.a}-${pair.b}`} className="flex items-center justify-between rounded-lg border border-separator-border bg-background-primary-default px-3 py-1.5 text-body-regular">
+                  <span className="text-text-primary">{nameById.get(pair.a) || "未知"} <span className="text-status-danger-400">✕</span> {nameById.get(pair.b) || "未知"} · {pair.scope === "group" ? "不同组" : "不相邻"}</span>
+                  <button onClick={event => removePair("no", pair.a, pair.b, event.currentTarget.parentElement || event.currentTarget)} className="text-text-tertiary hover:text-status-danger-500"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}
             </div>
           </Section>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-gray-100 px-5 py-3">
-          <button onClick={() => { onClose(); onRandomize(); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+        <div className="flex items-center gap-2 border-t border-separator-border px-5 py-3">
+          <button onClick={() => { onClose(); onRandomize(); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white hover:bg-accent-700">
             <Shuffle className="h-4 w-4" />随机排座
           </button>
-          <button onClick={() => { onClose(); onOrderByList(); }} className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+          <button onClick={() => { onClose(); onOrderByList(); }} className="flex items-center justify-center gap-1.5 rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-semibold text-text-primary hover:bg-background-secondary-default">
             <RotateCcw className="h-4 w-4" />名单顺序
           </button>
-          <button onClick={onUndo} disabled={!canUndo} className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:text-gray-300">
+          <button onClick={onUndo} disabled={!canUndo} className="flex items-center justify-center gap-1.5 rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-semibold text-text-primary hover:bg-background-secondary-default disabled:text-text-tertiary">
             <Undo2 className="h-4 w-4" />撤销
           </button>
         </div>

@@ -1,23 +1,23 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConfirmDialog, IconButton, InlineStatus, useAppDialog } from "./ui";
+import { ConfirmDialog, IconButton, InlineStatus, SegmentedControl, useAppDialog } from "./ui";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("IconButton semantic tones", () => {
-  it("keeps standard controls unchanged and exposes compact add/delete actions accessibly", () => {
+  it("uses unified controls and exposes compact add/delete actions accessibly", () => {
     const onAdd = vi.fn();
     render(<>
       <IconButton label="普通操作">图标</IconButton>
       <IconButton label="新增列" size="xs" tone="success" onClick={onAdd}>+</IconButton>
       <IconButton label="删除列" size="xs" tone="danger" disabled>−</IconButton>
     </>);
-    expect(screen.getByRole("button", { name: "普通操作" })).toHaveClass("h-10", "text-gray-500");
-    expect(screen.getByRole("button", { name: "新增列" })).toHaveClass("h-5", "text-emerald-600");
+    expect(screen.getByRole("button", { name: "普通操作" })).toHaveClass("size-9", "text-text-primary");
+    expect(screen.getByRole("button", { name: "新增列" })).toHaveClass("size-5", "text-status-success-600");
     fireEvent.click(screen.getByRole("button", { name: "新增列" }));
     expect(onAdd).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: "删除列" })).toHaveClass("text-red-500");
+    expect(screen.getByRole("button", { name: "删除列" })).toHaveClass("text-status-danger-600");
     expect(screen.getByRole("button", { name: "删除列" })).toBeDisabled();
   });
 });
@@ -86,5 +86,23 @@ describe("shared prompt validation", () => {
     expect(screen.getByRole("button", { name: "保存" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     await waitFor(() => expect(onResult).toHaveBeenCalledWith(null));
+  });
+});
+
+
+describe("BoardUI segmented compatibility", () => {
+  it("keeps one pressed value and existing callbacks when selecting another option", () => {
+    const onChange = vi.fn();
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} });
+    const options = [{ value: "quick", label: "快速" }, { value: "detail", label: "详细" }];
+    const { rerender } = render(<SegmentedControl value="quick" options={options} onChange={onChange} ariaLabel="登记视图" />);
+    expect(screen.getByRole("group", { name: "登记视图" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "快速" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "详细" }));
+    expect(onChange).toHaveBeenCalledWith("detail");
+    rerender(<SegmentedControl value="detail" options={options} onChange={onChange} ariaLabel="登记视图" disabled />);
+    expect(screen.getByRole("button", { name: "快速" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "详细" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "详细" })).toBeDisabled();
   });
 });

@@ -33,6 +33,7 @@ interface DragVisualState {
   studentId: StudentId;
   fromIndex: number | null;
   targetIndex: number | null;
+  targetOccupied: boolean;
   waitingTarget: boolean;
   pointerX: number;
   pointerY: number;
@@ -63,6 +64,7 @@ const SeatCard = memo(function SeatCard({
   seatIndex,
   isLocked,
   isDragging,
+  isConcealed,
   isDropTarget,
   dragActive,
   visualTransform,
@@ -77,6 +79,7 @@ const SeatCard = memo(function SeatCard({
   seatIndex: number;
   isLocked: boolean;
   isDragging: boolean;
+  isConcealed: boolean;
   isDropTarget: boolean;
   dragActive: boolean;
   visualTransform?: string;
@@ -106,16 +109,16 @@ const SeatCard = memo(function SeatCard({
       <div
         data-seat-index={seatIndex}
         data-seat-locked={isLocked ? "true" : "false"}
-        className={`relative h-full min-h-0 overflow-hidden rounded-xl border border-dashed text-xs text-gray-300 select-none transition-[background-color,border-color,box-shadow] duration-200 ${isLocked ? "border-amber-200 bg-amber-50/30" : "border-gray-200/80 bg-transparent hover:border-blue-200 hover:bg-blue-50/30"} ${isDropTarget ? "border-blue-400 bg-blue-50/80 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
+        className={`relative h-full min-h-0 overflow-hidden rounded-xl border border-dashed text-caption-1-regular text-text-tertiary select-none transition-[background-color,border-color,box-shadow] duration-200 ${isLocked ? "border-status-warning-200 bg-status-warning-50/30" : "border-border-button-default/80 bg-transparent hover:border-accent-200 hover:bg-accent-50/30"} ${isDropTarget ? "border-accent-400 bg-accent-50/80 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
         style={{ transform: visualTransform }}
       >
         <span className={`absolute inset-0 grid place-items-center transition-[opacity,transform] duration-200 ease-out ${cardMode === "compact" ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"}`}>空</span>
-        <span className={`absolute inset-0 grid place-items-center text-gray-300 transition-[opacity,transform] duration-200 ease-out ${cardMode === "detail" ? "scale-100 opacity-100 delay-100" : "pointer-events-none scale-105 opacity-0 delay-0"}`}>{seatPositionLabel}</span>
+        <span className={`absolute inset-0 grid place-items-center text-text-tertiary transition-[opacity,transform] duration-200 ease-out ${cardMode === "detail" ? "scale-100 opacity-100 delay-100" : "pointer-events-none scale-105 opacity-0 delay-0"}`}>{seatPositionLabel}</span>
       </div>
     );
   }
 
-  const genderDot = student.gender === "男" ? "bg-blue-400" : student.gender === "女" ? "bg-pink-400" : "bg-gray-300";
+  const genderDot = student.gender === "男" ? "bg-accent-400" : student.gender === "女" ? "bg-status-pink-400" : "bg-background-primary-disabled";
   const hasTags = student.academicTags.length > 0;
   const visibleTags = student.academicTags.slice(0, 2);
   const hiddenTagCount = Math.max(0, student.academicTags.length - visibleTags.length);
@@ -138,9 +141,9 @@ const SeatCard = memo(function SeatCard({
       onPointerDown={event => {
         if (!isLocked) onPointerDragStart(event, seatIndex);
       }}
-      className={`relative h-full min-h-0 w-full overflow-hidden rounded-xl bg-[var(--app-surface-muted)] text-left group ring-1 ring-inset transition-[background-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:bg-white hover:shadow-[var(--app-shadow-card)] cursor-pointer ${
+      className={`relative h-full min-h-0 w-full overflow-hidden rounded-xl bg-[var(--app-surface-muted)] text-left group ring-1 ring-inset transition-[background-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]  hover:bg-background-primary-default hover:shadow-[var(--app-shadow-card)] cursor-pointer ${
         isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-      } ${isLocked ? "bg-amber-50/50 ring-amber-300" : "ring-gray-200/80"} ${isDragging ? "opacity-25 ring-2 ring-blue-200" : ""} ${isDropTarget ? "bg-blue-50/90 ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
+      } ${isLocked ? "bg-status-warning-50/50 ring-status-warning-300" : "ring-border-button-default/80"} ${isDragging ? "opacity-25 ring-2 ring-accent-200" : ""} ${isConcealed ? "invisible" : ""} ${isDropTarget ? "bg-accent-50/90 ring-2 ring-accent-400 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
       style={{ transform: visualTransform, touchAction: "manipulation" }}
     >
       {/* Lock toggle */}
@@ -151,16 +154,16 @@ const SeatCard = memo(function SeatCard({
         onPointerDown={e => e.stopPropagation()}
         onMouseDown={e => e.stopPropagation()}
         title={isLocked ? "解锁座位" : "锁定座位"}
-        className={`absolute top-0.5 right-0.5 z-10 grid h-5 w-5 place-items-center rounded-md transition-opacity hover:bg-gray-100 ${isLocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+        className={`absolute top-0.5 right-0.5 z-10 grid h-5 w-5 place-items-center rounded-md transition-opacity hover:bg-background-tertiary-default ${isLocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
       >
-        <Lock className={`h-3 w-3 ${isLocked ? "text-amber-400" : "text-gray-300"}`} />
+        <Lock className={`h-3 w-3 ${isLocked ? "text-status-warning-400" : "text-text-tertiary"}`} />
       </button>
 
       {/* 姓名始终只渲染一份，模式切换时从垂直居中平滑移动到卡片顶部。 */}
       <div className={`absolute left-2.5 right-2.5 flex min-w-0 items-center gap-1.5 transition-[top,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${cardMode === "compact" ? "top-1/2 -translate-y-1/2" : "top-2"}`}>
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${genderDot}`} title={student.gender || "未知"} />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-800">{student.name}</span>
-        <span className={`shrink-0 max-w-[3.5rem] truncate text-[10px] tabular-nums text-gray-300 transition-[opacity,transform] duration-200 ${cardMode === "detail" ? "translate-x-0 opacity-100 delay-100" : "pointer-events-none translate-x-1 opacity-0 delay-0"}`}>{seatPositionLabel}</span>
+        <span className="min-w-0 flex-1 truncate text-body-semibold text-text-primary">{student.name}</span>
+        <span className={`shrink-0 max-w-[3.5rem] truncate text-[10px] tabular-nums text-text-tertiary transition-[opacity,transform] duration-200 ${cardMode === "detail" ? "translate-x-0 opacity-100 delay-100" : "pointer-events-none translate-x-1 opacity-0 delay-0"}`}>{seatPositionLabel}</span>
       </div>
 
       {/* 次要信息在卡片接近展开后再淡入，避免高度动画中途反复裁切。 */}
@@ -172,17 +175,17 @@ const SeatCard = memo(function SeatCard({
                 return (
                   <span
                     key={tag}
-                    className={`max-w-[4.5rem] shrink truncate rounded-full border px-1.5 py-0.5 text-[10px] ${isStrong ? "border-emerald-100 bg-emerald-50 text-emerald-600" : "border-red-100 bg-red-50 text-red-400"}`}
+                    className={`max-w-[4.5rem] shrink truncate rounded-full border px-1.5 py-0.5 text-[10px] ${isStrong ? "border-status-success-100 bg-status-success-50 text-status-success-600" : "border-status-danger-100 bg-status-danger-50 text-status-danger-400"}`}
                     style={{ fontWeight: 600 }}
                   >
                     {tag}
                   </span>
                 );
               })}
-              {hiddenTagCount > 0 && <span className="shrink-0 text-[10px] text-gray-400">+{hiddenTagCount}</span>}
+              {hiddenTagCount > 0 && <span className="shrink-0 text-[10px] text-text-tertiary">+{hiddenTagCount}</span>}
             </div>
           ) : (
-            <span className="text-[10px] text-gray-300">—</span>
+            <span className="text-[10px] text-text-tertiary">—</span>
           )}
       </div>
     </div>
@@ -204,7 +207,23 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const layout = useMemo(() => resolveSeatLayout(seatSettings.layout, seatOrder.length), [seatOrder.length, seatSettings.layout]);
   const seatedIds = useMemo(() => new Set(seatOrder.filter((id): id is StudentId => Boolean(id))), [seatOrder]);
-  const waitingStudents = useMemo(() => students.filter(student => !seatedIds.has(student.id)), [seatedIds, students]);
+  const waitingOrderRef = useRef<StudentId[]>([]);
+  const waitingStudents = useMemo(() => {
+    const waitingIds = new Set(students.filter(student => !seatedIds.has(student.id)).map(student => student.id));
+    const nextOrder = waitingOrderRef.current.filter(studentId => waitingIds.has(studentId));
+    const retainedIds = new Set(nextOrder);
+    students.forEach(student => {
+      if (waitingIds.has(student.id) && !retainedIds.has(student.id)) {
+        nextOrder.push(student.id);
+        retainedIds.add(student.id);
+      }
+    });
+    waitingOrderRef.current = nextOrder;
+    return nextOrder.flatMap(studentId => {
+      const student = studentById.get(studentId);
+      return student ? [student] : [];
+    });
+  }, [seatedIds, studentById, students]);
   const previousWaitingCountRef = useRef(waitingStudents.length);
   const [pendingStudentId, setPendingStudentId] = useState<StudentId | null>(null);
   const rowCount = Math.ceil(seatOrder.length / COLS);
@@ -392,10 +411,12 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         ? { targetIndex: null, proximity: 0 }
         : targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, source.fromIndex, source.sourceType === "waiting");
       const targetRect = targetIndex === null ? null : seatRectsRef.current.get(targetIndex);
+      const targetOccupied = targetIndex !== null && studentById.has(seatOrder[targetIndex] ?? "");
       const waitingShape = waitingTarget || (source.sourceType === "waiting" && targetIndex === null);
       setDragVisual({
         ...source,
         targetIndex,
+        targetOccupied,
         waitingTarget,
         pointerX: pointerEvent.clientX,
         pointerY: pointerEvent.clientY,
@@ -419,13 +440,19 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         : targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, source.fromIndex, source.sourceType === "waiting");
       const validSeatTarget = targetIndex !== null;
       const targetRect = validSeatTarget ? seatRectsRef.current.get(targetIndex) : null;
+      const targetOccupied = targetIndex !== null && studentById.has(seatOrder[targetIndex] ?? "");
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const emptySeatTarget = source.sourceType === "seat"
+        && source.fromIndex !== null
+        && targetIndex !== null
+        && !targetOccupied;
 
       if (waitingTarget && source.fromIndex !== null) {
         // 松手时先留在当前指针位置，等真实等待卡渲染并完成横向滚动后，再执行唯一一次吸附。
         setDragVisual(current => current ? {
           ...current,
           targetIndex: null,
+          targetOccupied: false,
           waitingTarget: true,
           proximity: 0,
           phase: "holding",
@@ -436,6 +463,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         } : current);
         setWaitingDockOpen(true);
         setPendingStudentId(null);
+        waitingOrderRef.current = [...waitingOrderRef.current.filter(studentId => studentId !== source.studentId), source.studentId];
         onMoveStudentToWaiting(source.fromIndex);
         window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
           const waitingList = waitingDockListRef.current;
@@ -476,6 +504,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       setDragVisual(current => current ? {
         ...current,
         targetIndex,
+        targetOccupied,
         waitingTarget: false,
         proximity: targetIndex === null ? 0 : 1,
         phase: "settling",
@@ -488,6 +517,9 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       if (source.sourceType === "waiting" && validSeatTarget) {
         onAssignStudentToSeat(source.studentId, targetIndex);
         setPendingStudentId(null);
+      } else if (emptySeatTarget && source.fromIndex !== null && targetIndex !== null) {
+        // 空座落点在松手时就更新真实顺序，由 overlay 遮住目标卡直到吸附结束，避免旧座位回闪一帧。
+        onMoveSeat(source.fromIndex, targetIndex);
       }
 
       settleTimerRef.current = window.setTimeout(() => {
@@ -501,6 +533,11 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
           return;
         }
         if (targetIndex === null) {
+          setDragVisual(null);
+          setDraggingSeat(null);
+          return;
+        }
+        if (emptySeatTarget) {
           setDragVisual(null);
           setDraggingSeat(null);
           return;
@@ -521,7 +558,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   function seatVisualTransform(seatIndex: number): string | undefined {
     if (!dragVisual || dragVisual.sourceType !== "seat" || dragVisual.fromIndex === null || dragVisual.targetIndex === null || seatIndex === dragVisual.fromIndex) return undefined;
     // Empty slots stay fixed; only occupied-seat swaps preview displacement.
-    if (!studentById.has(seatOrder[dragVisual.targetIndex] ?? "") || !studentById.has(seatOrder[seatIndex] ?? "")) return undefined;
+    if (!dragVisual.targetOccupied || !studentById.has(seatOrder[seatIndex] ?? "")) return undefined;
     const proximity = dragVisual.phase === "settling" ? 1 : dragVisual.proximity;
     if (seatIndex === dragVisual.targetIndex) {
       const push = getTargetPush(dragVisual.fromIndex, dragVisual.targetIndex, proximity);
@@ -547,7 +584,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   const dragOverlay = dragVisual && draggedStudent ? createPortal(
     <div
       aria-hidden="true"
-      className="seat-student-morph pointer-events-none fixed z-[100] overflow-hidden border bg-white/95 shadow-[var(--app-shadow-float)] backdrop-blur-sm motion-reduce:transition-none"
+      className="seat-student-morph pointer-events-none fixed z-[100] overflow-hidden border bg-background-primary-default/95 shadow-[var(--app-shadow-float)] backdrop-blur-sm motion-reduce:transition-none"
       data-drag-phase={dragVisual.phase}
       data-drag-shape={waitingShape ? "waiting" : "seat"}
       data-drag-student-id={dragVisual.studentId}
@@ -560,17 +597,17 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       }}
     >
       <div className="seat-student-morph__seat absolute inset-0 flex min-w-0 items-center gap-2 px-3">
-        <span className={`h-2 w-2 shrink-0 rounded-full ${draggedStudent.gender === "男" ? "bg-blue-400" : draggedStudent.gender === "女" ? "bg-pink-400" : "bg-gray-300"}`} />
-        <span className="min-w-0 flex-1 truncate text-sm font-bold text-gray-900">{draggedStudent.name}</span>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${draggedStudent.gender === "男" ? "bg-accent-400" : draggedStudent.gender === "女" ? "bg-status-pink-400" : "bg-background-primary-disabled"}`} />
+        <span className="min-w-0 flex-1 truncate text-body-semibold text-text-primary">{draggedStudent.name}</span>
       </div>
-      <span className="seat-student-morph__waiting absolute inset-0 grid place-content-center text-center text-xs font-bold text-gray-900">
+      <span className="seat-student-morph__waiting absolute inset-0 grid place-content-center text-center text-caption-1-semibold text-text-primary">
         {compactWaitingName(draggedStudent.name).map(line => <span key={line}>{line}</span>)}
       </span>
     </div>, document.body
   ) : null;
 
   if (!students.length) {
-    return <div className="grid h-full min-h-80 place-items-center rounded-[var(--app-radius-lg)] border border-dashed border-[var(--app-border)] bg-[var(--app-surface-muted)] px-6 text-center"><div><p className="text-base font-bold text-[var(--app-text)]">还没有学生可以排座</p><p className="mt-2 text-sm text-[var(--app-text-muted)]">请先到“数据管理”导入名单，或在学生管理中添加学生。</p></div></div>;
+    return <div className="grid h-full min-h-80 place-items-center rounded-[var(--app-radius-lg)] border border-dashed border-[var(--app-border)] bg-[var(--app-surface-muted)] px-6 text-center"><div><p className="text-headline-semibold text-[var(--app-text)]">还没有学生可以排座</p><p className="mt-2 text-body-regular text-[var(--app-text-muted)]">请先到“数据管理”导入名单，或在学生管理中添加学生。</p></div></div>;
   }
 
   const waitingDockExpanded = waitingDockOpen || Boolean(dragVisual?.waitingTarget);
@@ -593,7 +630,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       data-drop-active={dragVisual?.waitingTarget ? "true" : "false"}
     >
       <div ref={waitingDockBarRef} className="seat-waiting-dock__bar">
-        <div className="flex min-w-0 flex-1 items-center gap-2 text-xs font-bold text-[var(--app-text)]">
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-caption-1-semibold text-[var(--app-text)]">
           <Users className="h-4 w-4 shrink-0 text-[var(--app-text-muted)]" />
           <span className="truncate">等待区</span>
           <span className="seat-waiting-dock__count tabular-nums">{waitingStudents.length}</span>
@@ -604,7 +641,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
           aria-controls="seat-waiting-dock-reveal"
           aria-label={waitingDockExpanded ? "收起等待区" : "展开等待区"}
           onClick={() => setWaitingDockOpen(value => !value)}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--app-radius-sm)] text-[var(--app-text-muted)] transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--app-radius-sm)] text-[var(--app-text-muted)] transition-colors hover:bg-background-tertiary-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25"
         >
           <ChevronDown className="seat-waiting-dock__chevron h-4 w-4" />
         </button>
@@ -618,7 +655,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       >
         <div className="seat-waiting-dock__inner">
           <div className="seat-waiting-dock__cue">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-dashed border-gray-300 text-[var(--app-text-muted)]">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-dashed border-border-button-hover text-[var(--app-text-muted)]">
               <UserRoundPlus className="h-4 w-4" />
             </span>
             <div className="min-w-0 truncate text-[11px] font-bold text-[var(--app-text)]">
@@ -642,7 +679,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
                     }
                     setPendingStudentId(current => current === student.id ? null : student.id);
                   }}
-                  className={`seat-waiting-person shrink-0 border text-center text-xs transition-[background-color,border-color,box-shadow,opacity] ${pendingStudentId === student.id ? "border-blue-400 bg-blue-50 text-blue-800 shadow-[0_0_0_3px_rgba(59,130,246,0.10)]" : "border-[var(--app-border)] bg-[var(--app-surface-muted)] text-[var(--app-text)] hover:border-gray-300 hover:bg-white"} ${dragVisual?.studentId === student.id ? "pointer-events-none opacity-0" : ""}`}
+                  className={`seat-waiting-person shrink-0 border text-center text-caption-1-regular transition-[background-color,border-color,box-shadow] ${pendingStudentId === student.id ? "border-accent-400 bg-accent-50 text-accent-800 shadow-[0_0_0_3px_rgba(59,130,246,0.10)]" : "border-[var(--app-border)] bg-[var(--app-surface-muted)] text-[var(--app-text)] hover:border-border-button-hover hover:bg-background-primary-default"} ${dragVisual?.studentId === student.id ? "pointer-events-none invisible" : ""}`}
                 >
                   {compactWaitingName(student.name).map(line => <span key={line}>{line}</span>)}
                 </button>
@@ -659,7 +696,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
         <SeatLayoutSurface layout={layout} detail={cardMode === "detail"} renderSeat={(seat, seatIndex) =>
           <div className="seat-card-enter h-full min-h-0" style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms` }} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) assignWaitingStudentToSeat(studentId, seatIndex); }} onClick={() => { if (pendingStudentId) assignWaitingStudentToSeat(pendingStudentId, seatIndex); }}>
-            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} positionLabel={seat.label} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} />
+            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isConcealed={dragVisual?.phase === "settling" && dragVisual.studentId === seatOrder[seatIndex]} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} positionLabel={seat.label} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} />
           </div>
         } />
       </div>
@@ -675,7 +712,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         {/* Column group headers */}
         <div className="mb-2 flex shrink-0 gap-3 pl-12">
           {groups.map((_, gi) => (
-            <div key={gi} className="flex-1 text-center text-xs text-gray-400" style={{ fontWeight: 600 }}>
+            <div key={gi} className="flex-1 text-center text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600 }}>
               第 {gi + 1} 组
             </div>
           ))}
@@ -697,7 +734,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
             >
               {/* Row label */}
               <div className="flex w-9 shrink-0 items-center justify-center text-center">
-                <span className="text-xs text-gray-400" style={{ fontWeight: 600 }}>第{rowIdx + 1}排</span>
+                <span className="text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600 }}>第{rowIdx + 1}排</span>
               </div>
 
               {/* 4 groups of 2 columns */}
@@ -720,6 +757,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
                           seatIndex={cell.seatIndex}
                           isLocked={lockedSeats.has(cell.seatIndex)}
                           isDragging={draggingSeat === cell.seatIndex}
+                          isConcealed={dragVisual?.phase === "settling" && dragVisual.studentId === cell.studentId}
                           isDropTarget={dragVisual?.targetIndex === cell.seatIndex}
                           dragActive={Boolean(dragVisual) || pendingStudentId !== null}
                           visualTransform={seatVisualTransform(cell.seatIndex)}
@@ -738,26 +776,26 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
           })}
         </div>
 
-        <div className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] border border-blue-100 bg-blue-50/70 py-2 text-center text-xs text-blue-600" style={{ fontWeight: 700 }}>
+        <div className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] border border-accent-100 bg-accent-50/70 py-2 text-center text-caption-1-regular text-accent-600" style={{ fontWeight: 700 }}>
           讲台
         </div>
 
         {/* Legend */}
-        <div className="mt-3 flex shrink-0 items-center gap-4 border-t border-gray-100 pt-3">
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="w-2 h-2 rounded-full bg-blue-400" />男生
+        <div className="mt-3 flex shrink-0 items-center gap-4 border-t border-separator-border pt-3">
+          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
+            <span className="w-2 h-2 rounded-full bg-accent-400" />男生
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="w-2 h-2 rounded-full bg-pink-400" />女生
+          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
+            <span className="w-2 h-2 rounded-full bg-status-pink-400" />女生
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <Star className="w-3 h-3 text-emerald-400" />学科优势
+          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
+            <Star className="w-3 h-3 text-status-success-400" />学科优势
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <Lock className="w-3 h-3 text-amber-400" />座位锁定
+          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
+            <Lock className="w-3 h-3 text-status-warning-400" />座位锁定
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="w-4 h-4 rounded border-2 border-dashed border-gray-300" />空座
+          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
+            <span className="w-4 h-4 rounded border-2 border-dashed border-border-button-hover" />空座
           </div>
         </div>
       </div>

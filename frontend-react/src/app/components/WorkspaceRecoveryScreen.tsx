@@ -63,16 +63,16 @@ export function WorkspaceRecoveryScreen({ storage, onRecovered }: Props) {
 
   return (
     <main className="min-h-screen bg-[var(--app-bg)] px-5 py-10 text-[var(--app-text)]">
-      <section className="mx-auto max-w-2xl rounded-[var(--app-radius-lg)] border border-amber-200 bg-white p-6 shadow-[var(--app-shadow-card)] sm:p-8">
+      <section className="mx-auto max-w-2xl rounded-[var(--app-radius-lg)] border border-status-warning-200 bg-background-primary-default p-6 shadow-[var(--app-shadow-card)] sm:p-8">
         <div className="flex items-start gap-4">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700"><AlertTriangle className="h-5 w-5" /></span>
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-status-warning-100 text-status-warning-700"><AlertTriangle className="h-5 w-5" /></span>
           <div>
-            <h1 className="text-xl font-bold">检测到本机工作区数据异常</h1>
-            <p className="mt-2 text-sm leading-6 text-[var(--app-text-muted)]">系统已停止自动保存，不会覆盖现有原始数据。请先导出原始文件，再选择有效备份恢复；只有明确确认后才会创建空工作区。</p>
+            <h1 className="text-title-2-semibold">检测到本机工作区数据异常</h1>
+            <p className="mt-2 text-body-regular leading-6 text-[var(--app-text-muted)]">系统已停止自动保存，不会覆盖现有原始数据。请先导出原始文件，再选择有效备份恢复；只有明确确认后才会创建空工作区。</p>
           </div>
         </div>
 
-        <div className="mt-6 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="mt-6 rounded-xl bg-status-warning-50 p-4 text-body-regular text-status-warning-900">
           <p className="font-semibold">检测详情</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {storage.issues.slice(0, 5).map(issue => <li key={`${issue.path}-${issue.message}`}>{issue.path}：{issue.message}</li>)}
@@ -85,12 +85,12 @@ export function WorkspaceRecoveryScreen({ storage, onRecovered }: Props) {
         </div>
 
         <div className="mt-6 border-t border-[var(--app-border)] pt-6">
-          <h2 className="text-sm font-bold">从完整备份恢复</h2>
+          <h2 className="text-body-semibold">从完整备份恢复</h2>
           <FileDropZone accept=".json" onChange={file => { void readBackup(file); }} className="mt-3 min-h-28 justify-center">
-            <FileUp className="h-5 w-5 text-blue-600" />
-            <span className="text-sm font-semibold">{busy ? "正在校验…" : "选择或拖入 JSON 备份"}</span>
+            <FileUp className="h-5 w-5 text-accent-600" />
+            <span className="text-body-semibold">{busy ? "正在校验…" : "选择或拖入 JSON 备份"}</span>
           </FileDropZone>
-          {error && <p role="alert" className="mt-3 text-sm font-semibold text-red-600">{error}</p>}
+          {error && <p role="alert" className="mt-3 text-body-semibold text-status-danger-600">{error}</p>}
         </div>
       </section>
 

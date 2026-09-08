@@ -59,6 +59,34 @@ afterEach(() => {
 });
 
 describe("SeatBoard waiting dock", () => {
+  it("keeps the current waiting order and appends newly unseated students", () => {
+    const students = [
+      createTestStudent("s1", "名单第一"),
+      createTestStudent("s2", "名单第二"),
+      createTestStudent("s3", "原等待甲"),
+      createTestStudent("s4", "原等待乙"),
+    ];
+    const settings = createDefaultSeatSettings();
+    const commonProps = {
+      cardMode: "compact" as const,
+      students,
+      seatSettings: settings,
+      onSelectStudent: () => {},
+      onMoveSeat: () => {},
+      onMoveStudentToWaiting: () => {},
+      onAssignStudentToSeat: () => {},
+      lockedSeats: new Set<number>(),
+      onToggleLock: () => {},
+    };
+    const { rerender } = render(<SeatBoard {...commonProps} seatOrder={["s1", "s2", null]} />);
+    expect(Array.from(document.querySelectorAll<HTMLElement>("[data-waiting-student-id]")).map(element => element.dataset.waitingStudentId))
+      .toEqual(["s3", "s4"]);
+
+    rerender(<SeatBoard {...commonProps} seatOrder={[null, "s2", "s3"]} />);
+    expect(Array.from(document.querySelectorAll<HTMLElement>("[data-waiting-student-id]")).map(element => element.dataset.waitingStudentId))
+      .toEqual(["s4", "s1"]);
+  });
+
   it("morphs a waiting name into an empty seat and snaps to the real destination", () => {
     vi.useFakeTimers();
     mockDragGeometry();

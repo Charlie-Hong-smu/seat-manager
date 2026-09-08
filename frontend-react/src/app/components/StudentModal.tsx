@@ -461,9 +461,9 @@ export function StudentModal({
   }
 
   const recordTypeStyle: Record<RecordType, { bg: string; text: string; label: string }> = {
-    reward: { bg: "bg-emerald-50 border-emerald-100", text: "text-emerald-700", label: "奖" },
-    punish: { bg: "bg-red-50 border-red-100", text: "text-red-600", label: "罚" },
-    note:   { bg: "bg-gray-50 border-gray-100", text: "text-gray-600", label: "备注" },
+    reward: { bg: "bg-status-success-50 border-status-success-100", text: "text-status-success-700", label: "奖" },
+    punish: { bg: "bg-status-danger-50 border-status-danger-100", text: "text-status-danger-600", label: "罚" },
+    note:   { bg: "bg-background-secondary-default border-separator-border", text: "text-text-secondary", label: "备注" },
   };
 
   const seatIndex = seatOrder.findIndex(id => id === student.id);
@@ -539,18 +539,18 @@ export function StudentModal({
 
   return (
     <div className={`soft-backdrop-enter fixed inset-0 ${layerClassName} flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm`}>
-      <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-white shadow-[var(--app-shadow-float)] outline-none transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
+      <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-background-primary-default shadow-[var(--app-shadow-float)] outline-none transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
         {/* Header */}
-        <div ref={modalHeaderRef} className="shrink-0 border-b border-gray-100 p-5 pb-4">
+        <div ref={modalHeaderRef} className="shrink-0 border-b border-separator-border p-5 pb-4">
           <div className="relative flex min-h-10 items-center justify-between">
             {onNavigate && <IconButton label="上一位学生" size="sm" onClick={() => navigateStudent(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
             {!onNavigate && <span className="h-8 w-8" aria-hidden="true" />}
             <div className="pointer-events-none absolute left-1/2 top-1/2 w-[min(16rem,calc(100%_-_10rem))] -translate-x-1/2 -translate-y-1/2 text-center">
               <div key={student.id} className={`student-tab-content-enter ${tabDirection === "left" ? "student-tab-enter-left" : "student-tab-enter-right"}`}>
-                <div className="mb-1 text-xs text-gray-400" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
-                <h3 className="truncate text-gray-900" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`} style={{ fontSize: "1.25rem" }}>
+                <div className="mb-1 text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
+                <h3 className="truncate text-text-primary" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`} style={{ fontSize: "1.25rem" }}>
                   {student.name}
-                  <span className="ml-2 hidden text-gray-400 2xl:inline" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
+                  <span className="ml-2 hidden text-text-tertiary 2xl:inline" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
                 </h3>
               </div>
             </div>
@@ -561,21 +561,21 @@ export function StudentModal({
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
                 {onSelectStudent && <div className="w-40 shrink-0"><StudentPicker compact students={students} value={student.id} onChange={selectStudent} label="直接选择学生" /></div>}
-                <Button type="button" size="sm" variant="ghost" aria-label="AI跟进" onClick={() => changeActiveTab("followup")} className="shrink-0 whitespace-nowrap border-violet-200 bg-violet-50 px-2 text-violet-700 hover:border-violet-200 hover:bg-violet-100 sm:px-2.5">
+                <Button type="button" size="sm" variant="ghost" aria-label="AI跟进" onClick={() => changeActiveTab("followup")} className="shrink-0 whitespace-nowrap border-status-ai-200 bg-status-ai-50 px-2 text-status-ai-700 hover:border-status-ai-200 hover:bg-status-ai-100 sm:px-2.5">
                   <Sparkles className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI跟进</span>
                 </Button>
                 {onOpenAiComment && (
-                  <Button type="button" size="sm" variant="ghost" aria-label="AI评语" onClick={onOpenAiComment} className="shrink-0 whitespace-nowrap border-violet-200 px-2 text-violet-600 hover:border-violet-200 hover:bg-violet-50 sm:px-2.5">
+                  <Button type="button" size="sm" variant="ghost" aria-label="AI评语" onClick={onOpenAiComment} className="shrink-0 whitespace-nowrap border-status-ai-200 px-2 text-status-ai-600 hover:border-status-ai-200 hover:bg-status-ai-50 sm:px-2.5">
                     <Sparkles className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI评语</span>
                   </Button>
                 )}
-                <Button type="button" size="sm" variant="ghost" aria-label="移出当前班级" onClick={() => setShowDeleteConfirm(true)} className="shrink-0 whitespace-nowrap border-red-200 px-2 text-red-500 hover:border-red-200 hover:bg-red-50 sm:px-2.5">
+                <Button type="button" size="sm" variant="ghost" aria-label="移出当前班级" onClick={() => setShowDeleteConfirm(true)} className="shrink-0 whitespace-nowrap border-status-danger-200 px-2 text-status-danger-500 hover:border-status-danger-200 hover:bg-status-danger-50 sm:px-2.5">
                   <Trash2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">移出当前班级</span>
                 </Button>
           </div>
         </div>
 
-        <div ref={modalTabsRef} className="relative shrink-0 border-b border-gray-100 pr-28">
+        <div ref={modalTabsRef} className="relative shrink-0 border-b border-separator-border pr-28">
           <UnderlineTabs value={activeTab} options={STUDENT_DETAIL_TABS} onChange={changeActiveTab} ariaLabel="学生详情" className="border-b-0 px-6 pt-3" />
           {activeTab === "profile" && <div className="absolute bottom-2 right-6">{profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存</Button></div> : <Button size="sm" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}</div>}
         </div>
@@ -583,15 +583,15 @@ export function StudentModal({
         <div className="min-h-0 flex-1 overflow-y-auto">
         <div ref={modalContentMeasureRef} key={`${student.id}-${activeTab}`} className={`student-tab-content-enter space-y-5 p-6 ${tabDirection === "left" ? "student-tab-enter-left" : "student-tab-enter-right"}`}>
           {activeTab === "profile" && (
-          <div className="rounded-2xl border border-gray-100">
-            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
-              <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>学生信息</span>
-              <span className="text-xs text-gray-400">{profileEditing ? "编辑中 · 保存后生效" : "查看模式"}</span>
+          <div className="rounded-2xl border border-separator-border">
+            <div className="flex items-center justify-between border-b border-separator-border bg-background-secondary-default px-4 py-3">
+              <span className="text-body-regular text-text-primary" style={{ fontWeight: 700 }}>学生信息</span>
+              <span className="text-caption-1-regular text-text-tertiary">{profileEditing ? "编辑中 · 保存后生效" : "查看模式"}</span>
             </div>
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
                 <label className="flex min-w-0 flex-col gap-1.5">
-                  <span className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>姓名</span>
+                  <span className="block text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>姓名</span>
                   <input
                     disabled={!profileEditing}
                     value={nameInput}
@@ -599,16 +599,16 @@ export function StudentModal({
                       setNameInput(e.target.value);
                       setProfileStatus("");
                     }}
-                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-gray-50 disabled:text-gray-700"
+                    className="h-10 w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-secondary-default disabled:text-text-primary"
                   />
                 </label>
                 <div className="flex flex-col gap-1.5">
-                  <span className="block text-xs text-gray-500" style={{ fontWeight: 600 }}>性别</span>
+                  <span className="block text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>性别</span>
                   <SegmentedControl value={genderInput} ariaLabel="学生性别" disabled={!profileEditing} onChange={value => { setGenderInput(value as Gender); setProfileStatus(""); }} options={[{ value: "男", label: "男" }, { value: "女", label: "女" }]} className="flex h-10 w-full" />
                 </div>
               </div>
               <label className="space-y-1.5 block">
-                <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>别名</span>
+                <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>别名</span>
                 <input
                   disabled={!profileEditing}
                   value={aliasesInput}
@@ -617,18 +617,18 @@ export function StudentModal({
                     setProfileStatus("");
                   }}
                   placeholder="多个别名用顿号或逗号分隔"
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-gray-50 disabled:text-gray-700"
+                  className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-secondary-default disabled:text-text-primary"
                 />
               </label>
 
-              <div className="rounded-xl border border-blue-100 bg-blue-50/40 px-3 py-3">
+              <div className="rounded-xl border border-accent-100 bg-accent-50/40 px-3 py-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="text-xs text-blue-700" style={{ fontWeight: 800 }}>联系与住宿信息</span>
-                  <span className="text-xs text-blue-500/70">仅保存在本机 / 同步备份中</span>
+                  <span className="text-caption-1-regular text-accent-700" style={{ fontWeight: 800 }}>联系与住宿信息</span>
+                  <span className="text-caption-1-regular text-accent-500/70">仅保存在本机 / 同步备份中</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="space-y-1.5">
-                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>家长电话</span>
+                    <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>家长电话</span>
                     <input
                       disabled={!profileEditing}
                       value={parentPhoneInput}
@@ -638,11 +638,11 @@ export function StudentModal({
                       }}
                       type="tel"
                       placeholder="例如：13800000000"
-                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-white/60 disabled:text-gray-700 disabled:placeholder:text-gray-400"
+                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
                     />
                   </label>
                   <label className="space-y-1.5">
-                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>紧急联系人</span>
+                    <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>紧急联系人</span>
                     <input
                       disabled={!profileEditing}
                       value={emergencyContactInput}
@@ -651,11 +651,11 @@ export function StudentModal({
                         setProfileStatus("");
                       }}
                       placeholder="姓名 / 关系 / 电话"
-                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-white/60 disabled:text-gray-700 disabled:placeholder:text-gray-400"
+                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
                     />
                   </label>
                   <label className="space-y-1.5 sm:col-span-2">
-                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>住址</span>
+                    <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>住址</span>
                     <input
                       disabled={!profileEditing}
                       value={addressInput}
@@ -664,46 +664,46 @@ export function StudentModal({
                         setProfileStatus("");
                       }}
                       placeholder="家庭住址（可选）"
-                      className="w-full rounded-xl border border-blue-100 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-300 disabled:cursor-default disabled:border-transparent disabled:bg-white/60 disabled:text-gray-700 disabled:placeholder:text-gray-400"
+                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
                     />
                   </label>
                   <div className="space-y-1.5 sm:col-span-2">
-                    <span className="text-xs text-gray-500" style={{ fontWeight: 600 }}>是否住宿</span>
+                    <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>是否住宿</span>
                     <SegmentedControl value={isBoardingInput ? "boarding" : "commuter"} ariaLabel="住宿状态" disabled={!profileEditing} onChange={value => { setIsBoardingInput(value === "boarding"); setProfileStatus(""); }} options={[{ value: "commuter", label: "走读" }, { value: "boarding", label: "住宿" }]} className="flex max-w-xs" />
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+              <div className="rounded-xl border border-separator-border bg-background-secondary-default px-3 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-xs text-gray-400" style={{ fontWeight: 800 }}>宿舍</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                      <span className="text-gray-900" style={{ fontWeight: 900 }}>{currentDormitory?.name || "未分配"}</span>
-                      <span className="text-gray-400">成员 {currentDormitory?.memberIds.length ?? "—"}</span>
+                    <div className="text-caption-1-regular text-text-tertiary" style={{ fontWeight: 800 }}>宿舍</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-body-regular">
+                      <span className="text-text-primary" style={{ fontWeight: 900 }}>{currentDormitory?.name || "未分配"}</span>
+                      <span className="text-text-tertiary">成员 {currentDormitory?.memberIds.length ?? "—"}</span>
                     </div>
-                    <div className="mt-1 truncate text-xs text-gray-400">
+                    <div className="mt-1 truncate text-caption-1-regular text-text-tertiary">
                       最近事件：{latestDormitoryEvent ? `${latestDormitoryEvent.reason} · ${latestDormitoryEvent.date}` : "暂无"}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <button onClick={() => setDormAssignmentOpen(true)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50" style={{ fontWeight: 800 }}>更换宿舍</button>
-                    <button onClick={() => setDormEventOpen(true)} disabled={!currentDormitory} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400" style={{ fontWeight: 800 }}>记宿舍事件</button>
-                    <button onClick={onOpenDormitories} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50" style={{ fontWeight: 800 }}>管理</button>
+                    <button onClick={() => setDormAssignmentOpen(true)} className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-regular text-text-secondary hover:bg-background-secondary-default" style={{ fontWeight: 800 }}>更换宿舍</button>
+                    <button onClick={() => setDormEventOpen(true)} disabled={!currentDormitory} className="rounded-lg bg-accent-600 px-3 py-1.5 text-caption-1-regular text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary" style={{ fontWeight: 800 }}>记宿舍事件</button>
+                    <button onClick={onOpenDormitories} className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-regular text-text-secondary hover:bg-background-secondary-default" style={{ fontWeight: 800 }}>管理</button>
                   </div>
                 </div>
-                {dormStatus && <p className="mt-2 text-xs text-blue-600">{dormStatus}</p>}
+                {dormStatus && <p className="mt-2 text-caption-1-regular text-accent-600">{dormStatus}</p>}
               </div>
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500" style={{ fontWeight: 700 }}>行为标签</span>
-                  <span className="text-xs text-gray-400">写回旧版手动标签</span>
+                  <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 700 }}>行为标签</span>
+                  <span className="text-caption-1-regular text-text-tertiary">写回旧版手动标签</span>
                 </div>
                 <div className="space-y-3">
                   {BEHAVIOR_TAG_GROUPS.map(group => (
                     <div key={group.id} className="grid grid-cols-[5rem_1fr] gap-3 items-start">
-                      <span className="text-xs text-gray-400 pt-1.5">{group.name}</span>
+                      <span className="text-caption-1-regular text-text-tertiary pt-1.5">{group.name}</span>
                       <div className="flex flex-wrap gap-2">
                         {group.tags.map(tag => {
                           const active = selectedBehaviorTags.has(tag.id);
@@ -712,7 +712,7 @@ export function StudentModal({
                               key={tag.id}
                               disabled={!profileEditing}
                               onClick={() => toggleBehaviorTag(tag.id)}
-                              className={`rounded-full border px-2.5 py-1.5 text-sm transition-colors disabled:cursor-default ${active ? "border-blue-200 bg-blue-50 text-blue-700" : `border-gray-200 bg-white text-gray-500 ${profileEditing ? "hover:bg-gray-50" : "opacity-70"}`}`}
+                              className={`rounded-full border px-2.5 py-1.5 text-body-regular transition-colors disabled:cursor-default ${active ? "border-accent-200 bg-accent-50 text-accent-700" : `border-border-button-default bg-background-primary-default text-text-secondary ${profileEditing ? "hover:bg-background-secondary-default" : "opacity-70"}`}`}
                               style={{ fontWeight: 600 }}
                             >
                               {tag.label}
@@ -726,20 +726,20 @@ export function StudentModal({
               </div>
 
               <div className="space-y-2">
-                <span className="text-xs text-gray-500" style={{ fontWeight: 700 }}>学科标签</span>
+                <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 700 }}>学科标签</span>
                 <div className="flex flex-wrap gap-2">
                   {student.academicTags.length > 0 ? student.academicTags.map(tag => {
                     const isStrong = tag.endsWith("强");
                     return (
-                      <span key={tag} className={`px-2.5 py-1 rounded-full text-sm border ${isStrong ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-500 border-red-100"}`} style={{ fontWeight: 600 }}>
+                      <span key={tag} className={`px-2.5 py-1 rounded-full text-body-regular border ${isStrong ? "bg-status-success-50 text-status-success-700 border-status-success-100" : "bg-status-danger-50 text-status-danger-500 border-status-danger-100"}`} style={{ fontWeight: 600 }}>
                         {tag}
                       </span>
                     );
-                  }) : <span className="text-sm text-gray-400">暂无自动学科标签</span>}
+                  }) : <span className="text-body-regular text-text-tertiary">暂无自动学科标签</span>}
                 </div>
               </div>
 
-              {profileStatus && <p className="text-xs text-blue-600">{profileStatus}</p>}
+              {profileStatus && <p className="text-caption-1-regular text-accent-600">{profileStatus}</p>}
             </div>
           </div>
           )}
@@ -753,26 +753,26 @@ export function StudentModal({
               onChange={e => setNoteInput(e.target.value)}
               placeholder="备注（可选）"
               maxLength={40}
-              className="flex-1 min-w-0 px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300"
+              className="flex-1 min-w-0 px-3.5 py-2.5 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
             />
-            <button onClick={() => addRecord("reward")} className="shrink-0 flex items-center gap-1 px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
+            <button onClick={() => addRecord("reward")} className="shrink-0 flex items-center gap-1 px-3.5 py-2.5 bg-status-success-500 hover:bg-status-success-600 text-text-white rounded-xl text-body-regular transition-colors" style={{ fontWeight: 600 }}>
               <Plus className="w-3.5 h-3.5" />奖
             </button>
-            <button onClick={() => addRecord("punish")} className="shrink-0 flex items-center gap-1 px-3.5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm transition-colors" style={{ fontWeight: 600 }}>
+            <button onClick={() => addRecord("punish")} className="shrink-0 flex items-center gap-1 px-3.5 py-2.5 bg-status-danger-500 hover:bg-status-danger-600 text-text-white rounded-xl text-body-regular transition-colors" style={{ fontWeight: 600 }}>
               <Plus className="w-3.5 h-3.5" />罚
             </button>
-            <button onClick={() => addRecord("note")} className="shrink-0 px-3.5 py-2.5 text-sm text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors" style={{ fontWeight: 600 }}>
+            <button onClick={() => addRecord("note")} className="shrink-0 px-3.5 py-2.5 text-body-regular text-text-secondary border border-border-button-default hover:bg-background-tertiary-default rounded-xl transition-colors" style={{ fontWeight: 600 }}>
               + 备注
             </button>
           </div>
 
           {/* Sync to other students */}
-          <div className="border border-gray-100 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
-              <span className="text-sm text-gray-600" style={{ fontWeight: 600 }}>同步到其他学生（可选）</span>
+          <div className="border border-separator-border rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-background-secondary-default border-b border-separator-border">
+              <span className="text-body-regular text-text-secondary" style={{ fontWeight: 600 }}>同步到其他学生（可选）</span>
               <div className="flex gap-2">
-                <button onClick={() => setSyncSelected(new Set(students.filter(s => s.id !== student.id).map(s => s.id)))} className="text-xs text-blue-600 hover:underline">全选</button>
-                <button onClick={() => setSyncSelected(new Set())} className="text-xs text-gray-400 hover:underline">清空</button>
+                <button onClick={() => setSyncSelected(new Set(students.filter(s => s.id !== student.id).map(s => s.id)))} className="text-caption-1-regular text-accent-600 hover:underline">全选</button>
+                <button onClick={() => setSyncSelected(new Set())} className="text-caption-1-regular text-text-tertiary hover:underline">清空</button>
               </div>
             </div>
             <div className="px-3 pt-2 pb-1">
@@ -780,18 +780,18 @@ export function StudentModal({
                 value={syncSearch}
                 onChange={e => setSyncSearch(e.target.value)}
                 placeholder="搜索姓名"
-                className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 mb-2"
+                className="w-full px-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300 mb-2"
               />
               <div className="max-h-32 overflow-y-auto space-y-0.5 pb-2">
                 {syncCandidates.slice(0, 12).map(s => (
-                  <label key={s.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                  <label key={s.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-background-secondary-default cursor-pointer">
                     <input
                       type="checkbox"
                       checked={syncSelected.has(s.id)}
                       onChange={() => toggleSync(s.id)}
-                      className="w-4 h-4 accent-blue-600 rounded"
+                      className="w-4 h-4 accent-accent-600 rounded"
                     />
-                    <span className="text-sm text-gray-700">{s.name}</span>
+                    <span className="text-body-regular text-text-primary">{s.name}</span>
                   </label>
                 ))}
               </div>
@@ -800,28 +800,28 @@ export function StudentModal({
 
           {/* Week selector + Records */}
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600" style={{ fontWeight: 600 }}>查看周</span>
-            <SelectMenu value={selectedWeek} onChange={setSelectedWeek} ariaLabel="查看周" className="w-64 bg-gray-50" options={weekOptions.map(week => ({ value: week.key, label: week.label }))} />
+            <span className="text-body-regular text-text-secondary" style={{ fontWeight: 600 }}>查看周</span>
+            <SelectMenu value={selectedWeek} onChange={setSelectedWeek} ariaLabel="查看周" className="w-64 bg-background-secondary-default" options={weekOptions.map(week => ({ value: week.key, label: week.label }))} />
           </div>
 
           {filteredRecords.length > 0 ? (
             <div className="space-y-2">
               {filteredRecords.map(record => (
                 <div key={record.id} className={`flex items-center gap-3 px-4 py-3 border rounded-xl ${recordTypeStyle[record.type].bg}`}>
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${recordTypeStyle[record.type].bg} ${recordTypeStyle[record.type].text}`} style={{ fontWeight: 700 }}>
+                  <span className={`text-caption-1-regular px-2 py-0.5 rounded-full border ${recordTypeStyle[record.type].bg} ${recordTypeStyle[record.type].text}`} style={{ fontWeight: 700 }}>
                     {recordTypeStyle[record.type].label}
                   </span>
-                  <span className={`flex-1 text-sm ${recordTypeStyle[record.type].text}`}>{record.note || "(无备注)"}</span>
-                  {record.score !== undefined && <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${record.score > 0 ? "bg-emerald-100 text-emerald-700" : record.score < 0 ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500"}`}>{record.score > 0 ? "+" : ""}{record.score}</span>}
-                  <span className="text-xs text-gray-400">{record.date}</span>
-                  <button onClick={() => setPendingRecordDelete(record)} aria-label={`删除记录 ${record.note || "无备注"}`} className="p-1 text-gray-300 hover:text-red-500 hover:bg-white/70 rounded-lg transition-colors">
+                  <span className={`flex-1 text-body-regular ${recordTypeStyle[record.type].text}`}>{record.note || "(无备注)"}</span>
+                  {record.score !== undefined && <span className={`rounded-full px-2 py-0.5 text-caption-1-semibold ${record.score > 0 ? "bg-status-success-100 text-status-success-700" : record.score < 0 ? "bg-status-danger-100 text-status-danger-600" : "bg-background-tertiary-default text-text-secondary"}`}>{record.score > 0 ? "+" : ""}{record.score}</span>}
+                  <span className="text-caption-1-regular text-text-tertiary">{record.date}</span>
+                  <button onClick={() => setPendingRecordDelete(record)} aria-label={`删除记录 ${record.note || "无备注"}`} className="p-1 text-text-tertiary hover:text-status-danger-500 hover:bg-background-primary-default/70 rounded-lg transition-colors">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400 text-center py-3">该周暂无记录，可以先来添加奖罚。</p>
+            <p className="text-body-regular text-text-tertiary text-center py-3">该周暂无记录，可以先来添加奖罚。</p>
           )}
           </div>
           )}
@@ -867,16 +867,16 @@ export function StudentModal({
             </div>
           )}
 
-          {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-gray-50 p-3 text-center"><div className="text-xl font-black text-gray-800">{item.value}</div><div className="text-xs text-gray-400">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div className="mb-3 text-sm font-bold text-gray-800">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3"><span className="text-sm font-bold text-gray-700">{item.date}</span><span className="text-sm text-gray-500">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-sm text-gray-400">暂无出勤异常</p>}</div><div className="rounded-xl bg-blue-50 p-3 text-sm text-blue-700">当前跟进任务 {followupTasks.filter(task=>followupHasStudent(task, student.id)&&task.status==="pending").length} 项</div></div>; })()}
+          {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-background-secondary-default p-3 text-center"><div className="text-title-2-regular font-black text-text-primary">{item.value}</div><div className="text-caption-1-regular text-text-tertiary">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-separator-border bg-background-secondary-default p-4"><div className="mb-3 text-body-semibold text-text-primary">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-separator-border px-4 py-3"><span className="text-body-semibold text-text-primary">{item.date}</span><span className="text-body-regular text-text-secondary">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-body-regular text-text-tertiary">暂无出勤异常</p>}</div><div className="rounded-xl bg-accent-50 p-3 text-body-regular text-accent-700">当前跟进任务 {followupTasks.filter(task=>followupHasStudent(task, student.id)&&task.status==="pending").length} 项</div></div>; })()}
 
           {activeTab === "trend" && (
           <div className="space-y-5">
           {/* Grade Trend */}
-          <div className="border border-gray-100 rounded-2xl overflow-hidden">
-            <div className="flex items-start justify-between gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
+          <div className="border border-separator-border rounded-2xl overflow-hidden">
+            <div className="flex items-start justify-between gap-3 px-4 py-3 bg-background-secondary-default border-b border-separator-border">
               <div>
-                <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>成绩趋势</span>
-                <p className="text-xs text-gray-400 mt-0.5">{chronologicalExams.length} 次考试 · 分数曲线按时间展示，进退步按班排判断</p>
+                <span className="text-body-regular text-text-primary" style={{ fontWeight: 700 }}>成绩趋势</span>
+                <p className="text-caption-1-regular text-text-tertiary mt-0.5">{chronologicalExams.length} 次考试 · 分数曲线按时间展示，进退步按班排判断</p>
               </div>
               <div className="max-w-[60%] overflow-x-auto">
                 <SegmentedControl value={effectiveTrendMetric} ariaLabel="成绩趋势科目" onChange={setTrendMetric} options={trendMetricOptions.slice(0, 7).map(metric => ({ value: metric, label: metric === "total" ? "总分" : metric }))} className="shrink-0" />
@@ -888,26 +888,26 @@ export function StudentModal({
                   <RetryableLazy
                     load={loadStudentTrendChart}
                     componentProps={{ data: trendData, metric: effectiveTrendMetric }}
-                    fallback={<div className="h-full animate-pulse rounded-xl bg-gray-100" aria-label="正在加载趋势图" />}
+                    fallback={<div className="h-full animate-pulse rounded-xl bg-background-tertiary-default" aria-label="正在加载趋势图" />}
                   />
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-400">
+                <div className="rounded-xl border border-dashed border-border-button-default bg-background-secondary-default px-4 py-8 text-center text-body-regular text-text-tertiary">
                   至少需要两次有效考试，才会显示趋势图。
                 </div>
               )}
 
-              <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-4 space-y-3">
+              <div className="rounded-2xl border border-status-ai-100 bg-status-ai-50/40 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-1.5 text-sm text-violet-700" style={{ fontWeight: 700 }}>
+                    <div className="flex items-center gap-1.5 text-body-regular text-status-ai-700" style={{ fontWeight: 700 }}>
                       <Sparkles className="w-4 h-4" />AI 成绩趋势分析
                     </div>
                   </div>
                   <button
                     onClick={handleGenerateAiTrend}
                     disabled={aiTrendBusy || chronologicalExams.length < 2}
-                    className="inline-flex shrink-0 items-center justify-center gap-2 px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex shrink-0 items-center justify-center gap-2 px-3.5 py-2 bg-status-ai-600 hover:bg-status-ai-700 text-text-white rounded-xl text-body-regular transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ fontWeight: 700 }}
                   >
                     {aiTrendBusy && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -922,17 +922,17 @@ export function StudentModal({
                       onChange={event => setAiTrendAccessCode(event.target.value)}
                       type="password"
                       placeholder="输入 AI 授权码"
-                      className="min-w-0 px-3 py-2 text-sm bg-white border border-violet-100 rounded-xl outline-none focus:border-violet-300"
+                      className="min-w-0 px-3 py-2 text-body-regular bg-background-primary-default border border-status-ai-100 rounded-xl outline-none focus:border-status-ai-300"
                     />
-                    <label className="flex items-center gap-2 px-2 text-xs text-violet-500 cursor-pointer">
-                      <input type="checkbox" checked={rememberAiTrendAuth} onChange={event => setRememberAiTrendAuth(event.target.checked)} className="accent-violet-600" />
+                    <label className="flex items-center gap-2 px-2 text-caption-1-regular text-status-ai-500 cursor-pointer">
+                      <input type="checkbox" checked={rememberAiTrendAuth} onChange={event => setRememberAiTrendAuth(event.target.checked)} className="accent-status-ai-600" />
                       记住授权
                     </label>
                   </div>
                 )}
 
                 {aiTrendBusy && <AiGenerationPanel title="正在生成成绩趋势分析" steps={["整理历次考试", "识别关键变化", "形成教师建议"]} />}
-                {!aiTrendBusy && aiTrendStatus && <p className="text-xs text-violet-600">{aiTrendStatus}</p>}
+                {!aiTrendBusy && aiTrendStatus && <p className="text-caption-1-regular text-status-ai-600">{aiTrendStatus}</p>}
                 <div aria-hidden={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible} inert={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible ? true : undefined} className={`grid transition-[grid-template-rows,opacity,transform] duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${aiTrendResult && !aiTrendBusy && aiTrendResultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
                   <div className="overflow-hidden">
                   {aiTrendResult && <div className="ai-followup-result-enter grid grid-cols-1 gap-2 pb-0.5">
@@ -942,9 +942,9 @@ export function StudentModal({
                       ["建议关注", aiTrendResult.suggestions],
                       ["参考提示", aiTrendResult.disclaimer],
                     ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
-                      <div key={label} className="rounded-xl border border-violet-100 bg-white px-3 py-2.5">
-                        <div className="text-xs text-violet-500 mb-1" style={{ fontWeight: 700 }}>{label}</div>
-                        <p className="text-sm text-gray-700 leading-relaxed">{value}</p>
+                      <div key={label} className="rounded-xl border border-status-ai-100 bg-background-primary-default px-3 py-2.5">
+                        <div className="text-caption-1-regular text-status-ai-500 mb-1" style={{ fontWeight: 700 }}>{label}</div>
+                        <p className="text-body-regular text-text-primary leading-relaxed">{value}</p>
                       </div>
                     ))}
                   </div>}
@@ -955,8 +955,8 @@ export function StudentModal({
           </div>
 
           {/* Exam Scores */}
-          <div className="border-t border-gray-100 pt-5">
-            <h4 className="text-gray-700 mb-3" style={{ fontSize: "0.9375rem" }}>考试成绩</h4>
+          <div className="border-t border-separator-border pt-5">
+            <h4 className="text-text-primary mb-3" style={{ fontSize: "0.9375rem" }}>考试成绩</h4>
             <div className="space-y-4">
               {examScores.map(exam => {
                 const scoreEntries = getScoreEntries(exam.scores);
@@ -964,10 +964,10 @@ export function StudentModal({
                 const weak = getWeakSubject(exam.scores);
                 const total = getExamTotal(exam);
                 return (
-                  <div key={exam.id} className="border border-gray-100 rounded-2xl overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
-                      <span className="text-sm text-gray-700" style={{ fontWeight: 700 }}>{exam.name}</span>
-                      <span className="text-xs text-gray-400">{exam.date}</span>
+                  <div key={exam.id} className="border border-separator-border rounded-2xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 bg-background-secondary-default border-b border-separator-border">
+                      <span className="text-body-regular text-text-primary" style={{ fontWeight: 700 }}>{exam.name}</span>
+                      <span className="text-caption-1-regular text-text-tertiary">{exam.date}</span>
                     </div>
                     <div className="p-4">
                       {/* Subject scores grid */}
@@ -981,21 +981,21 @@ export function StudentModal({
                             <div
                               key={sub}
                               aria-label={`${sub}成绩 ${subScore}，班排 ${formatGradeRank(cell.rankClass)}${hasGradeScore(cell.rankSchool) ? `，校排 ${cell.rankSchool}` : ""}`}
-                              className={`rounded-xl border px-3 py-2 text-sm ${
-                              isBest ? "border-emerald-100 bg-emerald-50" :
-                              isWeak ? "border-red-100 bg-red-50" :
-                              "border-gray-100 bg-white"
+                              className={`rounded-xl border px-3 py-2 text-body-regular ${
+                              isBest ? "border-status-success-100 bg-status-success-50" :
+                              isWeak ? "border-status-danger-100 bg-status-danger-50" :
+                              "border-separator-border bg-background-primary-default"
                             }`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <span className={`${isBest ? "text-emerald-700" : isWeak ? "text-red-500" : "text-gray-600"}`} style={{ fontWeight: 600 }}>{sub}</span>
-                                <span className={`flex items-center gap-1 ${isBest ? "text-emerald-700" : isWeak ? "text-red-500" : "text-gray-800"}`} style={{ fontWeight: 700 }}>
-                                  {scoreKind && <span className="rounded bg-white/70 px-1 py-0.5 text-[9px] font-bold text-gray-400">{scoreKind}</span>}
+                                <span className={`${isBest ? "text-status-success-700" : isWeak ? "text-status-danger-500" : "text-text-secondary"}`} style={{ fontWeight: 600 }}>{sub}</span>
+                                <span className={`flex items-center gap-1 ${isBest ? "text-status-success-700" : isWeak ? "text-status-danger-500" : "text-text-primary"}`} style={{ fontWeight: 700 }}>
+                                  {scoreKind && <span className="rounded bg-background-primary-default/70 px-1 py-0.5 text-[9px] font-bold text-text-tertiary">{scoreKind}</span>}
                                   {subScore}
                                 </span>
                               </div>
-                              <div className="mt-1.5 flex items-center gap-2 text-[10px] leading-none text-gray-400">
-                                <span className="font-semibold text-blue-500">班排 {formatGradeRank(cell.rankClass)}</span>
+                              <div className="mt-1.5 flex items-center gap-2 text-[10px] leading-none text-text-tertiary">
+                                <span className="font-semibold text-accent-500">班排 {formatGradeRank(cell.rankClass)}</span>
                                 {hasGradeScore(cell.rankSchool) && <span>校排 {cell.rankSchool}</span>}
                                 {hasGradeScore(cell.assignedScore) && hasGradeScore(cell.rawScore) && <span className="ml-auto">原 {cell.rawScore}</span>}
                               </div>
@@ -1004,24 +1004,24 @@ export function StudentModal({
                         })}
                       </div>
                       {/* Summary */}
-                      <div className="flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-1.5 text-gray-600">
-                          <span className="text-gray-400">总分</span>
-                          <span className="text-blue-700" style={{ fontWeight: 800, fontSize: "1.125rem" }}>{Math.round(total * 10) / 10}</span>
+                      <div className="flex items-center gap-4 text-body-regular">
+                        <div className="flex items-center gap-1.5 text-text-secondary">
+                          <span className="text-text-tertiary">总分</span>
+                          <span className="text-accent-700" style={{ fontWeight: 800, fontSize: "1.125rem" }}>{Math.round(total * 10) / 10}</span>
                         </div>
                         {(exam.rank || hasGradeScore(exam.totalCell?.rankClass)) && (
-                          <div className="flex items-center gap-1 text-gray-400">
+                          <div className="flex items-center gap-1 text-text-tertiary">
                             <span>总班排</span>
-                            <span className="text-gray-700" style={{ fontWeight: 700 }}>第 {formatGradeRank(exam.totalCell?.rankClass) !== "—" ? formatGradeRank(exam.totalCell?.rankClass) : exam.rank} 名</span>
+                            <span className="text-text-primary" style={{ fontWeight: 700 }}>第 {formatGradeRank(exam.totalCell?.rankClass) !== "—" ? formatGradeRank(exam.totalCell?.rankClass) : exam.rank} 名</span>
                           </div>
                         )}
-                        {hasGradeScore(exam.totalCell?.rankSchool) && <div className="text-xs text-gray-400">校排 {exam.totalCell.rankSchool}</div>}
-                        {hasGradeScore(exam.totalCell?.assignedScore) && hasGradeScore(exam.totalCell?.rawScore) && <div className="text-xs text-gray-400">原始总分 {exam.totalCell.rawScore}</div>}
+                        {hasGradeScore(exam.totalCell?.rankSchool) && <div className="text-caption-1-regular text-text-tertiary">校排 {exam.totalCell.rankSchool}</div>}
+                        {hasGradeScore(exam.totalCell?.assignedScore) && hasGradeScore(exam.totalCell?.rawScore) && <div className="text-caption-1-regular text-text-tertiary">原始总分 {exam.totalCell.rawScore}</div>}
                         <div className="ml-auto flex items-center gap-3">
-                          <div className="flex items-center gap-1 text-xs text-emerald-600">
+                          <div className="flex items-center gap-1 text-caption-1-regular text-status-success-600">
                             <TrendingUp className="w-3 h-3" />{best}
                           </div>
-                          <div className="flex items-center gap-1 text-xs text-red-400">
+                          <div className="flex items-center gap-1 text-caption-1-regular text-status-danger-400">
                             <TrendingDown className="w-3 h-3" />{weak}
                           </div>
                         </div>
@@ -1041,12 +1041,12 @@ export function StudentModal({
 
       {dormAssignmentOpen && (
         <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[1px]">
-          <div className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-gray-100 bg-white p-5 shadow-[var(--app-shadow-float)]">
-            <div className="text-base text-gray-900" style={{ fontWeight: 900 }}>更换宿舍</div>
-            <SelectMenu value={pendingDormitoryId} onChange={setPendingDormitoryId} ariaLabel="选择宿舍" className="mt-4 w-full bg-gray-50" options={[{ value: "", label: "未分配" }, ...dormitories.map(dormitory => ({ value: dormitory.id, label: dormitory.name }))]} />
+          <div className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-separator-border bg-background-primary-default p-5 shadow-[var(--app-shadow-float)]">
+            <div className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>更换宿舍</div>
+            <SelectMenu value={pendingDormitoryId} onChange={setPendingDormitoryId} ariaLabel="选择宿舍" className="mt-4 w-full bg-background-secondary-default" options={[{ value: "", label: "未分配" }, ...dormitories.map(dormitory => ({ value: dormitory.id, label: dormitory.name }))]} />
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <button onClick={() => setDormAssignmentOpen(false)} className="rounded-xl border border-gray-200 bg-white py-2 text-sm text-gray-600 hover:bg-gray-50" style={{ fontWeight: 800 }}>取消</button>
-              <button onClick={() => handleDormitoryChange(pendingDormitoryId)} className="rounded-xl bg-blue-600 py-2 text-sm text-white hover:bg-blue-700" style={{ fontWeight: 800 }}>保存</button>
+              <button onClick={() => setDormAssignmentOpen(false)} className="rounded-xl border border-border-button-default bg-background-primary-default py-2 text-body-regular text-text-secondary hover:bg-background-secondary-default" style={{ fontWeight: 800 }}>取消</button>
+              <button onClick={() => handleDormitoryChange(pendingDormitoryId)} className="rounded-xl bg-accent-600 py-2 text-body-regular text-text-white hover:bg-accent-700" style={{ fontWeight: 800 }}>保存</button>
             </div>
           </div>
         </div>
@@ -1054,13 +1054,13 @@ export function StudentModal({
 
       {dormEventOpen && currentDormitory && (
         <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[1px]">
-          <div className="modal-panel-enter w-full max-w-md rounded-[var(--app-radius-lg)] border border-gray-100 bg-white p-5 shadow-[var(--app-shadow-float)]">
+          <div className="modal-panel-enter w-full max-w-md rounded-[var(--app-radius-lg)] border border-separator-border bg-background-primary-default p-5 shadow-[var(--app-shadow-float)]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-base text-gray-900" style={{ fontWeight: 900 }}>记宿舍事件</div>
-                <div className="mt-1 text-xs text-gray-400">{student.name} · {currentDormitory.name}</div>
+                <div className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>记宿舍事件</div>
+                <div className="mt-1 text-caption-1-regular text-text-tertiary">{student.name} · {currentDormitory.name}</div>
               </div>
-              <button onClick={() => setDormEventOpen(false)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <button onClick={() => setDormEventOpen(false)} className="rounded-lg p-1 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary">
                 <X className="h-4 w-4" />
               </button>
             </div>

@@ -44,15 +44,15 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
 
   return (
     <>
-      <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+      <div className="bg-background-primary-default rounded-2xl p-6 border border-separator-border shadow-sm">
         <div className="flex items-start justify-between mb-5">
           <div>
-            <h3 className="text-gray-700">多次考试趋势</h3>
-            <p className="text-sm text-gray-400 mt-0.5">各科班级平均分随考试场次的变化</p>
+            <h3 className="text-text-primary">多次考试趋势</h3>
+            <p className="text-body-regular text-text-tertiary mt-0.5">各科班级平均分随考试场次的变化</p>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 justify-end">
             {subjects.map(sub => (
-              <span key={sub} className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span key={sub} className="flex items-center gap-1.5 text-caption-1-regular text-text-secondary">
                 <span className="w-4 h-0.5 rounded-full inline-block" style={{ background: SUBJECT_COLORS[sub] }} />
                 {sub}
               </span>
@@ -83,15 +83,15 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-50">
-          <h3 className="text-gray-700">各场考试科目对比</h3>
-          <p className="text-sm text-gray-400 mt-0.5">班级各科平均分，↑↓ 为较上次变化</p>
+      <div className="bg-background-primary-default rounded-2xl border border-separator-border shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-separator-border">
+          <h3 className="text-text-primary">各场考试科目对比</h3>
+          <p className="text-body-regular text-text-tertiary mt-0.5">班级各科平均分，↑↓ 为较上次变化</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-body-regular">
             <thead>
-              <tr className="bg-gray-50 text-gray-400" style={{ fontSize: "0.8125rem" }}>
+              <tr className="bg-background-secondary-default text-text-tertiary" style={{ fontSize: "0.8125rem" }}>
                 <th className="text-left px-6 py-3">科目</th>
                 {trendData.map(e => (
                   <th key={e.exam} className="text-center px-6 py-3">{e.exam}</th>
@@ -106,11 +106,11 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
                 const last = [...vals].reverse().find((value): value is number => value !== null);
                 const total = first !== undefined && last !== undefined ? Math.round((last - first) * 10) / 10 : null;
                 return (
-                  <tr key={sub} className="border-t border-gray-50 hover:bg-gray-50/60 transition-colors">
+                  <tr key={sub} className="border-t border-separator-border hover:bg-background-secondary-default/60 transition-colors">
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SUBJECT_COLORS[sub] || "var(--app-chart-fallback)" }} />
-                        <span className="text-gray-700" style={{ fontWeight: 600 }}>{sub}</span>
+                        <span className="text-text-primary" style={{ fontWeight: 600 }}>{sub}</span>
                       </div>
                     </td>
                     {vals.map((v, i) => {
@@ -118,9 +118,9 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
                       const diff = v !== null && previous !== null ? Math.round((v - previous) * 10) / 10 : null;
                       return (
                         <td key={i} className="text-center px-6 py-3">
-                          <span className="tabular-nums text-gray-800" style={{ fontWeight: 600 }}>{v ?? "—"}</span>
+                          <span className="tabular-nums text-text-primary" style={{ fontWeight: 600 }}>{v ?? "—"}</span>
                           {diff !== null && (
-                            <span className={`ml-1.5 text-xs tabular-nums ${diff > 0 ? "text-emerald-500" : diff < 0 ? "text-red-400" : "text-gray-400"}`}>
+                            <span className={`ml-1.5 text-caption-1-regular tabular-nums ${diff > 0 ? "text-status-success-500" : diff < 0 ? "text-status-danger-400" : "text-text-tertiary"}`}>
                               {diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "—"}
                             </span>
                           )}
@@ -128,7 +128,7 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
                       );
                     })}
                     <td className="text-center px-6 py-3">
-                      <span className={`text-sm tabular-nums ${total === null ? "text-gray-300" : total > 0 ? "text-emerald-600" : total < 0 ? "text-red-500" : "text-gray-400"}`} style={{ fontWeight: 700 }}>
+                      <span className={`text-body-regular tabular-nums ${total === null ? "text-text-tertiary" : total > 0 ? "text-status-success-600" : total < 0 ? "text-status-danger-500" : "text-text-tertiary"}`} style={{ fontWeight: 700 }}>
                         {total === null ? "—" : total > 0 ? `+${total}` : total}
                       </span>
                     </td>

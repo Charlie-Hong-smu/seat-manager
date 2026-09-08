@@ -1,3 +1,6 @@
+import { Button as BoardButton } from "@/components/base/buttons/button";
+import { SegmentedControl as BoardSegments, SegmentedControlItem } from "@/components/base/segmented-control/segmented-control";
+import { cx } from "@/utils/cx";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Search, Sparkles, X } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -25,40 +28,14 @@ export function Button({
   className?: string;
   children: ReactNode;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const sizeClasses = {
-    sm: "h-8 px-3 text-xs",
-    md: "h-10 px-4 text-sm",
-    lg: "h-11 px-5 text-base",
-  };
-
-  const variantClasses = {
-    primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",
-    ai: "bg-[var(--app-ai)] text-white hover:bg-violet-700 focus-visible:ring-violet-500/30 disabled:bg-violet-300",
-    secondary: "bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400",
-    danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
-    ghost: "bg-transparent border border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50 disabled:border-gray-100 disabled:text-gray-300",
-  };
-
-  return (
-    <button
-      disabled={disabled}
-      className={`inline-flex items-center justify-center gap-2 rounded-[var(--app-radius-sm)] font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-200 hover:-translate-y-px active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 disabled:translate-y-0 ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
+  return <BoardButton {...props} disabled={disabled} variant={variant === "ai" ? "primary" : variant}
+    size={size === "sm" ? "small" : "medium"}
+    className={cx("app-button", size === "lg" && "h-11 px-5", variant === "ai" && "app-button-ai", className)}>
+    {children}
+  </BoardButton>;
 }
 
-export function IconButton({
-  label,
-  size = "md",
-  active = false,
-  tone = "default",
-  className = "",
-  children,
-  ...props
-}: {
+export function IconButton({ label, size = "md", active = false, tone = "default", className = "", children, ...props }: {
   label: string;
   size?: "xs" | "sm" | "md" | "lg";
   active?: boolean;
@@ -66,21 +43,11 @@ export function IconButton({
   className?: string;
   children: ReactNode;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const sizeClass = { xs: "h-5 w-5", sm: "h-8 w-8", md: "h-10 w-10", lg: "h-11 w-11" }[size];
-  const toneClass = tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-600 hover:border-emerald-300 hover:bg-emerald-100"
-    : tone === "danger" ? "border-red-200 bg-red-50 text-red-500 hover:border-red-300 hover:bg-red-100"
-      : active ? "border-blue-100 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800";
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      className={`inline-grid shrink-0 place-items-center rounded-[var(--app-radius-sm)] border transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-200 hover:-translate-y-px active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 ${sizeClass} ${toneClass} ${className}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
+  return <BoardButton {...props} aria-label={label} title={label} variant="secondary" size={size === "xs" ? "xs" : size === "sm" ? "small" : "medium"}
+    className={cx("app-icon-button shrink-0 p-0", { xs: "size-5", sm: "size-8", md: "size-9", lg: "size-11" }[size],
+      active && "bg-button-ghost-background text-button-ghost-foreground",
+      tone === "success" && "text-status-success-600 bg-status-success-50",
+      tone === "danger" && "text-status-danger-600 bg-status-danger-50", className)}>{children}</BoardButton>;
 }
 
 export function InlineStatus({ message, tone = "auto", className = "" }: {
@@ -96,12 +63,12 @@ export function InlineStatus({ message, tone = "auto", className = "" }: {
         : "info"
     : tone;
   const toneClass = {
-    info: "bg-blue-50 text-blue-700",
-    success: "bg-emerald-50 text-emerald-700",
-    error: "bg-red-50 text-red-700",
-    ai: "bg-violet-50 text-violet-700",
+    info: "bg-accent-50 text-accent-700",
+    success: "bg-status-success-50 text-status-success-700",
+    error: "bg-status-danger-50 text-status-danger-700",
+    ai: "bg-status-ai-50 text-status-ai-700",
   }[resolvedTone];
-  return <p role={resolvedTone === "error" ? "alert" : "status"} aria-live="polite" className={`rounded-[var(--app-radius-sm)] px-3 py-2 text-xs font-semibold leading-5 ${toneClass} ${className}`}>{message}</p>;
+  return <p role={resolvedTone === "error" ? "alert" : "status"} aria-live="polite" className={`rounded-[var(--app-radius-sm)] px-3 py-2 text-caption-1-semibold leading-5 ${toneClass} ${className}`}>{message}</p>;
 }
 
 const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
@@ -161,8 +128,8 @@ export function ModalShell({ open, title, description, children, footer, onClose
   const panelRef = useModalFocus(open, onClose);
   if (!open) return null;
   return createPortal(<div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter w-full overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-float)] outline-none ${className}`}>
-      <header className="flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-base font-bold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-sm leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
+    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter w-full overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)] outline-none ${className}`}>
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-headline-semibold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
       <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
       {footer && <footer className="flex flex-wrap justify-end gap-2 border-t border-[var(--app-border)] p-4">{footer}</footer>}
     </div>
@@ -200,10 +167,10 @@ export function ConfirmDialog({
 
   if (!open) return null;
   return createPortal(<div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
-    <div ref={panelRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white p-5 shadow-[var(--app-shadow-float)] outline-none">
-      <h2 id={titleId} className="text-base font-bold text-[var(--app-text)]">{title}</h2>
-      <p id={descriptionId} className="mt-2 text-sm leading-6 text-[var(--app-text-muted)]">{description}</p>
-      {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{error}</p>}
+    <div ref={panelRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default p-5 shadow-[var(--app-shadow-float)] outline-none">
+      <h2 id={titleId} className="text-headline-semibold text-[var(--app-text)]">{title}</h2>
+      <p id={descriptionId} className="mt-2 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>
+      {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-status-danger-50 px-3 py-2 text-caption-1-semibold text-status-danger-600">{error}</p>}
       <div className="mt-5 flex flex-wrap justify-end gap-2">{showCancel && <Button variant="ghost" onClick={onCancel}>取消</Button>}{alternateLabel && onAlternate && <Button variant="secondary" onClick={onAlternate}>{alternateLabel}</Button>}<Button autoFocus variant={variant} onClick={onConfirm}>{confirmLabel}</Button></div>
     </div>
   </div>, document.body);
@@ -231,7 +198,7 @@ function PromptDialog({ open, title, description, defaultValue = "", confirmLabe
   useEffect(() => { if (open) setValue(defaultValue); }, [defaultValue, open]);
   const error = validate?.(value);
   return <ModalShell open={open} title={title} description={description} onClose={onCancel} className="max-w-sm" footer={<><Button variant="ghost" onClick={onCancel}>取消</Button><Button disabled={Boolean(error)} onClick={() => onConfirm(value)}>{confirmLabel}</Button></>}>
-    <label className="block text-sm font-semibold text-[var(--app-text-muted)]">名称<input autoFocus value={value} aria-invalid={Boolean(error)} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !error) onConfirm(value); }} className="mt-2 h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 text-[var(--app-text)] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15" /></label>
+    <label className="block text-body-semibold text-[var(--app-text-muted)]">名称<input autoFocus value={value} aria-invalid={Boolean(error)} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !error) onConfirm(value); }} className="mt-2 h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 text-[var(--app-text)] outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-500/15" /></label>
     {error && <InlineStatus message={error} tone="error" className="mt-3" />}
   </ModalShell>;
 }
@@ -283,10 +250,10 @@ export function ActionToast({ message, actionLabel, actionIcon, onAction, onClos
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
   }, []);
 
-  return <div role="status" aria-live="polite" data-phase={phase} className="action-toast fixed bottom-5 left-1/2 z-[100] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl bg-gray-900 px-4 py-3 text-sm text-white shadow-2xl">
+  return <div role="status" aria-live="polite" data-phase={phase} className="action-toast fixed bottom-5 left-1/2 z-[100] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl bg-text-primary px-4 py-3 text-body-regular text-text-white shadow-2xl">
     <span className="min-w-0">{message}</span>
-    {actionLabel && onAction && <button type="button" onClick={() => { onAction(); requestClose(); }} className="flex shrink-0 items-center gap-1 rounded-lg bg-white/10 px-2 py-1 font-bold transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50">{actionIcon}{actionLabel}</button>}
-    <button type="button" onClick={requestClose} aria-label="关闭提示" className="shrink-0 text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"><X className="h-4 w-4"/></button>
+    {actionLabel && onAction && <button type="button" onClick={() => { onAction(); requestClose(); }} className="flex shrink-0 items-center gap-1 rounded-lg bg-background-primary-default/10 px-2 py-1 font-bold transition-colors hover:bg-background-primary-default/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50">{actionIcon}{actionLabel}</button>}
+    <button type="button" onClick={requestClose} aria-label="关闭提示" className="shrink-0 text-text-white/60 transition-colors hover:text-text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"><X className="h-4 w-4"/></button>
   </div>;
 }
 
@@ -315,13 +282,13 @@ export function AiGenerationPanel({ title, steps, compact = false }: { title: st
     const timer = window.setInterval(() => setActiveStep(current => Math.min(current + 1, steps.length - 1)), 1200);
     return () => window.clearInterval(timer);
   }, [steps.length]);
-  return <div className={`ai-generation-panel ai-followup-loading-enter relative overflow-hidden rounded-[var(--app-radius-md)] border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-blue-50 text-left ${compact ? "p-3" : "p-4"}`} role="status" aria-live="polite" aria-label={title}>
+  return <div className={`ai-generation-panel ai-followup-loading-enter relative overflow-hidden rounded-[var(--app-radius-md)] border border-status-ai-100 bg-gradient-to-br from-status-ai-50 via-white to-accent-50 text-left ${compact ? "p-3" : "p-4"}`} role="status" aria-live="polite" aria-label={title}>
     <span aria-hidden="true" className="ai-generation-scan absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-white/75 to-transparent" />
     <div className="relative flex items-center gap-3">
-      <span className="ai-generation-core relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-200/70"><Sparkles className="h-5 w-5"/><span className="ai-generation-orbit absolute -inset-1 rounded-[18px] border border-violet-300/70"/></span>
-      <span className="min-w-0 flex-1"><strong className="block text-sm text-violet-800">{title}</strong><span className="mt-1 block text-xs font-semibold text-violet-600" key={activeStep}>{steps[activeStep] || "正在生成内容"}</span></span>
+      <span className="ai-generation-core relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-status-ai-600 text-text-white shadow-lg shadow-violet-200/70"><Sparkles className="h-5 w-5"/><span className="ai-generation-orbit absolute -inset-1 rounded-[18px] border border-status-ai-300/70"/></span>
+      <span className="min-w-0 flex-1"><strong className="block text-body-regular text-status-ai-800">{title}</strong><span className="mt-1 block text-caption-1-semibold text-status-ai-600" key={activeStep}>{steps[activeStep] || "正在生成内容"}</span></span>
     </div>
-    {!compact && <div className="relative mt-4 grid gap-2 sm:grid-cols-3">{steps.map((step, index) => <div key={step} className={`flex items-center gap-2 rounded-[var(--app-radius-sm)] border px-2.5 py-2 text-[11px] font-semibold transition-colors duration-300 ${index < activeStep ? "border-emerald-100 bg-emerald-50 text-emerald-700" : index === activeStep ? "border-violet-200 bg-white text-violet-700 shadow-sm" : "border-white/70 bg-white/55 text-gray-400"}`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${index < activeStep ? "bg-emerald-500 text-white" : index === activeStep ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400"}`}>{index < activeStep ? "✓" : index + 1}</span><span className="truncate">{step}</span></div>)}</div>}
+    {!compact && <div className="relative mt-4 grid gap-2 sm:grid-cols-3">{steps.map((step, index) => <div key={step} className={`flex items-center gap-2 rounded-[var(--app-radius-sm)] border px-2.5 py-2 text-[11px] font-semibold transition-colors duration-300 ${index < activeStep ? "border-status-success-100 bg-status-success-50 text-status-success-700" : index === activeStep ? "border-status-ai-200 bg-background-primary-default text-status-ai-700 shadow-sm" : "border-white/70 bg-background-primary-default/55 text-text-tertiary"}`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${index < activeStep ? "bg-status-success-500 text-text-white" : index === activeStep ? "bg-status-ai-600 text-text-white" : "bg-background-tertiary-default text-text-tertiary"}`}>{index < activeStep ? "✓" : index + 1}</span><span className="truncate">{step}</span></div>)}</div>}
   </div>;
 }
 
@@ -346,8 +313,8 @@ export function Card({
   return (
     <section className={`${overflow === "visible" ? "overflow-visible" : "overflow-hidden"} rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-[var(--app-surface)] shadow-[var(--app-shadow-card)] ${className}`}>
       {title && (
-        <div className="flex h-16 items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
-          <h2 className="text-base font-bold text-gray-900">{title}</h2>
+        <div className="flex h-16 items-center justify-between gap-3 border-b border-separator-border px-5 py-4">
+          <h2 className="text-headline-semibold text-text-primary">{title}</h2>
           {action}
         </div>
       )}
@@ -371,58 +338,13 @@ export function SegmentedControl<T extends string>({
   className?: string;
   disabled?: boolean;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
-  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
-
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    const selectedButton = buttonRefs.current.get(value);
-    if (!root || !selectedButton) return;
-
-    const updateIndicator = () => {
-      setIndicator({
-        left: selectedButton.offsetLeft,
-        width: selectedButton.offsetWidth,
-        ready: true,
-      });
-    };
-    updateIndicator();
-
-    const observer = new ResizeObserver(updateIndicator);
-    observer.observe(root);
-    buttonRefs.current.forEach(button => observer.observe(button));
-    return () => observer.disconnect();
-  }, [value, options.length]);
-
-  return (
-    <div ref={rootRef} role="group" aria-label={ariaLabel} aria-disabled={disabled} className={`relative inline-flex items-center gap-1 rounded-[var(--app-radius-sm)] bg-gray-100 p-1 ${disabled ? "opacity-70" : ""} ${className}`}>
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute bottom-1 top-1 rounded-lg bg-white shadow-sm transition-[left,width,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-        style={{ left: indicator.left, width: indicator.width, opacity: indicator.ready ? 1 : 0 }}
-      />
-      {options.map(option => {
-        const selected = value === option.value;
-        return (
-          <button
-            key={option.value}
-            ref={node => {
-              if (node) buttonRefs.current.set(option.value, node);
-              else buttonRefs.current.delete(option.value);
-            }}
-            type="button"
-            disabled={disabled}
-            aria-pressed={selected}
-            onClick={() => onChange(option.value)}
-            className={`relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-[color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:cursor-default ${selected ? "text-blue-700" : `text-gray-500 ${disabled ? "" : "hover:text-gray-800"}`}`}
-          >
-            {option.icon}{option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
+  return <div role="group" aria-label={ariaLabel} className={cx("inline-flex", className)}><BoardSegments aria-label={ariaLabel} selectedKeys={[value]} isDisabled={disabled}
+    onSelectionChange={keys => { const selected = Array.from(keys).find(key => String(key) !== value); if (selected !== undefined) onChange(String(selected) as T); }}
+    className="app-segments w-full">
+    {options.map(option => <SegmentedControlItem key={option.value} id={option.value} className="min-h-8 min-w-0 flex-1 gap-1.5 px-3">
+      {option.icon}{option.label}
+    </SegmentedControlItem>)}
+  </BoardSegments></div>;
 }
 
 export function UnderlineTabs<T extends string>({
@@ -455,11 +377,11 @@ export function UnderlineTabs<T extends string>({
     return () => observer.disconnect();
   }, [options.length, value]);
 
-  return <div ref={rootRef} role="tablist" aria-label={ariaLabel} className={`relative flex items-center gap-1 border-b border-gray-100 ${className}`}>
-    <span aria-hidden="true" className={`pointer-events-none absolute -bottom-px h-0.5 rounded-full transition-[left,width,background-color,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${activeOption?.tone === "ai" ? "bg-violet-600" : "bg-blue-600"}`} style={{ left: indicator.left, width: indicator.width, opacity: indicator.ready ? 1 : 0 }} />
+  return <div ref={rootRef} role="tablist" aria-label={ariaLabel} className={`relative flex items-center gap-1 border-b border-separator-border ${className}`}>
+    <span aria-hidden="true" className={`pointer-events-none absolute -bottom-px h-0.5 rounded-full transition-[left,width,background-color,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${activeOption?.tone === "ai" ? "bg-status-ai-600" : "bg-accent-600"}`} style={{ left: indicator.left, width: indicator.width, opacity: indicator.ready ? 1 : 0 }} />
     {options.map(option => {
       const selected = option.value === value;
-      return <button key={option.value} ref={node => { if (node) buttonRefs.current.set(option.value, node); else buttonRefs.current.delete(option.value); }} type="button" role="tab" aria-selected={selected} onClick={() => onChange(option.value)} className={`relative px-4 py-2.5 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/30 ${selected ? option.tone === "ai" ? "text-violet-700" : "text-blue-700" : "text-gray-400 hover:text-gray-600"}`}>{option.label}</button>;
+      return <button key={option.value} ref={node => { if (node) buttonRefs.current.set(option.value, node); else buttonRefs.current.delete(option.value); }} type="button" role="tab" aria-selected={selected} onClick={() => onChange(option.value)} className={`relative px-4 py-2.5 text-body-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500/30 ${selected ? option.tone === "ai" ? "text-status-ai-700" : "text-accent-700" : "text-text-tertiary hover:text-text-secondary"}`}>{option.label}</button>;
     })}
   </div>;
 }
@@ -569,16 +491,16 @@ export function SelectMenu({ value, options, onChange, ariaLabel, placeholder = 
   }, [open]);
 
   return <>
-    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-left text-sm text-[var(--app-text)] transition-colors hover:border-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 ${className}`}>
+    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default px-3 text-left text-body-regular text-[var(--app-text)] transition-colors hover:border-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20 ${className}`}>
       <span className={`min-w-0 flex-1 truncate ${selected ? "" : "text-[var(--app-text-muted)]"}`}>{selected?.label || placeholder}</span>
-      <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+      <ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
     </button>
-    {createPortal(<AnimatedPopover open={open} className="fixed z-[120] overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-2 shadow-[var(--app-shadow-float)]" style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}><div ref={panelRef}>
-      {showSearch && <div className="relative mb-2"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400"/><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索选项" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-[var(--app-surface-muted)] pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:bg-white"/></div>}
+    {createPortal(<AnimatedPopover open={open} className="fixed z-[120] overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-2 shadow-[var(--app-shadow-float)]" style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}><div ref={panelRef}>
+      {showSearch && <div className="relative mb-2"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-text-tertiary"/><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索选项" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-[var(--app-surface-muted)] pl-9 pr-3 text-body-regular outline-none focus:border-accent-300 focus:bg-background-primary-default"/></div>}
       <div role="listbox" aria-label={ariaLabel} className="max-h-[min(16rem,var(--select-menu-max-height,16rem))] space-y-1 overflow-y-auto">{filtered.map(option => {
         const active = String(option.value) === String(value);
-        return <button key={String(option.value)} type="button" role="option" aria-selected={active} disabled={option.disabled} onClick={() => { onChange(String(option.value)); setOpen(false); setSearch(""); triggerRef.current?.focus(); }} className={`flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-sm transition-colors disabled:opacity-40 ${active ? "bg-blue-50 font-bold text-blue-700" : "text-gray-700 hover:bg-[var(--app-surface-muted)]"}`}><span className="min-w-0 flex-1 truncate text-left">{option.label}</span>{active && <Check className="h-4 w-4 shrink-0"/>}</button>;
-      })}{!filtered.length && <div className="py-6 text-center text-sm text-[var(--app-text-muted)]">没有匹配选项</div>}</div>
+        return <button key={String(option.value)} type="button" role="option" aria-selected={active} disabled={option.disabled} onClick={() => { onChange(String(option.value)); setOpen(false); setSearch(""); triggerRef.current?.focus(); }} className={`flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-body-regular transition-colors disabled:opacity-40 ${active ? "bg-accent-50 font-bold text-accent-700" : "text-text-primary hover:bg-[var(--app-surface-muted)]"}`}><span className="min-w-0 flex-1 truncate text-left">{option.label}</span>{active && <Check className="h-4 w-4 shrink-0"/>}</button>;
+      })}{!filtered.length && <div className="py-6 text-center text-body-regular text-[var(--app-text-muted)]">没有匹配选项</div>}</div>
     </div></AnimatedPopover>, document.body)}
   </>;
 }
@@ -639,12 +561,12 @@ export function DatePicker({ value, onChange, ariaLabel, className = "", min, ma
   const label = selected ? `${selected.getFullYear()}年${selected.getMonth() + 1}月${selected.getDate()}日` : "请选择日期";
 
   return <>
-    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-white px-3 text-left text-sm transition-colors hover:border-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 ${className}`}><CalendarDays className="h-4 w-4 shrink-0 text-blue-500"/><span className="min-w-0 flex-1 truncate text-[var(--app-text)]">{label}</span><ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}/></button>
-    {createPortal(<AnimatedPopover open={open} className="fixed z-[125] w-[304px] rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-3 shadow-[var(--app-shadow-float)]" style={position}><div ref={panelRef} role="dialog" aria-label={ariaLabel}>
-      <div className="mb-3 flex items-center justify-between"><IconButton size="sm" label="上个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4"/></IconButton><strong className="text-sm text-[var(--app-text)]">{visibleMonth.getFullYear()}年 {visibleMonth.getMonth() + 1}月</strong><IconButton size="sm" label="下个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4"/></IconButton></div>
+    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default px-3 text-left text-body-regular transition-colors hover:border-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20 ${className}`}><CalendarDays className="h-4 w-4 shrink-0 text-accent-500"/><span className="min-w-0 flex-1 truncate text-[var(--app-text)]">{label}</span><ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}/></button>
+    {createPortal(<AnimatedPopover open={open} className="fixed z-[125] w-[304px] rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-3 shadow-[var(--app-shadow-float)]" style={position}><div ref={panelRef} role="dialog" aria-label={ariaLabel}>
+      <div className="mb-3 flex items-center justify-between"><IconButton size="sm" label="上个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4"/></IconButton><strong className="text-body-regular text-[var(--app-text)]">{visibleMonth.getFullYear()}年 {visibleMonth.getMonth() + 1}月</strong><IconButton size="sm" label="下个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4"/></IconButton></div>
       <div className="grid grid-cols-7 text-center text-[11px] font-bold text-[var(--app-text-muted)]">{"日一二三四五六".split("").map(day => <span key={day} className="py-1">{day}</span>)}</div>
-      <div className="mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-xs transition-colors disabled:opacity-25 ${active ? "bg-blue-600 font-bold text-white" : dayValue === today ? "bg-blue-50 font-bold text-blue-700" : currentMonth ? "text-gray-700 hover:bg-gray-100" : "text-gray-300 hover:bg-gray-50"}`}>{day.getDate()}</button>; })}</div>
-      <div className="mt-3 flex justify-between border-t border-gray-100 pt-2"><Button size="sm" variant="ghost" onClick={() => { onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
+      <div className="mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-caption-1-regular transition-colors disabled:opacity-25 ${active ? "bg-accent-600 font-bold text-text-white" : dayValue === today ? "bg-accent-50 font-bold text-accent-700" : currentMonth ? "text-text-primary hover:bg-background-tertiary-default" : "text-text-tertiary hover:bg-background-secondary-default"}`}>{day.getDate()}</button>; })}</div>
+      <div className="mt-3 flex justify-between border-t border-separator-border pt-2"><Button size="sm" variant="ghost" onClick={() => { onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
     </div></AnimatedPopover>, document.body)}
   </>;
 }
@@ -698,23 +620,23 @@ export function ToolDrawer({
   if (!open) return null;
   return (
     <>
-      <button type="button" aria-label="关闭工具面板" className={`soft-backdrop-enter inset-0 bg-gray-950/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
-      <aside className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-16px)] flex-col border-l border-[var(--app-border)] bg-white shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
+      <button type="button" aria-label="关闭工具面板" className={`soft-backdrop-enter inset-0 bg-text-primary/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
+      <aside className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-16px)] flex-col border-l border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--app-border)] px-4">
-          <h2 className="text-base font-bold text-[var(--app-text)]">{title}</h2>
+          <h2 className="text-headline-semibold text-[var(--app-text)]">{title}</h2>
           <button
             ref={closeRef}
             type="button"
             aria-label="关闭工具面板"
             title="关闭工具面板"
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
+            className="grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] border border-border-button-default text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className={`min-h-0 flex-1 overflow-y-auto ${bodyClassName}`}>{children}</div>
-        {footer && <div className="shrink-0 border-t border-[var(--app-border)] bg-white p-4">{footer}</div>}
+        {footer && <div className="shrink-0 border-t border-[var(--app-border)] bg-background-primary-default p-4">{footer}</div>}
       </aside>
     </>
   );
@@ -789,8 +711,8 @@ export function FileDropZone({
       onDrop={handleDrop}
       className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 transition-all ${
         isDragging
-          ? "border-blue-500 bg-blue-50"
-          : "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100"
+          ? "border-accent-500 bg-accent-50"
+          : "border-border-button-hover bg-background-secondary-default hover:border-border-button-hover hover:bg-background-tertiary-default"
       } ${className}`}
     >
       {children}
