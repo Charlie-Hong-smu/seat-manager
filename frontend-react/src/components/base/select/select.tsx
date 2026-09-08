@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode, Ref } from "react";
 import {
   Button as AriaButton,
@@ -90,6 +90,23 @@ export function Select<T extends object>({
   // Pressing the trigger while open closes the popover instead of reopening
   const allowOpenChange = useTriggerToggle(isOpen, triggerRef);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    // Mouse-opened selects may keep focus on the trigger instead of the list.
+    // Consume Escape before the outer drawer's window listener in either case.
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing) return;
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !popoverRef.current?.contains(target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", escape, true);
+    return () => document.removeEventListener("keydown", escape, true);
+  }, [isOpen]);
+
   return (
     <AriaSelect
       ref={elementRef}
@@ -145,20 +162,12 @@ export function Select<T extends object>({
               popoverClassName,
             )}
           >
-            <div onKeyDownCapture={event => {
-              if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setIsOpen(false);
-              triggerRef.current?.focus();
-            }}>
             <AriaListBox
               items={items}
               className={cx(MENU_ITEMS_CONTAINER, "max-h-[240px] overflow-auto")}
             >
               <SelectSizeContext.Provider value={size}>{children}</SelectSizeContext.Provider>
             </AriaListBox>
-            </div>
           </AriaPopover>
         </>
       )}

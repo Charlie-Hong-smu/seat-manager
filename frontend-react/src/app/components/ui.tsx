@@ -224,7 +224,13 @@ function PromptDialog({ open, title, description, defaultValue = "", confirmLabe
   useEffect(() => { if (open) setValue(defaultValue); }, [defaultValue, open]);
   const error = validate?.(value);
   return <ModalShell open={open} title={title} description={description} onClose={onCancel} className="max-w-sm" footer={<><Button variant="ghost" onClick={onCancel}>取消</Button><Button disabled={Boolean(error)} onClick={() => onConfirm(value)}>{confirmLabel}</Button></>}>
-    <Input label="名称" autoFocus value={value} isInvalid={Boolean(error)} onChange={setValue} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !error) onConfirm(value); }} />
+    <Input label="名称" autoFocus value={value} isInvalid={Boolean(error)} onChange={setValue} onKeyDown={event => {
+      if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+      // Prevent Enter from activating the trigger after focus is restored.
+      event.preventDefault();
+      event.stopPropagation();
+      if (!error) onConfirm(value);
+    }} />
     {error && <InlineStatus message={error} tone="error" className="mt-3" />}
   </ModalShell>;
 }
