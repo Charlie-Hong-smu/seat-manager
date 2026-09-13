@@ -33,7 +33,7 @@ interface TopHeaderProps {
   onUnbindDevice?: () => void;
   onLogout: () => void;
   onWorkspaceChanged: () => void;
-  onBeforeWorkspaceMutate?: () => void;
+  onBeforeWorkspaceMutate?: () => boolean;
   saveStatus?: "saving" | "saved" | "failed" | "quota";
   onRetrySave?: () => void;
 }

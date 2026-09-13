@@ -1,3 +1,4 @@
+import { parseScoreNumber } from "./scoreValue";
 import { applyAutomaticClassRanks } from "./gradeRanking";
 import type { GradeRankConfig, GradeScoreCell, SavedGradeExamRecord, ScoreImportDraft } from "./types";
 import { toLocalDateKey } from "./dateKey";
@@ -90,14 +91,6 @@ function getScoreColumnKind(header: unknown): "raw" | "assigned" | "score" {
   if (/赋分|等级分|转换分|折算分|标准分|scaledscore|assignedscore|convertedscore/.test(normalized)) return "assigned";
   if (/原始分|原始成绩|原始得分|卷面分|卷面成绩|卷面得分|裸分|原分|rawscore|originalscore/.test(normalized)) return "raw";
   return "score";
-}
-
-function parseScoreNumber(value: unknown): number | null {
-  if (value === undefined || value === null || value === "") {
-    return null;
-  }
-  const parsed = Number.parseFloat(String(value).replace(/,/g, "").trim());
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function parseRankNumber(value: unknown): number | null {

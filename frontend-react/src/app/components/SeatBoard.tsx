@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Lock, Star, UserRoundPlus, Users } from "lucide-react";
+import { ChevronDown, Lock, UserRoundPlus, Users } from "lucide-react";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
 import { resolveSeatLayout } from "../state/seatLayout";
 import { SeatLayoutSurface } from "./SeatLayoutSurface";
@@ -33,6 +33,7 @@ interface DragVisualState {
   studentId: StudentId;
   fromIndex: number | null;
   targetIndex: number | null;
+  targetOccupied: boolean;
   waitingTarget: boolean;
   pointerX: number;
   pointerY: number;
@@ -63,6 +64,7 @@ const SeatCard = memo(function SeatCard({
   seatIndex,
   isLocked,
   isDragging,
+  isConcealed,
   isDropTarget,
   dragActive,
   visualTransform,
@@ -77,6 +79,7 @@ const SeatCard = memo(function SeatCard({
   seatIndex: number;
   isLocked: boolean;
   isDragging: boolean;
+  isConcealed: boolean;
   isDropTarget: boolean;
   dragActive: boolean;
   visualTransform?: string;
@@ -140,7 +143,7 @@ const SeatCard = memo(function SeatCard({
       }}
       className={`relative h-full min-h-0 w-full overflow-hidden rounded-xl bg-[var(--app-surface-muted)] text-left group ring-1 ring-inset transition-[background-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:bg-white hover:shadow-[var(--app-shadow-card)] cursor-pointer ${
         isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-      } ${isLocked ? "bg-amber-50/50 ring-amber-300" : "ring-gray-200/80"} ${isDragging ? "opacity-25 ring-2 ring-blue-200" : ""} ${isDropTarget ? "bg-blue-50/90 ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
+      } ${isLocked ? "bg-amber-50/50 ring-amber-300" : "ring-gray-200/80"} ${isDragging ? "opacity-25 ring-2 ring-blue-200" : ""} ${isConcealed ? "invisible" : ""} ${isDropTarget ? "bg-blue-50/90 ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
       style={{ transform: visualTransform, touchAction: "manipulation" }}
     >
       {/* Lock toggle */}
@@ -204,23 +207,25 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const layout = useMemo(() => resolveSeatLayout(seatSettings.layout, seatOrder.length), [seatOrder.length, seatSettings.layout]);
   const seatedIds = useMemo(() => new Set(seatOrder.filter((id): id is StudentId => Boolean(id))), [seatOrder]);
-  const waitingStudents = useMemo(() => students.filter(student => !seatedIds.has(student.id)), [seatedIds, students]);
+  const waitingOrderRef = useRef<StudentId[]>([]);
+  const waitingStudents = useMemo(() => {
+    const waitingIds = new Set(students.filter(student => !seatedIds.has(student.id)).map(student => student.id));
+    const nextOrder = waitingOrderRef.current.filter(studentId => waitingIds.has(studentId));
+    const retainedIds = new Set(nextOrder);
+    students.forEach(student => {
+      if (waitingIds.has(student.id) && !retainedIds.has(student.id)) {
+        nextOrder.push(student.id);
+        retainedIds.add(student.id);
+      }
+    });
+    waitingOrderRef.current = nextOrder;
+    return nextOrder.flatMap(studentId => {
+      const student = studentById.get(studentId);
+      return student ? [student] : [];
+    });
+  }, [seatedIds, studentById, students]);
   const previousWaitingCountRef = useRef(waitingStudents.length);
   const [pendingStudentId, setPendingStudentId] = useState<StudentId | null>(null);
-  const rowCount = Math.ceil(seatOrder.length / COLS);
-
-  const rows = useMemo(() => Array.from({ length: rowCount }, (_, r) =>
-    Array.from({ length: COLS }, (_, c) => ({
-      seatIndex: r * COLS + c,
-      studentId: seatOrder[r * COLS + c] ?? null,
-    }))
-  ), [rowCount, seatOrder]);
-
-  // Groups: [0,1] [2,3] [4,5] [6,7]
-  const groups = [
-    [0, 1], [2, 3], [4, 5], [6, 7],
-  ];
-
   useEffect(() => () => {
     dragCleanupRef.current?.();
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
@@ -392,10 +397,12 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         ? { targetIndex: null, proximity: 0 }
         : targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, source.fromIndex, source.sourceType === "waiting");
       const targetRect = targetIndex === null ? null : seatRectsRef.current.get(targetIndex);
+      const targetOccupied = targetIndex !== null && studentById.has(seatOrder[targetIndex] ?? "");
       const waitingShape = waitingTarget || (source.sourceType === "waiting" && targetIndex === null);
       setDragVisual({
         ...source,
         targetIndex,
+        targetOccupied,
         waitingTarget,
         pointerX: pointerEvent.clientX,
         pointerY: pointerEvent.clientY,
@@ -419,13 +426,19 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         : targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, source.fromIndex, source.sourceType === "waiting");
       const validSeatTarget = targetIndex !== null;
       const targetRect = validSeatTarget ? seatRectsRef.current.get(targetIndex) : null;
+      const targetOccupied = targetIndex !== null && studentById.has(seatOrder[targetIndex] ?? "");
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const emptySeatTarget = source.sourceType === "seat"
+        && source.fromIndex !== null
+        && targetIndex !== null
+        && !targetOccupied;
 
       if (waitingTarget && source.fromIndex !== null) {
         // 松手时先留在当前指针位置，等真实等待卡渲染并完成横向滚动后，再执行唯一一次吸附。
         setDragVisual(current => current ? {
           ...current,
           targetIndex: null,
+          targetOccupied: false,
           waitingTarget: true,
           proximity: 0,
           phase: "holding",
@@ -436,6 +449,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         } : current);
         setWaitingDockOpen(true);
         setPendingStudentId(null);
+        waitingOrderRef.current = [...waitingOrderRef.current.filter(studentId => studentId !== source.studentId), source.studentId];
         onMoveStudentToWaiting(source.fromIndex);
         window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
           const waitingList = waitingDockListRef.current;
@@ -476,6 +490,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       setDragVisual(current => current ? {
         ...current,
         targetIndex,
+        targetOccupied,
         waitingTarget: false,
         proximity: targetIndex === null ? 0 : 1,
         phase: "settling",
@@ -488,6 +503,9 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       if (source.sourceType === "waiting" && validSeatTarget) {
         onAssignStudentToSeat(source.studentId, targetIndex);
         setPendingStudentId(null);
+      } else if (emptySeatTarget && source.fromIndex !== null && targetIndex !== null) {
+        // 空座落点在松手时就更新真实顺序，由 overlay 遮住目标卡直到吸附结束，避免旧座位回闪一帧。
+        onMoveSeat(source.fromIndex, targetIndex);
       }
 
       settleTimerRef.current = window.setTimeout(() => {
@@ -501,6 +519,11 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
           return;
         }
         if (targetIndex === null) {
+          setDragVisual(null);
+          setDraggingSeat(null);
+          return;
+        }
+        if (emptySeatTarget) {
           setDragVisual(null);
           setDraggingSeat(null);
           return;
@@ -521,7 +544,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   function seatVisualTransform(seatIndex: number): string | undefined {
     if (!dragVisual || dragVisual.sourceType !== "seat" || dragVisual.fromIndex === null || dragVisual.targetIndex === null || seatIndex === dragVisual.fromIndex) return undefined;
     // Empty slots stay fixed; only occupied-seat swaps preview displacement.
-    if (!studentById.has(seatOrder[dragVisual.targetIndex] ?? "") || !studentById.has(seatOrder[seatIndex] ?? "")) return undefined;
+    if (!dragVisual.targetOccupied || !studentById.has(seatOrder[seatIndex] ?? "")) return undefined;
     const proximity = dragVisual.phase === "settling" ? 1 : dragVisual.proximity;
     if (seatIndex === dragVisual.targetIndex) {
       const push = getTargetPush(dragVisual.fromIndex, dragVisual.targetIndex, proximity);
@@ -642,7 +665,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
                     }
                     setPendingStudentId(current => current === student.id ? null : student.id);
                   }}
-                  className={`seat-waiting-person shrink-0 border text-center text-xs transition-[background-color,border-color,box-shadow,opacity] ${pendingStudentId === student.id ? "border-blue-400 bg-blue-50 text-blue-800 shadow-[0_0_0_3px_rgba(59,130,246,0.10)]" : "border-[var(--app-border)] bg-[var(--app-surface-muted)] text-[var(--app-text)] hover:border-gray-300 hover:bg-white"} ${dragVisual?.studentId === student.id ? "pointer-events-none opacity-0" : ""}`}
+                  className={`seat-waiting-person shrink-0 border text-center text-xs transition-[background-color,border-color,box-shadow] ${pendingStudentId === student.id ? "border-blue-400 bg-blue-50 text-blue-800 shadow-[0_0_0_3px_rgba(59,130,246,0.10)]" : "border-[var(--app-border)] bg-[var(--app-surface-muted)] text-[var(--app-text)] hover:border-gray-300 hover:bg-white"} ${dragVisual?.studentId === student.id ? "pointer-events-none invisible" : ""}`}
                 >
                   {compactWaitingName(student.name).map(line => <span key={line}>{line}</span>)}
                 </button>
@@ -654,116 +677,15 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
     </section>
   );
 
-  if (seatSettings.layout) {
-    return <div className="flex h-full min-h-0 flex-col gap-3">
+  return <div className="flex h-full min-h-0 flex-col gap-3">
       <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
         <SeatLayoutSurface layout={layout} detail={cardMode === "detail"} renderSeat={(seat, seatIndex) =>
           <div className="seat-card-enter h-full min-h-0" style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms` }} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) assignWaitingStudentToSeat(studentId, seatIndex); }} onClick={() => { if (pendingStudentId) assignWaitingStudentToSeat(pendingStudentId, seatIndex); }}>
-            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} positionLabel={seat.label} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} />
+            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isConcealed={dragVisual?.phase === "settling" && dragVisual.studentId === seatOrder[seatIndex]} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} positionLabel={seat.label} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} />
           </div>
         } />
       </div>
       {waitingSection}
       {dragOverlay}
     </div>;
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
-      <div className="flex min-h-full min-w-[760px] flex-col">
-        {/* Column group headers */}
-        <div className="mb-2 flex shrink-0 gap-3 pl-12">
-          {groups.map((_, gi) => (
-            <div key={gi} className="flex-1 text-center text-xs text-gray-400" style={{ fontWeight: 600 }}>
-              第 {gi + 1} 组
-            </div>
-          ))}
-        </div>
-
-        {/* Rows */}
-        <div
-          className="grid min-h-[384px] flex-1 content-center gap-2 transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-          style={{ gridTemplateRows: `repeat(${rowCount}, ${cardMode === "compact" ? "48px" : "72px"})` }}
-        >
-          {rows.map((_, displayIdx) => {
-            const rowIdx = rows.length - 1 - displayIdx;
-            const row = rows[rowIdx];
-            return (
-            <div
-              key={rowIdx}
-              className="seat-row-enter flex min-h-0 items-stretch gap-3"
-              style={{ animationDelay: `${displayIdx * 18}ms` }}
-            >
-              {/* Row label */}
-              <div className="flex w-9 shrink-0 items-center justify-center text-center">
-                <span className="text-xs text-gray-400" style={{ fontWeight: 600 }}>第{rowIdx + 1}排</span>
-              </div>
-
-              {/* 4 groups of 2 columns */}
-              {groups.map((cols, gi) => (
-                <div key={gi} className="grid min-w-0 flex-1 grid-cols-2 gap-2">
-                  {cols.map(colIdx => {
-                    const cell = row[colIdx];
-                    return (
-                      <div
-                        key={cell.seatIndex}
-                        className="seat-card-enter min-h-0 min-w-0"
-                        style={{ animationDelay: `${Math.min(cell.seatIndex, 12) * 10}ms` }}
-                        onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
-                        onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) assignWaitingStudentToSeat(studentId, cell.seatIndex); }}
-                        onClick={() => { if (pendingStudentId) assignWaitingStudentToSeat(pendingStudentId, cell.seatIndex); }}
-                      >
-                        <SeatCard
-                          studentId={cell.studentId}
-                          studentById={studentById}
-                          seatIndex={cell.seatIndex}
-                          isLocked={lockedSeats.has(cell.seatIndex)}
-                          isDragging={draggingSeat === cell.seatIndex}
-                          isDropTarget={dragVisual?.targetIndex === cell.seatIndex}
-                          dragActive={Boolean(dragVisual) || pendingStudentId !== null}
-                          visualTransform={seatVisualTransform(cell.seatIndex)}
-                          cardMode={cardMode}
-                          onSelect={onSelectStudent}
-                          onPointerDragStart={handleSeatPointerDrag}
-                          onToggleLock={onToggleLock}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          );
-          })}
-        </div>
-
-        <div className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] border border-blue-100 bg-blue-50/70 py-2 text-center text-xs text-blue-600" style={{ fontWeight: 700 }}>
-          讲台
-        </div>
-
-        {/* Legend */}
-        <div className="mt-3 flex shrink-0 items-center gap-4 border-t border-gray-100 pt-3">
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="w-2 h-2 rounded-full bg-blue-400" />男生
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="w-2 h-2 rounded-full bg-pink-400" />女生
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <Star className="w-3 h-3 text-emerald-400" />学科优势
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <Lock className="w-3 h-3 text-amber-400" />座位锁定
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="w-4 h-4 rounded border-2 border-dashed border-gray-300" />空座
-          </div>
-        </div>
-      </div>
-      </div>
-      {waitingSection}
-      {dragOverlay}
-    </div>
-  );
 }

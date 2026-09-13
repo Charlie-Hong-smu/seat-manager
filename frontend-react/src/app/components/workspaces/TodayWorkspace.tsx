@@ -1,3 +1,4 @@
+import { useWorkspaceDraftState } from "../../hooks/useWorkspaceDraftState";
 import { BookOpenCheck, CalendarDays, CheckCircle2, Clipboard, ClipboardList, FileSpreadsheet, LayoutGrid, Sparkles, UserRoundCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -36,7 +37,6 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [status, setStatus] = useState("");
-  const [weeklyContent, setWeeklyContent] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [weeklyStatus, setWeeklyStatus] = useState("");
   const [queueOpen, setQueueOpen] = useState(false);
@@ -44,11 +44,12 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   const [resolutionTaskId, setResolutionTaskId] = useState("");
   const items = useMemo(() => buildTodayWorkItems({ date: today, students, attendance, tasks, homework }), [attendance, homework, students, tasks, today]);
   const todayEntries = schedule.entries.filter(item => item.weekday === weekday).sort((a, b) => schedule.periods.findIndex(period => period.id === a.periodId) - schedule.periods.findIndex(period => period.id === b.periodId));
-  const abnormalCount = attendance.filter(item => item.date === today && (item.status !== "normal" || item.late || item.earlyLeave)).length;
-  const dueTaskCount = tasks.filter(item => item.status === "pending" && item.dueDate <= today).length;
-  const dueHomework = homework.filter(item => (item.lifecycle || "active") === "active" && item.dueDate <= today).length;
+  const abnormalCount = items.filter(item => item.kind === "attendance").length;
+  const dueTaskCount = items.filter(item => item.kind === "task").length;
+  const dueHomework = items.filter(item => item.kind === "homework").length;
   const range = getWeekRange();
   const facts = buildWeeklyFacts({ students, attendance, tasks, homework, dormitories, gradeExams, ...range });
+  const [weeklyContent, setWeeklyContent] = useWorkspaceDraftState(`weekly:class:${range.startDate}:${range.endDate}`, () => drafts.find(item => item.scope === "class" && item.startDate === range.startDate && item.endDate === range.endDate)?.content || buildLocalWeeklyDraft("班级", range.startDate, range.endDate, facts));
 
   useInitialTargetEffect(initialDraftId, () => {
     const draft = drafts.find(item => item.id === initialDraftId);
@@ -106,9 +107,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   }
 
   function openWeekly() {
-    const existing = drafts.find(item => item.scope === "class" && item.startDate === range.startDate && item.endDate === range.endDate);
-    setWeeklyContent(existing?.content || buildLocalWeeklyDraft("班级", range.startDate, range.endDate, facts));
-    setWeeklyStatus("已基于本机数据生成，可直接编辑或按需使用 AI 润色。");
+    setWeeklyStatus("草稿已保留，可继续编辑或按需使用 AI 润色。");
     setWeeklyOpen(true);
   }
 

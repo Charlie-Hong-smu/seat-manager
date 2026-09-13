@@ -15,7 +15,7 @@ import {
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
 import { SeatLayoutDesigner } from "../SeatLayoutDesigner";
-import { Button, SegmentedControl, SelectMenu, ToolDrawer } from "../ui";
+import { Button, SegmentedControl, SelectMenu, ToolDrawer, useAppDialog } from "../ui";
 import type {
   AppStudent,
   Gender,
@@ -24,7 +24,7 @@ import type {
 } from "../../state/types";
 import { matchesStudentSearch } from "../../state/studentSearch";
 import { SeatBoard } from "../SeatBoard";
-import { drawStudents, todayKey } from "../../state/dailyManagement";
+import { getDrawRound, retainDrawSessions, drawStudents, todayKey } from "../../state/dailyManagement";
 import type { AttendanceRecord, DrawSession, FollowupTask } from "../../state/types";
 
 export function DailyWorkspace({
@@ -86,6 +86,8 @@ export function DailyWorkspace({
   const [drawerSearch, setDrawerSearch] = useState("");
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
+  const appDialog = useAppDialog();
+  const [drawBusy, setDrawBusy] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   // 抽签历史直接读持久化的 drawSessions，切页或刷新后仍然可见。
@@ -104,9 +106,10 @@ export function DailyWorkspace({
     + constraints.frontRowStudentIds.length
     + seatSettings.complementRuleIds.length
     + (seatSettings.pairByGender ? 1 : 0);
-  const todayAttendance = attendanceRecords.filter(item => item.date === todayKey());
+  const activeStudentIds = new Set(students.filter(student => student.enrollmentStatus !== "archived").map(student => student.id));
+  const todayAttendance = attendanceRecords.filter(item => item.date === todayKey() && activeStudentIds.has(item.studentId));
   const abnormalAttendance = todayAttendance.filter(item => item.status !== "normal" || item.late || item.earlyLeave).length;
-  const dueTasks = followupTasks.filter(item => item.status === "pending" && item.dueDate <= todayKey()).length;
+  const dueTasks = followupTasks.filter(item => item.status === "pending" && item.dueDate && item.dueDate <= todayKey()).length;
 
   function addStudent() {
     if (!name.trim()) return;
@@ -116,13 +119,21 @@ export function DailyWorkspace({
     setAlias("");
   }
 
-  function draw() {
-    const usedToday = noRepeat ? new Set(drawSessions.filter(item => item.date === todayKey()).flatMap(item => item.studentIds)) : new Set<string>();
-    let selected = drawStudents(students, drawCount, usedToday);
-    if (!selected.length && noRepeat) selected = drawStudents(students, drawCount);
-    const picked = selected.map(student => student.name);
-    if (selected.length) onDrawSessionsChange([{ id: `draw-${Date.now()}`, date: todayKey(), studentIds: selected.map(student => student.id), createdAt: new Date().toISOString() }, ...drawSessions].slice(0, 50));
-    setDrawResult(picked);
+  async function draw() {
+    if (drawBusy) return;
+    setDrawBusy(true);
+    try {
+      const round = getDrawRound(drawSessions);
+      let roundId = round.roundId;
+      let selected = drawStudents(students, drawCount, noRepeat ? round.usedIds : new Set());
+      if (!selected.length && noRepeat && students.length) {
+        if (!await appDialog.confirm({ title: "本轮已抽完", description: "所有在班学生本轮都已抽过。确认后开始新一轮，历史记录仍保留。", confirmLabel: "开始新一轮" })) return;
+        roundId = crypto.randomUUID();
+        selected = drawStudents(students, drawCount);
+      }
+      if (selected.length) onDrawSessionsChange(retainDrawSessions([{ id: `draw-${crypto.randomUUID()}`, roundId, date: todayKey(), studentIds: selected.map(student => student.id), createdAt: new Date().toISOString() }, ...drawSessions]));
+      setDrawResult(selected.map(student => student.name));
+    } finally { setDrawBusy(false); }
   }
 
   return (
@@ -226,12 +237,12 @@ export function DailyWorkspace({
                 <input type="checkbox" checked={noRepeat} onChange={event => setNoRepeat(event.target.checked)} className="h-4 w-4 accent-blue-600" />去重
               </label>
             </div>
-            <Button className="mt-4 w-full" onClick={draw}><Dices className="h-4 w-4" />开始抽签</Button>
+            <Button className="mt-4 w-full" disabled={drawBusy} onClick={() => void draw()}><Dices className="h-4 w-4" />开始抽签</Button>
           </div>
           {drawResult.length > 0 && (
             <div className="surface-enter rounded-[var(--app-radius-md)] border border-blue-100 bg-blue-50 p-4">
               <div className="mb-2 text-xs font-bold text-blue-500">本次结果</div>
-              <div className="flex flex-wrap gap-2">{drawResult.map(resultName => <span key={resultName} className="rounded-full bg-blue-600 px-3 py-1.5 text-sm font-bold text-white">{resultName}</span>)}</div>
+              <div className="flex flex-wrap gap-2">{drawResult.map((resultName, index) => <span key={index} className="rounded-full bg-blue-600 px-3 py-1.5 text-sm font-bold text-white">{resultName}</span>)}</div>
             </div>
           )}
           {drawHistory.length > 0 && (
@@ -258,6 +269,7 @@ export function DailyWorkspace({
         onUndo={onUndoSeatOrder}
         onClose={() => setShowSeatSettings(false)}
       />
+      {appDialog.dialog}
     </div>
   );
 }

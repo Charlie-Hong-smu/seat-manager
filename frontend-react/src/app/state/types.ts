@@ -257,6 +257,7 @@ export interface FollowupTask {
 }
 
 export interface DrawSession {
+  roundId?: string;
   id: string;
   date: string;
   studentIds: StudentId[];
@@ -322,6 +323,7 @@ export interface GradeQuestionDefinition {
   label: string;
   subject: string;
   maxScore: number;
+  maxScoreInferred?: boolean;
   description?: string;
   knowledgePoints: string[];
   sourceColumn: number;

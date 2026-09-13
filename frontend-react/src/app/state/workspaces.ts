@@ -26,6 +26,19 @@ import { toLocalDateKey } from "./dateKey";
 const LEGACY_STORAGE_KEY = "homeroom-seat-manager-v1";
 export const WORKSPACES_KEY = "seat-manager-workspaces-v1";
 const SCHOOL_STAGE_KEY = "seat-manager-last-school-stage";
+let acceptedRevision: string | null | undefined;
+let writeEnabled = true;
+
+export function acceptWorkspaceRevision(): void {
+  acceptedRevision = hasStorage() ? localStorage.getItem(WORKSPACES_KEY) : null;
+}
+
+export function setWorkspaceWriteEnabled(enabled: boolean): void { writeEnabled = enabled; }
+
+export function hasWorkspaceConflict(): boolean {
+  return acceptedRevision !== undefined && hasStorage() && localStorage.getItem(WORKSPACES_KEY) !== acceptedRevision;
+}
+
 
 function hasStorage(): boolean {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -250,13 +263,13 @@ function readBookRaw(): WorkspaceBook | null {
     return null;
   }
   if (bookCache && bookCache.raw === raw) {
-    return bookCache.book;
+    return structuredClone(bookCache.book);
   }
   const status = inspectWorkspaceStorage();
   if (status.status === "corrupt") throw new WorkspaceStorageCorruptError(status.issues);
   if (status.status === "ready") {
     bookCache = { raw, book: status.book };
-    return status.book;
+    return structuredClone(status.book);
   }
   return null;
 }
@@ -266,9 +279,16 @@ function writeBook(book: WorkspaceBook): boolean {
     return false;
   }
   try {
+    if (hasWorkspaceConflict()) {
+      window.dispatchEvent(new Event("workspace-storage-conflict"));
+      bookCache = null;
+      return false;
+    }
+    if (!writeEnabled) return false;
     const raw = JSON.stringify(book);
     window.localStorage.setItem(WORKSPACES_KEY, raw);
-    bookCache = { raw, book };
+    if (acceptedRevision !== undefined) acceptedRevision = raw;
+    bookCache = { raw, book: structuredClone(book) };
     return true;
   } catch (error) {
     bookCache = null;
@@ -485,7 +505,7 @@ export function getBookSnapshot(): WorkspaceBook {
  */
 function copyRosterForNewTerm(data: Record<string, unknown>): Record<string, unknown> {
   const rawStudents = Array.isArray(data.students) ? data.students : [];
-  const students = rawStudents.map(item => {
+  const students = rawStudents.filter(item => isRecord(item) && item.enrollmentStatus !== "archived").map(item => {
     if (!isRecord(item)) {
       return item;
     }
@@ -516,6 +536,7 @@ function copyRosterForNewTerm(data: Record<string, unknown>): Record<string, unk
     }
     return {
       ...item,
+      memberIds: students.filter(student => isRecord(student) && student.dormitoryId === item.id).map(student => (student as Record<string, unknown>).id),
       events: [],
       history: [],
       currentScore: item.baseScore ?? 0,

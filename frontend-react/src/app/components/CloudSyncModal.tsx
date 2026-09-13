@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cloud, DownloadCloud, KeyRound, RefreshCw, UploadCloud, X } from "lucide-react";
+import { Cloud, DownloadCloud, KeyRound, RefreshCw, UploadCloud } from "lucide-react";
 
 import {
   clearSyncAuth,
@@ -11,12 +11,12 @@ import {
   usesProductAuthForSync,
   type SyncStatus,
 } from "../state/syncStorage";
-import { useAppDialog } from "./ui";
+import { Button, ModalShell, useAppDialog } from "./ui";
 
 interface CloudSyncModalProps {
   open: boolean;
   onClose: () => void;
-  onBeforeUpload: () => void;
+  onBeforeUpload: () => boolean;
   onRestored: () => void;
 }
 
@@ -38,11 +38,9 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
   const [busy, setBusy] = useState(false);
   const productSync = usesProductAuthForSync();
 
-  if (!open) {
-    return null;
-  }
 
   async function run(action: "auth" | "status" | "upload" | "restore") {
+    if (busy) return;
     try {
       setBusy(true);
       setMessage("正在处理...");
@@ -67,7 +65,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
         return;
       }
       if (action === "upload") {
-        onBeforeUpload();
+        if (!onBeforeUpload()) { setMessage("本机保存失败，已停止上传，请先处理保存问题。"); return; }
         const next = await uploadCurrentStateToCloud(deviceName);
         setStatus(next);
         setMessage(`已上传到云端：${formatTime(next.updatedAt)}。`);
@@ -78,6 +76,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
           setMessage("已取消恢复。");
           return;
         }
+        if (!onBeforeUpload()) { setMessage("本机保存失败，已停止恢复，请先处理保存问题。"); return; }
         const next = await restoreStateFromCloud();
         setStatus(next);
         onRestored();
@@ -101,20 +100,15 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
     }
   }
 
-  return (
-    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="modal-panel-enter w-full max-w-lg overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between">
-          <div>
-            <div className="text-xs text-blue-500 mb-0.5" style={{ fontWeight: 700 }}>手动云端同步</div>
-            <h2 className="text-gray-900" style={{ fontSize: "1.125rem", fontWeight: 800 }}>云端备份与恢复</h2>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4">
+  return <>
+    <ModalShell open={open} title="云端备份与恢复" description="手动云端同步" onClose={() => { if (!busy) onClose(); }} footer={<>
+      {!productSync && <Button variant="secondary" disabled={busy} onClick={() => void run("auth")}>授权</Button>}
+      <Button variant="secondary" disabled={busy} onClick={() => void run("status")}><RefreshCw className="h-4 w-4"/>状态</Button>
+      <Button disabled={busy} onClick={() => void run("upload")}><UploadCloud className="h-4 w-4"/>上传本机</Button>
+      <Button variant="danger" disabled={busy} onClick={() => void run("restore")}><DownloadCloud className="h-4 w-4"/>恢复云端</Button>
+      {!productSync && <Button variant="ghost" disabled={busy} onClick={() => { clearSyncAuth(); setMessage("同步授权已清除。"); }}>清除授权</Button>}
+    </>}>
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="block text-xs text-gray-500 mb-1.5" style={{ fontWeight: 700 }}>设备名称</span>
@@ -167,29 +161,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-100 flex flex-wrap gap-2">
-          {!productSync && (
-            <button disabled={busy} onClick={() => run("auth")} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 text-sm" style={{ fontWeight: 700 }}>
-              授权
-            </button>
-          )}
-          <button disabled={busy} onClick={() => run("status")} className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 text-sm inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
-            <RefreshCw className="w-3.5 h-3.5" />状态
-          </button>
-          <button disabled={busy} onClick={() => run("upload")} className="px-3 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 text-sm inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
-            <UploadCloud className="w-3.5 h-3.5" />上传本机
-          </button>
-          <button disabled={busy} onClick={() => run("restore")} className="px-3 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 text-sm inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
-            <DownloadCloud className="w-3.5 h-3.5" />恢复云端
-          </button>
-          {!productSync && (
-            <button disabled={busy} onClick={() => { clearSyncAuth(); setMessage("同步授权已清除。"); }} className="ml-auto px-3 py-2 rounded-xl text-gray-400 hover:bg-gray-50 disabled:opacity-50 text-sm">
-              清除授权
-            </button>
-          )}
-        </div>
-      </div>
-      {appDialog.dialog}
-    </div>
-  );
+    </ModalShell>
+    {appDialog.dialog}
+  </>;
 }

@@ -14,7 +14,7 @@ import {
 } from "../../state/backupStorage";
 import { hasStoredAiScoreMappingAuth, suggestRosterMappingWithAi, type AiRosterMappingSuggestion } from "../../state/aiScoreMappingService";
 import { prefetchXlsxAsset, readRowsFromFile } from "../../state/scoreImport";
-import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
+import { detectRosterMapping, parseRosterRows, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
 import type { AppStudent, SeatLayoutV1, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
 import { Button, FileDropZone, InlineStatus, SelectMenu, useAppDialog, useModalFocus } from "../ui";
@@ -37,7 +37,7 @@ export function DataWorkspace({
   seatOrder: Array<StudentId | null>;
   seatLayout?: SeatLayoutV1;
   onImportRoster: (file: File, options: RosterImportOptions) => Promise<RosterImportResult>;
-  onBeforeBackupExport: () => void;
+  onBeforeBackupExport: () => boolean;
   onBackupImported: () => void;
   healthIssues?: HealthIssue[];
   onRestoreStudent?: (studentId: StudentId) => void;
@@ -70,12 +70,12 @@ export function DataWorkspace({
     if (replaceExisting) {
       const confirmed = await appDialog.confirm({
         title: "覆盖现有名单？",
-        description: `新名单将成为当前在班名单${keepHistory ? "，同名学生沿用原有档案" : "，且新名单学生不继承原有档案"}。未出现在新名单中的在班学生会移入本页的归档区，可随时恢复，不会被删除。确认后会先自动导出一份完整备份文件，再执行覆盖。`,
+        description: `新名单将成为当前在班名单${keepHistory ? "，按唯一学号或唯一姓名沿用原有档案" : "，且新名单学生不继承原有档案"}。未出现在新名单中的在班学生会移入本页的归档区，可随时恢复，不会被删除。确认后会先自动导出一份完整备份文件，再执行覆盖。`,
         confirmLabel: "导出备份并覆盖",
         variant: "danger",
       });
       if (!confirmed) return;
-      onBeforeBackupExport();
+      if (!onBeforeBackupExport()) { setRosterStatus("本机保存失败，已停止导入，请先处理保存问题。"); return; }
       exportPreImportBackup();
     }
     setRosterStatus("正在导入名单...");
@@ -97,8 +97,9 @@ export function DataWorkspace({
         if (result.skippedCount) parts.push(`跳过 ${result.skippedCount} 名已在名单中`);
         setRosterStatus(`导入完成：${parts.length ? `${parts.join("，")}，` : ""}当前在班 ${result.studentCount} 名学生。`);
       }
-    } catch {
-      setRosterStatus("名单导入失败：请使用 .xlsx / .xls / .xlsm / .csv / .tsv，并确认表内有姓名列。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      setRosterStatus(message === "save_failed" ? "本机保存失败，名单未导入。请检查存储状态。" : /[\u4e00-\u9fff]/.test(message) ? message : "名单导入失败：请确认文件格式及姓名列。");
     }
   }
 
@@ -118,6 +119,8 @@ export function DataWorkspace({
       const mapping = detectRosterMapping(rows);
       setRosterRows(rows);
       setRosterMapping(mapping);
+      const placementWarnings = parseRosterRows(rows, mapping).warnings || [];
+      mapping.warnings.push(...placementWarnings);
       setRosterStatus(mapping.warnings.length ? `${mapping.warnings.join(" ")} 可打开映射设置调整。` : `已读取 ${Math.max(rows.length - (mapping.hasHeader ? 1 : 0), 0)} 行名单，可直接导入或调整映射。`);
     } catch {
       setRosterRows([]);
@@ -189,7 +192,7 @@ export function DataWorkspace({
   }
 
   function exportBackup() {
-    onBeforeBackupExport();
+    if (!onBeforeBackupExport()) { setBackupStatus("本机保存失败，已停止导出，请先处理保存问题。"); return; }
     setLastBackupAt(exportBackupJson());
     setBackupStatus("备份 JSON 已导出。");
   }
@@ -200,6 +203,7 @@ export function DataWorkspace({
       return;
     }
     if (!await appDialog.confirm({ title: "导入并覆盖当前数据？", description: "导入内容将覆盖当前本机工作区。系统会先自动导出一份当前备份，确认后再执行恢复。", confirmLabel: "确认导入恢复", variant: "danger" })) return;
+    if (!onBeforeBackupExport()) { setBackupStatus("本机保存失败，已停止恢复，请先处理保存问题。"); return; }
     if (restoreBackup(backupPreview)) {
       setBackupPreview(null);
       setBackupStatus("备份已恢复。");
@@ -264,7 +268,7 @@ export function DataWorkspace({
             <Button variant="secondary" onClick={exportBackup} className="w-full flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3">
               <FileDown className="h-4 w-4" />备份全部班级与学期
             </Button>
-            <Button variant="ghost" onClick={() => { onBeforeBackupExport(); exportCurrentClassBackupJson(); }} className="w-full flex items-center justify-center gap-2"><FileDown className="h-4 w-4" />仅导出当前班级</Button>
+            <Button variant="ghost" onClick={() => { if (onBeforeBackupExport()) exportCurrentClassBackupJson(); else setBackupStatus("本机保存失败，已停止导出。"); }} className="w-full flex items-center justify-center gap-2"><FileDown className="h-4 w-4" />仅导出当前班级</Button>
             {lastBackupAt && <p className="text-sm text-gray-400">上次备份：{formatBackupTime(lastBackupAt)}</p>}
           </div>
         </Panel>

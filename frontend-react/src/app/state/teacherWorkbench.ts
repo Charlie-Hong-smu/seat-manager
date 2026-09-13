@@ -1,3 +1,5 @@
+import { findStudentCandidates } from "./studentIdentity";
+import { isMissingScore, parseScoreNumber } from "./scoreValue";
 import { followupHasStudent, followupStudentLabel } from "./followupStudents";
 import type {
   AppStudent,
@@ -168,13 +170,15 @@ export type TodayWorkItem = {
 };
 
 export function buildTodayWorkItems(input: { date: string; students: AppStudent[]; attendance: AttendanceRecord[]; tasks: FollowupTask[]; homework: HomeworkAssignment[] }): TodayWorkItem[] {
+  const activeStudents = input.students.filter(student => student.enrollmentStatus !== "archived");
+  const activeIds = new Set(activeStudents.map(student => student.id));
   const names = new Map(input.students.map(student => [student.id, student.name]));
-  const tasks = input.tasks.filter(task => task.status === "pending" && task.dueDate <= input.date).map(task => ({ id: `task:${task.id}`, kind: "task" as const, title: task.title, detail: `${followupStudentLabel(task, names)} · ${task.dueDate < input.date ? "已逾期" : "今日截止"}`, urgency: (task.dueDate < input.date ? 0 : 1) as 0 | 1, entityId: task.id, studentId: task.studentId || undefined }));
-  const attendance = input.attendance.filter(item => item.date === input.date && (item.status !== "normal" || item.late || item.earlyLeave)).map(item => ({ id: `attendance:${item.id}`, kind: "attendance" as const, title: `${names.get(item.studentId) || "未知学生"}出勤异常`, detail: [item.status === "leave" ? "请假" : item.status === "absent" ? "缺勤" : "", item.late ? "迟到" : "", item.earlyLeave ? "早退" : ""].filter(Boolean).join(" · "), urgency: 2 as const, entityId: item.id, studentId: item.studentId }));
+  const tasks = input.tasks.filter(task => task.status === "pending" && task.dueDate && task.dueDate <= input.date).map(task => ({ id: `task:${task.id}`, kind: "task" as const, title: task.title, detail: `${followupStudentLabel(task, names)} · ${task.dueDate < input.date ? "已逾期" : "今日截止"}`, urgency: (task.dueDate < input.date ? 0 : 1) as 0 | 1, entityId: task.id, studentId: task.studentId || undefined }));
+  const attendance = input.attendance.filter(item => activeIds.has(item.studentId) && item.date === input.date && (item.status !== "normal" || item.late || item.earlyLeave)).map(item => ({ id: `attendance:${item.id}`, kind: "attendance" as const, title: `${names.get(item.studentId) || "未知学生"}出勤异常`, detail: [item.status === "leave" ? "请假" : item.status === "absent" ? "缺勤" : "", item.late ? "迟到" : "", item.earlyLeave ? "早退" : ""].filter(Boolean).join(" · "), urgency: 2 as const, entityId: item.id, studentId: item.studentId }));
   const homework = input.homework.filter(item => (item.lifecycle || "active") === "active" && item.dueDate <= input.date).flatMap(item => {
     const participantIds = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates));
-    const pendingIds = input.students.filter(student => participantIds.has(student.id) && item.studentStates[student.id]?.status === "pending").map(student => student.id);
-    const unrecordedIds = input.students.filter(student => participantIds.has(student.id) && (item.studentStates[student.id]?.status || "unrecorded") === "unrecorded").map(student => student.id);
+    const pendingIds = activeStudents.filter(student => participantIds.has(student.id) && item.studentStates[student.id]?.status === "pending").map(student => student.id);
+    const unrecordedIds = activeStudents.filter(student => participantIds.has(student.id) && (item.studentStates[student.id]?.status || "unrecorded") === "unrecorded").map(student => student.id);
     const detail = [pendingIds.length ? `${pendingIds.length} 人未交` : "", unrecordedIds.length ? `${unrecordedIds.length} 人待登记` : "", item.dueDate < input.date ? "已逾期" : "今日截止"].filter(Boolean).join(" · ");
     return pendingIds.length || unrecordedIds.length ? [{ id: `homework:${item.id}`, kind: "homework" as const, title: item.title, detail, urgency: (pendingIds.length && item.dueDate < input.date ? 0 : 1) as 0 | 1, entityId: item.id }] : [];
   });
@@ -230,10 +234,32 @@ export function buildItemAnalysisFromWideRows(rows: string[][], exam: GradeExam)
   const headers = rows[0] || [];
   const questionColumns = headers.map((header, index) => ({ header: text(header), index })).filter(item => /^(第?\s*\d+\s*题|q\s*\d+)/i.test(item.header));
   if (!questionColumns.length) throw new Error("item_columns_missing");
-  const questions: GradeQuestionDefinition[] = questionColumns.map((item, index) => ({ id: `question-${index + 1}`, label: item.header || `第${index + 1}题`, subject: exam.subjects[0] || "未分类", maxScore: Math.max(1, ...rows.slice(1).map(row => number(row[item.index], 0))), knowledgePoints: [], sourceColumn: item.index }));
-  const nameColumn = headers.findIndex(header => /姓名|学生/.test(text(header)));
-  const studentByName = new Map(exam.rows.map(row => [row.name.replace(/\s+/g, ""), row.studentId]));
-  return { questions, rows: rows.slice(1).filter(row => row.some(cell => text(cell))).map(row => { const studentName = text(row[nameColumn >= 0 ? nameColumn : 0]); return { studentId: studentByName.get(studentName.replace(/\s+/g, "")), studentName, scores: Object.fromEntries(questions.map(question => { const raw = text(row[question.sourceColumn]); return [question.id, raw === "" ? null : number(raw, 0)]; })) }; }), updatedAt: new Date().toISOString() };
+  const nameColumn = headers.findIndex(header => /姓名|^名字$|^name$/i.test(text(header)));
+  const noColumn = headers.findIndex(header => /学号|考号|学生编号|student.?no|student.?id/i.test(text(header)));
+  const candidates = exam.rows.map(row => ({ ...row, id: row.studentId || row.id }));
+  const importedRows = rows.slice(1).filter(row => row.some(cell => text(cell))).map((row, index) => {
+    const studentName = text(row[nameColumn >= 0 ? nameColumn : 0]);
+    const matches = findStudentCandidates(candidates, { name: studentName, studentNo: noColumn >= 0 ? text(row[noColumn]) : undefined });
+    if (matches.length > 1) throw new Error(`第 ${index + 2} 行“${studentName}”无法唯一匹配考试名单，请核对姓名和学号。`);
+    const scores = Object.fromEntries(questionColumns.map((question, questionIndex) => {
+      const raw = row[question.index];
+      const score = parseScoreNumber(raw);
+      if ((score === null && !isMissingScore(raw)) || (score !== null && score < 0)) throw new Error(`第 ${index + 2} 行 ${question.header} 得分无效，请核对原表。`);
+      return [`question-${questionIndex + 1}`, score];
+    }));
+    return { studentId: matches[0]?.studentId, studentName, scores };
+  });
+  const bound = new Set<string>();
+  importedRows.forEach(row => {
+    if (!row.studentId) return;
+    if (bound.has(row.studentId)) throw new Error(`“${row.studentName}”重复关联同一学生，请核对学号。`);
+    bound.add(row.studentId);
+  });
+  const questions: GradeQuestionDefinition[] = questionColumns.map((item, index) => {
+    const id = `question-${index + 1}`;
+    return { id, label: item.header || `第${index + 1}题`, subject: exam.subjects[0] || "未分类", maxScore: Math.max(1, ...importedRows.map(row => row.scores[id] ?? 0)), maxScoreInferred: true, knowledgePoints: [], sourceColumn: item.index };
+  });
+  return { questions, rows: importedRows, updatedAt: new Date().toISOString() };
 }
 
 export function getQuestionStats(itemAnalysis: GradeItemAnalysis) {
@@ -251,12 +277,12 @@ export function normalizeGradeItemAnalysis(value: unknown): GradeItemAnalysis | 
   const questions = value.questions.flatMap((item, index): GradeQuestionDefinition[] => {
     if (!isRecord(item)) return [];
     const maxScore = number(item.maxScore);
-    return maxScore > 0 ? [{ id: text(item.id) || `question-${index + 1}`, label: text(item.label) || `第${index + 1}题`, subject: text(item.subject) || "未分类", maxScore, description: text(item.description) || undefined, knowledgePoints: Array.isArray(item.knowledgePoints) ? item.knowledgePoints.map(text).filter(Boolean) : [], sourceColumn: number(item.sourceColumn, index) }] : [];
+    return maxScore > 0 ? [{ id: text(item.id) || `question-${index + 1}`, label: text(item.label) || `第${index + 1}题`, subject: text(item.subject) || "未分类", maxScore, maxScoreInferred: item.maxScoreInferred === true, description: text(item.description) || undefined, knowledgePoints: Array.isArray(item.knowledgePoints) ? item.knowledgePoints.map(text).filter(Boolean) : [], sourceColumn: number(item.sourceColumn, index) }] : [];
   });
   const questionIds = new Set(questions.map(item => item.id));
   const rows = value.rows.flatMap(item => {
     if (!isRecord(item) || !text(item.studentName) || !isRecord(item.scores)) return [];
-    return [{ studentId: text(item.studentId) || undefined, studentName: text(item.studentName), scores: Object.fromEntries(Object.entries(item.scores).filter(([id]) => questionIds.has(id)).map(([id, score]) => [id, score === null || score === "" ? null : number(score)])) }];
+    return [{ studentId: text(item.studentId) || undefined, studentName: text(item.studentName), scores: Object.fromEntries(Object.entries(item.scores).filter(([id]) => questionIds.has(id)).map(([id, score]) => [id, parseScoreNumber(score)])) }];
   });
   return questions.length && rows.length ? { questions, rows, updatedAt: text(value.updatedAt) || new Date().toISOString() } : undefined;
 }

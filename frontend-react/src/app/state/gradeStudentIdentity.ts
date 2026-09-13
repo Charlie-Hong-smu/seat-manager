@@ -1,51 +1,8 @@
-import { normalizeStudentSearch } from "./studentSearch";
-import type { SavedGradeExamEntry, SavedGradeExamRecord, StudentId } from "./types";
+import { resolveStudent, type StudentIdentity } from "./studentIdentity";
+import type { SavedGradeExamRecord, StudentId } from "./types";
 
-export interface GradeStudentCandidate {
-  id: StudentId;
-  name: string;
-  studentNo?: string;
-  aliases?: string[];
-  enrollmentStatus?: "active" | "archived";
-}
-
-type GradeStudentReference = Pick<SavedGradeExamEntry, "studentId" | "studentNo" | "name">;
-
-function normalizeStudentNo(value: unknown): string {
-  return String(value || "").trim().toLocaleLowerCase("zh-Hans-CN").replace(/\s+/g, "");
-}
-
-function normalizeGradeStudentName(value: unknown): string {
-  return normalizeStudentSearch(String(value || "")
-    .replace(/\u3000/g, " ")
-    .replace(/[()（）][^()（）]*[()（）]/g, "")
-    .replace(/(同学|学生)$/g, ""));
-}
-
-/** 稳定 ID 优先，其次唯一学号；姓名只在活跃或归档候选唯一时兜底。 */
-export function resolveGradeStudent<T extends GradeStudentCandidate>(students: T[], reference: GradeStudentReference): T | undefined {
-  const stableId = String(reference.studentId || "").trim();
-  if (stableId) {
-    const matched = students.find(student => student.id === stableId);
-    if (matched) return matched;
-  }
-
-  const studentNo = normalizeStudentNo(reference.studentNo);
-  if (studentNo) {
-    const matched = students.filter(student => normalizeStudentNo(student.studentNo) === studentNo);
-    if (matched.length === 1) return matched[0];
-    if (matched.length > 1) return undefined;
-  }
-
-  const name = normalizeGradeStudentName(reference.name);
-  if (!name) return undefined;
-  const matched = students.filter(student => [student.name, ...(student.aliases || [])]
-    .some(candidate => normalizeGradeStudentName(candidate) === name));
-  const active = matched.filter(student => student.enrollmentStatus !== "archived");
-  if (active.length === 1) return active[0];
-  if (active.length > 1) return undefined;
-  return matched.length === 1 ? matched[0] : undefined;
-}
+export type GradeStudentCandidate = StudentIdentity;
+export const resolveGradeStudent = resolveStudent;
 
 export function attachSavedGradeStudentIds(records: SavedGradeExamRecord[], students: GradeStudentCandidate[]): SavedGradeExamRecord[] {
   return records.map(record => ({

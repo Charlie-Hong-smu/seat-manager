@@ -1,3 +1,4 @@
+import { useWorkspaceDraftState } from "../hooks/useWorkspaceDraftState";
 import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 
@@ -6,7 +7,7 @@ import { matchesStudentSearch } from "../state/studentSearch";
 import type { AppStudent, FundTxType } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { DatePicker } from "./ui";
-import { toLocalDateKey } from "../state/dateKey";
+import { isValidDateKey, toLocalDateKey } from "../state/dateKey";
 
 interface FundTransactionFormProps {
   students: AppStudent[];
@@ -14,13 +15,13 @@ interface FundTransactionFormProps {
 }
 
 export function FundTransactionForm({ students, onSubmit }: FundTransactionFormProps) {
-  const [type, setType] = useState<FundTxType>("expense");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState(FUND_EXPENSE_PRESETS[0]?.category || "活动支出");
-  const [note, setNote] = useState("");
-  const [date, setDate] = useState(() => toLocalDateKey());
+  const [type, setType] = useWorkspaceDraftState<FundTxType>("fund:new:type", "expense");
+  const [amount, setAmount] = useWorkspaceDraftState("fund:new:amount", "");
+  const [category, setCategory] = useWorkspaceDraftState("fund:new:category", FUND_EXPENSE_PRESETS[0]?.category || "活动支出");
+  const [note, setNote] = useWorkspaceDraftState("fund:new:note", "");
+  const [date, setDate] = useWorkspaceDraftState("fund:new:date", () => toLocalDateKey());
   const [showRelated, setShowRelated] = useState(false);
-  const [relatedIds, setRelatedIds] = useState<string[]>([]);
+  const [relatedIds, setRelatedIds] = useWorkspaceDraftState<string[]>("fund:new:relatedIds", []);
   const [studentSearch, setStudentSearch] = useState("");
   const selectedStudentsRef = useRef<HTMLDivElement>(null);
   const studentCandidatesRef = useRef<HTMLDivElement>(null);
@@ -79,7 +80,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
 
   function submit() {
     const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0) return;
+    if (!Number.isFinite(value) || value <= 0 || !isValidDateKey(date)) return;
     onSubmit({
       type,
       amount: value,
@@ -169,7 +170,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
       />
 
       {/* 日期 */}
-      <DatePicker value={date} onChange={setDate} ariaLabel="交易日期" className="w-full" />
+      <DatePicker required value={date} onChange={setDate} ariaLabel="交易日期" className="w-full" />
 
       {/* 关联学生（可展开，带动画，多选） */}
       <div>

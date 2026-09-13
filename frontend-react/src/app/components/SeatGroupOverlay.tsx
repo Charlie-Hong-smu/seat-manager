@@ -27,6 +27,7 @@ export function SeatGroupOverlay({ groups, cells, columns, rows, hovered, onHove
     if (!element) return;
     const measure = () => { const rect = element.getBoundingClientRect(); if (rect.width && rect.height) setCellSize({ width: rect.width / columns, height: rect.height / rows }); };
     measure();
+    if (typeof ResizeObserver === "undefined") { window.addEventListener("resize", measure); return () => window.removeEventListener("resize", measure); }
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();

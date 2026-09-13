@@ -44,7 +44,7 @@ export function DormitoryPeriodToolbar({
             options={[{ value: "week", label: "本周" }, { value: "month", label: "本月" }, { value: "custom", label: "自定义周期" }]}
           />
           <IconButton size="sm" label="上一个周期" onClick={() => onAnchorChange("previous")}><ChevronLeft className="h-4 w-4" /></IconButton>
-          <DatePicker value={anchor} onChange={onAnchorChange} ariaLabel="宿舍统计日期" className="h-9 w-44 bg-[var(--app-surface-muted)]" />
+          <DatePicker required value={anchor} onChange={onAnchorChange} ariaLabel="宿舍统计日期" className="h-9 w-44 bg-[var(--app-surface-muted)]" />
           <IconButton size="sm" label="下一个周期" onClick={() => onAnchorChange("next")}><ChevronRight className="h-4 w-4" /></IconButton>
           <span className="min-w-0 flex-1 text-xs font-bold text-[var(--app-text-muted)]">{range.label}</span>
           <div

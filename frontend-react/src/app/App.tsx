@@ -1,3 +1,5 @@
+import { useWorkspaceWriteAccess } from "./hooks/useWorkspaceWriteAccess";
+import { exportUnsavedClassBackup } from "./state/backupStorage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw } from "lucide-react";
 
@@ -23,7 +25,7 @@ import {
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
 import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
 import { USES_LICENSE_AUTH } from "./config";
-import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamItemAnalysis, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
+import { buildLegacySnapshot, deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamItemAnalysis, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { useSeatManagerState } from "./state/store";
 import { useSeatManagerController } from "./state/seatManagerController";
@@ -37,8 +39,8 @@ import { getFollowupStudentIds } from "./state/followupStudents";
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, businessEntityExists, inspectStateHealth, targetFromBusinessRef, type TimelineTarget } from "./state/dataInsights";
 import { createActivityEvent } from "./state/activityEvents";
-import { archiveStudent, changeFollowupTaskStatus, permanentlyDeleteStudent, restoreStudent, syncCompletedFollowupHomework, updateFollowupResolution } from "./state/classManagementCommands";
-import { useActionToast, useAppDialog } from "./components/ui";
+import { archiveStudent, changeFollowupTaskStatus, permanentlyDeleteStudent, restoreStudent, syncCompletedFollowupHomework, undoFollowupChange, undoFollowupHomework, updateFollowupResolution } from "./state/classManagementCommands";
+import { Button, Card, useActionToast, useAppDialog } from "./components/ui";
 import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
 import { resolveSeatLayout } from "./state/seatLayout";
 import { WorkspaceRecoveryScreen } from "./components/WorkspaceRecoveryScreen";
@@ -99,6 +101,7 @@ export default function App() {
   ]);
   const gradeThresholds = normalizeGradeThresholds(appState.settings.gradeThresholds);
   const { persist: persistState, reload: reloadState, replace: replaceState } = controller;
+  const writeAccess = useWorkspaceWriteAccess(reloadState);
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [workspaceStorage, setWorkspaceStorage] = useState(() => inspectWorkspaceStorage());
   const [sidebarTab, setSidebarTab] = useState<AppTab>("today");
@@ -135,7 +138,7 @@ export default function App() {
   const [followupMode, setFollowupMode] = useState<"tasks" | "homework">("tasks");
   const [quickRecordOpen, setQuickRecordOpen] = useState(false);
   const followupAfterSave = useRef<((taskIds: string[]) => void | (() => void)) | null>(null);
-  const flushPersistRef = useRef<() => void>(() => {});
+  const flushPersistRef = useRef<() => boolean>(() => true);
   // 两个全量扫描只在对应页签激活时计算，且 toast/弹窗等 App 局部状态变化不再触发重算。
   const historyTimeline = useMemo(() => (sidebarTab === "history" ? buildTimeline(appState) : []), [appState, sidebarTab]);
   const healthIssues = useMemo(() => (sidebarTab === "data" ? inspectStateHealth(appState) : []), [appState, sidebarTab]);
@@ -184,28 +187,40 @@ export default function App() {
     const result = changeFollowupTaskStatus(task, "completed");
     setFollowupTasks(current => current.map(item => (item.id === taskId ? result.task : item)));
     const events = [result.event];
+    const removeTaskActivity = recordActivity(result.event);
     let homeworkChanged = false;
     const homeworkSync = syncCompletedFollowupHomework(task, homeworkAssignments);
     if (homeworkSync) {
       const assignment = homeworkAssignments.find(item => item.id === task.sourceRef?.entityId);
       homeworkChanged = await appDialog.confirm({ title: "同步作业状态？", description: `跟进任务已经完成。是否同时把“${assignment?.title || "关联作业"}”中该学生的状态更新为“已交”？选择取消也不会影响任务完成。`, confirmLabel: "同步为已交" });
       if (homeworkChanged) {
-        setHomeworkAssignments(homeworkSync.assignments);
+        setHomeworkAssignments(current => current.map(item => {
+          const changed = homeworkSync.assignments.find(value => value.id === item.id);
+          return item.id === task.sourceRef?.entityId && changed ? { ...item, studentStates: { ...item.studentStates, [task.studentId]: changed.studentStates[task.studentId] }, updatedAt: changed.updatedAt } : item;
+        }));
         events.push(homeworkSync.event);
       }
     }
-    const removeActivity = recordActivities(events);
+    const removeSourceActivity = recordActivities(events.slice(1));
+    const removeActivity = () => { removeTaskActivity(); removeSourceActivity(); };
     actionToast.show({
-      message: `已完成跟进：${task.title}`,
+      message: `任务状态已更新 · 已完成跟进：${task.title}`,
       actionLabel: "撤销",
       actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
       onAction: () => {
-        setFollowupTasks(current => current.map(item => (item.id === taskId ? task : item)));
-        if (homeworkChanged) setHomeworkAssignments(previousHomework);
+        setFollowupTasks(current => current.map(item => (item.id === taskId ? undoFollowupChange(item, task, result.task) : item)));
+        if (homeworkChanged && homeworkSync) setHomeworkAssignments(current => undoFollowupHomework(current, previousHomework, homeworkSync.assignments, task));
         removeActivity();
       },
       duration: 6000,
     });
+    return true;
+  }
+
+  async function handleChangeTaskStatus(taskId: string, status: "pending" | "completed" | "cancelled") {
+    if (status === "completed") return handleCompleteTodayTask(taskId);
+    const undo = handleSetLinkedTaskStatus([taskId], status);
+    actionToast.show({ message: status === "pending" ? "任务已恢复" : "任务已取消", actionLabel: "撤销", onAction: undo, duration: 6000 });
     return true;
   }
 
@@ -215,7 +230,7 @@ export default function App() {
     const result = updateFollowupResolution(task, note);
     setFollowupTasks(current => current.map(item => item.id === taskId ? result.task : item));
     const removeActivity = recordActivity(result.event);
-    actionToast.show({ message: "处理结果已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { setFollowupTasks(current => current.map(item => item.id === taskId ? task : item)); removeActivity(); }, duration: 6000 });
+    actionToast.show({ message: "处理结果已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { setFollowupTasks(current => current.map(item => item.id === taskId ? undoFollowupChange(item, task, result.task) : item)); removeActivity(); }, duration: 6000 });
   }
 
   function handleContinueTodayTask(taskId: string) {
@@ -230,7 +245,7 @@ export default function App() {
     setFollowupTasks(current => current.map(task => changes.find(change => change.task.id === task.id)?.task || task));
     const removeActivities = recordActivities(changes.map(change => change.event));
     return () => {
-      setFollowupTasks(current => current.map(task => previous.find(item => item.id === task.id) || task));
+      setFollowupTasks(current => current.map(task => { const before = previous.find(item => item.id === task.id); const after = changes.find(item => item.task.id === task.id)?.task; return before && after ? undoFollowupChange(task, before, after) : task; }));
       removeActivities();
     };
   }
@@ -338,22 +353,23 @@ export default function App() {
       hasMounted.current = true;
       return;
     }
-    if (!loggedIn || workspaceStorage.status === "corrupt") {
+    if (!loggedIn || writeAccess.status !== "ready" || workspaceStorage.status === "corrupt") {
       return;
     }
     setSaveStatus("saving");
     const scope = getCurrentWorkspaceScope();
     let timer: number | null = window.setTimeout(() => flush(), 400);
     function flush() {
-      if (timer === null) return;
+      if (timer === null) return persistState();
       window.clearTimeout(timer);
       timer = null;
-      if (getCurrentWorkspaceScope() !== scope) return;
+      if (getCurrentWorkspaceScope() !== scope) return false;
       const saved = persistState();
       if (saved) setSaveStatus("saved");
       else {
         try { const probe = "seat-manager-storage-probe"; localStorage.setItem(probe, "1"); localStorage.removeItem(probe); setSaveStatus("failed"); } catch { setSaveStatus("quota"); }
       }
+      return saved;
     }
     flushPersistRef.current = flush;
     const handleVisibility = () => { if (document.visibilityState === "hidden") flush(); };
@@ -367,7 +383,7 @@ export default function App() {
         timer = null;
       }
     };
-  }, [appState, loggedIn, persistState, workspaceStorage.status]);
+  }, [appState, loggedIn, persistState, workspaceStorage.status, writeAccess.status]);
 
   useEffect(() => {
     if (!loggedIn || typeof Notification === "undefined" || Notification.permission !== "granted") return;
@@ -635,7 +651,7 @@ export default function App() {
   }
 
   function saveCurrentLegacySnapshot() {
-    persistState();
+    return persistState();
   }
 
   function reloadFromLegacyState() {
@@ -896,7 +912,7 @@ export default function App() {
   }
 
   async function handleImportRoster(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
-    saveCurrentLegacySnapshot();
+    if (!saveCurrentLegacySnapshot()) throw new Error("本机保存失败，已停止导入。");
     const result = await importRosterFile(file, options);
     replaceState(result.state);
     setSeatHistory([]);
@@ -933,7 +949,7 @@ export default function App() {
       return;
     }
     try {
-      flushPersistRef.current();
+      if (!flushPersistRef.current()) { actionToast.show({ message: "本机保存失败，请先处理保存问题。" }); return; }
       await unbindCurrentDevice();
       await appDialog.notice({ title: "设备已解绑", description: "本机已经退出登录，并释放了一个设备名额。" });
       setLoggedIn(false);
@@ -1007,6 +1023,11 @@ export default function App() {
     }} />;
   }
 
+  if (writeAccess.status !== "ready") {
+    const conflict = writeAccess.status === "conflict";
+    return <main className="grid min-h-screen place-items-center bg-[var(--app-bg)] p-6"><Card title={conflict ? "检测到其他窗口修改" : writeAccess.status === "checking" ? "正在检查工作区" : "工作区暂时无法编辑"} className="w-full max-w-lg"><p className="text-sm leading-6 text-gray-600">{conflict ? "本窗口已暂停保存，避免覆盖其他窗口的数据。可先导出本窗口内容，再读取最新数据。" : writeAccess.status === "elsewhere" ? "另一个窗口正在编辑本机文件柜，请关闭该窗口后重试。" : writeAccess.status === "failed" ? "无法取得本机编辑权限，请稍后重试。" : "正在确认本机编辑权限。"}</p><div className="mt-4 flex gap-2">{conflict && <Button variant="secondary" onClick={() => exportUnsavedClassBackup(buildLegacySnapshot(appState))}>导出本窗口内容</Button>}{writeAccess.status !== "checking" && <Button onClick={async () => { if (!conflict || await appDialog.confirm({ title: "读取最新数据？", description: "将用本机已保存的数据替换本窗口尚未保存的修改。需要保留时请先导出本窗口内容。", confirmLabel: "读取最新数据", variant: "danger" })) writeAccess.retry(); }}>{conflict ? "读取最新数据" : "重试"}</Button>}</div></Card>{appDialog.dialog}</main>;
+  }
+
   return (
     <AppShell
       sidebarCollapsed={sidebarCollapsed}
@@ -1028,7 +1049,7 @@ export default function App() {
           saveStatus={saveStatus}
           onRetrySave={() => { setSaveStatus("saving"); setSaveStatus(persistState() ? "saved" : "failed"); }}
           onLogout={() => {
-            flushPersistRef.current();
+            if (!flushPersistRef.current()) { actionToast.show({ message: "本机保存失败，请先处理保存问题。" }); return; }
             clearAuth();
             setLoggedIn(false);
           }}
@@ -1162,20 +1183,16 @@ export default function App() {
             />
           )}
 
-          {showCloudSync && (
             <CloudSyncModal
               open={showCloudSync}
               onClose={() => setShowCloudSync(false)}
               onBeforeUpload={saveCurrentLegacySnapshot}
               onRestored={reloadFromLegacyState}
             />
-          )}
           <FollowupTaskDrawer open={Boolean(followupDraft)} students={students} draft={followupDraft} onClose={() => { followupAfterSave.current = null; setFollowupDraft(null); }} onConfirm={confirmFollowupTask} />
           <QuickRecordDrawer open={quickRecordOpen} students={students} presets={quickRecordPresets} onClose={() => setQuickRecordOpen(false)} onApply={applyQuickRecord} onPresetsChange={setQuickRecordPresets} />
 
-          {showInstallHelp && (
-            <InstallHelpModal message={installMessage} onClose={() => setShowInstallHelp(false)} />
-          )}
+          <InstallHelpModal open={showInstallHelp} message={installMessage} onClose={() => setShowInstallHelp(false)} />
 
           {!USES_LICENSE_AUTH && showChangePassword && (
             <ChangePasswordModal
@@ -1190,7 +1207,7 @@ export default function App() {
       }
     >
       <div className="h-full">
-        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
+        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full workspace-tab-enter">
             <DailyWorkspace
@@ -1249,7 +1266,7 @@ export default function App() {
 
         {sidebarTab === "attendance" && <div className="h-full workspace-tab-enter"><AttendanceWorkspace students={students} records={attendanceRecords} tasks={followupTasks} onChange={setAttendanceRecords} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenTask={taskId => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId })} initialTarget={timelineTarget?.workspace === "attendance" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} /></div>}
 
-        {sidebarTab === "followups" && <div className="h-full workspace-tab-enter"><FollowupWorkspace key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenSource={navigateToEntity} sourceExists={ref => businessEntityExists(appState, ref)} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} initialMode={followupMode} /></div>}
+        {sidebarTab === "followups" && <div className="h-full workspace-tab-enter"><FollowupWorkspace onCreateTask={confirmFollowupTask} onTaskStatusChange={handleChangeTaskStatus} onSaveResolution={handleSaveTodayTaskResolution} key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenSource={navigateToEntity} sourceExists={ref => businessEntityExists(appState, ref)} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} initialMode={followupMode} /></div>}
 
         {sidebarTab === "scores" && (
           <div className="h-full workspace-tab-enter">

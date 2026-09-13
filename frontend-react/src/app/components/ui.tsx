@@ -159,8 +159,14 @@ export function ModalShell({ open, title, description, children, footer, onClose
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useModalFocus(open, onClose);
-  if (!open) return null;
-  return createPortal(<div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+  const [present, setPresent] = useState(open);
+  useEffect(() => {
+    if (open) { setPresent(true); return; }
+    const timer = window.setTimeout(() => setPresent(false), 200);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+  if (!open && !present) return null;
+  return createPortal(<div aria-hidden={!open} {...(!open ? { inert: "" as unknown as boolean } : {})} data-closing={!open || undefined} className="app-modal-presence soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter w-full overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-white shadow-[var(--app-shadow-float)] outline-none ${className}`}>
       <header className="flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-base font-bold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-sm leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
       <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
@@ -592,7 +598,7 @@ function formatDateValue(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function DatePicker({ value, onChange, ariaLabel, className = "", min, max }: { value: string; onChange: (value: string) => void; ariaLabel: string; className?: string; min?: string; max?: string }) {
+export function DatePicker({ value, onChange, ariaLabel, className = "", min, max, required = false }: { value: string; onChange: (value: string) => void; ariaLabel: string; className?: string; min?: string; max?: string; required?: boolean }) {
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => { const date = parseDateValue(value); return new Date(date.getFullYear(), date.getMonth(), 1); });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -644,7 +650,7 @@ export function DatePicker({ value, onChange, ariaLabel, className = "", min, ma
       <div className="mb-3 flex items-center justify-between"><IconButton size="sm" label="上个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4"/></IconButton><strong className="text-sm text-[var(--app-text)]">{visibleMonth.getFullYear()}年 {visibleMonth.getMonth() + 1}月</strong><IconButton size="sm" label="下个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4"/></IconButton></div>
       <div className="grid grid-cols-7 text-center text-[11px] font-bold text-[var(--app-text-muted)]">{"日一二三四五六".split("").map(day => <span key={day} className="py-1">{day}</span>)}</div>
       <div className="mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-xs transition-colors disabled:opacity-25 ${active ? "bg-blue-600 font-bold text-white" : dayValue === today ? "bg-blue-50 font-bold text-blue-700" : currentMonth ? "text-gray-700 hover:bg-gray-100" : "text-gray-300 hover:bg-gray-50"}`}>{day.getDate()}</button>; })}</div>
-      <div className="mt-3 flex justify-between border-t border-gray-100 pt-2"><Button size="sm" variant="ghost" onClick={() => { onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
+      <div className="mt-3 flex justify-between border-t border-gray-100 pt-2"><Button size="sm" variant="ghost" disabled={required} onClick={() => { if (!required) onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" disabled={Boolean((min && today < min) || (max && today > max))} onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
     </div></AnimatedPopover>, document.body)}
   </>;
 }

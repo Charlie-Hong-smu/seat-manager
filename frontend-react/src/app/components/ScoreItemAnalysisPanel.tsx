@@ -1,10 +1,10 @@
 import { followupHasStudent } from "../state/followupStudents";
 import { BarChart3, ChevronDown, ChevronUp, FileSpreadsheet, HelpCircle, ListPlus, Sparkles, Tags } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useInitialTargetEffect } from "../hooks/useInitialTargetEffect";
 import { generateAiItemAnalysis, type AiItemAnalysisResult } from "../state/teacherAiService";
-import { buildItemAnalysisFromWideRows, getQuestionStats } from "../state/teacherWorkbench";
+import { buildItemAnalysisFromWideRows, digestFacts, getQuestionStats } from "../state/teacherWorkbench";
 import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuestionDefinition, StudentId } from "../state/types";
 import { AiGenerationPanel, AnimatedPopover, Button, Card, IconButton, SelectMenu } from "./ui";
 import { LinkedTaskBadge } from "./LinkedWorkflow";
@@ -13,11 +13,17 @@ export function ScoreItemAnalysisPanel({ exams, students, tasks, onSave, onCreat
   const [examId, setExamId] = useState(initialExamId || exams[0]?.id || "");
   const exam = exams.find(item => item.id === examId) || exams[0];
   const [status, setStatus] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiResult, setAiResult] = useState<AiItemAnalysisResult | null>(null);
+  const [busyKey, setBusyKey] = useState("");
+  const [result, setResult] = useState<{ key: string; value: AiItemAnalysisResult } | null>(null);
+  const requestVersion = useRef(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [expandedQuestionId, setExpandedQuestionId] = useState(initialQuestionId || "");
   const analysis = exam?.itemAnalysis;
+  const analysisKey = digestFacts([exam?.id, exam?.name, exam?.date, analysis]);
+  const aiBusy = busyKey === analysisKey;
+  const aiResult = result?.key === analysisKey ? result.value : null;
+  const inferredMaxScore = analysis?.questions.some(question => question.maxScoreInferred);
+  useEffect(() => { requestVersion.current += 1; setBusyKey(""); return () => { requestVersion.current += 1; }; }, [analysisKey]);
   const stats = useMemo(() => analysis ? getQuestionStats(analysis) : [], [analysis]);
   const knowledgeStats = useMemo(() => {
     const groups = new Map<string, number[]>();
@@ -40,25 +46,29 @@ export function ScoreItemAnalysisPanel({ exams, students, tasks, onSave, onCreat
 
   function importQuestions() {
     if (!exam?.importSource?.rows.length) { setStatus("这场考试没有保存原始表格，请在成绩管理中重新映射原文件。"); return; }
-    try { const itemAnalysis = buildItemAnalysisFromWideRows(exam.importSource.rows, exam); setStatus(onSave(exam.id, itemAnalysis) ? `已识别 ${itemAnalysis.questions.length} 道题。` : "题目分析保存失败。"); }
-    catch { setStatus("未找到“第1题”或“Q1”形式的题目列。"); }
+    try { const itemAnalysis = buildItemAnalysisFromWideRows(exam.importSource.rows, exam); setStatus(onSave(exam.id, itemAnalysis) ? `已识别 ${itemAnalysis.questions.length} 道题。${itemAnalysis.rows.some(row => !row.studentId) ? "未关联学生的行保留统计，请核对学号；这些行不会生成个人跟进。" : ""}` : "题目分析保存失败。"); }
+    catch (error) { setStatus(error instanceof Error && error.message !== "item_columns_missing" ? error.message : "未找到“第1题”或“Q1”形式的题目列。"); }
   }
 
   function updateQuestion(questionId: string, patch: { maxScore?: number; knowledgePoints?: string[]; description?: string }) {
     if (!exam || !analysis) return;
-    onSave(exam.id, { ...analysis, questions: analysis.questions.map(question => question.id === questionId ? { ...question, ...patch } : question), updatedAt: new Date().toISOString() });
+    onSave(exam.id, { ...analysis, questions: analysis.questions.map(question => question.id === questionId ? { ...question, ...patch, maxScoreInferred: patch.maxScore !== undefined ? false : question.maxScoreInferred } : question), updatedAt: new Date().toISOString() });
   }
 
   async function analyzeWithAi() {
-    if (!exam || !analysis) return;
-    setAiBusy(true); setStatus("");
-    try { setAiResult(await generateAiItemAnalysis({ exam: { id: exam.id, name: exam.name, date: exam.date }, questions: stats.map(item => ({ id: item.question.id, label: item.question.label, description: item.question.description, knowledgePoints: item.question.knowledgePoints, maxScore: item.question.maxScore, average: item.average, rate: item.rate, weakStudentIds: item.weakStudentIds.slice(0, 12) })) })); }
-    catch { setStatus("AI 暂时不可用，本地题目统计仍可使用。"); }
-    finally { setAiBusy(false); }
+    if (!exam || !analysis || inferredMaxScore || aiBusy) return;
+    const version = ++requestVersion.current;
+    setBusyKey(analysisKey); setResult(null); setStatus("");
+    try {
+      const value = await generateAiItemAnalysis({ exam: { id: exam.id, name: exam.name, date: exam.date }, questions: stats.map(item => ({ id: item.question.id, label: item.question.label, description: item.question.description, knowledgePoints: item.question.knowledgePoints, maxScore: item.question.maxScore, average: item.average, rate: item.rate, weakStudentIds: item.weakStudentIds.slice(0, 12) })) });
+      if (version === requestVersion.current) setResult({ key: analysisKey, value });
+    } catch { if (version === requestVersion.current) setStatus("AI 暂时不可用，本地题目统计仍可使用。"); }
+    finally { if (version === requestVersion.current) setBusyKey(""); }
   }
 
   if (!exam) return <div className="py-20 text-center text-sm text-gray-400">请先导入一场考试</div>;
-  return <div className="space-y-4 p-4"><Card overflow="visible" bodyClassName="flex flex-wrap items-center gap-3 p-4"><SelectMenu value={exam.id} onChange={setExamId} ariaLabel="选择题目分析考试" options={exams.map(item => ({ value: item.id, label: item.name }))}/><Button variant="secondary" onClick={importQuestions}><FileSpreadsheet className="h-4 w-4"/>{analysis ? "重新识别题目列" : "从原成绩表识别题目"}</Button>{analysis && <Button onClick={() => void analyzeWithAi()}><Sparkles className="h-4 w-4"/>AI 教学分析</Button>}{status && <span className="min-w-0 flex-1 text-xs text-blue-600">{status}</span>}<div className="relative ml-auto"><IconButton label="题目分析使用说明" size="sm" active={helpOpen} aria-expanded={helpOpen} onClick={() => setHelpOpen(open => !open)}><HelpCircle className="h-4 w-4"/></IconButton><AnimatedPopover open={helpOpen} className="absolute right-0 top-full z-30 mt-2 w-[min(42rem,calc(100vw-3rem))] rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-4 shadow-[var(--app-shadow-float)]"><div><h2 className="text-sm font-bold text-gray-900">题目分析怎么用</h2><div className="mt-3 grid gap-3 lg:grid-cols-3"><div className="flex gap-3 rounded-xl bg-gray-50 p-3"><FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"/><div><strong className="text-sm text-gray-800">1. 识别逐题得分</strong><p className="mt-1 text-xs leading-5 text-gray-500">原成绩表需有“第1题、第2题…”或“Q1、Q2…”列；只有学科总分时无法生成。</p></div></div><div className="flex gap-3 rounded-xl bg-gray-50 p-3"><BarChart3 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"/><div><strong className="text-sm text-gray-800">2. 先做本地统计</strong><p className="mt-1 text-xs leading-5 text-gray-500">计算每题均分、得分率和低于 60% 的学生人数，不需要调用 AI。</p></div></div><div className="flex gap-3 rounded-xl bg-gray-50 p-3"><Tags className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"/><div><strong className="text-sm text-gray-800">3. 补充教学判断</strong><p className="mt-1 text-xs leading-5 text-gray-500">老师可填写满分与知识点，再按需让 AI 整理薄弱点和教学建议。</p></div></div></div></div></AnimatedPopover></div></Card>
+  return <div className="space-y-4 p-4"><Card overflow="visible" bodyClassName="flex flex-wrap items-center gap-3 p-4"><SelectMenu value={exam.id} onChange={setExamId} ariaLabel="选择题目分析考试" options={exams.map(item => ({ value: item.id, label: item.name }))}/><Button variant="secondary" onClick={importQuestions}><FileSpreadsheet className="h-4 w-4"/>{analysis ? "重新识别题目列" : "从原成绩表识别题目"}</Button>{analysis && <Button variant="ai" disabled={aiBusy || inferredMaxScore} onClick={() => void analyzeWithAi()}><Sparkles className="h-4 w-4"/>AI 教学分析</Button>}{status && <span className="min-w-0 flex-1 text-xs text-blue-600">{status}</span>}<div className="relative ml-auto"><IconButton label="题目分析使用说明" size="sm" active={helpOpen} aria-expanded={helpOpen} onClick={() => setHelpOpen(open => !open)}><HelpCircle className="h-4 w-4"/></IconButton><AnimatedPopover open={helpOpen} className="absolute right-0 top-full z-30 mt-2 w-[min(42rem,calc(100vw-3rem))] rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-white p-4 shadow-[var(--app-shadow-float)]"><div><h2 className="text-sm font-bold text-gray-900">题目分析怎么用</h2><div className="mt-3 grid gap-3 lg:grid-cols-3"><div className="flex gap-3 rounded-xl bg-gray-50 p-3"><FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"/><div><strong className="text-sm text-gray-800">1. 识别逐题得分</strong><p className="mt-1 text-xs leading-5 text-gray-500">原成绩表需有“第1题、第2题…”或“Q1、Q2…”列；只有学科总分时无法生成。</p></div></div><div className="flex gap-3 rounded-xl bg-gray-50 p-3"><BarChart3 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"/><div><strong className="text-sm text-gray-800">2. 先做本地统计</strong><p className="mt-1 text-xs leading-5 text-gray-500">计算每题均分、得分率和低于 60% 的学生人数，不需要调用 AI。</p></div></div><div className="flex gap-3 rounded-xl bg-gray-50 p-3"><Tags className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"/><div><strong className="text-sm text-gray-800">3. 补充教学判断</strong><p className="mt-1 text-xs leading-5 text-gray-500">老师可填写满分与知识点，再按需让 AI 整理薄弱点和教学建议。</p></div></div></div></div></AnimatedPopover></div></Card>
+    {inferredMaxScore && <Card><p className="text-sm text-amber-700">满分暂按样本最高分估计，得分率及薄弱名单仅供核对；请先检查每题满分。</p><Button className="mt-3" variant="secondary" onClick={() => analysis && onSave(exam.id, { ...analysis, questions: analysis.questions.map(question => ({ ...question, maxScoreInferred: false })), updatedAt: new Date().toISOString() })}>确认当前满分</Button></Card>}
     {aiBusy && <AiGenerationPanel title="正在分析题目与知识点" steps={["整理本地统计", "识别薄弱点", "形成教学建议"]}/>}
     {aiResult && !aiBusy && <Card title="AI 教学建议"><div className="space-y-3"><p className="text-sm leading-6 text-gray-700">{aiResult.overview}</p>{aiResult.weakPoints.length > 0 && <div><div className="text-xs font-bold text-gray-400">主要薄弱点</div><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">{aiResult.weakPoints.map(item => <li key={item}>{item}</li>)}</ul></div>}{aiResult.teachingSuggestions.length > 0 && <div><div className="text-xs font-bold text-gray-400">教学建议</div><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">{aiResult.teachingSuggestions.map(item => <li key={item}>{item}</li>)}</ul></div>}{aiResult.followupCandidates.length > 0 && <div className="flex flex-wrap gap-2">{aiResult.followupCandidates.map(candidate => { const student = students.find(item => item.id === candidate.studentId); return student ? <Button key={candidate.studentId} size="sm" variant="secondary" onClick={() => onCreateFollowup(candidate.studentId, exam, candidate.reason)}>为 {student.name} 创建跟进</Button> : null; })}</div>}<p className="text-xs text-gray-400">{aiResult.disclaimer}</p></div></Card>}
     {knowledgeStats.length > 0 && <Card title="知识点得分率" bodyClassName="flex flex-wrap gap-2 p-4">{knowledgeStats.map(item => <span key={item.label} className={`rounded-full px-3 py-1.5 text-xs font-bold ${item.rate < 60 ? "bg-rose-50 text-rose-600" : "bg-blue-50 text-blue-700"}`}>{item.label} {item.rate}%</span>)}</Card>}

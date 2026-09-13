@@ -1,3 +1,5 @@
+import { isValidDateKey } from "../state/dateKey";
+import { useWorkspaceDraftState } from "../hooks/useWorkspaceDraftState";
 import { followupHasStudent } from "../state/followupStudents";
 import { Archive, Check, CheckCircle2, LayoutGrid, List, Pencil, Plus, RotateCcw, Search, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -45,10 +47,10 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
   const undoActivityRef = useRef<(() => void) | null>(null);
   const feedbackTimerRef = useRef<number | null>(null);
   assignmentsRef.current = assignments;
-  const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("");
-  const [dueDate, setDueDate] = useState(todayKey());
-  const [note, setNote] = useState("");
+  const [title, setTitle] = useWorkspaceDraftState("homework:new:title", "");
+  const [subject, setSubject] = useWorkspaceDraftState("homework:new:subject", "");
+  const [dueDate, setDueDate] = useWorkspaceDraftState("homework:new:dueDate", todayKey());
+  const [note, setNote] = useWorkspaceDraftState("homework:new:note", "");
   const [selectedId, setSelectedId] = useState(initialAssignmentId || assignments[0]?.id || "");
   const [viewMode, setViewMode] = useState<"quick" | "detail">("quick");
   const [markStatus, setMarkStatus] = useState<HomeworkStudentStatus>("submitted");
@@ -57,14 +59,14 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
   const [undoAssignments, setUndoAssignments] = useState<HomeworkAssignment[] | null>(null);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [draftSubjects, setDraftSubjects] = useState<string[]>(subjectCatalog);
-  const [newSubject, setNewSubject] = useState("");
+  const [newSubject, setNewSubject] = useWorkspaceDraftState("homework:new:newSubject", "");
   const [catalogStatus, setCatalogStatus] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState<"active" | "closed" | "archived">("active");
   const [manageOpen, setManageOpen] = useState(false);
-  const [editTitle, setEditTitle] = useState("");
-  const [editSubject, setEditSubject] = useState("");
-  const [editDueDate, setEditDueDate] = useState(todayKey());
-  const [editNote, setEditNote] = useState("");
+  const [editTitle, setEditTitle, cleareditTitle] = useWorkspaceDraftState(`homework:edit:${selectedId}:title`, assignments.find(item => item.id === selectedId)?.title || "");
+  const [editSubject, setEditSubject, cleareditSubject] = useWorkspaceDraftState(`homework:edit:${selectedId}:subject`, assignments.find(item => item.id === selectedId)?.subject || "");
+  const [editDueDate, setEditDueDate, cleareditDueDate] = useWorkspaceDraftState(`homework:edit:${selectedId}:dueDate`, assignments.find(item => item.id === selectedId)?.dueDate || "");
+  const [editNote, setEditNote, cleareditNote] = useWorkspaceDraftState(`homework:edit:${selectedId}:note`, assignments.find(item => item.id === selectedId)?.note || "");
   const [recentUpdate, setRecentUpdate] = useState<{ studentId: StudentId; message: string } | null>(null);
   const visibleAssignments = assignments.filter(item => (item.lifecycle || "active") === lifecycleFilter);
   const selected = visibleAssignments.find(item => item.id === selectedId) || visibleAssignments[0];
@@ -93,7 +95,7 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
   }, [selected, selectedId]);
 
   function add() {
-    if (!title.trim() || !subject) return;
+    if (!title.trim() || !subject || !isValidDateKey(dueDate)) return;
     const now = new Date().toISOString();
     const assignment: HomeworkAssignment = {
       id: `homework-${Date.now()}`,
@@ -206,17 +208,14 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
 
   function openManage() {
     if (!selected) return;
-    setEditTitle(selected.title);
-    setEditSubject(selected.subject);
-    setEditDueDate(selected.dueDate);
-    setEditNote(selected.note);
     setManageOpen(true);
   }
 
   function saveAssignment() {
-    if (!selected || !editTitle.trim() || !editSubject) return;
+    if (!selected || !editTitle.trim() || !editSubject || !isValidDateKey(editDueDate)) return;
     onChange(assignments.map(item => item.id === selected.id ? { ...item, title: editTitle.trim(), subject: editSubject, dueDate: editDueDate, note: editNote.trim(), updatedAt: new Date().toISOString() } : item));
     onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "homework", entityId: selected.id }, studentIds: selected.participantStudentIds || Object.keys(selected.studentStates), title: `修改作业：${editTitle.trim()}`, detail: `${editSubject} · 截止 ${editDueDate}` }));
+    cleareditTitle(); cleareditSubject(); cleareditDueDate(); cleareditNote();
     setManageOpen(false);
     actionToast.show({ message: "作业信息已更新" });
   }
@@ -261,7 +260,7 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
         <Card title="布置作业"><div className="space-y-3">
           <input value={title} onChange={event => setTitle(event.target.value)} placeholder="作业名称" className="h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500/10"/>
           <div className="flex gap-2"><SelectMenu value={subject} onChange={setSubject} ariaLabel="作业学科" placeholder="选择学科" searchable className="min-w-0 flex-1" options={subjectCatalog.map(item => ({ value: item, label: item }))}/><Button size="sm" variant="secondary" onClick={openCatalog}><Settings2 className="h-4 w-4"/>管理</Button></div>
-          <DatePicker value={dueDate} onChange={setDueDate} ariaLabel="作业截止日期" className="w-full"/>
+          <DatePicker required value={dueDate} onChange={setDueDate} ariaLabel="作业截止日期" className="w-full"/>
           <textarea value={note} onChange={event => setNote(event.target.value)} rows={3} placeholder="说明（可选）" className="w-full resize-none rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500/10"/>
           <Button className="w-full" disabled={!title.trim() || !subject} onClick={add}><Plus className="h-4 w-4"/>保存作业</Button>
           {!subject && <p className="text-xs text-[var(--app-text-muted)]">选择学科后即可保存；自定义学科可在“管理”中添加。</p>}
@@ -299,7 +298,7 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
       <div className="space-y-4">
         <input value={editTitle} onChange={event => setEditTitle(event.target.value)} placeholder="作业名称" className="h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 text-sm outline-none focus:border-blue-300"/>
         <SelectMenu value={editSubject} onChange={setEditSubject} ariaLabel="编辑作业学科" placeholder="选择学科" searchable className="w-full" options={subjectCatalog.map(item => ({ value: item, label: item }))}/>
-        <DatePicker value={editDueDate} onChange={setEditDueDate} ariaLabel="编辑作业截止日期" className="w-full"/>
+        <DatePicker required value={editDueDate} onChange={setEditDueDate} ariaLabel="编辑作业截止日期" className="w-full"/>
         <textarea value={editNote} onChange={event => setEditNote(event.target.value)} rows={4} placeholder="作业说明" className="w-full resize-none rounded-[var(--app-radius-sm)] border border-[var(--app-border)] px-3 py-2 text-sm outline-none focus:border-blue-300"/>
         {selected && <div className="rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-[var(--app-surface-muted)] p-3 text-xs leading-5 text-[var(--app-text-muted)]">参与学生 {participantStudents.length} 人 · 关联任务 {tasks.filter(task => task.sourceRef?.domain === "homework" && task.sourceRef.entityId === selected.id).length} 项</div>}
         {selected?.lifecycle !== "active" ? <Button variant="secondary" className="w-full" onClick={() => void changeLifecycle("active")}><RotateCcw className="h-4 w-4"/>恢复为进行中</Button> : <Button variant="secondary" className="w-full" onClick={() => void changeLifecycle("closed")}><CheckCircle2 className="h-4 w-4"/>结束作业</Button>}

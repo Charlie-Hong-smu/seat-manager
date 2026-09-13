@@ -297,7 +297,7 @@ function mergeSnapshotDomains(baseState: Record<string, unknown>, input: Persist
   };
 }
 
-export function saveLegacySnapshot(input: PersistSnapshotInput): boolean {
+export function buildLegacySnapshot(input: PersistSnapshotInput): Record<string, unknown> {
   const baseState = getBaseState();
   const previousStudents = Array.isArray(baseState.students) ? baseState.students : [];
   const previousById = new Map<string, Record<string, unknown>>();
@@ -308,10 +308,14 @@ export function saveLegacySnapshot(input: PersistSnapshotInput): boolean {
     }
   });
 
-  return writeLegacyRootState({
+  return {
     ...mergeSnapshotDomains(baseState, input),
     students: input.students.map(student => toLegacyStudent(student, previousById.get(student.id))),
-  });
+  };
+}
+
+export function saveLegacySnapshot(input: PersistSnapshotInput): boolean {
+  return writeLegacyRootState(buildLegacySnapshot(input));
 }
 
 export function saveGradeExamRecord(input: SaveGradeExamInput): SeatManagerState | null {

@@ -164,3 +164,7 @@ export function restoreBackup(preview: BackupImportPreview, options: { skipSafet
   if (!options.skipSafetyBackup) exportPreImportBackup();
   return importPreparedWorkspace(preview.prepared);
 }
+
+export function exportUnsavedClassBackup(data: Record<string, unknown>): void {
+  downloadFile(`unsaved_classroom_${formatDateForFilename()}_${formatTimeForFilename()}.json`, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), data }, null, 2), "application/json;charset=utf-8");
+}

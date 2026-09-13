@@ -90,9 +90,9 @@ async function handleLicenseAuth(request, env, corsHeaders) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
   }
   const deviceName = toText(body.value.deviceName || "").slice(0, 80) || "未知设备";
-  const bound = await bindLicenseDevice(license, deviceId, deviceName, env);
+  const bound = await bindLicenseDevice(license, deviceId, deviceName, env, edition);
   if (!bound.ok) {
-    return jsonResponse({ error: "device_limit", maxDevices: bound.maxDevices }, 409, corsHeaders);
+    return jsonResponse({ error: bound.error || "device_limit", maxDevices: bound.maxDevices }, bound.error ? 403 : 409, corsHeaders);
   }
 
   const rememberDays = Number(body.value.rememberDays);
@@ -215,7 +215,8 @@ async function handleLicenseAdminUpsert(request, env, corsHeaders) {
     devices: clearDevices ? [] : existing?.devices || [],
     updatedAt: now,
   });
-  await env.SEAT_MANAGER_KV.put(licenseKey, JSON.stringify(serializeLicenseForStorage(record)));
+  if (env.ACCOUNT_COORDINATOR) await env.ACCOUNT_COORDINATOR.getByName(licenseKey).mutateLicense(licenseKey, { type: "upsert", record: serializeLicenseForStorage(record), clearDevices });
+  else await env.SEAT_MANAGER_KV.put(licenseKey, JSON.stringify(serializeLicenseForStorage(record)));
   const saved = await loadLicenseRecordByKey(licenseKey, env);
   return jsonResponse({ license: serializeLicenseForAdmin(saved) }, 200, corsHeaders);
 }
@@ -432,7 +433,7 @@ async function verifyAiRequest(token, env) {
 
 async function getAiLimitResponse(env, verified, corsHeaders) {
   const usage = await consumeAiUsage(env, verified);
-  return usage.allowed ? null : jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
+  return usage.allowed ? null : usage.reason === "store_failed" ? jsonResponse({ error: "service_unavailable" }, 503, corsHeaders) : jsonResponse({ error: "rate_limited" }, 429, corsHeaders);
 }
 
 async function handleSyncStatus(env, corsHeaders, syncContext) {
@@ -1070,7 +1071,7 @@ async function loadLicenseRecordByKey(key, env) {
   if (!env.SEAT_MANAGER_KV || !toText(key).startsWith(LICENSE_KEY_PREFIX)) {
     return null;
   }
-  const record = await env.SEAT_MANAGER_KV.get(key, { type: "json" });
+  const record = env.ACCOUNT_COORDINATOR ? await env.ACCOUNT_COORDINATOR.getByName(key).readLicense(key) : await env.SEAT_MANAGER_KV.get(key, { type: "json" });
   if (!record) {
     return null;
   }
@@ -1098,7 +1099,12 @@ async function loadLicenseRecordByKey(key, env) {
   };
 }
 
-async function bindLicenseDevice(license, deviceId, deviceName, env) {
+async function bindLicenseDevice(license, deviceId, deviceName, env, edition) {
+  if (env.ACCOUNT_COORDINATOR && license.storageKey) {
+    const result = await env.ACCOUNT_COORDINATOR.getByName(license.storageKey).mutateLicense(license.storageKey, { type: "bind", deviceId, deviceName, edition, maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES });
+    if (result.ok) Object.assign(license, result.license);
+    return result;
+  }
   const maxDevices = license.maxDevices || DEFAULT_MAX_DEVICES;
   const now = new Date().toISOString();
   const devices = [...license.devices];
@@ -1123,6 +1129,7 @@ async function bindLicenseDevice(license, deviceId, deviceName, env) {
 }
 
 async function unbindLicenseDevice(license, deviceId, env) {
+  if (env.ACCOUNT_COORDINATOR && license.storageKey) return (await env.ACCOUNT_COORDINATOR.getByName(license.storageKey).mutateLicense(license.storageKey, { type: "unbind", deviceId })).removed;
   const now = new Date().toISOString();
   const devices = license.devices.filter((device) => device.id !== deviceId);
   const removed = devices.length !== license.devices.length;
@@ -1133,6 +1140,7 @@ async function unbindLicenseDevice(license, deviceId, env) {
 }
 
 async function unbindAllLicenseDevices(license, env) {
+  if (env.ACCOUNT_COORDINATOR && license.storageKey) { await env.ACCOUNT_COORDINATOR.getByName(license.storageKey).mutateLicense(license.storageKey, { type: "clear" }); return; }
   const now = new Date().toISOString();
   if (env.SEAT_MANAGER_KV && license.storageKey) {
     await persistLicenseRecord(license, env, { devices: [], updatedAt: now });
