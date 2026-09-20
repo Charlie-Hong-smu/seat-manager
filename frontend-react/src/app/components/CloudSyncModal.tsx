@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cloud, DownloadCloud, RefreshCw, UploadCloud, X } from "lucide-react";
+import { Cloud, DownloadCloud, RefreshCw, UploadCloud } from "lucide-react";
 
 import {
   clearSyncAuth,
@@ -11,12 +11,12 @@ import {
   usesProductAuthForSync,
   type SyncStatus,
 } from "../state/syncStorage";
-import { Button, Checkbox, IconButton, Input, useAppDialog } from "./ui";
+import { Button, Checkbox, Input, ModalShell, useAppDialog } from "./ui";
 
 interface CloudSyncModalProps {
   open: boolean;
   onClose: () => void;
-  onBeforeUpload: () => void;
+  onBeforeUpload: () => boolean;
   onRestored: () => void;
 }
 
@@ -38,11 +38,9 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
   const [busy, setBusy] = useState(false);
   const productSync = usesProductAuthForSync();
 
-  if (!open) {
-    return null;
-  }
 
   async function run(action: "auth" | "status" | "upload" | "restore") {
+    if (busy) return;
     try {
       setBusy(true);
       setMessage("正在处理...");
@@ -67,7 +65,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
         return;
       }
       if (action === "upload") {
-        onBeforeUpload();
+        if (!onBeforeUpload()) { setMessage("本机保存失败，已停止上传，请先处理保存问题。"); return; }
         const next = await uploadCurrentStateToCloud(deviceName);
         setStatus(next);
         setMessage(`已上传到云端：${formatTime(next.updatedAt)}。`);
@@ -78,6 +76,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
           setMessage("已取消恢复。");
           return;
         }
+        if (!onBeforeUpload()) { setMessage("本机保存失败，已停止恢复，请先处理保存问题。"); return; }
         const next = await restoreStateFromCloud();
         setStatus(next);
         onRestored();
@@ -101,15 +100,15 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
     }
   }
 
-  return (
-    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="modal-panel-enter w-full max-w-lg overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl">
-        <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
-          <h2 className="text-headline-semibold text-text-primary">云端备份与恢复</h2>
-          <IconButton label="关闭云同步" onClick={onClose}><X className="h-4 w-4" /></IconButton>
-        </div>
-
-        <div className="p-5 space-y-4">
+  return <>
+    <ModalShell open={open} title="云端备份与恢复" description="手动云端同步" onClose={() => { if (!busy) onClose(); }} footer={<>
+      {!productSync && <Button variant="secondary" disabled={busy} onClick={() => void run("auth")}>授权</Button>}
+      <Button variant="secondary" disabled={busy} onClick={() => void run("status")}><RefreshCw className="h-4 w-4"/>状态</Button>
+      <Button disabled={busy} onClick={() => void run("upload")}><UploadCloud className="h-4 w-4"/>上传本机</Button>
+      <Button variant="danger" disabled={busy} onClick={() => void run("restore")}><DownloadCloud className="h-4 w-4"/>恢复云端</Button>
+      {!productSync && <Button variant="ghost" disabled={busy} onClick={() => { clearSyncAuth(); setMessage("同步授权已清除。"); }}>清除授权</Button>}
+    </>}>
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Input label="设备名称" value={deviceName} onChange={setDeviceName} />
             {productSync ? (
@@ -140,19 +139,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-separator-border p-4">
-          {!productSync && (
-            <Button variant="secondary" disabled={busy} onClick={() => run("auth")}>授权</Button>
-          )}
-          <Button variant="secondary" disabled={busy} onClick={() => run("status")}><RefreshCw className="h-3.5 w-3.5" />状态</Button>
-          <Button disabled={busy} onClick={() => run("upload")}><UploadCloud className="h-4 w-4" />上传本机</Button>
-          <Button variant="secondary" disabled={busy} onClick={() => run("restore")}><DownloadCloud className="h-4 w-4" />恢复云端</Button>
-          {!productSync && (
-            <Button variant="ghost" className="ml-auto" disabled={busy} onClick={() => { clearSyncAuth(); setMessage("同步授权已清除。"); }}>清除授权</Button>
-          )}
-        </div>
-      </div>
-      {appDialog.dialog}
-    </div>
-  );
+    </ModalShell>
+    {appDialog.dialog}
+  </>;
 }

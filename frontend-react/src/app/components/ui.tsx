@@ -593,7 +593,7 @@ function formatDateValue(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function DatePicker({ value, onChange, ariaLabel, className = "", min, max }: { value: string; onChange: (value: string) => void; ariaLabel: string; className?: string; min?: string; max?: string }) {
+export function DatePicker({ value, onChange, ariaLabel, className = "", min, max, required = false }: { value: string; onChange: (value: string) => void; ariaLabel: string; className?: string; min?: string; max?: string; required?: boolean }) {
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => { const date = parseDateValue(value); return new Date(date.getFullYear(), date.getMonth(), 1); });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -645,7 +645,7 @@ export function DatePicker({ value, onChange, ariaLabel, className = "", min, ma
       <div className="mb-3 flex items-center justify-between"><IconButton size="sm" label="上个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4"/></IconButton><strong className="text-body-regular text-[var(--app-text)]">{visibleMonth.getFullYear()}年 {visibleMonth.getMonth() + 1}月</strong><IconButton size="sm" label="下个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4"/></IconButton></div>
       <div className="grid grid-cols-7 text-center text-[11px] font-bold text-[var(--app-text-muted)]">{"日一二三四五六".split("").map(day => <span key={day} className="py-1">{day}</span>)}</div>
       <div className="mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-caption-1-regular transition-colors disabled:opacity-25 ${active ? "bg-accent-600 font-bold text-text-white" : dayValue === today ? "bg-accent-50 font-bold text-accent-700" : currentMonth ? "text-text-primary hover:bg-background-tertiary-default" : "text-text-tertiary hover:bg-background-secondary-default"}`}>{day.getDate()}</button>; })}</div>
-      <div className="mt-3 flex justify-between border-t border-separator-border pt-2"><Button size="sm" variant="ghost" onClick={() => { onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
+      <div className="mt-3 flex justify-between border-t border-separator-border pt-2"><Button size="sm" variant="ghost" disabled={required} onClick={() => { if (!required) onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" disabled={Boolean((min && today < min) || (max && today > max))} onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
     </div></AnimatedPopover>, document.body)}
   </>;
 }

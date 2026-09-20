@@ -3,6 +3,28 @@ import { createActivityEvent } from "./activityEvents";
 import { removeStudentFromSavedGradeExams } from "./gradeStudentIdentity";
 import type { ActivityEvent, AttendanceRecord, AttendanceStatus, FollowupTask, HomeworkAssignment, SeatManagerState, StudentId } from "./types";
 
+/** 仅撤回本次修改过且未被后续操作改写的字段，保留期间其他结果与提醒。 */
+export function undoFollowupChange(current: FollowupTask, before: FollowupTask, after: FollowupTask): FollowupTask {
+  const restored = { ...current };
+  for (const key of Object.keys(after) as Array<keyof FollowupTask>) {
+    if (JSON.stringify(before[key]) !== JSON.stringify(after[key]) && JSON.stringify(current[key]) === JSON.stringify(after[key])) {
+      Object.assign(restored, { [key]: before[key] });
+    }
+  }
+  return restored;
+}
+
+/** 作业联动只回滚该生的一格，不用整份作业快照覆盖其他登记。 */
+export function undoFollowupHomework(current: HomeworkAssignment[], before: HomeworkAssignment[], after: HomeworkAssignment[], task: FollowupTask): HomeworkAssignment[] {
+  return current.map(item => {
+    if (item.id !== task.sourceRef?.entityId) return item;
+    const previous = before.find(value => value.id === item.id)?.studentStates[task.studentId];
+    const changed = after.find(value => value.id === item.id)?.studentStates[task.studentId];
+    if (!previous || JSON.stringify(item.studentStates[task.studentId]) !== JSON.stringify(changed)) return item;
+    return { ...item, studentStates: { ...item.studentStates, [task.studentId]: previous } };
+  });
+}
+
 export function completeFollowupTask(task: FollowupTask, resolutionNote = ""): { task: FollowupTask; event: ActivityEvent } {
   const now = new Date().toISOString();
   const next = { ...task, status: "completed" as const, completedAt: now, updatedAt: now, resolutionNote: resolutionNote.trim() || task.resolutionNote, resolutionUpdatedAt: resolutionNote.trim() ? now : task.resolutionUpdatedAt };

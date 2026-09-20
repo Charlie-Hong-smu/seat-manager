@@ -158,7 +158,7 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
     </div>
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <span className="text-caption-1-semibold text-text-secondary">快速登记：点击学生标记为</span>
-      <DatePicker value={date} onChange={value => { setDate(value); setSelected(new Set()); setRecentUpdate(null); }} ariaLabel="出勤日期" className="w-44 bg-background-primary-default"/>
+      <DatePicker required value={date} onChange={value => { setDate(value); setSelected(new Set()); setRecentUpdate(null); }} ariaLabel="出勤日期" className="w-44 bg-background-primary-default"/>
       <SegmentedControl value={quickStatus} onChange={value => setQuickStatus(value as AttendanceQuickStatus)} ariaLabel="快速出勤状态" className="min-w-72 flex-1 overflow-x-auto" options={QUICK_STATUS_OPTIONS}/>
       <Button size="sm" variant="secondary" disabled={!byStudent.size} onClick={() => void markAllNormal()}><Check className="h-4 w-4"/>全部正常</Button>
       <Button size="sm" variant="ghost" disabled={!undo} onClick={() => { if (!undo) return; onChange(undo); undoActivityRef.current?.(); undoActivityRef.current = null; setUndo(null); }}><RotateCcw className="h-4 w-4"/>撤销上一步</Button>

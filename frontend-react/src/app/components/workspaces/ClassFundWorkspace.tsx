@@ -1,3 +1,4 @@
+import { useWorkspaceDraftState } from "../../hooks/useWorkspaceDraftState";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, ListPlus, Pencil, RotateCcw, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 
@@ -8,7 +9,7 @@ import type { AppStudent, FundTransaction, FundTxType } from "../../state/types"
 import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import { FundTransactionForm } from "../FundTransactionForm";
 import { Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, SelectMenu, useActionToast } from "../ui";
-import { toLocalDateKey } from "../../state/dateKey";
+import { isValidDateKey, toLocalDateKey } from "../../state/dateKey";
 import { resolveReferencedStudentNames } from "../../state/studentReferences";
 import { createActivityEvent } from "../../state/activityEvents";
 import type { ActivityEvent } from "../../state/types";
@@ -43,11 +44,12 @@ export function ClassFundWorkspace({
   onActivity?: (event: ActivityEvent) => void | (() => void);
 }) {
   const [editingId, setEditingId] = useState("");
-  const [editType, setEditType] = useState<FundTxType>("income");
-  const [editAmount, setEditAmount] = useState("");
-  const [editCategory, setEditCategory] = useState("");
-  const [editNote, setEditNote] = useState("");
-  const [editDate, setEditDate] = useState("");
+  const editingTransaction = transactions.find(tx => tx.id === editingId);
+  const [editType, setEditType, cleareditType] = useWorkspaceDraftState<FundTxType>(`fund:edit:${editingId}:type`, editingTransaction?.type || "income");
+  const [editAmount, setEditAmount, cleareditAmount] = useWorkspaceDraftState(`fund:edit:${editingId}:amount`, editingTransaction ? String(editingTransaction.amount) : "");
+  const [editCategory, setEditCategory, cleareditCategory] = useWorkspaceDraftState(`fund:edit:${editingId}:category`, editingTransaction?.category || "");
+  const [editNote, setEditNote, cleareditNote] = useWorkspaceDraftState(`fund:edit:${editingId}:note`, editingTransaction?.note || "");
+  const [editDate, setEditDate, cleareditDate] = useWorkspaceDraftState(`fund:edit:${editingId}:date`, editingTransaction?.date || "");
   const [periodMode, setPeriodMode] = useState<FundPeriodMode>("month");
   const [periodAnchor, setPeriodAnchor] = useState(() => toLocalDateKey());
   const [confirmClearAll, setConfirmClearAll] = useState(false);
@@ -104,11 +106,6 @@ export function ClassFundWorkspace({
 
   function startEdit(tx: FundTransaction) {
     setEditingId(tx.id);
-    setEditType(tx.type);
-    setEditAmount(String(tx.amount));
-    setEditCategory(tx.category);
-    setEditNote(tx.note);
-    setEditDate(tx.date);
   }
 
   function saveEdit() {
@@ -116,7 +113,7 @@ export function ClassFundWorkspace({
       return;
     }
     const value = Number(editAmount);
-    if (!Number.isFinite(value) || value <= 0) {
+    if (!Number.isFinite(value) || value <= 0 || !isValidDateKey(editDate)) {
       return;
     }
     const previousTransaction = transactions.find(tx => tx.id === editingId);
@@ -128,6 +125,7 @@ export function ClassFundWorkspace({
       date: editDate,
     });
     const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "fund", entityId: editingId }, studentIds: previousTransaction?.relatedStudentIds || [], title: `修改班费流水：${editCategory || "未分类"}`, detail: `${editType === "income" ? "收入" : "支出"} ¥${Math.abs(value).toFixed(2)}` }));
+    cleareditType(); cleareditAmount(); cleareditCategory(); cleareditNote(); cleareditDate();
     setEditingId("");
     actionToast.show({
       message: "班费流水修改已保存",
@@ -164,7 +162,7 @@ export function ClassFundWorkspace({
         <div className="mx-auto max-w-5xl space-y-5">
           <Card className="surface-enter" bodyClassName="flex flex-wrap items-center gap-3 p-3">
             <SegmentedControl value={periodMode} onChange={setPeriodMode} ariaLabel="班费统计周期" options={[{ value: "all", label: "全部" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }]} />
-            {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><DatePicker value={periodAnchor} onChange={setPeriodAnchor} ariaLabel="班费统计日期" className="h-9 w-44 bg-background-primary-default"/><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-caption-1-semibold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
+            {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><DatePicker required value={periodAnchor} onChange={setPeriodAnchor} ariaLabel="班费统计日期" className="h-9 w-44 bg-background-primary-default"/><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-caption-1-semibold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
             <SegmentedControl className="ml-auto" value={view} onChange={value => setView(value as "ledger" | "collection")} ariaLabel="班费视图" options={[{ value: "ledger", label: "收支流水" }, { value: "collection", label: "收缴情况" }]} />
           </Card>
           {/* 统计卡：左大余额 + 右两小卡 */}
@@ -317,7 +315,7 @@ export function ClassFundWorkspace({
                             className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300"
                             placeholder="说明"
                           />
-                          <DatePicker value={editDate} onChange={setEditDate} ariaLabel="修改交易日期" className="w-full" />
+                          <DatePicker required value={editDate} onChange={setEditDate} ariaLabel="修改交易日期" className="w-full" />
                           <div className="flex gap-2">
                             <button
                               onClick={saveEdit}

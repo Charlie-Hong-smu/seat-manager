@@ -30,6 +30,15 @@ export async function consumeAiUsage(env, context, now = new Date()) {
 
   const day = now.toISOString().slice(0, 10);
   const key = `${USAGE_PREFIX}${day}:${actorHash}`;
+  if (env.ACCOUNT_COORDINATOR) {
+    try {
+      return await env.ACCOUNT_COORDINATOR.getByName(key).consumeUsage(key, context.dailyLimit, now.toISOString());
+    } catch {
+      console.warn(JSON.stringify({ event: "ai_usage_coordinator_failed" }));
+      return { allowed: false, reason: "store_failed" };
+    }
+  }
+  // Compatibility for older deployments without the coordinator binding.
   try {
     const stored = await env.SEAT_MANAGER_KV.get(key, { type: "json" });
     const count = Number.isFinite(Number(stored?.count)) ? Number(stored.count) : 0;

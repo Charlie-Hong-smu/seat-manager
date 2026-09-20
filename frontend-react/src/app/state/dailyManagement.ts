@@ -1,5 +1,5 @@
 import type { AppStudent, AttendanceRecord, AttendanceStatus, BusinessDomain, DrawSession, FollowupTask, FollowupTaskSource, FollowupTaskStatus, StudentId } from "./types";
-import { toLocalDateKey } from "./dateKey";
+import { isValidDateKey, toLocalDateKey } from "./dateKey";
 import { followupHasStudent, getFollowupStudentIds, isIndividualFollowup } from "./followupStudents";
 
 function id(prefix: string): string {
@@ -18,7 +18,7 @@ export function normalizeAttendanceRecords(raw: unknown): AttendanceRecord[] {
     const item = value as Record<string, unknown>;
     const studentId = typeof item.studentId === "string" ? item.studentId : "";
     const date = typeof item.date === "string" ? item.date : "";
-    if (!studentId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    if (!studentId || !isValidDateKey(date)) return;
     const status: AttendanceStatus = item.status === "leave" || item.status === "absent" ? item.status : "normal";
     const createdAt = typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString();
     byKey.set(`${date}:${studentId}`, {
@@ -37,6 +37,7 @@ export function normalizeAttendanceRecords(raw: unknown): AttendanceRecord[] {
 }
 
 export function upsertAttendance(records: AttendanceRecord[], input: Omit<AttendanceRecord, "id" | "createdAt" | "updatedAt">): AttendanceRecord[] {
+  if (!input.studentId || !isValidDateKey(input.date)) return records;
   const existing = records.find(item => item.studentId === input.studentId && item.date === input.date);
   const isDefault = input.status === "normal" && !input.late && !input.earlyLeave && !input.note.trim() && !input.leaveStart && !input.leaveEnd;
   if (isDefault) return records.filter(item => item !== existing);
@@ -139,14 +140,25 @@ export function getTaskUrgency(task: FollowupTask, today = todayKey()): "overdue
   return "upcoming";
 }
 
+export function retainDrawSessions(sessions: DrawSession[]): DrawSession[] {
+  const today = todayKey();
+  return [...sessions.filter(item => item.date === today), ...sessions.filter(item => item.date !== today).slice(0, 50)];
+}
+
+export function getDrawRound(sessions: DrawSession[], date = todayKey()) {
+  const roundId = sessions.find(item => item.date === date)?.roundId || date;
+  const usedIds = new Set(sessions.filter(item => item.date === date && (item.roundId || date) === roundId).flatMap(item => item.studentIds));
+  return { roundId, usedIds };
+}
+
 export function normalizeDrawSessions(raw: unknown): DrawSession[] {
   if (!Array.isArray(raw)) return [];
-  return raw.flatMap((value, index): DrawSession[] => {
+  return retainDrawSessions(raw.flatMap((value, index): DrawSession[] => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
     const item = value as Record<string, unknown>;
     const studentIds = Array.isArray(item.studentIds) ? item.studentIds.filter((v): v is string => typeof v === "string") : [];
-    return studentIds.length ? [{ id: typeof item.id === "string" ? item.id : `draw-${index}`, date: typeof item.date === "string" ? item.date : todayKey(), studentIds, createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString() }] : [];
-  }).slice(0, 50);
+    return studentIds.length ? [{ id: typeof item.id === "string" ? item.id : `draw-${index}`, roundId: typeof item.roundId === "string" ? item.roundId : undefined, date: typeof item.date === "string" ? item.date : todayKey(), studentIds, createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString() }] : [];
+  }));
 }
 
 export function drawStudents(students: AppStudent[], count: number, excludedIds: Set<StudentId> = new Set()): AppStudent[] {

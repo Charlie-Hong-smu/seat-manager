@@ -1,3 +1,5 @@
+import { isValidDateKey } from "../state/dateKey";
+import { useWorkspaceDraftState } from "../hooks/useWorkspaceDraftState";
 import { findMatchingFollowupTask } from "../state/dailyManagement";
 import { getFollowupStudentIds } from "../state/followupStudents";
 import { useState, useMemo, useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
@@ -96,30 +98,31 @@ export function DormitoryWorkspace({
   const appDialog = useAppDialog();
   const actionToast = useActionToast();
   const [selectedDormId, setSelectedDormId] = useState(dormitories[0]?.id || "");
-  const [newName, setNewName] = useState("");
+  const [newName, setNewName] = useWorkspaceDraftState("dormitory:new:newName", "");
   const [memberSearch, setMemberSearch] = useState("");
   const [editingEventId, setEditingEventId] = useState("");
-  const [editReason, setEditReason] = useState("");
-  const [editScore, setEditScore] = useState(0);
-  const [editNote, setEditNote] = useState("");
-  const [editPunishment, setEditPunishment] = useState("");
-  const [editDate, setEditDate] = useState(localDateKey());
-  const [eventDate, setEventDate] = useState(localDateKey());
+  const editingSource = dormitories.flatMap(dorm => [...dorm.events, ...dorm.history.flatMap(history => history.events)]).find(event => event.id === editingEventId);
+  const [editReason, setEditReason, cleareditReason] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:reason`, editingSource?.reason ?? "");
+  const [editScore, setEditScore, cleareditScore] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:score`, editingSource?.score ?? 0);
+  const [editNote, setEditNote, cleareditNote] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:note`, editingSource?.note ?? "");
+  const [editPunishment, setEditPunishment, cleareditPunishment] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:punishment`, editingSource?.punishment ?? "");
+  const [editDate, setEditDate, cleareditDate] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:date`, editingSource?.date ?? localDateKey());
+  const [eventDate, setEventDate] = useWorkspaceDraftState(`dormitory:new:eventDate:${selectedDormId}`, localDateKey());
   const [periodMode, setPeriodMode] = useState<DormitoryPeriodMode>("week");
   const [periodAnchor, setPeriodAnchor] = useState(localDateKey());
   const [focusedEventId, setFocusedEventId] = useState("");
 
   // 事件录入表单 state
-  const [reason, setReason] = useState("");
-  const [score, setScore] = useState(0);
-  const [note, setNote] = useState("");
-  const [punishment, setPunishment] = useState("");
-  const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
+  const [reason, setReason] = useWorkspaceDraftState(`dormitory:new:reason:${selectedDormId}`, "");
+  const [score, setScore] = useWorkspaceDraftState(`dormitory:new:score:${selectedDormId}`, 0);
+  const [note, setNote] = useWorkspaceDraftState(`dormitory:new:note:${selectedDormId}`, "");
+  const [punishment, setPunishment] = useWorkspaceDraftState(`dormitory:new:punishment:${selectedDormId}`, "");
+  const [responsibleIds, setResponsibleIds] = useWorkspaceDraftState<string[]>(`dormitory:new:responsibleIds:${selectedDormId}`, []);
   const [showResponsible, setShowResponsible] = useState(false);
   const [responsibleSearch, setResponsibleSearch] = useState("");
-  const [recordToStudent, setRecordToStudent] = useState(true);
-  const [createFollowup, setCreateFollowup] = useState(false);
-  const [followupDueDate, setFollowupDueDate] = useState(() => localDateKey());
+  const [recordToStudent, setRecordToStudent] = useWorkspaceDraftState(`dormitory:new:recordToStudent:${selectedDormId}`, true);
+  const [createFollowup, setCreateFollowup] = useWorkspaceDraftState(`dormitory:new:createFollowup:${selectedDormId}`, false);
+  const [followupDueDate, setFollowupDueDate] = useWorkspaceDraftState(`dormitory:new:followupDueDate:${selectedDormId}`, () => localDateKey());
 
   // 可变预设事件列表 + 自定义输入
   const initialPreferences = useMemo(
@@ -127,7 +130,7 @@ export function DormitoryWorkspace({
     [preferences],
   );
   const [presets, setPresets] = useState<PresetEvent[]>(initialPreferences.presets);
-  const [customLabel, setCustomLabel] = useState("");
+  const [customLabel, setCustomLabel] = useWorkspaceDraftState(`dormitory:new:customLabel:${selectedDormId}`, "");
   const [presetManagerOpen, setPresetManagerOpen] = useState(false);
   const [presetDrafts, setPresetDrafts] = useState<PresetDraft[]>([]);
   const [pendingDeletePreset, setPendingDeletePreset] = useState("");
@@ -286,19 +289,15 @@ export function DormitoryWorkspace({
     });
   }
 
-  function startEditEvent(eventId: string, reason: string, score: number, note: string, punishment: string, date: string) {
+  function startEditEvent(eventId: string, _reason: string, _score: number, _note: string, _punishment: string, _date: string) {
     setEditingEventId(eventId);
-    setEditReason(reason);
-    setEditScore(score);
-    setEditNote(note);
-    setEditPunishment(punishment);
-    setEditDate(date);
   }
 
   function saveEditEvent() {
-    if (!selectedDormitory || !editingEventId) return;
+    if (!selectedDormitory || !editingEventId || !isValidDateKey(editDate)) return;
     const previousEvent = selectedPeriodEvents.find(entry => entry.event.id === editingEventId)?.event;
     onUpdateDormitoryEvent(selectedDormitory.id, editingEventId, { reason: editReason, score: editScore, note: editNote, punishment: editPunishment, date: editDate });
+    cleareditReason(); cleareditScore(); cleareditNote(); cleareditPunishment(); cleareditDate();
     const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "dormitory", entityId: editingEventId, studentId: previousEvent?.responsibleStudentIds?.[0] || previousEvent?.responsibleStudentId }, studentIds: previousEvent?.responsibleStudentIds || (previousEvent?.responsibleStudentId ? [previousEvent.responsibleStudentId] : []), title: `修改宿舍事件：${editReason}`, detail: `${selectedDormitory.name} · ${editScore > 0 ? "+" : ""}${editScore} 分` }));
     setEditingEventId("");
     actionToast.show({
@@ -370,7 +369,7 @@ export function DormitoryWorkspace({
   }
 
   function submitEvent() {
-    if (!selectedDormitory || !reason.trim()) return;
+    if (!selectedDormitory || !reason.trim() || !isValidDateKey(eventDate)) return;
     // 记住这次设定的分数
     const nextScoreMemory = { ...scoreMemory, [reason.trim()]: score };
     setScoreMemory(nextScoreMemory);
@@ -607,7 +606,7 @@ export function DormitoryWorkspace({
 
                       <label className="block">
                         <span className="mb-1.5 block text-caption-1-semibold text-text-tertiary">发生日期</span>
-                        <DatePicker value={eventDate} onChange={setEventDate} ariaLabel="宿舍事件发生日期" className="w-full" max={localDateKey()} />
+                        <DatePicker required value={eventDate} onChange={setEventDate} ariaLabel="宿舍事件发生日期" className="w-full" max={localDateKey()} />
                       </label>
 
                       {/* 备注 */}
@@ -775,7 +774,7 @@ export function DormitoryWorkspace({
                               className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300"
                               placeholder="备注"
                             />
-                            <DatePicker value={editDate} onChange={setEditDate} ariaLabel="修改宿舍事件日期" className="w-full" max={localDateKey()} />
+                            <DatePicker required value={editDate} onChange={setEditDate} ariaLabel="修改宿舍事件日期" className="w-full" max={localDateKey()} />
                             <div className="flex gap-2">
                               <input
                                 value={editPunishment}

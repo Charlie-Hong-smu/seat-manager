@@ -1,3 +1,4 @@
+import { useWorkspaceDraftState } from "../hooks/useWorkspaceDraftState";
 import { Plus, RotateCcw, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -17,15 +18,15 @@ export function QuickRecordDrawer({ open, students, presets, initialStudentIds =
   onApply: (input: QuickRecordInput) => (() => void) | void;
   onPresetsChange: (presets: QuickRecordPreset[]) => void;
 }) {
-  const [studentIds, setStudentIds] = useState<StudentId[]>(initialStudentIds);
-  const [type, setType] = useState<RecordType>("note");
-  const [note, setNote] = useState("");
-  const [score, setScore] = useState("");
-  const [presetId, setPresetId] = useState("");
-  const [newPresetLabel, setNewPresetLabel] = useState("");
+  const [studentIds, setStudentIds] = useWorkspaceDraftState<StudentId[]>("quick-record:new:studentIds", initialStudentIds);
+  const [type, setType] = useWorkspaceDraftState<RecordType>("quick-record:new:type", "note");
+  const [note, setNote] = useWorkspaceDraftState("quick-record:new:note", "");
+  const [score, setScore] = useWorkspaceDraftState("quick-record:new:score", "");
+  const [presetId, setPresetId] = useWorkspaceDraftState("quick-record:new:presetId", "");
+  const [newPresetLabel, setNewPresetLabel] = useWorkspaceDraftState("quick-record:new:newPresetLabel", "");
   const [managing, setManaging] = useState(false);
   const [undo, setUndo] = useState<null | (() => void)>(null);
-  useEffect(() => { if (open) setStudentIds(initialStudentIds); }, [initialStudentIds, open]);
+  useEffect(() => { if (open && initialStudentIds.length) setStudentIds(initialStudentIds); }, [initialStudentIds, open, setStudentIds]);
   const activePresets = useMemo(() => presets.filter(item => item.enabled).sort((a, b) => a.order - b.order), [presets]);
 
   function choosePreset(preset: QuickRecordPreset) {

@@ -3,6 +3,8 @@ import { readRowsFromFile } from "./scoreImport";
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import type { SeatManagerState } from "./types";
 
+import { findStudentCandidates, normalizeStudentName, normalizeStudentNo } from "./studentIdentity";
+
 const COLS = 8;
 
 export interface RosterImportOptions {
@@ -24,6 +26,7 @@ export interface RosterImportResult {
 }
 
 export interface ParsedRoster {
+  warnings?: string[];
   names: string[];
   placements: Array<string | null>;
   genders: string[];
@@ -57,15 +60,6 @@ function cloneJson<T>(value: T, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-function normalizeName(value: unknown): string {
-  return String(value || "")
-    .trim()
-    .replace(/\u3000/g, " ")
-    .replace(/[()（）][^()（）]*[()（）]/g, "")
-    .replace(/(同学|学生)$/g, "")
-    .replace(/\s+/g, "");
 }
 
 function makeId(): string {
@@ -128,6 +122,7 @@ export function parseRosterRows(rows: string[][], mapping = detectRosterMapping(
   const names: string[] = [];
   const genderList: string[] = [];
   const studentNoList: string[] = [];
+  const warnings: string[] = [];
   let hasPlacement = false;
   let maxIndex = -1;
 
@@ -145,6 +140,11 @@ export function parseRosterRows(rows: string[][], mapping = detectRosterMapping(
 
     if (Number.isInteger(rowIndex) && Number.isInteger(colIndex) && rowIndex >= 1 && colIndex >= 1 && colIndex <= COLS) {
       const index = (rowIndex - 1) * COLS + (colIndex - 1);
+      if (placements[index]) {
+        warnings.push(`第 ${rowIndex} 行第 ${colIndex} 列重复：${name} 将排入空座，保留已有学生。`);
+        names.push(name); genderList.push(gender); studentNoList.push(studentNo);
+        continue;
+      }
       placements[index] = name;
       genders[index] = gender;
       studentNos[index] = studentNo;
@@ -166,31 +166,18 @@ export function parseRosterRows(rows: string[][], mapping = detectRosterMapping(
     }
   }
 
-  return { names, placements, genders, studentNos, genderList, studentNoList, hasPlacement };
+  return { names, placements, genders, studentNos, genderList, studentNoList, hasPlacement, warnings };
 }
 
-function buildPreservedLookup(students: unknown[]): Map<string, Record<string, unknown>[]> {
-  const lookup = new Map<string, Record<string, unknown>[]>();
-  students.forEach(student => {
-    if (!isRecord(student)) {
-      return;
-    }
-    [student.name, ...(Array.isArray(student.aliases) ? student.aliases : [])].forEach(name => {
-      const key = normalizeName(name);
-      if (!key) {
-        return;
-      }
-      const list = lookup.get(key) || [];
-      list.push(student);
-      lookup.set(key, list);
-    });
-  });
-  return lookup;
-}
-
-function takePreserved(lookup: Map<string, Record<string, unknown>[]>, name: string): Record<string, unknown> | null {
-  const key = normalizeName(name);
-  return key ? lookup.get(key)?.shift() || null : null;
+function matchStudent(students: Record<string, unknown>[], name: string, studentNo: string): Record<string, unknown> | null {
+  const candidates = students.map(raw => ({
+    id: String(raw.id), name: String(raw.name || ""), studentNo: String(raw.studentNo || ""),
+    aliases: Array.isArray(raw.aliases) ? raw.aliases.map(String) : [],
+    enrollmentStatus: raw.enrollmentStatus === "archived" ? "archived" as const : "active" as const, raw,
+  }));
+  const matches = findStudentCandidates(candidates, { name, studentNo });
+  if (matches.length > 1) throw new Error(`“${name}”对应多名学生，请补齐唯一学号后重新导入。`);
+  return matches[0]?.raw || null;
 }
 
 function makeStudent(name: string, gender: string, studentNo: string, preserved?: Record<string, unknown> | null): Record<string, unknown> {
@@ -231,25 +218,19 @@ interface AppliedRosterImport {
   skippedCount: number;
 }
 
-function collectStudentNameKeys(student: Record<string, unknown>): string[] {
-  return [student.name, ...(Array.isArray(student.aliases) ? student.aliases : [])]
-    .map(normalizeName)
-    .filter(Boolean);
-}
-
 function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): AppliedRosterImport {
   const base = isRecord(readLegacyRootState()) ? readLegacyRootState() as Record<string, unknown> : {};
   const previousStudents = Array.isArray(base.students) ? base.students.filter(isRecord) : [];
   const activePrevious = previousStudents.filter(student => student.enrollmentStatus !== "archived");
   const archivedPrevious = previousStudents.filter(student => student.enrollmentStatus === "archived");
   if (options.replaceExisting) {
-    // 活跃学生优先领取同名档案；匹配到的归档学生视为重新入班。
-    const preservedLookup = options.keepHistory ? buildPreservedLookup([...activePrevious, ...archivedPrevious]) : new Map<string, Record<string, unknown>[]>();
+    const candidates = options.keepHistory ? previousStudents : [];
     const consumedIds = new Set<string>();
     let matchedCount = 0;
-    const takeMatch = (name: string): Record<string, unknown> | null => {
-      const preserved = takePreserved(preservedLookup, name);
+    const takeMatch = (name: string, studentNo: string): Record<string, unknown> | null => {
+      const preserved = matchStudent(candidates, name, studentNo);
       if (preserved && preserved.id !== undefined) {
+        if (consumedIds.has(String(preserved.id))) throw new Error(`“${name}”重复关联同一学生，请核对学号。`);
         consumedIds.add(String(preserved.id));
         matchedCount += 1;
       }
@@ -264,12 +245,12 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
       if (!name) {
         return;
       }
-      const student = makeStudent(name, parsed.genders[index] || "", parsed.studentNos[index] || "", takeMatch(name));
+      const student = makeStudent(name, parsed.genders[index] || "", parsed.studentNos[index] || "", takeMatch(name, parsed.studentNos[index] || ""));
       students.push(student);
       seatOrder[index] = String(student.id);
     });
     parsed.names.forEach((name, index) => {
-      const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "", takeMatch(name));
+      const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "", takeMatch(name, parsed.studentNoList[index] || ""));
       students.push(student);
       placeFirstEmpty(seatOrder, String(student.id));
     });
@@ -295,39 +276,26 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
     return { next, newCount: rosterSize - matchedCount, matchedCount, archivedCount: leftBehind.length, skippedCount: 0 };
   }
 
-  // 追加导入：已在名单中的姓名跳过，命中归档学生则恢复其在班状态。
+  // 追加和覆盖共用身份规则；含座位的行也必须进入名单。
   const students = previousStudents.map(student => ({ ...student }));
-  const activeKeys = new Set<string>();
-  students.forEach(student => {
-    if (student.enrollmentStatus !== "archived") {
-      collectStudentNameKeys(student).forEach(key => activeKeys.add(key));
-    }
-  });
-  const archivedLookup = buildPreservedLookup(students.filter(student => student.enrollmentStatus === "archived"));
   const additions: string[] = [];
   let newCount = 0;
   let matchedCount = 0;
   let skippedCount = 0;
-  parsed.names.forEach((name, index) => {
-    const key = normalizeName(name);
-    if (key && activeKeys.has(key)) {
-      skippedCount += 1;
-      return;
-    }
-    const revived = takePreserved(archivedLookup, name);
-    if (revived) {
-      revived.enrollmentStatus = "active";
-      delete revived.archivedAt;
+  const incoming = [
+    ...parsed.placements.flatMap((name, index) => name ? [{ name, gender: parsed.genders[index] || "", studentNo: parsed.studentNos[index] || "" }] : []),
+    ...parsed.names.map((name, index) => ({ name, gender: parsed.genderList[index] || "", studentNo: parsed.studentNoList[index] || "" })),
+  ];
+  incoming.forEach(({ name, gender, studentNo }) => {
+    const matched = matchStudent(students, name, studentNo);
+    if (matched && matched.enrollmentStatus !== "archived") { skippedCount += 1; return; }
+    if (matched) {
+      Object.assign(matched, makeStudent(name, gender, studentNo, matched));
       matchedCount += 1;
-      additions.push(String(revived.id));
+      additions.push(String(matched.id));
     } else {
-      const student = makeStudent(name, parsed.genderList[index] || "", parsed.studentNoList[index] || "");
-      students.push(student);
-      newCount += 1;
-      additions.push(String(student.id));
-    }
-    if (key) {
-      activeKeys.add(key);
+      const student = makeStudent(name, gender, studentNo);
+      students.push(student); newCount += 1; additions.push(String(student.id));
     }
   });
   const activeCount = students.filter(student => student.enrollmentStatus !== "archived").length;
@@ -340,6 +308,16 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
 export function applyParsedRoster(parsed: ParsedRoster, options: RosterImportOptions): RosterImportResult {
   if (!parsed.names.length && !parsed.hasPlacement) {
     throw new Error("empty_roster");
+  }
+  const identities = [
+    ...parsed.placements.flatMap((name, index) => name ? [{ name, no: parsed.studentNos[index] }] : []),
+    ...parsed.names.map((name, index) => ({ name, no: parsed.studentNoList[index] })),
+  ];
+  const keys = new Set<string>();
+  for (const { name, no } of identities) {
+    const key = normalizeStudentNo(no) ? `no:${normalizeStudentNo(no)}` : `name:${normalizeStudentName(name)}`;
+    if (keys.has(key)) throw new Error(`“${name}”重复或缺少唯一学号，请核对名单后重新导入。`);
+    keys.add(key);
   }
   const { next, newCount, matchedCount, archivedCount, skippedCount } = applyRosterImport(parsed, options);
   if (!writeLegacyRootState(next)) {

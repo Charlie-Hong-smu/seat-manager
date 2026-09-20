@@ -1,5 +1,5 @@
 name = "seat-manager-ai"
-main = "deepseek-ai-worker.js"
+main = "worker-entry.js"
 compatibility_date = "2026-06-29"
 workers_dev = true
 
@@ -25,3 +25,11 @@ namespace_id = "202607102"
   [ratelimits.simple]
   limit = 12
   period = 60
+
+[[durable_objects.bindings]]
+name = "ACCOUNT_COORDINATOR"
+class_name = "AccountCoordinator"
+
+[[migrations]]
+tag = "v1-account-coordinator"
+new_sqlite_classes = ["AccountCoordinator"]

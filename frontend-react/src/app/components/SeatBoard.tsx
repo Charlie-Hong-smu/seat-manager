@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Lock, Star, UserRoundPlus, Users } from "lucide-react";
+import { ChevronDown, Lock, UserRoundPlus, Users } from "lucide-react";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
 import { resolveSeatLayout } from "../state/seatLayout";
 import { SeatLayoutSurface } from "./SeatLayoutSurface";
@@ -226,20 +226,6 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   }, [seatedIds, studentById, students]);
   const previousWaitingCountRef = useRef(waitingStudents.length);
   const [pendingStudentId, setPendingStudentId] = useState<StudentId | null>(null);
-  const rowCount = Math.ceil(seatOrder.length / COLS);
-
-  const rows = useMemo(() => Array.from({ length: rowCount }, (_, r) =>
-    Array.from({ length: COLS }, (_, c) => ({
-      seatIndex: r * COLS + c,
-      studentId: seatOrder[r * COLS + c] ?? null,
-    }))
-  ), [rowCount, seatOrder]);
-
-  // Groups: [0,1] [2,3] [4,5] [6,7]
-  const groups = [
-    [0, 1], [2, 3], [4, 5], [6, 7],
-  ];
-
   useEffect(() => () => {
     dragCleanupRef.current?.();
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
@@ -691,8 +677,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
     </section>
   );
 
-  if (seatSettings.layout) {
-    return <div className="flex h-full min-h-0 flex-col gap-3">
+  return <div className="flex h-full min-h-0 flex-col gap-3">
       <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
         <SeatLayoutSurface layout={layout} detail={cardMode === "detail"} renderSeat={(seat, seatIndex) =>
           <div className="seat-card-enter h-full min-h-0" style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms` }} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) assignWaitingStudentToSeat(studentId, seatIndex); }} onClick={() => { if (pendingStudentId) assignWaitingStudentToSeat(pendingStudentId, seatIndex); }}>
@@ -703,105 +688,4 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       {waitingSection}
       {dragOverlay}
     </div>;
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
-      <div className="flex h-full min-h-full min-w-[760px] flex-col">
-        {/* Column group headers */}
-        <div className="mb-2 flex shrink-0 gap-3 pl-12">
-          {groups.map((_, gi) => (
-            <div key={gi} className="flex-1 text-center text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600 }}>
-              第 {gi + 1} 组
-            </div>
-          ))}
-        </div>
-
-        {/* Rows */}
-        <div
-          className="grid shrink-0 flex-1 content-center gap-2 transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-          style={{ minHeight: rowCount * (cardMode === "compact" ? 32 : 72) + (rowCount - 1) * 8, gridTemplateRows: `repeat(${rowCount}, ${cardMode === "compact" ? "minmax(32px, 1fr)" : "72px"})` }}
-        >
-          {rows.map((_, displayIdx) => {
-            const rowIdx = rows.length - 1 - displayIdx;
-            const row = rows[rowIdx];
-            return (
-            <div
-              key={rowIdx}
-              className="seat-row-enter flex min-h-0 items-stretch gap-3"
-              style={{ animationDelay: `${displayIdx * 18}ms` }}
-            >
-              {/* Row label */}
-              <div className="flex w-9 shrink-0 items-center justify-center text-center">
-                <span className="text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600 }}>第{rowIdx + 1}排</span>
-              </div>
-
-              {/* 4 groups of 2 columns */}
-              {groups.map((cols, gi) => (
-                <div key={gi} className="grid min-w-0 flex-1 grid-cols-2 gap-2">
-                  {cols.map(colIdx => {
-                    const cell = row[colIdx];
-                    return (
-                      <div
-                        key={cell.seatIndex}
-                        className="seat-card-enter min-h-0 min-w-0"
-                        style={{ animationDelay: `${Math.min(cell.seatIndex, 12) * 10}ms` }}
-                        onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
-                        onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) assignWaitingStudentToSeat(studentId, cell.seatIndex); }}
-                        onClick={() => { if (pendingStudentId) assignWaitingStudentToSeat(pendingStudentId, cell.seatIndex); }}
-                      >
-                        <SeatCard
-                          studentId={cell.studentId}
-                          studentById={studentById}
-                          seatIndex={cell.seatIndex}
-                          isLocked={lockedSeats.has(cell.seatIndex)}
-                          isDragging={draggingSeat === cell.seatIndex}
-                          isConcealed={dragVisual?.phase === "settling" && dragVisual.studentId === cell.studentId}
-                          isDropTarget={dragVisual?.targetIndex === cell.seatIndex}
-                          dragActive={Boolean(dragVisual) || pendingStudentId !== null}
-                          visualTransform={seatVisualTransform(cell.seatIndex)}
-                          cardMode={cardMode}
-                          onSelect={onSelectStudent}
-                          onPointerDragStart={handleSeatPointerDrag}
-                          onToggleLock={onToggleLock}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          );
-          })}
-        </div>
-
-        <div className="mt-3 shrink-0 rounded-[var(--app-radius-sm)] border border-accent-100 bg-accent-50/70 py-2 text-center text-caption-1-regular text-accent-600" style={{ fontWeight: 700 }}>
-          讲台
-        </div>
-
-        {/* Legend */}
-        <div className="mt-3 flex shrink-0 items-center gap-4 border-t border-separator-border pt-3">
-          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
-            <span className="w-2 h-2 rounded-full bg-accent-400" />男生
-          </div>
-          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
-            <span className="w-2 h-2 rounded-full bg-status-pink-400" />女生
-          </div>
-          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
-            <Star className="w-3 h-3 text-status-success-400" />学科优势
-          </div>
-          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
-            <Lock className="w-3 h-3 text-status-warning-400" />座位锁定
-          </div>
-          <div className="flex items-center gap-1.5 text-caption-1-regular text-text-tertiary">
-            <span className="w-4 h-4 rounded border-2 border-dashed border-border-button-hover" />空座
-          </div>
-        </div>
-      </div>
-      </div>
-      {waitingSection}
-      {dragOverlay}
-    </div>
-  );
 }

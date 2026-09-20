@@ -4,10 +4,11 @@
 
 ## 代码边界
 
-- `deepseek-ai-worker.js`：稳定的 Wrangler 入口，只导出应用。
+- `worker-entry.js`：Wrangler 入口，导出应用与 AccountCoordinator；`deepseek-ai-worker.js` 保持纯应用 facade，供既有 Node 检查使用。
 - `worker-app.js`：CORS、异常边界、显式路由装配与现有领域 handler。
 - `worker-auth.js`：token、hash 和常量时间比较。
-- `worker-usage.js`：`AiRequestContext`、短窗口限流和 KV 日计数。
+- `worker-usage.js`：`AiRequestContext`、短窗口限流和持久每日计数。
+- `worker-account-coordinator.js`：按授权键或计数日键分片，串行计数、绑定设备及管理员写入；保持 KV 兼容镜像。
 - `routes/`：license、sync 与 AI 的领域路由表；管理员路由仍由应用入口显式装配并受同一鉴权/响应边界保护。
 - `worker-router.js`：统一路由调度。
 - `worker-response.js`：CORS、JSON 和异常响应。
@@ -41,7 +42,7 @@ npm run tail
 npx wrangler secret put SECRET_NAME
 ```
 
-`wrangler.toml` 只保存非敏感配置和 KV binding。不要提交 `.dev.vars`、API key、授权码、同步码或 token secret。
+`wrangler.toml` 只保存非敏感配置、KV / Durable Object binding 与迁移声明。不要提交 `.dev.vars`、API key、授权码、同步码或 token secret。
 
 ## Secrets 与变量
 
@@ -76,7 +77,7 @@ AI 日计数 key（内部防滥用，不进入备份或同步）：
 seat-manager:ai-usage:<YYYY-MM-DD>:<actorHash>
 ```
 
-value 为 `{ "count": number, "updatedAt": string }`，3 天过期。payload 校验成功后、调用 DeepSeek 前计数；KV 故障只记录结构化告警并放行。`AUTH_RATE_LIMITER` 为每来源/登录路由每分钟 20 次，`AI_RATE_LIMITER` 为每个已验证 actor 每分钟 12 次。
+value 为 `{ "count": number, "updatedAt": string }`，3 天过期。payload 校验成功后、调用 DeepSeek 前计数；协调器故障返回 503 并停止 AI 请求；KV 镜像失败只告警，已完成的原子计数仍然有效。未绑定协调器的旧部署保持原 KV 兼容语义。`AUTH_RATE_LIMITER` 为每来源/登录路由每分钟 20 次，`AI_RATE_LIMITER` 为每个已验证 actor 每分钟 12 次。
 
 产品授权记录 key：
 

@@ -113,7 +113,7 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 - 评语工作台的 `/refine-comment` 只接收当前选区、有限相邻语境和稳定学生 ID，返回单段替换建议；前端不得在响应到达时自动覆盖或持久化，必须由老师先点“应用替换”，再沿用既有保存动作写入草稿。
 - 周报与题目分析采用“本地先算、按需 AI 增强”：`teacherAiService.ts` 按事实签名缓存结果；`/generate-weekly-draft` 和 `/analyze-score-items` 不在页面打开时自动调用。题目分析只向 Worker 发送本地统计、知识点和稳定学生 ID，不发送整个工作簿。
 - Worker 公共路由新增或删除时，必须同时通过 `cloudflare-worker/test/routes.test.js`。
-- AI handler 在 payload 校验后、调用上游前统一经过 `AiRequestContext`/usage 边界：Cloudflare Rate Limiting 负责短窗口保护，KV 负责尽力而为的 UTC 日计数；KV 故障告警后放行。
+- AI handler 在 payload 校验后、调用上游前统一经过 `AiRequestContext`/usage 边界：Cloudflare Rate Limiting 负责短窗口保护，`ACCOUNT_COORDINATOR` 按 actor/UTC 日串行执行持久计数，保留原 KV 键作为兼容镜像；协调器失败返回 503，中止上游请求。未绑定协调器的旧部署仍保留旧 KV 兼容路径。
 
 ## PWA
 
@@ -128,7 +128,18 @@ Scores、AI Companion 面板、Comment Workbench 和学生详情的成绩趋势�
 - 不把 secret、DeepSeek key、产品码或管理员 token 放入前端或 Git。
 - 不通过提交 `dist` 发布；两个前端都由 CI 重新构建。
 
-
 ## BoardUI 预览适配
 
 独立预览分支通过 `ui.tsx` 包装 `src/components/base/` 下的 BoardUI 按钮与分段控件源码，继续保留应用原有 props 和状态边界。`src/utils/cx.ts` 使用 tailwind-merge；分段控件使用 react-aria-components。React 保持18，按钮使用 forwardRef。BoardUI 主题与字体合并到现有 `src/styles/theme.css`，没有第二套主题入口。迁移范围和实际验证记录见 `docs/BOARDUI_PREVIEW.md`。
+
+## 2026-09 审计修复边界
+
+本机编辑使用 `useWorkspaceWriteAccess` 获取同一 origin 文件柜的 Web Lock；其他窗口提示关闭编辑窗口后重试。缺少 Web Locks 的环境保留存储版本核验。`writeBook` 在写入前核对本窗口接受的原始文件柜版本，外部修改后暂停保存并允许先导出当前未保存内容，再由老师确认读取最新数据。导出、手动上传、切换学期及退出必须检查保存结果，保存失败时停止后续动作。文件柜及备份版本、键、载荷保持兼容。
+
+`studentIdentity.ts` 是名单、成绩与逐题表的身份匹配边界：稳定 ID、唯一学号、唯一姓名；明确不同的学号不允许姓名兜底，同名歧义不得领取其他学生档案。新学期只复制在班名单，并重建宿舍成员。题目缺考与空值保留 null，非法得分要求核对；无学生关联的行保留统计但不生成个人跟进。样本最高分仅作为待确认的满分，老师确认后才可调用教学 AI。AI 结果绑定考试及题目数据签名。
+
+`useWorkspaceDraftState` 以工作区、业务对象、字段缓存普通业务草稿（`seat-manager-form-draft-v1:*`），覆盖跟进、作业、班费、宿舍事件、快捷记录和周报。缓存不进入正式业务数据、备份或云端。正式提交清理对应内容；敏感凭据和明确取消即丢弃的布局草稿不缓存。共享 ModalShell 负责焦点、Esc 与关闭过渡，必填业务日期使用 DatePicker.required，日期范围与可选截止日仍可清除。
+
+任务页与今日共用 App 的跟进创建、完成、结果与撤销入口，字段级撤销保留后续无关修改，作业联动仅撤回该生的登记。默认座位与自定义座位共用 SeatLayoutSurface，继续使用同一拖动实现。抽签增加可选 roundId，重开一轮必须确认；当日完整历史用于去重，旧日历史仍只保留 50 条。今日计数直接来自队列，归档学生出勤不进入当前待处理队列。
+
+Worker 的 `worker-entry.js` 导出稳定应用及 `AccountCoordinator`。`ACCOUNT_COORDINATOR` 为 SQLite Durable Object，按既有授权键或额度日键分片；每个对象串行处理读改写。首次读取从原 KV 迁移，之后对象存储为授权及计数的权威值，原 KV 保留相同键和形状的镜像。设备绑定、解绑、清空和管理员更新经同一对象处理，管理员普通修改保留最新设备列表。公共 HTTP 路由、Netlify allowlist 和全部 secret 名称不变；手动云端班级数据仍沿原 KV 存储，不进入协调器。
