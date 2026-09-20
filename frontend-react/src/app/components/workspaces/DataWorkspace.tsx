@@ -17,7 +17,7 @@ import { prefetchXlsxAsset, readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
 import type { AppStudent, SeatLayoutV1, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
-import { Button, FileDropZone, InlineStatus, SelectMenu, useAppDialog, useModalFocus } from "../ui";
+import { Button, DialogPresence, FileDropZone, InlineStatus, SelectMenu, useAppDialog, useModalFocus } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function DataWorkspace({
@@ -223,7 +223,7 @@ export function DataWorkspace({
   const rosterPreviewRows = rosterRows.slice(rosterMapping?.hasHeader === false ? 0 : 1, (rosterMapping?.hasHeader === false ? 0 : 1) + 10);
 
   return (
-    <div className="flex h-full flex-col bg-background-secondary-default">
+    <div className="flex h-full flex-col bg-background-primary-default">
       <div className="grid gap-4 overflow-y-auto p-4 lg:grid-cols-3">
         <div className="surface-enter lg:col-span-3"><Panel title="数据健康检查" action={<span className={`rounded-full px-2.5 py-1 text-caption-1-semibold ${healthIssues.some(i => i.severity === "critical") ? "bg-status-danger-50 text-status-danger-600" : healthIssues.length ? "bg-status-warning-50 text-status-warning-600" : "bg-status-success-50 text-status-success-600"}`}>{healthIssues.length ? `${healthIssues.length} 项问题` : "状态正常"}</span>}><div className="grid gap-2 sm:grid-cols-2">{healthIssues.map(issue => <div key={issue.id} className={`rounded-xl border p-3 ${issue.severity === "critical" ? "border-status-danger-100 bg-status-danger-50" : "border-status-warning-100 bg-status-warning-50"}`}><div className="text-body-semibold text-text-primary">{issue.title}</div><div className="mt-1 text-caption-1-regular text-text-secondary">{issue.detail}</div></div>)}{!healthIssues.length && <p className="text-body-regular text-text-secondary">未发现重复学号、孤立座位、宿舍重复归属或无效学生引用。</p>}</div></Panel></div>
         <div className="surface-enter lg:col-span-3"><Panel title="归档学生" action={<span className="rounded-full bg-background-tertiary-default px-2.5 py-1 text-caption-1-semibold text-text-secondary">{archivedStudents?.length || 0} 人</span>}>
@@ -284,6 +284,7 @@ export function DataWorkspace({
         </Panel>
         </div>
       </div>
+      <DialogPresence open={rosterMappingOpen && Boolean(rosterMapping)}>
       {rosterMappingOpen && rosterMapping && (
         <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-text-primary/35 p-5">
           <div ref={rosterMappingRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="名单列映射" className="modal-panel-enter flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-background-primary-default shadow-2xl outline-none">
@@ -421,6 +422,7 @@ export function DataWorkspace({
           </div>
         </div>
       )}
+      </DialogPresence>
       {appDialog.dialog}
     </div>
   );

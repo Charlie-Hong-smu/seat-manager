@@ -38,7 +38,7 @@ import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/Followu
 import { buildTimeline, businessEntityExists, inspectStateHealth, targetFromBusinessRef, type TimelineTarget } from "./state/dataInsights";
 import { createActivityEvent } from "./state/activityEvents";
 import { archiveStudent, changeFollowupTaskStatus, permanentlyDeleteStudent, restoreStudent, syncCompletedFollowupHomework, updateFollowupResolution } from "./state/classManagementCommands";
-import { useActionToast, useAppDialog } from "./components/ui";
+import { DialogPresence, useActionToast, useAppDialog } from "./components/ui";
 import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
 import { resolveSeatLayout } from "./state/seatLayout";
 import { WorkspaceRecoveryScreen } from "./components/WorkspaceRecoveryScreen";
@@ -1087,6 +1087,7 @@ export default function App() {
               : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, transitionState: commentWorkbenchTransition, onClose: closeCommentWorkbench, onExitComplete: finishClosingCommentWorkbench, onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
           )}
 
+          <DialogPresence open={Boolean(selectedStudent)}>
           {selectedStudent && (
             <StudentDetail
               student={selectedStudent}
@@ -1137,7 +1138,9 @@ export default function App() {
               }}
             />
           )}
+          </DialogPresence>
 
+          <DialogPresence open={Boolean(shufflePreview)}>
           {shufflePreview && (
             <SeatShufflePreview
               students={students}
@@ -1151,7 +1154,9 @@ export default function App() {
               onSelectStudent={student => openStudentDetail(student)}
             />
           )}
+          </DialogPresence>
 
+          <DialogPresence open={Boolean(selectedHistorySnapshot)}>
           {selectedHistorySnapshot && (
             <HistorySeatModal
               snapshot={selectedHistorySnapshot}
@@ -1161,7 +1166,9 @@ export default function App() {
               onDelete={handleDeleteSeatHistory}
             />
           )}
+          </DialogPresence>
 
+          <DialogPresence open={showCloudSync}>
           {showCloudSync && (
             <CloudSyncModal
               open={showCloudSync}
@@ -1170,13 +1177,17 @@ export default function App() {
               onRestored={reloadFromLegacyState}
             />
           )}
+          </DialogPresence>
           <FollowupTaskDrawer open={Boolean(followupDraft)} students={students} draft={followupDraft} onClose={() => { followupAfterSave.current = null; setFollowupDraft(null); }} onConfirm={confirmFollowupTask} />
           <QuickRecordDrawer open={quickRecordOpen} students={students} presets={quickRecordPresets} onClose={() => setQuickRecordOpen(false)} onApply={applyQuickRecord} onPresetsChange={setQuickRecordPresets} />
 
+          <DialogPresence open={showInstallHelp}>
           {showInstallHelp && (
             <InstallHelpModal message={installMessage} onClose={() => setShowInstallHelp(false)} />
           )}
+          </DialogPresence>
 
+          <DialogPresence open={!USES_LICENSE_AUTH && showChangePassword}>
           {!USES_LICENSE_AUTH && showChangePassword && (
             <ChangePasswordModal
               onClose={() => setShowChangePassword(false)}
@@ -1186,6 +1197,7 @@ export default function App() {
               }}
             />
           )}
+          </DialogPresence>
         </>
       }
     >

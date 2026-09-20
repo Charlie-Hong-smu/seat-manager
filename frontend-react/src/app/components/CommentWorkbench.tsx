@@ -35,7 +35,7 @@ import {
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
-import { AiGenerationPanel, Button, SegmentedControl, useAppDialog } from "./ui";
+import { AiGenerationPanel, Button, IconButton, SegmentedControl, useAppDialog } from "./ui";
 import {
   addCommentCustomOption,
   COMMENT_LENGTH_MODES,
@@ -935,7 +935,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const selectedMaterialLabels = selectedSummary.criteriaSummary.flatMap(item => item.values);
   const selectedLengthLabel = LENGTH_MODES.find(mode => mode.value === selectedComment?.lengthMode)?.label || "100～150";
   const selectedStyleLabel = STYLES.find(style => style.value === selectedComment?.style)?.label || "温和鼓励";
-  const filterModeIndex = filterMode === "all" ? 0 : filterMode === "pending" ? 1 : 2;
+
 
   function getCommentStatus(state: CommentState) {
     if (state.failed) {
@@ -952,7 +952,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
 
   if (!selectedStudent || !selectedComment) {
     return (
-      <div role="dialog" aria-modal="true" aria-label="评语工作台" data-transition-state={transitionState} onTransitionEnd={handleWorkbenchTransitionEnd} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-background-secondary-default">
+      <div role="dialog" aria-modal="true" aria-label="评语工作台" data-transition-state={transitionState} onTransitionEnd={handleWorkbenchTransitionEnd} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-background-primary-default">
         <div className="comment-workbench-topbar shrink-0 bg-background-primary-default border-b border-separator-border px-6 py-4 flex items-center justify-between">
           <h2 className="text-text-primary">评语工作台</h2>
           <button aria-label="关闭评语工作台" onClick={onClose} className="p-2 text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default rounded-xl transition-colors">
@@ -965,7 +965,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   }
 
   return (
-    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} data-transition-state={transitionState} onKeyDown={handleWorkbenchKeyDown} onTransitionEnd={handleWorkbenchTransitionEnd} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] outline-none">
+    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} data-transition-state={transitionState} onKeyDown={handleWorkbenchKeyDown} onTransitionEnd={handleWorkbenchTransitionEnd} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-background-primary-default text-[var(--app-text)] outline-none">
       <header className="comment-workbench-topbar flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-background-primary-default px-4">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="shrink-0 text-headline-semibold text-text-primary">评语工作台</h2>
@@ -1007,32 +1007,16 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       <div className="grid min-h-0 flex-1 grid-cols-[184px_minmax(520px,1fr)_300px] overflow-hidden xl:grid-cols-[216px_minmax(680px,1fr)_340px]">
         <aside className="comment-workbench-pane comment-workbench-roster flex min-h-0 flex-col border-r border-[var(--app-border)] bg-background-primary-default">
           <div className="space-y-3 border-b border-[var(--app-border)] p-3">
-            <div className="relative grid grid-cols-2 gap-1 rounded-[var(--app-radius-sm)] bg-background-tertiary-default p-1" role="group" aria-label="评语处理模式">
-              <span aria-hidden="true" className="pointer-events-none absolute bottom-1 left-1 top-1 rounded-lg bg-background-primary-default shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none" style={{ width: "calc((100% - 12px) / 2)", transform: workbenchMode === "batch" ? "translateX(calc(100% + 4px))" : "translateX(0)" }} />
-              <button type="button" aria-pressed={workbenchMode === "single"} onClick={() => setWorkbenchMode("single")} className={`relative z-10 flex h-8 items-center justify-center gap-1 rounded-lg text-caption-1-semibold transition-colors duration-200 ${workbenchMode === "single" ? "text-accent-700" : "text-text-secondary"}`}>
-                <UserRound className="h-3.5 w-3.5" />逐人
-              </button>
-              <button type="button" aria-pressed={workbenchMode === "batch"} onClick={() => setWorkbenchMode("batch")} className={`relative z-10 flex h-8 items-center justify-center gap-1 rounded-lg text-caption-1-semibold transition-colors duration-200 ${workbenchMode === "batch" ? "text-accent-700" : "text-text-secondary"}`}>
-                <Users className="h-3.5 w-3.5" />批量
-              </button>
-            </div>
+            <SegmentedControl value={workbenchMode} onChange={setWorkbenchMode} ariaLabel="评语处理模式" className="w-full" options={[{ value: "single", label: "逐人", icon: <UserRound className="h-3.5 w-3.5" /> }, { value: "batch", label: "批量", icon: <Users className="h-3.5 w-3.5" /> }]}/>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
-              <input value={filterSearch} onChange={event => setFilterSearch(event.target.value)} placeholder="搜索姓名" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default pl-9 pr-3 text-body-regular outline-none transition-colors focus:border-accent-300 focus:bg-background-primary-default" />
+              <input value={filterSearch} onChange={event => setFilterSearch(event.target.value)} placeholder="搜索姓名" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default pl-9 pr-3 text-body-regular outline-none transition-colors focus:border-accent-300" />
             </div>
-            <div className="relative grid grid-cols-3 gap-1 rounded-[var(--app-radius-sm)] bg-background-tertiary-default p-1" role="group" aria-label="学生评语状态筛选">
-              <span aria-hidden="true" className="pointer-events-none absolute bottom-1 left-1 top-1 rounded-lg bg-background-primary-default shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none" style={{ width: "calc((100% - 16px) / 3)", transform: `translateX(calc(${filterModeIndex * 100}% + ${filterModeIndex * 4}px))` }} />
-              {([
-                { value: "all", label: "全部", count: students.length },
-                { value: "pending", label: "待生成", count: pendingCount },
-                { value: "needsInfo", label: "需补充", count: needsInfoCount },
-              ] as Array<{ value: CommentFilterMode; label: string; count: number }>).map(option => (
-                <button key={option.value} type="button" aria-pressed={filterMode === option.value} onClick={() => setFilterMode(option.value)} className={`relative z-10 min-w-0 rounded-lg py-1.5 text-[11px] font-semibold transition-colors duration-200 ${filterMode === option.value ? "text-text-primary" : "text-text-secondary"}`}>
-                  <span className="block truncate">{option.label}</span>
-                  <span className="block text-[10px] tabular-nums opacity-70">{option.count}</span>
-                </button>
-              ))}
-            </div>
+            <SegmentedControl value={filterMode} onChange={setFilterMode} ariaLabel="学生评语状态筛选" className="w-full" options={([
+              { value: "all", label: "全部", count: students.length },
+              { value: "pending", label: "待生成", count: pendingCount },
+              { value: "needsInfo", label: "需补充", count: needsInfoCount },
+            ] as Array<{ value: CommentFilterMode; label: string; count: number }>).map(option => ({ value: option.value, label: `${option.label} ${option.count}` }))}/>
           </div>
 
           <div aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch" ? true : undefined} className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
@@ -1073,7 +1057,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                   <span aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch" ? true : undefined} className={`grid shrink-0 overflow-hidden transition-[width,margin,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "mr-2 w-4 translate-x-0 opacity-100" : "mr-0 w-0 -translate-x-2 opacity-0"}`}>
                     <input type="checkbox" checked={batchSelected} onClick={event => event.stopPropagation()} onChange={() => toggleBatchSelection(student.id)} className="h-4 w-4 accent-accent-600" aria-label={`选择 ${student.name} 用于批量生成`} />
                   </span>
-                  <span className={`mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-full text-body-semibold ${active ? "bg-accent-600 text-text-white" : "bg-background-tertiary-default text-text-secondary"}`}>{student.name.slice(0, 1)}</span>
+                  <span className={`mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-full text-body-semibold ${active ? "bg-accent-100 text-accent-700" : "bg-background-tertiary-default text-text-secondary"}`}>{student.name.slice(0, 1)}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-body-semibold text-text-primary">{student.name}</span>
                     <span className={`mt-0.5 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${status.badge}`}>{status.label}</span>
@@ -1092,20 +1076,20 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                   <span>已选 {selectedBatchCount} 人</span>
                   {batchState.total > 0 && <span className="font-bold text-accent-700">{batchState.done}/{batchState.total}</span>}
                 </div>
-                <button type="button" onClick={batchButtonAction} className={`flex h-10 w-full items-center justify-center gap-2 rounded-[var(--app-radius-sm)] text-body-semibold transition-colors ${batchRunning ? "bg-background-tertiary-hover text-text-primary hover:bg-background-primary-disabled" : "bg-accent-600 text-text-white hover:bg-accent-700"}`}>
+                <Button type="button" variant={batchRunning ? "secondary" : "primary"} className="h-10 w-full" onClick={batchButtonAction}>
                   {batchRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}{batchButtonLabel}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
         </aside>
 
-        <main className="comment-workbench-pane comment-workbench-editor min-h-0 min-w-0 bg-[var(--app-bg)] p-3 xl:p-4">
-          <section key={`editor-${selectedId}`} className="comment-detail-enter flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
+        <main className="comment-workbench-pane comment-workbench-editor min-h-0 min-w-0 bg-background-primary-default">
+          <section key={`editor-${selectedId}`} className="comment-detail-enter flex h-full min-h-0 flex-col bg-background-primary-default">
             <div className="shrink-0 border-b border-[var(--app-border)] px-4 py-3.5 xl:px-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
-                  <button type="button" aria-label={`查看 ${selectedStudent.name} 的学生详情`} title="查看学生详情" onClick={() => onSelectStudent(selectedStudent)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-600 text-headline-semibold text-text-white transition-[transform,box-shadow] duration-200  hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30 focus-visible:ring-offset-2 active:translate-y-0">{selectedInitial}</button>
+                  <button type="button" aria-label={`查看 ${selectedStudent.name} 的学生详情`} title="查看学生详情" onClick={() => onSelectStudent(selectedStudent)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-100 text-headline-semibold text-accent-700 transition-colors duration-200 hover:bg-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30 focus-visible:ring-offset-2">{selectedInitial}</button>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-title-3-semibold text-text-primary">{selectedStudent.name} · 学期评语</h3>
@@ -1146,7 +1130,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                     }}
                     placeholder="点击「生成评语」后会在这里显示；也可以选中文字，让 AI 局部优化表达。"
                     aria-label="评语正文编辑器"
-                    className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default px-5 py-4 text-[15px] leading-7 outline-none transition-[background-color,border-color,opacity] duration-200 focus:border-accent-300 focus:bg-background-primary-default ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
+                    className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-5 py-4 text-[15px] leading-7 outline-none transition-[border-color,opacity] duration-200 focus:border-accent-300 ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
                   />
                 ) : commentSelection ? (
                   <div
@@ -1218,16 +1202,16 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                 <Button type="button" variant={selectedComment.generated ? "primary" : "ai"} onClick={selectedComment.generated ? saveAndGoNext : generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="h-10 min-w-[168px]">
                   {selectedComment.generated ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{selectedComment.generated ? "保存并下一位" : "生成评语"}
                 </Button>
-                {selectedComment.generated && <button type="button" aria-label="重新生成" title="重新生成" onClick={generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover disabled:opacity-50"><Sparkles className="h-4 w-4" /></button>}
-                <button type="button" onClick={saveSelectedComment} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover" title="保存"><Save className="h-4 w-4" /></button>
-                <button type="button" onClick={() => { if (selectedComment.text) navigator.clipboard.writeText(selectedComment.text).catch(() => {}); }} disabled={!selectedComment.text} className="grid h-10 w-10 place-items-center rounded-[var(--app-radius-sm)] bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover disabled:opacity-40" title="复制"><Copy className="h-4 w-4" /></button>
+                {selectedComment.generated && <IconButton label="重新生成" size="lg" onClick={generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"}><Sparkles className="h-4 w-4" /></IconButton>}
+                <IconButton label="保存" size="lg" onClick={saveSelectedComment}><Save className="h-4 w-4" /></IconButton>
+                <IconButton label="复制" size="lg" onClick={() => { if (selectedComment.text) navigator.clipboard.writeText(selectedComment.text).catch(() => {}); }} disabled={!selectedComment.text}><Copy className="h-4 w-4" /></IconButton>
               </div>
             </div>
           </section>
         </main>
 
-        <aside className="comment-workbench-pane comment-workbench-materials min-h-0 border-l border-[var(--app-border)] bg-background-secondary-default p-3">
-          <section key={`tools-${selectedId}`} className="comment-detail-enter flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
+        <aside className="comment-workbench-pane comment-workbench-materials min-h-0 border-l border-[var(--app-border)] bg-background-primary-default">
+          <section key={`tools-${selectedId}`} className="comment-detail-enter flex h-full min-h-0 flex-col bg-background-primary-default">
             <div className="shrink-0 border-b border-[var(--app-border)] px-3.5 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -1280,7 +1264,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               </button>
               <div aria-hidden={!showTeacherNote} inert={!showTeacherNote ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ${showTeacherNote ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
                 <div className="overflow-hidden">
-                  <textarea value={teacherNote} onChange={event => { setTeacherNote(event.target.value); cacheSelectedCommentText(selectedComment.text, event.target.value); }} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default px-3 py-2.5 text-body-regular leading-5 outline-none focus:border-accent-300 focus:bg-background-primary-default" />
+                  <textarea value={teacherNote} onChange={event => { setTeacherNote(event.target.value); cacheSelectedCommentText(selectedComment.text, event.target.value); }} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-regular leading-5 outline-none focus:border-accent-300" />
                   <div className="mt-2 flex justify-end"><button type="button" onClick={saveSelectedTeacherNote} disabled={!hasUnsavedTeacherNote} className={`flex h-8 items-center gap-1.5 rounded-[var(--app-radius-sm)] px-3 text-caption-1-semibold ${hasUnsavedTeacherNote ? "bg-accent-50 text-accent-700 hover:bg-accent-100" : "bg-background-secondary-default text-text-tertiary"}`}><Save className="h-3.5 w-3.5" />暂存说明</button></div>
                 </div>
               </div>

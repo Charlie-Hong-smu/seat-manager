@@ -11,10 +11,6 @@ import {
 } from "recharts";
 import {
   Search,
-  Trophy,
-  TrendingUp,
-  Users,
-  Award,
   ArrowUpDown,
   ChevronDown,
   SlidersHorizontal,
@@ -24,7 +20,7 @@ import {
 
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
-import { AnimatedPopover, SegmentedControl } from "./ui";
+import { AnimatedPopover, Button, DialogPresence, SegmentedControl } from "./ui";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholds } from "../state/teacherWorkbench";
 import { createCompetitionRankMap } from "../state/gradeRanking";
@@ -172,27 +168,6 @@ function getMetricBandValue(row: GradeRow & { totalScore: number | null }, key: 
   const total = row.totalScore;
   const fullScore = Math.max(1, subjects.length * 100);
   return total === null ? null : Math.round((total / fullScore) * 1000) / 10;
-}
-
-function StatCard({ icon, label, value, sub, accent }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub?: string;
-  accent: string;
-}) {
-  return (
-    <div className="surface-enter flex flex-col gap-2 rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200  hover:border-border-button-default hover:shadow-md">
-      <div className="flex items-center gap-2">
-        <div className={`p-1.5 rounded-lg shrink-0 ${accent}`}>{icon}</div>
-        <span className="text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600 }}>{label}</span>
-      </div>
-      <p className="text-text-primary leading-none" style={{ fontSize: "1.75rem", fontWeight: 700 }}>
-        {value}
-      </p>
-      {sub && <p className="text-caption-1-regular text-text-tertiary">{sub}</p>}
-    </div>
-  );
 }
 
 const EMPTY_SUBJECTS: string[] = [];
@@ -374,7 +349,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
   if (!selectedExam) {
     return (
-      <div className="h-full bg-background-secondary-default p-6">
+      <div className="h-full bg-background-primary-default p-6">
         <div className="bg-background-primary-default border border-separator-border rounded-2xl p-8 text-center text-text-tertiary">
           暂无考试数据
         </div>
@@ -383,19 +358,19 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   }
 
   return (
-    <div className="grade-dashboard flex min-h-full flex-col bg-background-secondary-default">
-      <div className="grade-toolbar bg-background-primary-default border-b border-separator-border px-6 py-3 space-y-3" data-mode={activeTab}>
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="relative min-w-0 shrink basis-[280px]">
+    <div className="grade-dashboard flex min-h-full flex-col bg-background-primary-default">
+      <div className="grade-toolbar bg-background-primary-default border-b border-separator-border px-4 py-2.5" data-mode={activeTab}>
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="relative min-w-0 shrink basis-[240px]">
             <button
               type="button"
               aria-disabled={activeTab === "trend"}
               aria-haspopup={activeTab === "single" ? "listbox" : undefined}
               aria-expanded={activeTab === "single" ? examOpen : undefined}
               onClick={() => { if (activeTab === "single") setExamOpen(v => !v); }}
-              className={`flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border px-3 text-body-regular text-text-primary transition-[background-color,border-color,box-shadow] duration-300 ${
+              className={`flex h-9 w-full min-w-0 items-center gap-2 rounded-xl border px-3 text-body-regular text-text-primary transition-[background-color,border-color,box-shadow] duration-300 ${
                 activeTab === "single"
-                  ? "cursor-pointer border-border-button-default bg-background-secondary-default hover:border-accent-200 hover:bg-background-primary-default hover:shadow-sm"
+                  ? "cursor-pointer border-border-button-default bg-background-primary-default hover:border-accent-200 hover:shadow-sm"
                   : "cursor-default border-accent-100 bg-accent-50/50"
               }`}
               style={{ fontWeight: 600 }}
@@ -428,50 +403,12 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
             </AnimatedPopover>
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-            <SegmentedControl
-              value={activeTab === "single" ? metricKey : trendSubject}
-              ariaLabel="成绩学科切换"
-              onChange={subject => {
-                if (activeTab === "single") {
-                  setSelectedSubject(subject);
-                  setSortKey(subject);
-                  setSortAsc(false);
-                } else {
-                  setTrendSubject(subject);
-                }
-              }}
-              options={(activeTab === "single" ? ["total", ...subjects] : ["all", ...trendSubjects]).map(subject => ({
-                value: subject,
-                label: subject === "total" || subject === "all" ? "全部" : subject,
-              }))}
-              className="grade-subject-switcher shrink-0"
-            />
-          </div>
-        </div>
-
-        <div className="flex min-w-0 items-center gap-3">
+          <div className="ml-auto flex items-center gap-2">
+          {activeTab === "single" ? (
           <div className="relative shrink-0">
-            <button
-              type="button"
-              aria-disabled={activeTab === "trend"}
-              aria-haspopup={activeTab === "single" ? "dialog" : undefined}
-              aria-expanded={activeTab === "single" ? thresholdOpen : undefined}
-              onClick={() => { if (activeTab === "single") setThresholdOpen(v => !v); }}
-              className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-caption-1-regular transition-[color,background-color,border-color] duration-300 ${
-                activeTab === "single"
-                  ? thresholdOpen
-                    ? "border-accent-200 bg-accent-50 text-accent-700"
-                    : "border-border-button-default bg-background-secondary-default text-text-secondary hover:bg-background-tertiary-default"
-                  : "cursor-default border-border-button-default bg-background-secondary-default text-text-tertiary"
-              }`}
-              style={{ fontWeight: 700 }}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span key={activeTab} className="grade-toolbar-copy-enter">
-                {activeTab === "single" ? "阈值设置" : "分数趋势展示 · 进退步按班排"}
-              </span>
-            </button>
+            <Button size="sm" variant="secondary" aria-expanded={thresholdOpen} onClick={() => setThresholdOpen(v => !v)}>
+              <SlidersHorizontal className="h-3.5 w-3.5" />阈值设置
+            </Button>
 
             <AnimatedPopover
               open={activeTab === "single" && thresholdOpen}
@@ -491,7 +428,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                         max={100}
                         value={thresholds[key]}
                         onChange={event => updateThreshold(key, Number(event.target.value))}
-                        className="h-9 w-full rounded-xl border border-border-button-default bg-background-secondary-default px-2 text-center text-body-regular text-text-primary outline-none transition-colors focus:border-accent-300 focus:bg-background-primary-default"
+                        className="h-9 w-full rounded-xl border border-border-button-default bg-background-primary-default px-2 text-center text-body-regular text-text-primary outline-none transition-colors focus:border-accent-300"
                         style={{ fontWeight: 800 }}
                       />
                     </label>
@@ -500,22 +437,42 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                 <p className="mt-3 truncate text-caption-1-regular text-text-tertiary">{metricKey === "total" ? totalThresholdHint : subjectThresholdHint}</p>
             </AnimatedPopover>
           </div>
+          ) : (
+            <span className="shrink-0 text-caption-1-regular text-text-tertiary">分数趋势展示 · 进退步按班排</span>
+          )}
 
-          <button
-            onClick={() => setExportOpen(true)}
-            disabled={!exams.length}
-            className="flex shrink-0 items-center gap-1.5 px-3 py-2 text-caption-1-regular text-text-secondary bg-background-secondary-default hover:bg-background-tertiary-default border border-border-button-default rounded-xl transition-colors disabled:opacity-50"
-            style={{ fontWeight: 700 }}
-          >
-            <Download className="w-3.5 h-3.5" />导出成绩
-          </button>
+          <Button size="sm" variant="secondary" disabled={!exams.length} onClick={() => setExportOpen(true)} className="shrink-0">
+            <Download className="h-3.5 w-3.5" />导出成绩
+          </Button>
 
+            <SegmentedControl
+              value={activeTab}
+              ariaLabel="成绩分析方式"
+              onChange={value => setActiveTab(value as "single" | "trend")}
+              options={[{ value: "single", label: "单次分析" }, { value: "trend", label: "多次趋势" }]}
+              className="shrink-0"
+            />
+          </div>
+        </div>
+
+        <div className="mt-2 flex min-w-0 items-center overflow-x-auto">
           <SegmentedControl
-            value={activeTab}
-            ariaLabel="成绩分析方式"
-            onChange={value => setActiveTab(value as "single" | "trend")}
-            options={[{ value: "single", label: "单次分析" }, { value: "trend", label: "多次趋势" }]}
-            className="ml-auto shrink-0"
+            value={activeTab === "single" ? metricKey : trendSubject}
+            ariaLabel="成绩学科切换"
+            onChange={subject => {
+              if (activeTab === "single") {
+                setSelectedSubject(subject);
+                setSortKey(subject);
+                setSortAsc(false);
+              } else {
+                setTrendSubject(subject);
+              }
+            }}
+            options={(activeTab === "single" ? ["total", ...subjects] : ["all", ...trendSubjects]).map(subject => ({
+              value: subject,
+              label: subject === "total" || subject === "all" ? "全部" : subject,
+            }))}
+            className="grade-subject-switcher shrink-0"
           />
         </div>
       </div>
@@ -523,35 +480,21 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
       <div key={activeTab} className="view-switch-enter p-6 flex flex-col gap-5">
         {activeTab === "single" ? (
           <>
-            <div className="grade-stat-grid grid grid-cols-4 gap-4">
-              <StatCard
-                icon={<Users className="w-4 h-4 text-accent-600" />}
-                label="参考人数"
-                value={`${rows.length} 人`}
-                sub={`${subjects.length} 个科目`}
-                accent="bg-accent-50"
-              />
-              <StatCard
-                icon={<TrendingUp className="w-4 h-4 text-status-ai-600" />}
-                label={metricKey === "total" ? "班级平均分" : `${metricLabel}平均分`}
-                value={formatScore(avgMetric ?? avgTotal)}
-                sub={`满分 ${metricKey === "total" ? subjects.length * 100 : 100}`}
-                accent="bg-status-ai-50"
-              />
-              <StatCard
-                icon={<Trophy className="w-4 h-4 text-status-warning-600" />}
-                label="最高 / 最低分"
-                value={`${formatScore(maxMetric ?? maxTotal)} / ${formatScore(minMetric ?? minTotal)}`}
-                sub={`${metricLabel}区间`}
-                accent="bg-status-warning-50"
-              />
-              <StatCard
-                icon={<Award className="w-4 h-4 text-status-success-600" />}
-                label="优秀率"
-                value={`${rows.length ? Math.round((excellentCount / rows.length) * 100) : 0}%`}
-                sub={`及格率 ${rows.length ? Math.round((passCount / rows.length) * 100) : 0}%`}
-                accent="bg-status-success-50"
-              />
+            <div className="grid grid-cols-4 divide-x divide-separator-border overflow-hidden rounded-xl border border-separator-border bg-background-primary-default">
+              {[
+                { label: "参考人数", value: `${rows.length} 人`, sub: `${subjects.length} 个科目` },
+                { label: metricKey === "total" ? "班级平均分" : `${metricLabel}平均分`, value: formatScore(avgMetric ?? avgTotal), sub: `满分 ${metricKey === "total" ? subjects.length * 100 : 100}` },
+                { label: "最高 / 最低分", value: `${formatScore(maxMetric ?? maxTotal)} / ${formatScore(minMetric ?? minTotal)}`, sub: `${metricLabel}区间` },
+                { label: "优秀率", value: `${rows.length ? Math.round((excellentCount / rows.length) * 100) : 0}%`, sub: `及格率 ${rows.length ? Math.round((passCount / rows.length) * 100) : 0}%` },
+              ].map(stat => (
+                <div key={stat.label} className="min-w-0 px-4 py-3">
+                  <div className="truncate text-caption-1-regular text-text-tertiary">{stat.label}</div>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-headline-semibold tabular-nums text-text-primary">{stat.value}</span>
+                    <span className="text-caption-1-regular text-text-tertiary">{stat.sub}</span>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className={`grade-chart-grid ${metricKey === "total" ? "grid grid-cols-5 gap-4" : "grid grid-cols-1 gap-4"}`}>
@@ -606,7 +549,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     placeholder="搜索学生姓名"
-                    className="pl-8 pr-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300 w-44"
+                    className="pl-8 pr-3 py-2 text-body-regular bg-background-primary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300 w-44"
                   />
                 </div>
               </div>
@@ -785,6 +728,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           </>
         )}
       </div>
+      <DialogPresence open={exportOpen}>
       {exportOpen && (
         <GradeExportModal
           exams={exams}
@@ -792,6 +736,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           onClose={() => setExportOpen(false)}
         />
       )}
+      </DialogPresence>
     </div>
   );
 }

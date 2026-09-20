@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cloud, DownloadCloud, KeyRound, RefreshCw, UploadCloud, X } from "lucide-react";
+import { Cloud, DownloadCloud, RefreshCw, UploadCloud, X } from "lucide-react";
 
 import {
   clearSyncAuth,
@@ -11,7 +11,7 @@ import {
   usesProductAuthForSync,
   type SyncStatus,
 } from "../state/syncStorage";
-import { useAppDialog } from "./ui";
+import { Button, Checkbox, IconButton, Input, useAppDialog } from "./ui";
 
 interface CloudSyncModalProps {
   open: boolean;
@@ -104,88 +104,51 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
   return (
     <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
       <div className="modal-panel-enter w-full max-w-lg overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl">
-        <div className="px-5 py-4 border-b border-separator-border flex items-start justify-between">
-          <div>
-            <div className="text-caption-1-regular text-accent-500 mb-0.5" style={{ fontWeight: 700 }}>手动云端同步</div>
-            <h2 className="text-text-primary" style={{ fontSize: "1.125rem", fontWeight: 800 }}>云端备份与恢复</h2>
-          </div>
-          <button type="button" aria-label="关闭云同步" onClick={onClose} className="p-2 rounded-xl text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default">
-            <X className="w-4 h-4" />
-          </button>
+        <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
+          <h2 className="text-headline-semibold text-text-primary">云端备份与恢复</h2>
+          <IconButton label="关闭云同步" onClick={onClose}><X className="h-4 w-4" /></IconButton>
         </div>
 
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="block text-caption-1-regular text-text-secondary mb-1.5" style={{ fontWeight: 700 }}>设备名称</span>
-              <input
-                value={deviceName}
-                onChange={event => setDeviceName(event.target.value)}
-                className="w-full px-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
-              />
-            </label>
+            <Input label="设备名称" value={deviceName} onChange={setDeviceName} />
             {productSync ? (
-              <div className="rounded-xl border border-accent-100 bg-accent-50 px-3 py-2">
-                <span className="block text-caption-1-regular text-accent-500 mb-1" style={{ fontWeight: 700 }}>同步空间</span>
-                <span className="text-body-regular text-accent-700">当前授权码独立空间</span>
+              <div>
+                <span className="block text-caption-1-regular text-text-secondary">同步空间</span>
+                <span className="mt-1 block text-body-regular text-text-primary">当前授权码独立空间</span>
               </div>
             ) : (
-              <label className="block">
-                <span className="block text-caption-1-regular text-text-secondary mb-1.5" style={{ fontWeight: 700 }}>同步码</span>
-                <div className="relative">
-                  <KeyRound className="w-3.5 h-3.5 text-text-tertiary absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
-                    value={syncCode}
-                    onChange={event => setSyncCode(event.target.value)}
-                    className="w-full pl-8 pr-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
-                    placeholder="输入同步码"
-                  />
-                </div>
-              </label>
+              <Input label="同步码" type="password" value={syncCode} onChange={setSyncCode} placeholder="输入同步码" />
             )}
           </div>
 
           {!productSync && (
-            <label className="flex items-center gap-2 text-body-regular text-text-secondary cursor-pointer">
-              <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} className="accent-accent-600" />
-              记住同步授权 30 天
-            </label>
+            <Checkbox isSelected={remember} onChange={setRemember}>记住同步授权 30 天</Checkbox>
           )}
 
-          <div className="rounded-2xl border border-separator-border bg-background-secondary-default p-4">
-            <div className="flex items-center gap-2 text-body-regular text-text-primary" style={{ fontWeight: 700 }}>
-              <Cloud className="w-4 h-4 text-accent-500" />
+          <div className="border-t border-separator-border pt-4">
+            <div className="flex items-center gap-2 text-body-semibold text-text-primary">
+              <Cloud className="h-4 w-4 text-accent-500" />
               云端状态
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-body-regular text-text-secondary">
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-body-regular text-text-secondary">
               <span>状态：{status?.exists ? "已有备份" : status ? "暂无备份" : "未查询"}</span>
               <span>设备：{status?.deviceName || "--"}</span>
               <span className="col-span-2">时间：{formatTime(status?.updatedAt)}</span>
             </div>
-            <p className="mt-3 text-body-regular text-accent-600">{message}</p>
+            <p className="mt-2 text-body-regular text-accent-600">{message}</p>
           </div>
         </div>
 
-        <div className="p-4 border-t border-separator-border flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-separator-border p-4">
           {!productSync && (
-            <button disabled={busy} onClick={() => run("auth")} className="px-3 py-2 rounded-xl border border-border-button-default text-text-secondary hover:bg-background-secondary-default disabled:opacity-50 text-body-regular" style={{ fontWeight: 700 }}>
-              授权
-            </button>
+            <Button variant="secondary" disabled={busy} onClick={() => run("auth")}>授权</Button>
           )}
-          <button disabled={busy} onClick={() => run("status")} className="px-3 py-2 rounded-xl border border-border-button-default text-text-secondary hover:bg-background-secondary-default disabled:opacity-50 text-body-regular inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
-            <RefreshCw className="w-3.5 h-3.5" />状态
-          </button>
-          <button disabled={busy} onClick={() => run("upload")} className="px-3 py-2 rounded-xl bg-accent-600 text-text-white hover:bg-accent-700 disabled:opacity-50 text-body-regular inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
-            <UploadCloud className="w-3.5 h-3.5" />上传本机
-          </button>
-          <button disabled={busy} onClick={() => run("restore")} className="px-3 py-2 rounded-xl bg-status-warning-500 text-text-white hover:bg-status-warning-600 disabled:opacity-50 text-body-regular inline-flex items-center gap-1.5" style={{ fontWeight: 700 }}>
-            <DownloadCloud className="w-3.5 h-3.5" />恢复云端
-          </button>
+          <Button variant="secondary" disabled={busy} onClick={() => run("status")}><RefreshCw className="h-3.5 w-3.5" />状态</Button>
+          <Button disabled={busy} onClick={() => run("upload")}><UploadCloud className="h-4 w-4" />上传本机</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => run("restore")}><DownloadCloud className="h-4 w-4" />恢复云端</Button>
           {!productSync && (
-            <button disabled={busy} onClick={() => { clearSyncAuth(); setMessage("同步授权已清除。"); }} className="ml-auto px-3 py-2 rounded-xl text-text-tertiary hover:bg-background-secondary-default disabled:opacity-50 text-body-regular">
-              清除授权
-            </button>
+            <Button variant="ghost" className="ml-auto" disabled={busy} onClick={() => { clearSyncAuth(); setMessage("同步授权已清除。"); }}>清除授权</Button>
           )}
         </div>
       </div>

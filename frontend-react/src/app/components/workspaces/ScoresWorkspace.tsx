@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
+import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, Pencil, RotateCcw, Sparkles, Table, Trash2, X } from "lucide-react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 
@@ -22,7 +22,7 @@ import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuest
 import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, FileDropZone, IconButton, InlineStatus, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
+import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 import { toLocalDateKey } from "../../state/dateKey";
@@ -393,7 +393,7 @@ export function ScoresWorkspace({
   const rankChoiceLabel = rankChoice === "auto" ? "自动补全" : rankChoice === "source" ? "保留原表" : "待确认";
 
   return (
-    <div className="flex h-full flex-col bg-background-secondary-default">
+    <div className="flex h-full flex-col bg-background-primary-default">
       <div className="score-workspace-grid relative grid min-h-0 flex-1 overflow-hidden p-4" data-management-open={managementOpen}>
         <IconButton
           label={managementOpen ? "收起成绩管理" : "展开成绩管理"}
@@ -412,7 +412,7 @@ export function ScoresWorkspace({
         >
           <Panel title="成绩导入">
             <div className="space-y-3">
-              <FileDropZone accept=".xlsx,.xls,.xlsm,.csv,.tsv" onChange={file => { if (file) void readScoreFile(file); }}>
+              <FileDropZone accept=".xlsx,.xls,.xlsm,.csv,.tsv" onChange={file => { if (file) void readScoreFile(file); }} className="flex-row justify-center px-4 py-3">
                 <FileUp className="h-4 w-4 text-text-tertiary" />
                   <span className="text-body-regular text-text-secondary">{draft ? draft.filename : "拖拽或选择成绩文件"}</span>
               </FileDropZone>
@@ -442,8 +442,8 @@ export function ScoresWorkspace({
                       </button>
                     </div>
                   )}
-                  <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
-                  <DatePicker value={examDate} onChange={setExamDate} ariaLabel="考试日期" className="w-full bg-background-secondary-default" />
+                  <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
+                  <DatePicker value={examDate} onChange={setExamDate} ariaLabel="考试日期" className="w-full bg-background-primary-default" />
                   <Button onClick={saveDraft} className="w-full">{remappingExamId ? "保存修改" : "保存考试"}</Button>
                 </div>
               )}
@@ -451,7 +451,7 @@ export function ScoresWorkspace({
                 <button
                   type="button"
                   onClick={() => setMappingModalOpen(true)}
-                  className="flex w-full items-center justify-between rounded-2xl border border-border-button-default bg-background-secondary-default px-4 py-3 text-left text-body-regular text-text-primary hover:bg-background-tertiary-default"
+                  className="flex w-full items-center justify-between rounded-2xl border border-border-button-default bg-background-primary-default px-4 py-3 text-left text-body-regular text-text-primary hover:bg-background-secondary-default"
                   style={{ fontWeight: 900 }}
                 >
                   <span>映射设置</span>
@@ -479,10 +479,10 @@ export function ScoresWorkspace({
           </Panel>
 
           <Panel title="历史考试">
-            <div className="space-y-2">
+            <div className="divide-y divide-separator-border">
               {exams.map(exam => (
-                <div key={exam.id} className="rounded-xl border border-separator-border bg-background-secondary-default p-3">
-                  {editingExamId === exam.id ? (
+                editingExamId === exam.id ? (
+                  <div key={exam.id} className="rounded-xl border border-separator-border p-3">
                     <div className="space-y-2">
                       <input value={editExamName} onChange={e => setEditExamName(e.target.value)} className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
                       <DatePicker value={editExamDate} onChange={setEditExamDate} ariaLabel="修改考试日期" className="w-full" />
@@ -499,29 +499,29 @@ export function ScoresWorkspace({
                         <Button size="sm" variant="secondary" onClick={() => setEditingExamId("")}>取消</Button>
                       </div>
                     </div>
-                  ) : (
-                    <>
-                      <div className="truncate text-body-semibold text-text-primary">{exam.name}</div>
-                      <div className="mt-1 text-caption-1-regular text-text-tertiary">{exam.date || "未填写日期"} · {exam.rows.length} 人 · {exam.subjects.length} 科</div>
-                      <div className="mt-2 grid grid-cols-3 gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => setExamTable(exam)}>表格</Button>
-                        <Button size="sm" variant="secondary" onClick={() => editExam(exam)}>编辑</Button>
-                        <Button size="sm" variant="danger" onClick={() => { setDeleteExamError(""); setPendingDeleteExam(exam); }}>删除</Button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div key={exam.id} className="flex items-center gap-1 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-body-medium text-text-primary">{exam.name}</div>
+                      <div className="mt-0.5 text-caption-1-regular text-text-tertiary">{exam.date || "未填写日期"} · {exam.rows.length} 人 · {exam.subjects.length} 科</div>
+                    </div>
+                    <IconButton size="sm" label="查看成绩表格" onClick={() => setExamTable(exam)}><Table className="h-4 w-4" /></IconButton>
+                    <IconButton size="sm" label="编辑考试" onClick={() => editExam(exam)}><Pencil className="h-4 w-4" /></IconButton>
+                    <IconButton size="sm" label="删除考试" onClick={() => { setDeleteExamError(""); setPendingDeleteExam(exam); }}><Trash2 className="h-4 w-4" /></IconButton>
+                  </div>
+                )
               ))}
-              {exams.length === 0 && <div className="rounded-xl border border-dashed border-border-button-default bg-background-secondary-default px-3 py-8 text-center text-body-regular text-text-tertiary">暂无考试</div>}
+              {exams.length === 0 && <div className="py-6 text-center text-body-regular text-text-tertiary">暂无考试</div>}
             </div>
           </Panel>
 
           <Panel title="分析与建议">
             <div className="space-y-2">
-              <button disabled={classAnalysisBusy} onClick={generateClassAnalysis} className="w-full rounded-xl border border-border-button-default bg-background-secondary-default py-2 text-body-regular text-text-primary hover:bg-background-tertiary-default disabled:opacity-60" style={{ fontWeight: 800 }}>{classAnalysisBusy ? "生成中" : "生成班级分析"}</button>
-              <button disabled={studentAdviceProgress.busy} onClick={() => void onGenerateStudentTrendAdvice()} className="w-full rounded-xl border border-border-button-default bg-background-secondary-default py-2 text-body-regular text-text-primary hover:bg-background-tertiary-default disabled:opacity-60" style={{ fontWeight: 800 }}>
-                <Sparkles className="mr-1.5 inline h-4 w-4 -mt-0.5" />{studentAdviceProgress.busy ? "生成中" : "生成学生建议"}
-              </button>
+              <Button size="sm" variant="secondary" disabled={classAnalysisBusy} onClick={generateClassAnalysis} className="w-full">{classAnalysisBusy ? "生成中" : "生成班级分析"}</Button>
+              <Button size="sm" variant="secondary" disabled={studentAdviceProgress.busy} onClick={() => void onGenerateStudentTrendAdvice()} className="w-full">
+                <Sparkles className="h-4 w-4" />{studentAdviceProgress.busy ? "生成中" : "生成学生建议"}
+              </Button>
               {classAnalysisBusy && <AiGenerationPanel compact title="正在生成班级趋势分析" steps={["汇总考试变化", "识别班级趋势", "形成关注建议"]} />}
               {studentAdviceProgress.busy && <AiGenerationPanel compact title="正在生成学生建议" steps={["筛选变化学生", "整理个人趋势", "写入建议草稿"]} />}
               {classAnalysis && !classAnalysisBusy && (
@@ -541,6 +541,7 @@ export function ScoresWorkspace({
           {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}
         </main>
       </div>
+      <DialogPresence open={mappingModalOpen && Boolean(manualMapping)}>
       {mappingModalOpen && manualMapping && (
         <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-text-primary/35 p-5">
           <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-background-primary-default shadow-2xl outline-none">
@@ -823,6 +824,7 @@ export function ScoresWorkspace({
           </div>
         </div>
       )}
+      </DialogPresence>
       <ModalShell
         open={rankDialogOpen && Boolean(sourceDraft) && Boolean(missingRankSummary?.missingCellCount)}
         title="自动补全班级排名？"
@@ -843,7 +845,7 @@ export function ScoresWorkspace({
           </div>
         </div>
       </ModalShell>
-      {examTable && <ExamTableModal exam={examTable} onClose={() => setExamTable(null)} />}
+      <DialogPresence open={Boolean(examTable)}>{examTable && <ExamTableModal exam={examTable} onClose={() => setExamTable(null)} />}</DialogPresence>
       <ConfirmDialog open={Boolean(pendingDeleteExam)} title="删除这场考试？" description={`将删除“${pendingDeleteExam?.name || "当前考试"}”及其对应的全部学生成绩记录；操作后可在 6 秒内撤销。`} confirmLabel="确认删除考试" error={deleteExamError} onCancel={() => { setPendingDeleteExam(null); setDeleteExamError(""); }} onConfirm={() => pendingDeleteExam && deleteExam(pendingDeleteExam)} />
       {actionToast.toast}
     </div>

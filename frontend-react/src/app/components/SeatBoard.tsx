@@ -141,9 +141,9 @@ const SeatCard = memo(function SeatCard({
       onPointerDown={event => {
         if (!isLocked) onPointerDragStart(event, seatIndex);
       }}
-      className={`relative h-full min-h-0 w-full overflow-hidden rounded-xl bg-[var(--app-surface-muted)] text-left group ring-1 ring-inset transition-[background-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]  hover:bg-background-primary-default hover:shadow-[var(--app-shadow-card)] cursor-pointer ${
+      className={`relative h-full min-h-0 w-full overflow-hidden rounded-xl text-left group ring-1 ring-inset transition-[background-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]  hover:shadow-[var(--app-shadow-card)] hover:ring-accent-200 cursor-pointer ${
         isLocked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-      } ${isLocked ? "bg-status-warning-50/50 ring-status-warning-300" : "ring-border-button-default/80"} ${isDragging ? "opacity-25 ring-2 ring-accent-200" : ""} ${isConcealed ? "invisible" : ""} ${isDropTarget ? "bg-accent-50/90 ring-2 ring-accent-400 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
+      } ${isLocked ? "bg-status-warning-50/50 ring-status-warning-300" : "bg-background-primary-default ring-border-button-default/80"} ${isDragging ? "opacity-25 ring-2 ring-accent-200" : ""} ${isConcealed ? "invisible" : ""} ${isDropTarget ? "bg-accent-50/90 ring-2 ring-accent-400 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
       style={{ transform: visualTransform, touchAction: "manipulation" }}
     >
       {/* Lock toggle */}

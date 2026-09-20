@@ -1,4 +1,15 @@
 /* BoardUI foundations retrieved 2026-09-08 via MCP; adapted for Seat Manager. */
+
+/* InterVariable：自托管拉丁子集（48 KB wght 可变字重），CJK 由系统中文字体接管。
+ * 只覆盖拉丁与常用标点区，PWA precache 计入（约 48 KB）。 */
+@font-face {
+  font-family: "InterVariable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../assets/fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0100-024F, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF;
+}
 /* ---------------------------------------------------------------------------
  * BoardUI theme tokens
  *
@@ -45,12 +56,29 @@
   --color-accent-900: var(--color-blue-900);
   --color-accent-950: var(--color-blue-950);
 
+  /* ----- Iris ramp -----------------------------------------------------------
+   * AI 语义色（鸢尾紫）：偏蓝的紫、降低饱和，替代早期亮紫与石墨灰实验。
+   * 只经 status-ai-* 与 --app-ai 两个别名消费，不直接在组件引用。
+   * --------------------------------------------------------------------------*/
+  --color-iris-50:  #eef0fc;
+  --color-iris-100: #e0e2fa;
+  --color-iris-200: #c4c6f5;
+  --color-iris-300: #a6a8ee;
+  --color-iris-400: #8585e5;
+  --color-iris-500: #6a6add;
+  --color-iris-600: #5b5bd6;
+  --color-iris-700: #4b4bb8;
+  --color-iris-800: #3f3f94;
+  --color-iris-900: #363672;
+  --color-iris-950: #232348;
+
   /* ----- Typography ----------------------------------------------------------
    * Font sizes, weights, line-heights, and tracking all match Tailwind v4
-   * defaults. The only override is the family: Inter, loaded via next/font
-   * in app/layout.tsx, which exposes --font-inter to the document.
+   * defaults. Family: InterVariable（自托管拉丁子集，见底部 @font-face）；
+   * 中文回落系统中文字体，数字与拉丁字母获得 Inter 骨架。
    * --------------------------------------------------------------------------*/
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif,
+  --font-sans: "InterVariable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+               ui-sans-serif, system-ui, sans-serif,
                "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
                "Noto Color Emoji";
 
@@ -283,6 +311,17 @@
   --color-button-ghost-disabled:                  var(--color-accent-50);
   --color-button-ghost-foreground:                var(--color-accent-700);
   --color-button-ghost-disabled-foreground:       var(--color-accent-300);
+
+  /* Flat button surfaces — replaces the 180° gradient recipe; hover lightens
+   * one ramp step, active deepens one. */
+  --color-button-primary-default:                 var(--color-accent-600);
+  --color-button-primary-hover:                   var(--color-accent-500);
+  --color-button-primary-active:                  var(--color-accent-700);
+  --color-button-primary-disabled:                var(--color-neutral-200);
+  --color-button-danger-default:                  var(--color-red-600);
+  --color-button-danger-hover:                    var(--color-red-500);
+  --color-button-danger-active:                   var(--color-red-700);
+  --color-button-danger-disabled:                 var(--color-red-100);
   --color-dropdown-item-hover-background:        var(--color-neutral-100);
   --color-kbd-background:                        var(--color-neutral-300);
   --color-kbd-foreground:                        var(--color-neutral-500);
@@ -413,6 +452,8 @@
   --color-input-disabled-foreground:  var(--color-neutral-600);
   --color-icon-button-disabled-foreground: var(--color-neutral-500);
   --color-button-primary-disabled-foreground: var(--color-neutral-500);
+  --color-button-primary-disabled:            var(--color-neutral-700);
+  --color-button-danger-disabled:             var(--color-red-900);
 
   /* Text */
   --color-text-primary:  var(--color-neutral-50);
@@ -836,7 +877,7 @@
 @utility bg-button-primary {
   position: relative;
   isolation: isolate;
-  background-image: var(--gradient-button-primary-default);
+  background-color: var(--color-button-primary-default);
 
   &::before {
     content: "";
@@ -845,7 +886,7 @@
     z-index: -1;
     pointer-events: none;
     border-radius: inherit;
-    background-image: var(--gradient-button-primary-hover);
+    background-color: var(--color-button-primary-hover);
     opacity: 0;
     transition: opacity var(--button-transition-ms) ease;
   }
@@ -853,14 +894,14 @@
     opacity: 1;
   }
   &:active:not(:disabled):not([aria-disabled="true"]) {
-    background-image: var(--gradient-button-primary-active);
+    background-color: var(--color-button-primary-active);
   }
   &:active:not(:disabled):not([aria-disabled="true"])::before {
     opacity: 0;
   }
   &:disabled,
   &[aria-disabled="true"] {
-    background-image: var(--gradient-button-primary-disabled);
+    background-color: var(--color-button-primary-disabled);
   }
   &:disabled::before,
   &[aria-disabled="true"]::before {
@@ -871,7 +912,7 @@
 @utility bg-button-danger {
   position: relative;
   isolation: isolate;
-  background-image: var(--gradient-button-danger-default);
+  background-color: var(--color-button-danger-default);
 
   &::before {
     content: "";
@@ -880,7 +921,7 @@
     z-index: -1;
     pointer-events: none;
     border-radius: inherit;
-    background-image: var(--gradient-button-danger-hover);
+    background-color: var(--color-button-danger-hover);
     opacity: 0;
     transition: opacity var(--button-transition-ms) ease;
   }
@@ -888,14 +929,14 @@
     opacity: 1;
   }
   &:active:not(:disabled):not([aria-disabled="true"]) {
-    background-image: var(--gradient-button-danger-active);
+    background-color: var(--color-button-danger-active);
   }
   &:active:not(:disabled):not([aria-disabled="true"])::before {
     opacity: 0;
   }
   &:disabled,
   &[aria-disabled="true"] {
-    background-image: var(--gradient-button-danger-disabled);
+    background-color: var(--color-button-danger-disabled);
   }
   &:disabled::before,
   &[aria-disabled="true"]::before {
@@ -2149,7 +2190,7 @@
   --app-text-muted: #667085;
   --app-primary: #2563eb;
   --app-primary-hover: #1d4ed8;
-  --app-ai: var(--color-neutral-800);
+  --app-ai: var(--color-iris-600);
   --app-danger: #dc2626;
   --app-chart-blue: #3b82f6;
   --app-chart-green: #10b981;
@@ -2438,7 +2479,7 @@
  --app-text-muted: var(--color-text-secondary);
  --app-primary: var(--color-accent-600);
  --app-primary-hover: var(--color-accent-700);
- --app-ai: var(--color-neutral-800);
+ --app-ai: var(--color-iris-600);
  --app-danger: var(--color-red-600);
  --app-radius-sm: 10px;
  --app-radius-md: 16px;
@@ -2450,17 +2491,17 @@
  --app-motion-ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 @theme inline {
- --color-status-ai-50: var(--color-neutral-50);
- --color-status-ai-100: var(--color-neutral-100);
- --color-status-ai-200: var(--color-neutral-200);
- --color-status-ai-300: var(--color-neutral-300);
- --color-status-ai-400: var(--color-neutral-400);
- --color-status-ai-500: var(--color-neutral-500);
- --color-status-ai-600: var(--color-neutral-600);
- --color-status-ai-700: var(--color-neutral-700);
- --color-status-ai-800: var(--color-neutral-800);
- --color-status-ai-900: var(--color-neutral-900);
- --color-status-ai-950: var(--color-neutral-950);
+ --color-status-ai-50: var(--color-iris-50);
+ --color-status-ai-100: var(--color-iris-100);
+ --color-status-ai-200: var(--color-iris-200);
+ --color-status-ai-300: var(--color-iris-300);
+ --color-status-ai-400: var(--color-iris-400);
+ --color-status-ai-500: var(--color-iris-500);
+ --color-status-ai-600: var(--color-iris-600);
+ --color-status-ai-700: var(--color-iris-700);
+ --color-status-ai-800: var(--color-iris-800);
+ --color-status-ai-900: var(--color-iris-900);
+ --color-status-ai-950: var(--color-iris-950);
  --color-status-danger-50: var(--color-red-50);
  --color-status-danger-100: var(--color-red-100);
  --color-status-danger-200: var(--color-red-200);
@@ -2555,7 +2596,7 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
 .app-work-surface { border: 1px solid var(--app-border); background: var(--app-surface); }
 .app-button > span { gap: 6px; min-width: 0; }
 .app-icon-button > span { padding-inline: 0; }
-.app-button-ai { --gradient-button-primary-default: linear-gradient(180deg, var(--color-neutral-700), var(--color-neutral-800)); --gradient-button-primary-hover: linear-gradient(180deg, var(--color-neutral-800), var(--color-neutral-900)); --gradient-button-primary-active: linear-gradient(180deg, var(--color-neutral-900), var(--color-neutral-950)); }
+.app-button-ai { --color-button-primary-default: var(--color-iris-600); --color-button-primary-hover: var(--color-iris-500); --color-button-primary-active: var(--color-iris-700); }
 @layer base {
  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), textarea {
   border-color: var(--app-border); border-radius: var(--app-radius-sm);
@@ -2602,13 +2643,13 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
 .selection-ai-glass-inline { -webkit-box-decoration-break: clone; box-decoration-break: clone; border-radius: 4px; background: var(--color-background-secondary-default); color: var(--color-text-secondary); box-shadow: inset 0 -2px color-mix(in srgb, var(--app-ai) 25%, transparent); animation: none; }
 .ai-thinking-dot { animation: none; }
 @keyframes tool-drawer-enter {
-  from { opacity: 0; transform: translateX(12px) scale(.99); filter: blur(2px); }
-  to { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 .tool-drawer-enter { animation-duration: 240ms; animation-timing-function: var(--app-motion-ease); }
 .dialog-presence[data-phase="closing"] { pointer-events: none; }
-.dialog-presence[data-phase="closing"] .modal-panel-enter { animation: modal-panel-enter 150ms var(--app-motion-ease) reverse both; }
-.dialog-presence[data-phase="closing"] .soft-backdrop-enter { animation: soft-backdrop-enter 150ms ease-out reverse both; }
+.dialog-presence[data-phase="closing"] .modal-panel-enter { animation: modal-panel-enter 450ms var(--app-motion-ease) reverse both; }
+.dialog-presence[data-phase="closing"] .soft-backdrop-enter { animation: soft-backdrop-enter 400ms ease-out reverse both; }
 .tool-drawer-enter[data-phase="closing"] { pointer-events: none; animation: tool-drawer-enter 150ms var(--app-motion-ease) reverse both; }
 .tool-drawer-backdrop[data-phase="closing"] { pointer-events: none; animation: soft-backdrop-enter 150ms ease-out reverse both; }
 @media (prefers-reduced-motion: reduce) {

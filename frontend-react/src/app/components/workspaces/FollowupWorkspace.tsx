@@ -6,7 +6,7 @@ import { getTaskUrgency, prepareFollowupTasks, todayKey } from "../../state/dail
 import { followupHasStudent, followupStudentLabel, getFollowupStudentIds } from "../../state/followupStudents";
 import { matchesStudentSearch } from "../../state/studentSearch";
 import type { AppStudent, FollowupTask, HomeworkAssignment, StudentId } from "../../state/types";
-import { ActionToast, Button, Card, DashboardStats, Input, IconButton, SegmentedControl, UnderlineTabs, useActionToast, useAppDialog } from "../ui";
+import { ActionToast, Button, Card, Input, IconButton, MetricStrip, SegmentedControl, UnderlineTabs, useActionToast, useAppDialog } from "../ui";
 import { HomeworkPanel } from "../HomeworkPanel";
 import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import { FollowupTaskForm } from "../FollowupTaskForm";
@@ -113,14 +113,14 @@ export function FollowupWorkspace({ students, tasks, homeworkAssignments, subjec
     setSearch(tasks.find(task => task.id === taskId)?.title || "");
   }
 
-  if (mode === "homework") return <div className="h-full overflow-y-auto bg-background-secondary-default p-4"><div className="mx-auto max-w-6xl space-y-4"><UnderlineTabs value={mode} onChange={setMode} ariaLabel="任务与作业" options={[{ value: "tasks", label: "待办" }, { value: "homework", label: "作业" }]}/><HomeworkPanel students={students} assignments={homeworkAssignments} tasks={tasks} subjectCatalog={subjectCatalog} onChange={onHomeworkChange} onTaskChange={onChange} onOpenTask={openLinkedTask} onSubjectCatalogChange={onSubjectCatalogChange} onCreateFollowups={createHomeworkFollowups} onActivity={onActivity} initialAssignmentId={homeworkTargetId}/></div></div>;
+  if (mode === "homework") return <div className="h-full overflow-y-auto bg-background-primary-default p-4"><div className="mx-auto max-w-6xl space-y-4"><UnderlineTabs value={mode} onChange={setMode} ariaLabel="任务与作业" options={[{ value: "tasks", label: "待办" }, { value: "homework", label: "作业" }]}/><HomeworkPanel students={students} assignments={homeworkAssignments} tasks={tasks} subjectCatalog={subjectCatalog} onChange={onHomeworkChange} onTaskChange={onChange} onOpenTask={openLinkedTask} onSubjectCatalogChange={onSubjectCatalogChange} onCreateFollowups={createHomeworkFollowups} onActivity={onActivity} initialAssignmentId={homeworkTargetId}/></div></div>;
 
-  return <div className="h-full overflow-y-auto bg-background-secondary-default p-4"><div className="mx-auto max-w-6xl space-y-4">
+  return <div className="h-full overflow-y-auto bg-background-primary-default p-4"><div className="mx-auto max-w-6xl space-y-4">
     <UnderlineTabs value={mode} onChange={setMode} ariaLabel="任务与作业" options={[{ value: "tasks", label: "待办" }, { value: "homework", label: "作业" }]}/>
-    <DashboardStats columns={3} stats={[
-      { icon: Bell, label: "待处理", value: String(pending.length), deltaColor: "neutral" },
-      { icon: CheckCircle2, label: "今日到期", value: String(today), deltaColor: "neutral" },
-      { icon: CircleX, label: "已逾期", value: String(overdue), deltaColor: "neutral" },
+    <MetricStrip items={[
+      { key: "pending", label: "待处理", value: pending.length, dot: "bg-accent-500", caption: overdue > 0 ? `含逾期 ${overdue} 项` : "无逾期", onOpen: () => setFilter("pending") },
+      { key: "today", label: "今日到期", value: today, dot: "bg-status-warning-500", caption: "今日截止", onOpen: () => setFilter("today") },
+      { key: "overdue", label: "已逾期", value: overdue, dot: "bg-status-danger-500", caption: overdue > 0 ? `最早逾期 ${tasks.filter(task => task.status === "pending" && task.dueDate && task.dueDate < todayKey()).reduce((days, task) => Math.max(days, Math.floor((Date.parse(todayKey()) - Date.parse(task.dueDate)) / 86400000)), 0)} 天` : "无逾期", onOpen: () => setFilter("overdue") },
     ]} />
     <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
       <Card title="创建跟进"><div className="space-y-3">

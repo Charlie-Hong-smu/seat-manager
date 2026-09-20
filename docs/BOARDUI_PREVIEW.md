@@ -1,6 +1,15 @@
 # BoardUI 独立预览
 
-## 当前状态：已收尾并停止（2026-09-08）
+## 当前状态：质感修正完成（2026-09-14）
+
+用户评审 09-08 版本后指出两点：与 BoardUI 官网质感差距明显、AI 石墨灰过于单调死板。经官网对照定位到五个落差（只用了 StatCards 紧凑变体、AI 全量中性化、Inter 字体未真正加载、表面语言不同、图表彩虹色脱节），本轮按用户选定的"鸢尾紫 + 质感全包"方案实施，仍未推送、合并或部署；main 已前进至 d12d52e，本分支落后 1 个提交，合并前需重新三方对比 SeatBoard 与 DESIGN_SYSTEM。
+
+- AI 语义色：新增 `--color-iris-*` 色阶（鸢尾紫，偏蓝降饱和），`status-ai-*` 由 neutral 别名改为 iris 别名，`--app-ai` 指向 iris-600，`.app-button-ai` 渐变同步；加载动画保持官方单色点阵，AI 入口、生成按钮、徽标、Companion 发送键与评语选区下划线自动着色。
+- 统计卡：`stat-cards.tsx` footer 变体补 `onPress` 与可选 delta；`deltaColor` 扩展 `rose-up` / `lime-down` 显式箭头（方向与褒贬不一致场景，如异常数上升）。今日、出勤、任务三处调用点启用 footer 变体与语义图标贴（orange/blue/sky/emerald/pink），页脚只写真实数据（较昨日差值、含逾期项、待登记人数、占全班比例、最早逾期天数），不伪造百分比。
+- 字体：新增 `@fontsource-variable/inter` 依赖，仅取拉丁子集 `inter-latin-wght-normal.woff2`（48 KB）自托管于 `src/assets/fonts/`，`@font-face` 限定 unicode-range，CJK 回落系统中文字体；`--font-sans` 不再引用不存在的 next/font 变量。
+- 验证：tsc strict、ESLint（--max-warnings=0）、check:design、Zhang 与 Commercial 构建、check:production 均通过；入口 gzip 203.8 KiB、最大异步 112 KiB、precache 1.87 MiB（含字体），均在预算内。本机 vitest 环境 jsdom 单文件初始化约 52s（09-08 时正常，疑系统状态退化），全量单测以 forks+maxWorkers=1 运行中，结果待补记。演示数据为独立预览会话注入的 42 人示例班。
+
+## 早前状态：已收尾并停止（2026-09-08）
 
 用户在用量重置后明确授权修复剩余两项问题并完成验收。此次仅修复键盘边界，没有继续扩展视觉替换，也没有推送、合并或部署。
 

@@ -10,12 +10,11 @@ import {
   Shuffle,
   Undo2,
   UserPlus,
-  Users,
 } from "lucide-react";
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
 import { SeatLayoutDesigner } from "../SeatLayoutDesigner";
-import { Checkbox, Button, SegmentedControl, SelectMenu, ToolDrawer, Input } from "../ui";
+import { Checkbox, Button, DialogPresence, MetricStrip, SegmentedControl, SelectMenu, ToolDrawer, Input } from "../ui";
 import type {
   AppStudent,
   Gender,
@@ -126,20 +125,15 @@ export function DailyWorkspace({
   }
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[var(--app-bg)]">
+    <div className="relative flex h-full flex-col overflow-hidden bg-background-primary-default">
       <div className="daily-toolbar flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--app-border)] bg-background-primary-default px-4 py-3">
         <div className="daily-toolbar-primary flex flex-1 items-center gap-3">
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-background-tertiary-default px-2.5 text-caption-1-semibold text-text-secondary">
-              <Users className="h-3.5 w-3.5" />{students.length} 人
-            </span>
-            <span className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] bg-background-tertiary-default px-2.5 text-caption-1-semibold text-text-secondary">
-              <LayoutGrid className="h-3.5 w-3.5" />{seatOrder.length} 座
-            </span>
-            <button onClick={onOpenAttendance} className={`h-8 rounded-[var(--app-radius-sm)] px-2.5 text-caption-1-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 ${abnormalAttendance > 0 ? "bg-status-warning-50 text-status-warning-700 hover:bg-status-warning-100" : "bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover"}`}>今日异常 {abnormalAttendance}</button>
-            <button onClick={onOpenFollowups} className={`h-8 rounded-[var(--app-radius-sm)] px-2.5 text-caption-1-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 ${dueTasks > 0 ? "bg-accent-50 text-accent-700 hover:bg-accent-100" : "bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover"}`}>待跟进 {dueTasks}</button>
-          </div>
-
+          <MetricStrip size="sm" items={[
+            { key: "students", label: "学生", value: students.length },
+            { key: "seats", label: "座位", value: seatOrder.length },
+            { key: "abnormal", label: "今日异常", value: abnormalAttendance, dot: "bg-status-warning-500", onOpen: onOpenAttendance },
+            { key: "tasks", label: "待跟进", value: dueTasks, dot: "bg-accent-500", onOpen: onOpenFollowups },
+          ]} />
         </div>
 
         <div className="daily-toolbar-actions ml-auto flex shrink-0 items-center justify-end gap-2 whitespace-nowrap">
@@ -152,12 +146,8 @@ export function DailyWorkspace({
               { value: "detail", label: "详细", icon: <Maximize2 className="h-3.5 w-3.5" /> },
             ]}
           />}
-          {!editingLayout && <Button id="seat-layout-editor-trigger" size="sm" variant="secondary" onClick={() => { setActiveTool(null); setEditingLayout(true); }}>
+          {!editingLayout && <Button id="seat-layout-editor-trigger" size="sm" variant="ghost" onClick={() => { setActiveTool(null); setEditingLayout(true); }}>
             <LayoutGrid className="h-4 w-4" />编辑布局
-          </Button>}
-          {!editingLayout && <Button size="sm" onClick={() => setShowSeatSettings(true)}>
-            <Shuffle className="h-4 w-4" />排座
-            {activeConstraintCount > 0 && <span className="text-[11px] font-medium text-accent-100">· {activeConstraintCount} 条规则</span>}
           </Button>}
           {!editingLayout && <Button size="sm" variant="ghost" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}>
             <Undo2 className="h-4 w-4" />撤销
@@ -167,6 +157,10 @@ export function DailyWorkspace({
           </Button>}
           {!editingLayout && <Button id="daily-draw-tool-trigger" size="sm" variant={activeTool === "draw" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
             <Dices className="h-4 w-4" />抽签
+          </Button>}
+          {!editingLayout && <Button size="sm" onClick={() => setShowSeatSettings(true)}>
+            <Shuffle className="h-4 w-4" />排座
+            {activeConstraintCount > 0 && <span className="text-[11px] font-medium text-accent-100">· {activeConstraintCount} 条规则</span>}
           </Button>}
         </div>
       </div>
@@ -185,7 +179,7 @@ export function DailyWorkspace({
             <h3 className="text-body-semibold text-text-primary">新增学生</h3>
             <p className="mt-1 text-caption-1-regular leading-5 text-text-tertiary">新学生会自动安排到第一个空座位。</p>
           </div>
-          <div className="space-y-3 rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-secondary-default p-3">
+          <div className="space-y-3">
             <Input value={name} onChange={setName} placeholder="姓名"   />
             <div className="grid grid-cols-[1fr_6rem] gap-2">
               <Input value={alias} onChange={setAlias} placeholder="别名 / 拼音（可选）"  className="min-w-0" />
@@ -213,7 +207,7 @@ export function DailyWorkspace({
 
       <ToolDrawer open={activeTool === "draw"} title="课堂抽签" returnFocusId="daily-draw-tool-trigger" onClose={() => setActiveTool(null)}>
         <div className="space-y-4">
-          <div className="rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-secondary-default p-4">
+          <div>
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-body-regular text-text-secondary">
                 人数
@@ -242,17 +236,19 @@ export function DailyWorkspace({
         </div>
       </ToolDrawer>
 
-      <SeatSettingsModal
-        open={showSeatSettings}
-        students={students}
-        settings={seatSettings}
-        canUndo={canUndoSeatOrder}
-        onUpdate={onUpdateSeatSettings}
-        onRandomize={onRandomizeSeats}
-        onOrderByList={onOrderSeatsByList}
-        onUndo={onUndoSeatOrder}
-        onClose={() => setShowSeatSettings(false)}
-      />
+      <DialogPresence open={showSeatSettings}>
+        <SeatSettingsModal
+          open={showSeatSettings}
+          students={students}
+          settings={seatSettings}
+          canUndo={canUndoSeatOrder}
+          onUpdate={onUpdateSeatSettings}
+          onRandomize={onRandomizeSeats}
+          onOrderByList={onOrderSeatsByList}
+          onUndo={onUndoSeatOrder}
+          onClose={() => setShowSeatSettings(false)}
+        />
+      </DialogPresence>
     </div>
   );
 }

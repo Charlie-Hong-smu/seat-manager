@@ -17,7 +17,7 @@ import { normalizeAttendancePatch } from "../state/classManagementCommands";
 import { createActivityEvent } from "../state/activityEvents";
 import { matchesStudentSearch } from "../state/studentSearch";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
-import { AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { AiGenerationPanel, Button, ConfirmDialog, DialogPresence, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import { StudentPicker } from "./StudentPicker";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
@@ -1039,6 +1039,7 @@ export function StudentModal({
         </div>
       </div>
 
+      <DialogPresence open={dormAssignmentOpen}>
       {dormAssignmentOpen && (
         <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[1px]">
           <div className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-separator-border bg-background-primary-default p-5 shadow-[var(--app-shadow-float)]">
@@ -1051,7 +1052,9 @@ export function StudentModal({
           </div>
         </div>
       )}
+      </DialogPresence>
 
+      <DialogPresence open={dormEventOpen && Boolean(currentDormitory)}>
       {dormEventOpen && currentDormitory && (
         <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[1px]">
           <div className="modal-panel-enter w-full max-w-md rounded-[var(--app-radius-lg)] border border-separator-border bg-background-primary-default p-5 shadow-[var(--app-shadow-float)]">
@@ -1074,6 +1077,7 @@ export function StudentModal({
           </div>
         </div>
       )}
+      </DialogPresence>
       <ConfirmDialog open={showDeleteConfirm} title="将这名学生移出当前班级？" description={`“${student.name}”会从当前名单、座位、宿舍、出勤和新作业中移出，但历史记录、成绩、任务和沟通内容都会保留，可随时从归档学生中恢复。`} confirmLabel="确认移出班级" onCancel={() => setShowDeleteConfirm(false)} onConfirm={() => onDeleteStudent(student.id)} />
       <ConfirmDialog open={Boolean(pendingRecordDelete)} title="删除这条学生记录？" description={`将删除“${pendingRecordDelete?.note || "无备注记录"}”，删除后无法恢复。`} confirmLabel="确认删除记录" onCancel={() => setPendingRecordDelete(null)} onConfirm={() => { if (!pendingRecordDelete) return; deleteRecord(pendingRecordDelete.id); setPendingRecordDelete(null); }} />
       {appDialog.dialog}

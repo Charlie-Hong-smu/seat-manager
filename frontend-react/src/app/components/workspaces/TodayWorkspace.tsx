@@ -7,7 +7,7 @@ import { generateAiWeeklyDraft } from "../../state/teacherAiService";
 import { buildLocalWeeklyDraft, buildTodayWorkItems, buildWeeklyFacts, getWeekRange, parseScheduleRows } from "../../state/teacherWorkbench";
 import { readRowsFromFile } from "../../state/scoreImport";
 import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, CommunicationDraft, Dormitory, FollowupTask, GradeExam, HomeworkAssignment } from "../../state/types";
-import { AiGenerationPanel, Button, Card, Chip, DashboardStats, FileDropZone, IconButton, InlineStatus, Textarea, ToolDrawer } from "../ui";
+import { AiGenerationPanel, Button, Card, Chip, FileDropZone, IconButton, InlineStatus, MetricStrip, Textarea, ToolDrawer } from "../ui";
 import { ResolutionEditor } from "../LinkedWorkflow";
 
 export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
@@ -48,6 +48,15 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   const abnormalCount = attendance.filter(item => item.date === today && (item.status !== "normal" || item.late || item.earlyLeave)).length;
   const dueTaskCount = tasks.filter(item => item.status === "pending" && item.dueDate <= today).length;
   const dueHomework = homework.filter(item => (item.lifecycle || "active") === "active" && item.dueDate <= today).length;
+  // 统计卡页脚的真实对比数据：昨日异常数、逾期任务数、今日到期作业的待登记/未交人数。
+  const yesterdayKey = new Date(Date.now() - 86400000).toLocaleDateString("en-CA");
+  const hadYesterdayRecords = attendance.some(item => item.date === yesterdayKey);
+  const yesterdayAbnormal = attendance.filter(item => item.date === yesterdayKey && (item.status !== "normal" || item.late || item.earlyLeave)).length;
+  const abnormalDelta = abnormalCount - yesterdayAbnormal;
+  const overdueTaskCount = tasks.filter(item => item.status === "pending" && item.dueDate < today).length;
+  const homeworkPendingCount = homework
+    .filter(item => (item.lifecycle || "active") === "active" && item.dueDate <= today)
+    .reduce((sum, item) => sum + Object.values(item.studentStates).filter(state => state.status === "unrecorded" || state.status === "pending").length, 0);
   const range = getWeekRange();
   const facts = buildWeeklyFacts({ students, attendance, tasks, homework, dormitories, gradeExams, ...range });
 
@@ -129,15 +138,15 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
 
   return <div className="h-full overflow-y-auto bg-background-primary-default" data-today-workspace>
     <div className="mx-auto flex max-w-[1440px] flex-col gap-6 p-5 sm:p-6 lg:p-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+      <header className="flex flex-wrap items-center gap-x-8 gap-y-3">
         <div className="flex flex-col gap-1"><h1 className="text-title-2-medium text-text-primary">今日班务</h1><p className="text-body-regular text-text-secondary">{new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })} · {students.length} 位学生</p></div>
-        <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={openWeekly}><ClipboardList className="size-4"/>本周复盘</Button><Button onClick={onOpenQuickRecord}><Plus className="size-4"/>快捷记录</Button></div>
+        <MetricStrip items={[
+          { key: "attendance", label: "出勤异常", value: abnormalCount, dot: "bg-status-warning-500", caption: abnormalDelta !== 0 ? `较昨日 ${abnormalDelta > 0 ? "+" : ""}${abnormalDelta}` : hadYesterdayRecords ? "较昨日持平" : "今日", onOpen: onOpenAttendance },
+          { key: "tasks", label: "到期待办", value: dueTaskCount, dot: "bg-accent-500", caption: overdueTaskCount > 0 ? `含逾期 ${overdueTaskCount} 项` : "今日截止", onOpen: onOpenTasks },
+          { key: "homework", label: "到期作业", value: dueHomework, dot: "bg-status-cyan-500", caption: homeworkPendingCount > 0 ? `${homeworkPendingCount} 人待登记或未交` : "全部已登记", onOpen: onOpenHomework },
+        ]} />
+        <div className="ml-auto flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={openWeekly}><ClipboardList className="size-4"/>本周复盘</Button><Button onClick={onOpenQuickRecord}><Plus className="size-4"/>快捷记录</Button></div>
       </header>
-      <DashboardStats columns={3} stats={[
-        { icon: UserRoundCheck, label: "出勤异常", value: String(abnormalCount), delta: "今日", deltaColor: "neutral", onPress: onOpenAttendance },
-        { icon: ClipboardList, label: "到期待办", value: String(dueTaskCount), delta: "待处理", deltaColor: "neutral", onPress: onOpenTasks },
-        { icon: BookOpenCheck, label: "到期作业", value: String(dueHomework), delta: "进行中", deltaColor: "neutral", onPress: onOpenHomework },
-      ]}/>
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]">
         <Card title="需要处理" className="min-w-0" bodyClassName="px-3 pb-3" action={<Button size="sm" variant="ghost" onClick={() => setQueueOpen(true)}>查看全部 <span className="text-text-secondary">{items.length}</span></Button>}>
           <div className="flex items-center justify-between border-b border-separator-border px-2 pb-3 text-caption-1-regular text-text-secondary"><span>事项 · 按紧急程度排序</span><span>操作</span></div>

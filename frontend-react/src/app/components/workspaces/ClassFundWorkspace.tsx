@@ -158,13 +158,13 @@ export function ClassFundWorkspace({
   }
 
   return (
-    <div className="flex h-full flex-col bg-background-secondary-default">
+    <div className="flex h-full flex-col bg-background-primary-default">
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-5xl space-y-5">
           <Card className="surface-enter" bodyClassName="flex flex-wrap items-center gap-3 p-3">
             <SegmentedControl value={periodMode} onChange={setPeriodMode} ariaLabel="班费统计周期" options={[{ value: "all", label: "全部" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }]} />
-            {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><DatePicker value={periodAnchor} onChange={setPeriodAnchor} ariaLabel="班费统计日期" className="h-9 w-44 bg-[var(--app-surface-muted)]"/><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-caption-1-semibold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
+            {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><DatePicker value={periodAnchor} onChange={setPeriodAnchor} ariaLabel="班费统计日期" className="h-9 w-44 bg-background-primary-default"/><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-caption-1-semibold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
             <SegmentedControl className="ml-auto" value={view} onChange={value => setView(value as "ledger" | "collection")} ariaLabel="班费视图" options={[{ value: "ledger", label: "收支流水" }, { value: "collection", label: "收缴情况" }]} />
           </Card>
           {/* 统计卡：左大余额 + 右两小卡 */}

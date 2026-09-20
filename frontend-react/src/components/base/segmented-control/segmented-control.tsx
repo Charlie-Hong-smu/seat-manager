@@ -90,7 +90,7 @@ export function SegmentedControl({ className, children, variant = "solid", eleme
       className={(state) =>
         cx(
           "relative inline-flex items-start gap-0.5 rounded-2lg",
-          variant === "solid" && "bg-segmented-control-background p-1",
+          variant === "solid" && "border border-separator-border bg-segmented-control-background p-1",
           typeof className === "function" ? className(state) : className,
         )
       }
@@ -133,7 +133,7 @@ export function SegmentedControlItem({
           "outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring",
           state.isSelected
             ? "text-body-medium text-text-primary"
-            : "text-body-regular text-text-secondary hover:text-text-primary",
+            : "text-body-regular text-text-secondary hover:bg-background-primary-default/70 hover:text-text-primary",
           state.isDisabled && "cursor-not-allowed opacity-50",
           typeof className === "function" ? className(state) : className,
         )

@@ -30,7 +30,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { ConfirmDialog, DatePicker, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { ConfirmDialog, DatePicker, DialogPresence, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-status-success-600" : value < 0 ? "text-status-danger-500" : "text-text-secondary";
@@ -462,7 +462,7 @@ export function DormitoryWorkspace({
   }
 
   return (
-    <div className="flex h-full flex-col bg-background-secondary-default">
+    <div className="flex h-full flex-col bg-background-primary-default">
       <DormitoryPeriodToolbar
         mode={periodMode}
         onModeChange={setPeriodMode}
@@ -891,6 +891,7 @@ export function DormitoryWorkspace({
         />
       </div>
 
+      <DialogPresence open={presetManagerOpen}>
       {presetManagerOpen && (
         <div
           className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-text-primary/35 p-4 backdrop-blur-[2px]"
@@ -1000,6 +1001,7 @@ export function DormitoryWorkspace({
           </div>
         </div>
       )}
+      </DialogPresence>
       <ConfirmDialog open={Boolean(pendingDeleteDormitory)} title="删除这个宿舍？" description={`将删除“${pendingDeleteDormitory?.name || "当前宿舍"}”及全部事件，${pendingDeleteDormitory?.memberIds.length || 0} 名成员会变为未分配宿舍；操作后可在 6 秒内撤销。`} confirmLabel="确认删除宿舍" onCancel={() => setPendingDeleteDormitory(null)} onConfirm={() => {
         if (!pendingDeleteDormitory) return;
         const deleted = pendingDeleteDormitory;

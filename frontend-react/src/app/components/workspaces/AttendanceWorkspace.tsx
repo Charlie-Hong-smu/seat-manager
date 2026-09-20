@@ -13,7 +13,7 @@ import type { ActivityEvent, AppStudent, AttendanceRecord, FollowupTask, Student
 import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import type { TimelineTarget } from "../../state/dataInsights";
 import { AttendanceStatusControl } from "../AttendanceStatusControl";
-import { ActionToast, AnimatedPopover, Button, Card, Input, Checkbox, DashboardStats, DatePicker, SegmentedControl, useAppDialog } from "../ui";
+import { ActionToast, AnimatedPopover, Button, Input, IconButton, Checkbox, DatePicker, MetricStrip, SegmentedControl, useAppDialog } from "../ui";
 
 type AttendanceQuickStatus = "leave" | "absent" | "late" | "earlyLeave" | "normal";
 
@@ -139,25 +139,32 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
     feedbackTimerRef.current = window.setTimeout(() => setRecentUpdate(null), 1400);
   }
 
-  const filterOptions = [
-    { value: "all", label: "全部", count: students.length },
-    { value: "abnormal", label: "已记录", count: byStudent.size },
-    { value: "leave", label: "请假", count: counts.leave },
-    { value: "absent", label: "缺勤", count: counts.absent },
-    { value: "late", label: "迟到", count: counts.late },
-    { value: "earlyLeave", label: "早退", count: counts.earlyLeave },
-  ];
   const linkedTasks = tasks.filter(task => task.status === "pending" && task.sourceRef?.domain === "attendance" && (task.sourceRef.date === date || records.some(record => record.date === date && record.id === task.sourceRef?.entityId)));
 
-  return <div className="h-full overflow-y-auto bg-background-secondary-default p-4"><div className="mx-auto max-w-6xl space-y-4">
-    <DashboardStats columns={3} stats={[
-      { icon: Check, label: "正常", value: String(counts.normal), deltaColor: "neutral" },
-      { icon: RotateCcw, label: "请假", value: String(counts.leave), deltaColor: "neutral" },
-      { icon: List, label: "缺勤", value: String(counts.absent), deltaColor: "neutral" },
-    ]} />
-    <Card title="每日出勤" action={
-      <div className="relative">
-        <Button size="sm" variant="ghost" aria-expanded={exportOpen} onClick={() => setExportOpen(value => !value)}><Download className="h-4 w-4"/>导出</Button>
+  return <div className="h-full overflow-y-auto bg-background-primary-default p-4"><div className="mx-auto max-w-6xl space-y-4">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <MetricStrip size="sm" items={[
+        { key: "all", label: "全部", value: students.length, selected: filter === "all", onOpen: () => setFilter("all") },
+        { key: "normal", label: "正常", value: counts.normal, dot: "bg-status-success-500", selected: filter === "normal", onOpen: () => setFilter("normal") },
+        { key: "leave", label: "请假", value: counts.leave, dot: "bg-status-warning-500", selected: filter === "leave", onOpen: () => setFilter("leave") },
+        { key: "absent", label: "缺勤", value: counts.absent, dot: "bg-status-rose-500", selected: filter === "absent", onOpen: () => setFilter("absent") },
+        { key: "late", label: "迟到", value: counts.late, dot: "bg-accent-500", selected: filter === "late", onOpen: () => setFilter("late") },
+        { key: "earlyLeave", label: "早退", value: counts.earlyLeave, dot: "bg-status-warning-500", selected: filter === "earlyLeave", onOpen: () => setFilter("earlyLeave") },
+      ]} />
+      <div className="ml-auto flex items-center gap-2">
+        <Input value={search} onChange={setSearch} leadingIcon={Search} placeholder="搜索学生" className="min-w-40 flex-1 sm:max-w-56" />
+        <SegmentedControl value={viewMode} onChange={value => { setViewMode(value as "quick" | "detail"); setSelected(new Set()); }} ariaLabel="出勤登记视图" options={[{ value: "quick", label: "快速", icon: <LayoutGrid className="h-4 w-4"/> }, { value: "detail", label: "详细", icon: <List className="h-4 w-4"/> }]}/>
+      </div>
+    </div>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <span className="text-caption-1-semibold text-text-secondary">快速登记：点击学生标记为</span>
+      <DatePicker value={date} onChange={value => { setDate(value); setSelected(new Set()); setRecentUpdate(null); }} ariaLabel="出勤日期" className="w-44 bg-background-primary-default"/>
+      <SegmentedControl value={quickStatus} onChange={value => setQuickStatus(value as AttendanceQuickStatus)} ariaLabel="快速出勤状态" className="min-w-72 flex-1 overflow-x-auto" options={QUICK_STATUS_OPTIONS}/>
+      <Button size="sm" variant="secondary" disabled={!byStudent.size} onClick={() => void markAllNormal()}><Check className="h-4 w-4"/>全部正常</Button>
+      <Button size="sm" variant="ghost" disabled={!undo} onClick={() => { if (!undo) return; onChange(undo); undoActivityRef.current?.(); undoActivityRef.current = null; setUndo(null); }}><RotateCcw className="h-4 w-4"/>撤销上一步</Button>
+      {linkedTasks.length > 0 && <Button size="sm" variant="secondary" onClick={() => onOpenTask?.(linkedTasks[0].id)}><ListPlus className="h-3.5 w-3.5"/>已有跟进 {linkedTasks.length}</Button>}
+      <div className="relative ml-auto">
+        <IconButton label="导出出勤" size="md" aria-expanded={exportOpen} onClick={() => setExportOpen(value => !value)}><Download className="h-4 w-4"/></IconButton>
         <AnimatedPopover open={exportOpen} className="absolute right-0 top-full z-50 mt-2 w-72 rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-2 shadow-[var(--app-shadow-float)]">
           <button type="button" onClick={() => { downloadCsv(students, records, date); setExportOpen(false); }} className="flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-body-regular text-text-secondary transition-colors hover:bg-background-secondary-default">导出当日（{date}）</button>
           <button type="button" onClick={() => { const range = getFundPeriodRange("week", date); if (range) downloadRangeCsv(students, records, range.start, range.end); setExportOpen(false); }} className="flex h-10 w-full items-center rounded-[var(--app-radius-sm)] px-3 text-body-regular text-text-secondary transition-colors hover:bg-background-secondary-default">导出本周（含汇总）</button>
@@ -173,25 +180,9 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
         </AnimatedPopover>
         {exportOpen && <button type="button" aria-label="关闭导出菜单" className="fixed inset-0 z-40 cursor-default" onClick={() => setExportOpen(false)} />}
       </div>
-    }>
-      <div className="mb-3 rounded-[var(--app-radius-md)] bg-[var(--app-surface-muted)] p-3">
-        <div className="mb-2 text-caption-1-semibold text-[var(--app-text-muted)]">快速登记：点击学生标记为</div>
-        <div className="flex flex-wrap items-center gap-3">
-          <DatePicker value={date} onChange={value => { setDate(value); setSelected(new Set()); setRecentUpdate(null); }} ariaLabel="出勤日期" className="w-44 bg-background-primary-default"/>
-          <SegmentedControl value={quickStatus} onChange={value => setQuickStatus(value as AttendanceQuickStatus)} ariaLabel="快速出勤状态" className="min-w-72 flex-1 overflow-x-auto" options={QUICK_STATUS_OPTIONS}/>
-          <Button size="sm" variant="secondary" disabled={!byStudent.size} onClick={() => void markAllNormal()}><Check className="h-4 w-4"/>全部正常</Button>
-          <Button size="sm" variant="ghost" disabled={!undo} onClick={() => { if (!undo) return; onChange(undo); undoActivityRef.current?.(); undoActivityRef.current = null; setUndo(null); }}><RotateCcw className="h-4 w-4"/>撤销上一步</Button>
-        </div>
-      </div>
+    </div>
 
-      <p aria-live="polite" className="sr-only">{recentUpdate?.message || ""}</p>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {linkedTasks.length > 0 && <Button size="sm" variant="secondary" onClick={() => onOpenTask?.(linkedTasks[0].id)}><ListPlus className="h-3.5 w-3.5"/>已有跟进 {linkedTasks.length}</Button>}
-        {filterOptions.map(option => <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => setFilter(option.value)} className={`rounded-full border px-3 py-1.5 text-caption-1-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20 ${filter === option.value ? "border-accent-200 bg-accent-50 text-accent-700" : "border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}>{option.label} {option.count}</button>)}
-        <Input value={search} onChange={setSearch} leadingIcon={Search} placeholder="搜索学生" className="ml-auto min-w-48 flex-1 sm:max-w-64" />
-        <SegmentedControl value={viewMode} onChange={value => { setViewMode(value as "quick" | "detail"); setSelected(new Set()); }} ariaLabel="出勤登记视图" options={[{ value: "quick", label: "快速", icon: <LayoutGrid className="h-4 w-4"/> }, { value: "detail", label: "详细", icon: <List className="h-4 w-4"/> }]}/>
-      </div>
+    <p aria-live="polite" className="sr-only">{recentUpdate?.message || ""}</p>
 
       {viewMode === "quick" ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{rows.map(student => {
         const record = byStudent.get(student.id);
@@ -207,7 +198,6 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
         <div className="overflow-hidden rounded-xl border border-separator-border">{rows.map(student => { const record=byStudent.get(student.id); const status=record?.status||"normal"; const editing=editingId===student.id; return <div key={student.id} data-attendance-student-id={student.id} className={`view-switch-enter border-b border-separator-border px-4 py-3 last:border-0 ${focusedStudentId === student.id ? "entity-focus-highlight" : ""}`}><div className="grid grid-cols-[auto_minmax(7rem,1fr)_auto] items-center gap-3"><Checkbox isSelected={selected.has(student.id)} onChange={() => toggle(student.id)} aria-label={`选择 ${student.name}`} /><div><div className="font-bold text-text-primary">{student.name}</div><div className="text-caption-1-regular text-text-tertiary">{record?.note || attendanceSummary(record)}</div></div><div className="flex items-center gap-2"><AttendanceStatusControl compact value={status} late={record?.late||false} earlyLeave={record?.earlyLeave||false} onChange={patch => patchStudent(student.id, patch)}/><button onClick={() => setEditingId(editing ? "" : student.id)} className="rounded-lg bg-background-secondary-default p-2 text-text-secondary" aria-label={`编辑 ${student.name} 详情`}><Settings2 className="h-4 w-4"/></button></div></div>{editing && <div className="mt-3 grid gap-2 rounded-xl bg-background-secondary-default p-3 sm:grid-cols-3"><Input value={record?.note||""} onChange={value => patchStudent(student.id,{note:value})} placeholder="备注" /><AttendanceDateTimeFields label="请假开始" value={record?.leaveStart||""} onChange={value => patchStudent(student.id,{leaveStart:value})}/><AttendanceDateTimeFields label="请假结束" value={record?.leaveEnd||""} onChange={value => patchStudent(student.id,{leaveEnd:value})}/>{record && <button onClick={() => onRequestTask({studentId:student.id,title:`出勤跟进：${record.status==="leave"?"请假":record.status==="absent"?"缺勤":record.late?"迟到":"早退"}`,type:"出勤关注",description:`${date}${record.note?` · ${record.note}`:""}`,plannedDate:date,dueDate:date,source:"attendance",sourceRef:{domain:"attendance",entityId:record.id,studentId:student.id,date}})} className="sm:col-span-3 flex items-center justify-center gap-1 rounded-lg bg-accent-50 py-2 text-caption-1-semibold text-accent-700"><ListPlus className="h-3.5 w-3.5"/>创建跟进任务</button>}</div>}</div>})}</div>
       </>}
       {!rows.length && <div className="py-12 text-center text-body-regular text-text-tertiary">没有符合条件的学生</div>}
-    </Card>
     {undo && <ActionToast message="出勤修改已保存" actionLabel="撤销" actionIcon={<RotateCcw className="h-3.5 w-3.5"/>} onAction={() => { onChange(undo); undoActivityRef.current?.(); undoActivityRef.current = null; setUndo(null); }} onClose={() => setUndo(null)} duration={6000}/>}
     {appDialog.dialog}
   </div></div>;

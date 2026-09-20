@@ -16,7 +16,7 @@ import {
 import { APP_NAME } from "../config";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import type { AppStudent } from "../state/types";
-import { AnimatedPopover, IconButton } from "./ui";
+import { AnimatedPopover, DialogPresence, IconButton } from "./ui";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 interface TopHeaderProps {
@@ -191,6 +191,7 @@ export function TopHeader({
         </div>
       </header>
 
+      <DialogPresence open={searchOpen}>
       {searchOpen && (
         <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-start justify-center bg-text-primary/20 px-4 pt-[12vh] backdrop-blur-[2px]" onMouseDown={event => event.currentTarget === event.target && closeSearch()}>
           <div className="modal-panel-enter w-full max-w-xl overflow-hidden rounded-[var(--app-radius-lg)] border border-white bg-background-primary-default shadow-[var(--app-shadow-float)]" role="dialog" aria-label="搜索学生">
@@ -248,6 +249,7 @@ export function TopHeader({
           </div>
         </div>
       )}
+      </DialogPresence>
 
       {accountOpen && <button type="button" aria-label="关闭账户菜单" className="fixed inset-0 z-30" onClick={onCloseAccount} />}
     </>

@@ -80,6 +80,42 @@ export function InlineStatus({ message, tone = "auto", className = "" }: {
   return <p role={resolvedTone === "error" ? "alert" : "status"} aria-live="polite" className={`rounded-[var(--app-radius-sm)] px-3 py-2 text-caption-1-semibold leading-5 ${toneClass} ${className}`}>{message}</p>;
 }
 
+/**
+ * 内联指标行：语义圆点 + 标签 + 数字 + 小字。
+ * 用于替换装饰性统计大卡——信息相同时更轻；onOpen 时整段可点；
+ * 带 selected 时可直接充当单选筛选条（替代描边药丸筛选）。
+ */
+export function MetricStrip({ items, size = "md", className = "" }: {
+  items: Array<{
+    key: string;
+    label: string;
+    value: string | number;
+    dot?: string;
+    caption?: string;
+    selected?: boolean;
+    onOpen?: () => void;
+  }>;
+  size?: "md" | "sm";
+  className?: string;
+}) {
+  const compact = size === "sm";
+  return <div className={cx("flex flex-wrap items-center gap-x-1 gap-y-1", className)}>
+    {items.map(item => {
+      const content = <>
+        {item.dot && <span aria-hidden="true" className={cx("size-2 shrink-0 self-center rounded-full", item.dot)} />}
+        <span className={cx(compact ? "text-caption-1-semibold" : "text-body-medium", item.selected ? "text-accent-700" : "text-text-secondary")}>{item.label}</span>
+        <span className={cx("tabular-nums", compact ? "text-body-semibold" : "text-title-2-medium", item.selected ? "text-accent-700" : "text-text-primary")}>{item.value}</span>
+        {item.caption && <span className="text-caption-1-regular text-text-secondary">{item.caption}</span>}
+      </>;
+      const itemClass = cx("flex items-baseline rounded-lg", compact ? "gap-1.5 px-2.5 py-1.5" : "gap-2 px-3 py-2");
+      return item.onOpen
+        ? <button key={item.key} type="button" onClick={item.onOpen} aria-pressed={item.selected ?? undefined}
+            className={cx(itemClass, "text-left outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-border-focus-ring", item.selected ? "bg-accent-50" : "hover:bg-background-secondary-default")}>{content}</button>
+        : <span key={item.key} className={itemClass}>{content}</span>;
+    })}
+  </div>;
+}
+
 const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -128,14 +164,14 @@ export function useModalFocus(open: boolean, onEscape: () => void) {
 }
 
 // Retain the rendered content during exit, including titles cleared by callers.
-function DialogPresence({ open, children }: { open: boolean; children: ReactNode }) {
+export function DialogPresence({ open, children }: { open: boolean; children: ReactNode }) {
   const [present, setPresent] = useState(open);
   const lastContent = useRef(children);
   if (open) lastContent.current = children;
   useEffect(() => {
     if (open) { setPresent(true); return; }
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : 150);
+    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : 460);
     return () => window.clearTimeout(timer);
   }, [open]);
   if (!open && !present) return null;
@@ -621,7 +657,7 @@ export function ToolDrawer({
   returnFocusId,
   widthClassName = "w-[400px]",
   bodyClassName = "p-4",
-  positionClassName = "absolute",
+  positionClassName = "fixed",
   backdropLayerClassName = "z-20",
   panelLayerClassName = "z-30",
   footer,
@@ -669,11 +705,11 @@ export function ToolDrawer({
   }, [open, returnFocusId]);
 
   if (!open && !present) return null;
-  return (
+  const drawerContent = (
     <>
       <button type="button" aria-label="关闭工具面板" tabIndex={-1} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-backdrop soft-backdrop-enter inset-0 bg-text-primary/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
-      <aside ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-enter inset-y-3 right-3 flex max-w-[calc(100%-24px)] flex-col overflow-hidden rounded-3xl border border-border-button-default bg-background-secondary-default p-2.5 shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
-        <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-3">
+      <aside ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-24px)] flex-col overflow-hidden border-l border-border-button-default bg-background-primary-default shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
+        <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-separator-border px-4">
           <h2 className="text-headline-semibold text-[var(--app-text)]">{title}</h2>
           <button
             ref={closeRef}
@@ -681,16 +717,17 @@ export function ToolDrawer({
             aria-label="关闭工具面板"
             title="关闭工具面板"
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] border border-border-button-default text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
+            className="grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className={cx("min-h-0 flex-1 overflow-y-auto rounded-2xl bg-background-primary-default", bodyClassName)}>{children}</div>
-        {footer && <div className="mt-2.5 shrink-0 rounded-2xl bg-background-primary-default p-3">{footer}</div>}
+        <div className={cx("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{children}</div>
+        {footer && <div className="shrink-0 border-t border-separator-border p-3">{footer}</div>}
       </aside>
     </>
   );
+  return typeof document === "undefined" ? null : createPortal(drawerContent, document.body);
 }
 
 /**
@@ -760,11 +797,13 @@ export function FileDropZone({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 transition-all ${
+      className={cx(
+        "flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 transition-all",
         isDragging
           ? "border-accent-500 bg-accent-50"
-          : "border-border-button-hover bg-background-secondary-default hover:border-border-button-hover hover:bg-background-tertiary-default"
-      } ${className}`}
+          : "border-border-button-hover bg-background-secondary-default hover:border-border-button-hover hover:bg-background-tertiary-default",
+        className,
+      )}
     >
       {children}
       <input

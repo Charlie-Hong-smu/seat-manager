@@ -49,7 +49,9 @@ export type Stat = {
   value: string;
   delta?: string;
   onPress?: () => void;
-  deltaColor: "lime" | "rose" | "neutral";
+  /** lime/rose 决定丸子的颜色语义；-up/-down 后缀显式指定箭头方向，
+   *  用于"数值上升但是坏事"（如异常增加）这类方向与褒贬不一致的场景。 */
+  deltaColor: "lime" | "rose" | "neutral" | "rose-up" | "lime-down";
   /** Footer variant: icon tile tint (defaults to blue). */
   tone?: StatTone;
   /** Footer variant: comparison caption in the band ("From last month"). */
@@ -123,8 +125,18 @@ const DELTA_STYLES: Record<
     className: "text-status-lime-text",
     pill: "bg-status-lime-background",
   },
+  "lime-down": {
+    icon: RiArrowDownCircleFill,
+    className: "text-status-lime-text",
+    pill: "bg-status-lime-background",
+  },
   rose: {
     icon: RiArrowDownCircleFill,
+    className: "text-status-rose-text",
+    pill: "bg-status-rose-background",
+  },
+  "rose-up": {
+    icon: RiArrowUpCircleFill,
     className: "text-status-rose-text",
     pill: "bg-status-rose-background",
   },
@@ -182,7 +194,7 @@ function PlainStatCard({ stat }: { stat: Stat }) {
         <p className="w-full text-body-medium text-text-secondary">{stat.label}</p>
         <div className="flex w-full flex-wrap items-center gap-2">
           <p className="text-title-1-medium whitespace-nowrap text-text-primary">{stat.value}</p>
-          {stat.delta && <Chip variant="bold" color={stat.deltaColor}>{stat.delta}</Chip>}
+          {stat.delta && <Chip variant="bold" color={stat.deltaColor.startsWith("rose") ? "rose" : stat.deltaColor.startsWith("lime") ? "lime" : "neutral"}>{stat.delta}</Chip>}
         </div>
       </div>
     </Root>
@@ -190,8 +202,9 @@ function PlainStatCard({ stat }: { stat: Stat }) {
 }
 
 function FooterStatCard({ stat }: { stat: Stat }) {
+  const Root = stat.onPress ? "button" : "section";
   return (
-    <section className="flex min-w-0 flex-col rounded-2xl bg-background-secondary-default p-2">
+    <Root type={stat.onPress ? "button" : undefined} onClick={stat.onPress} aria-label={stat.onPress ? `${stat.label} ${stat.value}` : undefined} className="flex min-w-0 flex-col rounded-2xl bg-background-secondary-default p-2 text-left outline-none transition-colors duration-150 enabled:cursor-pointer enabled:hover:bg-background-secondary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring">
       {/* Icon tile + optional info glyph, both hanging from the same top inset */}
       <div className="flex w-full items-start justify-between gap-2.5 p-2">
         <span
@@ -218,9 +231,9 @@ function FooterStatCard({ stat }: { stat: Stat }) {
         <p className="truncate text-body-regular text-text-secondary">
           {stat.caption ?? "From last month"}
         </p>
-        <DeltaPill delta={stat.delta} deltaColor={stat.deltaColor} />
+        {stat.delta && <DeltaPill delta={stat.delta} deltaColor={stat.deltaColor} />}
       </div>
-    </section>
+    </Root>
   );
 }
 

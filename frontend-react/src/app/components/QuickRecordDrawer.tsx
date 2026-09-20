@@ -1,4 +1,4 @@
-import { Plus, RotateCcw, Save, X } from "lucide-react";
+import { Plus, RotateCcw, Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AppStudent, QuickRecordPreset, RecordType, StudentId } from "../state/types";
@@ -61,7 +61,6 @@ export function QuickRecordDrawer({ open, students, presets, initialStudentIds =
           <div className="flex gap-2"><Input value={newPresetLabel} onChange={setNewPresetLabel} placeholder="新预设名称" className="min-w-0 flex-1" /><Button size="sm" disabled={!newPresetLabel.trim()} onClick={addPreset}><Plus className="h-4 w-4"/>保存当前内容</Button></div>
           {presets.map(item => <div key={item.id} className="flex items-center justify-between gap-2 text-body-regular"><span className={item.enabled ? "text-text-primary" : "text-text-tertiary line-through"}>{item.label}</span><button type="button" onClick={() => onPresetsChange(presets.map(preset => preset.id === item.id ? { ...preset, enabled: !preset.enabled } : preset))} className="text-caption-1-semibold text-text-secondary">{item.enabled ? "停用" : "启用"}</button></div>)}
         </div>}
-        <Button variant="ghost" className="w-full" onClick={onClose}><X className="h-4 w-4"/>关闭</Button>
       </div>
     </ToolDrawer>
     {undo && <ActionToast message="快捷记录已保存" actionLabel="撤销" actionIcon={<RotateCcw className="h-3.5 w-3.5"/>} onAction={() => { undo(); setUndo(null); }} onClose={() => setUndo(null)} duration={6000}/>}
