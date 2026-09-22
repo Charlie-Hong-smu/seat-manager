@@ -1,3 +1,4 @@
+import { reconcileClassDuties } from "./classDuties";
 import { EXAMS, INITIAL_SEATS, SAMPLE_RECORDS, STUDENTS } from "../components/mockData";
 import { calculateDormScore } from "./dormitoryActions";
 import { normalizeFundTransactions } from "./classFundActions";
@@ -399,12 +400,15 @@ function normalizeSeatHistory(value: unknown): SeatHistorySnapshot[] {
       if (normalizedSeats.length > seatCount) {
         normalizedSeats.length = seatCount;
       }
+      const studentIds = Array.isArray(item.studentIds) ? item.studentIds : undefined;
       return {
         id: toStringValue(item.id, `seat-history-${index}`),
         time: toStringValue(item.time) || toStringValue(item.savedAt) || new Date().toISOString(),
         note: toStringValue(item.note),
         rows,
         seats: normalizedSeats,
+        ...(studentIds ? { studentIds: Array.from({ length: seatCount }, (_, i) => { const id = studentIds[i]; return typeof id === "string" && id ? id : null; }) } : {}),
+        ...(Array.isArray(item.lockedSeats) ? { lockedSeats: [...new Set(item.lockedSeats.filter((index): index is number => Number.isInteger(index) && Number(index) >= 0 && Number(index) < seatCount))] } : {}),
         layout,
       };
     })
@@ -776,7 +780,7 @@ function getConfirmedDeletedExamIds(rawSavedExams: unknown, events: ActivityEven
   return new Set([...latest].filter(([id, event]) => event.action === "deleted" && !savedIds.has(id)).map(([id]) => id));
 }
 
-export function createSeatManagerState(raw: unknown): SeatManagerState {
+function createSeatManagerStateBase(raw: unknown): SeatManagerState {
   if (!isRecord(raw)) {
     return createMockSeatManagerState();
   }
@@ -850,4 +854,8 @@ export function createSeatManagerState(raw: unknown): SeatManagerState {
     settings,
     gradeExams: normalizeGradeExams(savedExams, normalizedStudents),
   };
+}
+
+export function createSeatManagerState(raw: unknown): SeatManagerState {
+  return reconcileClassDuties(createSeatManagerStateBase(raw));
 }

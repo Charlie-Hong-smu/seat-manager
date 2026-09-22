@@ -1,11 +1,15 @@
+import { StudentPicker } from "./StudentPicker";
 import { Plus, Search, X } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import type { AppStudent } from "../state/types";
 
 export function DormitoryMembersPanel({
+  leaderStudentId, onLeaderChange,
   memberListRef, memberStudents, onSelectStudent, removeMemberWithAnimation, memberSearch,
   setMemberSearch, memberCandidatesRef, assignableStudents, addMemberWithAnimation,
 }: {
+  leaderStudentId?: string;
+  onLeaderChange?: (id: string) => void;
   memberListRef: RefObject<HTMLDivElement>;
   memberStudents: AppStudent[];
   onSelectStudent: (student: AppStudent) => void;
@@ -25,13 +29,14 @@ export function DormitoryMembersPanel({
             </div>
             <span className="rounded-full border border-accent-100 bg-accent-50 px-2 py-0.5 text-caption-1-semibold text-accent-600">{memberStudents.length} 人</span>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-            <div ref={memberListRef} className="grid min-h-10 gap-2 rounded-xl border border-dashed border-accent-100 bg-accent-50/30 p-2">
+          <div className="flex-1 min-h-0 flex flex-col gap-3 p-3">
+            {onLeaderChange && <div className="space-y-1.5"><div className="text-caption-1-semibold text-text-secondary">宿舍长</div><StudentPicker compact allowClear label="宿舍长" students={memberStudents} value={leaderStudentId || ""} onChange={onLeaderChange} /></div>}
+            <div ref={memberListRef} className="grid min-h-10 max-h-[45%] shrink-0 gap-2 overflow-y-auto rounded-xl border border-dashed border-accent-100 bg-accent-50/30 p-2">
               {memberStudents.map(student => (
                 <div
                   key={student.id}
                   data-selection-motion-id={student.id}
-                  className="dorm-member-enter group flex items-center gap-2 rounded-xl border border-accent-100 bg-background-primary-default p-2 shadow-sm transition-[border-color,box-shadow,transform] duration-200  hover:border-accent-200 hover:shadow-md"
+                  className="group flex items-center gap-2 rounded-xl border border-accent-100 bg-background-primary-default p-2 shadow-sm transition-[border-color,box-shadow,transform] duration-200  hover:border-accent-200 hover:shadow-md"
                 >
                   <button onClick={() => onSelectStudent(student)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                     <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold ${student.gender === "男" ? "bg-accent-50 text-accent-500" : student.gender === "女" ? "bg-status-pink-50 text-status-pink-500" : "bg-background-tertiary-default text-text-secondary"}`}>
@@ -39,7 +44,7 @@ export function DormitoryMembersPanel({
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-caption-1-semibold text-text-primary">{student.name}</span>
-                      <span className="block text-[10px] text-text-tertiary">{student.gender || "性别未填"} · 宿舍成员</span>
+                      <span className="block text-[10px] text-text-tertiary">{student.gender || "性别未填"} · {student.id === leaderStudentId ? "宿舍长" : "宿舍成员"}</span>
                     </span>
                   </button>
                   <button
@@ -64,7 +69,7 @@ export function DormitoryMembersPanel({
                 placeholder="搜索并加入学生"
               />
             </div>
-            <div ref={memberCandidatesRef} className="max-h-52 overflow-y-auto rounded-xl border border-separator-border bg-background-secondary-default/40 p-1">
+            <div ref={memberCandidatesRef} className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-separator-border bg-background-secondary-default/40 p-1">
               {assignableStudents.map(student => (
                 <button
                   key={student.id}

@@ -22,5 +22,5 @@ export function LinkedTaskBadge({ task, onOpen }: { task?: FollowupTask; onOpen?
 
 export function ResolutionEditor({ task, onSave, onContinue }: { task: FollowupTask; onSave: (note: string) => void; onContinue: () => void }) {
   const [note, setNote, clearNote] = useWorkspaceDraftState(`followup:resolution:${task.id}`, task.resolutionNote || "");
-  return <div className="view-switch-enter mt-3 flex flex-col gap-3 rounded-[var(--app-radius-sm)] border border-status-success-100 bg-status-success-50/50 p-3"><Textarea label="处理结果（可选）" rows={2} value={note} onChange={setNote} placeholder="例如：已与家长沟通，学生将在周五前补交"/><div className="flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={onContinue}>继续跟进</Button><Button size="sm" onClick={() => { onSave(note); clearNote(); }}><Save className="h-3.5 w-3.5"/>保存结果</Button></div></div>;
+  return <div className="mt-3 flex flex-col gap-3 rounded-[var(--app-radius-sm)] border border-status-success-100 bg-status-success-50/50 p-3"><Textarea label="处理结果（可选）" rows={2} value={note} onChange={setNote} placeholder="例如：已与家长沟通，学生将在周五前补交"/><div className="flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={onContinue}>继续跟进</Button><Button size="sm" onClick={() => { onSave(note); clearNote(); }}><Save className="h-3.5 w-3.5"/>保存结果</Button></div></div>;
 }

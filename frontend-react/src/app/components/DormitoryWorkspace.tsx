@@ -1,3 +1,4 @@
+import type { ClassDutiesBinding } from "../state/classDuties";
 import { isValidDateKey } from "../state/dateKey";
 import { useWorkspaceDraftState } from "../hooks/useWorkspaceDraftState";
 import { findMatchingFollowupTask } from "../state/dailyManagement";
@@ -32,7 +33,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { ConfirmDialog, DatePicker, DialogPresence, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { MotionCollapse, ConfirmDialog, DatePicker, DialogPresence, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-status-success-600" : value < 0 ? "text-status-danger-500" : "text-text-secondary";
@@ -53,6 +54,7 @@ interface PresetDraft {
 }
 
 interface Props {
+  classDuties?: ClassDutiesBinding;
   students: AppStudent[];
   dormitories: Dormitory[];
   onCreateDormitory: (name: string, baseScore: number) => Dormitory;
@@ -75,6 +77,7 @@ interface Props {
 }
 
 export function DormitoryWorkspace({
+  classDuties,
   students,
   dormitories,
   onCreateDormitory,
@@ -154,18 +157,18 @@ export function DormitoryWorkspace({
   const sortedDormitories = [...dormitories].sort((a, b) => (periodScores.get(b.id) || 0) - (periodScores.get(a.id) || 0) || a.name.localeCompare(b.name, "zh-Hans-CN"));
   const selectedDormitory = dormitories.find(dormitory => dormitory.id === selectedDormId) || sortedDormitories[0] || null;
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
-  const memberStudents = selectedDormitory ? selectedDormitory.memberIds.map(id => studentById.get(id)).filter((student): student is AppStudent => Boolean(student)) : [];
-  const assignableStudents = students
+  const memberStudents = useMemo(() => selectedDormitory ? selectedDormitory.memberIds.map(id => studentById.get(id)).filter((student): student is AppStudent => Boolean(student)) : [], [selectedDormitory, studentById]);
+  const assignableStudents = useMemo(() => students
     .filter(student => !selectedDormitory || student.dormitoryId !== selectedDormitory.id)
     .filter(student => matchesStudentSearch(student, memberSearch))
-    .slice(0, 16);
-  const filteredMembers = responsibleSearch.trim()
+    .slice(0, 16), [students, selectedDormitory, memberSearch]);
+  const filteredMembers = useMemo(() => responsibleSearch.trim()
     ? memberStudents.filter(student => matchesStudentSearch(student, responsibleSearch))
-    : memberStudents;
-  const selectedResponsibleStudents = responsibleIds
+    : memberStudents, [memberStudents, responsibleSearch]);
+  const selectedResponsibleStudents = useMemo(() => responsibleIds
     .map(id => memberStudents.find(student => student.id === id))
-    .filter((student): student is AppStudent => Boolean(student));
-  const selectedPeriodEvents = selectedDormitory ? filterDormitoryEventsByRange(selectedDormitory, periodRange) : [];
+    .filter((student): student is AppStudent => Boolean(student)), [responsibleIds, memberStudents]);
+  const selectedPeriodEvents = useMemo(() => selectedDormitory ? filterDormitoryEventsByRange(selectedDormitory, periodRange) : [], [selectedDormitory, periodRange]);
   const selectedPeriodScore = selectedDormitory ? periodScores.get(selectedDormitory.id) || 0 : 0;
 
   const activeDormIndex = Math.max(0, sortedDormitories.findIndex(d => d.id === selectedDormitory?.id));
@@ -183,7 +186,7 @@ export function DormitoryWorkspace({
     setSelectedDormId(match.dormitory.id);
     if (match.event) setPeriodAnchor(match.event.date);
     setFocusedEventId(entityId);
-    window.setTimeout(() => document.querySelector(`[data-dormitory-event-id="${CSS.escape(entityId)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+    window.setTimeout(() => document.querySelector(`[data-dormitory-event-id="${CSS.escape(entityId)}"]`)?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }), 100);
   }, onInitialTargetConsumed);
 
   // 切换宿舍时重置编辑状态 + 触发主区域动画
@@ -205,13 +208,13 @@ export function DormitoryWorkspace({
 
   function selectDorm(id: string) {
     if (id !== selectedDormId) {
-      setSelectedDormId(id);
+      runViewTransition(() => setSelectedDormId(id));
     }
   }
 
   function createDormitory() {
     const dormitory = onCreateDormitory(newName, 0);
-    setSelectedDormId(dormitory.id);
+    runViewTransition(() => setSelectedDormId(dormitory.id));
     setNewName("");
     actionToast.show({
       message: "宿舍已创建",
@@ -320,7 +323,6 @@ export function DormitoryWorkspace({
   function addMemberWithAnimation(event: ReactMouseEvent<HTMLButtonElement>, student: AppStudent) {
     animateSelectionTransfer({
       itemId: student.id,
-      itemName: student.name,
       sourceElement: event.currentTarget,
       sourceContainer: memberCandidatesRef.current,
       targetContainer: memberListRef.current,
@@ -334,12 +336,10 @@ export function DormitoryWorkspace({
       : null;
     animateSelectionTransfer({
       itemId: student.id,
-      itemName: student.name,
       sourceElement: selected ? selectedElement || event.currentTarget : event.currentTarget,
       sourceContainer: selected ? responsibleSelectedRef.current : responsibleCandidatesRef.current,
       targetContainer: selected ? responsibleCandidatesRef.current : responsibleSelectedRef.current,
       commit: () => toggleResponsible(student.id),
-      tone: "indigo",
     });
   }
 
@@ -347,7 +347,6 @@ export function DormitoryWorkspace({
     const card = event.currentTarget.closest<HTMLElement>("[data-selection-motion-id]") || event.currentTarget;
     animateSelectionTransfer({
       itemId: student.id,
-      itemName: student.name,
       sourceElement: card,
       sourceContainer: memberListRef.current,
       targetContainer: memberCandidatesRef.current,
@@ -359,12 +358,10 @@ export function DormitoryWorkspace({
     const chip = event.currentTarget.closest<HTMLElement>("[data-selection-motion-id]") || event.currentTarget;
     animateSelectionTransfer({
       itemId: student.id,
-      itemName: student.name,
       sourceElement: chip,
       sourceContainer: responsibleSelectedRef.current,
       targetContainer: responsibleCandidatesRef.current,
       commit: () => toggleResponsible(student.id),
-      tone: "indigo",
     });
   }
 
@@ -475,7 +472,7 @@ export function DormitoryWorkspace({
                 actionToast.show({ message: "宿舍统计周期已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => onPeriodSettingsChange(previousSettings), duration: 6000 });
               }}
       />
-      <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr_220px] gap-4 overflow-hidden p-4">
+      <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr_220px] grid-rows-[minmax(0,1fr)] gap-4 overflow-hidden p-4">
         <DormitoryListPanel
           newName={newName}
           setNewName={setNewName}
@@ -492,7 +489,7 @@ export function DormitoryWorkspace({
         {/* 中间：事件账本 + 列表（带切换动画） */}
         <main ref={mainRef} className="flex flex-col min-h-0 overflow-hidden gap-4">
           {selectedDormitory ? (
-            <div key={animKey} className="flex flex-col min-h-0 flex-1 gap-4 workspace-tab-enter">
+            <div key={animKey} className="vt-dorm-detail flex flex-col min-h-0 flex-1 gap-4">
               {/* 标题区 + 统计 */}
               <div className="flex items-start justify-between gap-4 shrink-0">
                 <div className="min-w-0">
@@ -639,24 +636,20 @@ export function DormitoryWorkspace({
                             <span className="text-accent-500">· 已选 {responsibleIds.length} 人</span>
                           )}
                         </button>
-                        <div
-                          className={`overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${
-                            showResponsible ? "max-h-96 mt-3 opacity-100" : "max-h-0 mt-0 opacity-0"
-                          }`}
-                        >
+                        <MotionCollapse open={showResponsible} contentClassName="pt-3">
                           {/* 已选责任人：同时作为名字飞入的落点 */}
                           <div ref={responsibleSelectedRef} className="mb-2 flex min-h-8 flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-status-indigo-100 bg-status-indigo-50/40 px-2 py-1.5">
                             {selectedResponsibleStudents.length > 0 ? selectedResponsibleStudents.map(student => (
                               <span
                                 key={student.id}
                                 data-selection-motion-id={student.id}
-                                className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-status-indigo-200 bg-background-primary-default py-1 pl-2.5 pr-1 text-caption-1-semibold text-status-indigo-700 shadow-sm"
+                                className="inline-flex items-center gap-1 rounded-lg border border-status-indigo-200 bg-background-primary-default py-1 pl-2.5 pr-1 text-caption-1-semibold text-status-indigo-700 shadow-sm"
                               >
                                 {student.name}
                                 <button
                                   type="button"
                                   onClick={event => removeResponsibleWithAnimation(event, student)}
-                                  className="grid h-4 w-4 place-items-center rounded-full text-status-indigo-300 hover:bg-status-danger-100 hover:text-status-danger-500"
+                                  className="grid h-4 w-4 place-items-center rounded-md text-status-indigo-300 hover:bg-status-danger-100 hover:text-status-danger-500"
                                   title={`取消选择 ${student.name}`}
                                 >
                                   <X className="h-2.5 w-2.5" />
@@ -716,7 +709,7 @@ export function DormitoryWorkspace({
                             />
                             同时记入责任人个人档案
                           </label>
-                        </div>
+                        </MotionCollapse>
                       </div>
 
                       {/* 按钮 */}
@@ -878,6 +871,8 @@ export function DormitoryWorkspace({
         </main>
 
         <DormitoryMembersPanel
+          leaderStudentId={selectedDormitory ? classDuties?.value.dormitoryLeaders[selectedDormitory.id] : undefined}
+          onLeaderChange={classDuties && selectedDormitory ? id => { classDuties.onChange(current => ({ ...current, dormitoryLeaders: { ...current.dormitoryLeaders, [selectedDormitory.id]: id } })); actionToast.show({ message: id ? "宿舍长已设置" : "已取消宿舍长" }); } : undefined}
           memberListRef={memberListRef}
           memberStudents={memberStudents}
           onSelectStudent={onSelectStudent}
@@ -893,7 +888,7 @@ export function DormitoryWorkspace({
       <DialogPresence open={presetManagerOpen}>
       {presetManagerOpen && (
         <div
-          className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-text-primary/35 p-4 backdrop-blur-[2px]"
+          className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           aria-label="管理宿舍事件类型"
@@ -904,7 +899,7 @@ export function DormitoryWorkspace({
             }
           }}
         >
-          <div ref={presetManagerRef} tabIndex={-1} className="modal-panel-enter flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white bg-background-primary-default shadow-2xl outline-none">
+          <div ref={presetManagerRef} tabIndex={-1} className="modal-panel-enter app-modal-panel flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden outline-none">
             <div className="flex items-start justify-between border-b border-separator-border px-5 py-4">
               <div>
                 <h3 className="text-headline-semibold text-text-primary">管理事件类型</h3>

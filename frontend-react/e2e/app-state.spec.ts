@@ -16,7 +16,7 @@ async function login(page: import("@playwright/test").Page) {
   await page.goto("./");
   await page.getByPlaceholder("请输入授权码").fill("TEST-ZHANG-CODE");
   await page.getByRole("button", { name: "进入" }).click();
-  await expect(page.getByRole("button", { name: "今日" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
 }
@@ -94,17 +94,17 @@ test("main seat editor supports animated range selection, isolated slots and a p
   await page.getByRole("button", { name: /新增学生/ }).click();
   await page.getByPlaceholder("姓名", { exact: true }).fill("布局预览学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
-  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
+  await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "编辑布局", exact: true }).click();
   const editor = page.locator("[data-seat-layout-editor]");
   await expect(editor).toBeVisible();
   await expect(page.getByRole("dialog", { name: "排座" })).toBeHidden();
 
-  await editor.getByRole("button", { name: "批量框选" }).click();
+  await page.getByRole("button", { name: "批量框选" }).click();
   const rangeTarget = editor.locator('[data-seat-layout-slot="4:6"]');
   await rangeTarget.locator(".seat-layout-slot__face").hover();
-  await expect(editor.getByText("7 列 × 5 行", { exact: true })).toBeVisible();
+  await expect(page.getByText("7 列 × 5 行", { exact: true })).toBeVisible();
   await rangeTarget.locator(".seat-layout-slot__face").click();
   await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(35);
 
@@ -114,7 +114,7 @@ test("main seat editor supports animated range selection, isolated slots and a p
   await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(36);
   await expect(isolated.locator(".seat-layout-slot__face")).toHaveCSS("animation-name", "seat-layout-slot-enable");
 
-  await editor.getByRole("button", { name: "框选成组" }).click();
+  await page.getByRole("button", { name: "框选成组" }).click();
   const groupStart = editor.locator('[data-seat-layout-slot="0:0"] .seat-layout-slot__face');
   const groupEnd = editor.locator('[data-seat-layout-slot="4:1"] .seat-layout-slot__face');
   await groupStart.hover();
@@ -130,7 +130,7 @@ test("main seat editor supports animated range selection, isolated slots and a p
   await podiumSlot.hover();
   await podiumSlot.getByRole("button", { name: "将第 9 行第 8 列设为讲台" }).click();
   await expect(podiumSlot).toHaveAttribute("data-podium", "true");
-  await editor.getByRole("button", { name: "应用布局" }).click();
+  await page.getByRole("button", { name: "应用布局" }).click();
 
   await expect(editor).toBeHidden();
   await expect(page.locator("[data-seat-layout-node]")).toHaveCount(36);
@@ -160,10 +160,10 @@ test("custom classroom grid renders without overlapping seat cards", async ({ pa
 
   await page.getByRole("button", { name: "编辑布局", exact: true }).click();
   const editor = page.locator("[data-seat-layout-editor]");
-  await editor.getByRole("button", { name: "批量框选" }).click();
+  await page.getByRole("button", { name: "批量框选" }).click();
   await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
   await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(64);
-  await editor.getByRole("button", { name: "应用布局" }).click();
+  await page.getByRole("button", { name: "应用布局" }).click();
 
   const nodes = page.locator("[data-seat-layout-node]");
   await expect(nodes).toHaveCount(64);
@@ -229,7 +229,7 @@ test("layout editor cancel preserves data and reduced motion keeps slot editing 
   await expect(added).not.toHaveAttribute("data-group-id");
   await added.locator(".seat-layout-slot__face").press("Space");
   await expect(added).toHaveAttribute("data-active", "false");
-  await editor.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "取消", exact: true }).click();
   await expect(editor).toBeHidden();
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(before);
 });
@@ -288,7 +288,7 @@ test("row and column insertion preserves seats and occupied deletion requires co
   const enabled = editor.locator('[data-seat-layout-slot][data-active="true"]');
   const firstId = await editor.locator('[data-seat-layout-slot="0:0"]').getAttribute("data-seat-grid-seat");
   const enabledCount = await enabled.count();
-  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await page.getByRole("button", { name: "批量框选", exact: true }).click();
   await editor.getByRole("button", { name: "在第 1 列前新增一列", exact: true }).click();
   await expect(editor.locator('[data-seat-layout-slot="0:0"]')).toHaveAttribute("data-active", "false");
   await expect(editor.locator('[data-seat-layout-slot="0:1"]')).toHaveAttribute("data-seat-grid-seat", firstId!);
@@ -301,26 +301,26 @@ test("row and column insertion preserves seats and occupied deletion requires co
   await expect(enabled).toHaveCount(enabledCount);
   await editor.getByRole("button", { name: "删除第 2 行", exact: true }).click();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect(editor.getByRole("button", { name: "批量框选中" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".seat-mode-toolbar__editor").getByRole("button", { name: "批量框选中" })).toHaveAttribute("aria-pressed", "true");
 
   await editor.getByRole("button", { name: "删除第 1 列", exact: true }).click();
   const dialog = page.getByRole("alertdialog", { name: "删除第 1 列？" });
   await expect(dialog).toContainText("此列已经有学生座位，是否仍要删除？");
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await expect(enabled).toHaveCount(enabledCount);
-  await expect(editor.getByRole("button", { name: "批量框选中" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".seat-mode-toolbar__editor").getByRole("button", { name: "批量框选中" })).toHaveAttribute("aria-pressed", "true");
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(original);
 
-  await editor.getByRole("button", { name: "框选成组", exact: true }).click();
+  await page.getByRole("button", { name: "框选成组", exact: true }).click();
   const deletedCount = await editor.locator('[data-seat-layout-slot^="0:"][data-active="true"]').count();
   await editor.getByRole("button", { name: "删除第 1 行", exact: true }).click();
   const rowDialog = page.getByRole("alertdialog", { name: "删除第 1 行？" });
   await expect(rowDialog).toContainText("此行已经有学生座位，是否仍要删除？");
   await rowDialog.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(enabled).toHaveCount(enabledCount - deletedCount);
-  await expect(editor.getByRole("button", { name: "框选成组中" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".seat-mode-toolbar__editor").getByRole("button", { name: "框选成组中" })).toHaveAttribute("aria-pressed", "true");
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(original);
-  await editor.getByRole("button", { name: "应用布局", exact: true }).click();
+  await page.getByRole("button", { name: "应用布局", exact: true }).click();
   await expect(page.locator("[data-seat-layout-node]")).toHaveCount(enabledCount - deletedCount);
   await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
   await page.reload();
@@ -334,7 +334,7 @@ test("inserting between rows and columns keeps existing blue nodes opaque withou
   await login(page);
   await page.getByRole("button", { name: "编辑布局", exact: true }).click();
   const editor = page.locator("[data-seat-layout-editor]");
-  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await page.getByRole("button", { name: "批量框选", exact: true }).click();
   await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
   const faces = editor.locator('[data-seat-grid-seat] .seat-layout-slot__face');
   await expect(faces).toHaveCount(64);
@@ -372,7 +372,7 @@ test("existing group edges resize, podiums stay outside and overlapping selectio
   await page.getByRole("button", { name: "编辑布局", exact: true }).click();
   const editor = page.locator("[data-seat-layout-editor]");
   const grid = editor.locator("[data-seat-layout-slot-grid]");
-  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await page.getByRole("button", { name: "批量框选", exact: true }).click();
   await editor.locator('[data-seat-layout-slot="3:3"] .seat-layout-slot__face').click();
   const podium = editor.locator('[data-seat-layout-slot="1:0"]');
   await podium.hover();
@@ -381,7 +381,7 @@ test("existing group edges resize, podiums stay outside and overlapping selectio
   await expect(podium).not.toHaveAttribute("data-group-id");
   const firstGroup = editor.locator('[data-seat-layout-group-boundary="group-slot-1"]');
   await expect(firstGroup).toHaveAttribute("data-podium-cutout", "true");
-  await editor.getByRole("button", { name: "框选成组", exact: true }).click();
+  await page.getByRole("button", { name: "框选成组", exact: true }).click();
   const bottom = firstGroup.getByRole("button", { name: "调整第 1 组下边缘" });
   await bottom.hover();
   await page.mouse.down();
@@ -440,7 +440,7 @@ test("existing group edges resize, podiums stay outside and overlapping selectio
   await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-slot-2"]')).toHaveCount(2);
   await expect(targetGroup.locator(".seat-group-label__name")).toHaveText(targetName!);
   await expect.poll(() => groupContoursAreDisjoint(page)).toBe(true);
-  await editor.getByRole("button", { name: "应用布局", exact: true }).click();
+  await page.getByRole("button", { name: "应用布局", exact: true }).click();
   await expect(page.locator('[data-seat-layout-group-boundary][data-podium-cutout="true"]')).toHaveCount(1);
   await expect(page.locator("[data-seat-layout-node]")).toHaveCount(15);
   await expect(page.locator("[data-seat-layout-podium]")).toBeVisible();
@@ -492,7 +492,7 @@ test("legacy 66-seat layout fits with disjoint trimmed contours, automatic split
   await expect(editor.locator('[data-seat-layout-slot][data-group-id="group-1"]')).toHaveCount(0);
   await expect(editor.locator('[data-seat-layout-slot][data-active="true"]')).toHaveCount(66);
 
-  await editor.getByRole("button", { name: "框选成组", exact: true }).click();
+  await page.getByRole("button", { name: "框选成组", exact: true }).click();
   await editor.locator('[data-seat-layout-slot="1:1"] .seat-layout-slot__face').hover();
   await page.mouse.down();
   await editor.locator('[data-seat-layout-slot="3:4"] .seat-layout-slot__face').hover();
@@ -509,7 +509,7 @@ test("legacy 66-seat layout fits with disjoint trimmed contours, automatic split
   const boundaries = page.locator("[data-seat-layout-group-boundary]");
   const disjoint = () => groupContoursAreDisjoint(page);
   await expect.poll(disjoint).toBe(true);
-  await editor.getByRole("button", { name: "应用布局", exact: true }).click();
+  await page.getByRole("button", { name: "应用布局", exact: true }).click();
   expect(await nodes.evaluateAll(els => els.map(el => ({ id: el.getAttribute("data-seat-layout-node"), cell: el.getAttribute("data-seat-grid-cell") })))).toEqual(before);
   await expect(boundaries).toHaveCount(6);
   await expect.poll(disjoint).toBe(true);
@@ -531,14 +531,14 @@ test("group names and ungroup actions work in both selection modes and persist o
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
   await page.getByRole("button", { name: "编辑布局", exact: true }).click();
   const editor = page.locator("[data-seat-layout-editor]");
-  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await page.getByRole("button", { name: "批量框选", exact: true }).click();
   await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
   const slots = editor.locator('[data-seat-layout-slot][data-active="true"]');
   const group = (id: number) => editor.locator(`[data-seat-layout-group-boundary="group-slot-${id}"]`);
   const prompt = page.getByRole("dialog", { name: "编辑组名", exact: true });
   const name = prompt.getByRole("textbox", { name: "名称" });
 
-  await editor.getByRole("button", { name: "框选成组", exact: true }).click();
+  await page.getByRole("button", { name: "框选成组", exact: true }).click();
   await editor.locator('[data-seat-layout-slot="1:0"]').hover();
   await group(1).getByRole("button", { name: /^编辑/ }).click();
   await expect(prompt).toBeVisible();
@@ -551,7 +551,7 @@ test("group names and ungroup actions work in both selection modes and persist o
   await name.press("Enter");
   await expect(prompt).toBeHidden();
   await expect(group(1).locator(".seat-group-label__name")).toHaveText("第 7 组");
-  await expect(editor.getByRole("button", { name: "框选成组中", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".seat-mode-toolbar__editor").getByRole("button", { name: "框选成组中", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(slots).toHaveCount(64);
   await group(2).locator(".seat-group-label").hover();
   await group(2).getByRole("button", { name: /^解除/ }).click();
@@ -564,9 +564,9 @@ test("group names and ungroup actions work in both selection modes and persist o
   await name.press("Escape");
   await expect(prompt).toBeHidden();
   await expect(group(1).locator(".seat-group-label__name")).toHaveText("第 7 组");
-  await expect(editor.getByRole("button", { name: "框选成组中", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".seat-mode-toolbar__editor").getByRole("button", { name: "框选成组中", exact: true })).toHaveAttribute("aria-pressed", "true");
 
-  await editor.getByRole("button", { name: "批量框选", exact: true }).click();
+  await page.getByRole("button", { name: "批量框选", exact: true }).click();
   await editor.locator('[data-seat-layout-slot="1:0"]').hover();
   await group(1).locator(".seat-group-label").hover();
   await page.screenshot({ path: "../output/seat-layout-acceptance/group-actions-in-selection.png", animations: "disabled" });
@@ -574,13 +574,13 @@ test("group names and ungroup actions work in both selection modes and persist o
   await name.fill("8");
   await prompt.getByRole("button", { name: "确定", exact: true }).click();
   await expect(group(1).locator(".seat-group-label__name")).toHaveText("第 8 组");
-  await expect(editor.getByRole("button", { name: "批量框选中", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".seat-mode-toolbar__editor").getByRole("button", { name: "批量框选中", exact: true })).toHaveAttribute("aria-pressed", "true");
   await group(3).locator(".seat-group-label").hover();
   await group(3).getByRole("button", { name: /^解除/ }).click();
   await expect(group(3)).toHaveCount(0);
   await expect(slots).toHaveCount(64);
-  await editor.getByRole("button", { name: "应用布局", exact: true }).click();
-  const savedName = page.locator('[data-seat-layout-group-boundary="group-slot-1"] .seat-group-label__name');
+  await page.getByRole("button", { name: "应用布局", exact: true }).click();
+  const savedName = page.locator('[data-seat-board-layer] [data-seat-layout-group-boundary="group-slot-1"] .seat-group-label__name');
   await expect(savedName).toHaveText("第 8 组");
   await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
   await page.reload();
@@ -594,7 +594,7 @@ test("group names and ungroup actions work in both selection modes and persist o
   await group(1).getByRole("button", { name: /^编辑/ }).click();
   await name.fill("9");
   await prompt.getByRole("button", { name: "确定", exact: true }).click();
-  await editor.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "取消", exact: true }).click();
   await expect(savedName).toHaveText("第 8 组");
 });
 
@@ -644,68 +644,52 @@ test("corrupt local workspace stays untouched until an explicit recovery", async
   await expect(page.getByRole("heading", { name: "检测到本机工作区数据异常" })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(corruptRaw);
 
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[type="file"]:not([inert] *)').setInputFiles({
     name: "valid-backup.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({ version: 1, data: { students: [], seatOrder: [] } })),
   });
   await page.getByRole("button", { name: "确认恢复" }).click();
-  await expect(page.getByRole("button", { name: "今日" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).not.toBe(corruptRaw);
 });
 
-test("preloads the comment workbench and uses the shared BoardUI entry and exit motion", async ({ page }) => {
+test("preloads the comment workbench and keeps it inside the shared main surface", async ({ page }) => {
   await login(page);
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((entry) => entry.name.includes("CommentWorkbench-")))).toBe(true);
   await page.getByRole("button", { name: /新增学生/ }).click();
   await page.getByPlaceholder("姓名", { exact: true }).fill("动效测试学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
-
-  await page.getByRole("button", { name: "评语工作台" }).click();
-  const dialog = page.getByRole("dialog", { name: "评语工作台" });
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAttribute("data-transition-state", "open");
+  const surface = page.locator(".app-work-surface");
+  const original = await surface.boundingBox();
+  const nav = page.getByRole("navigation", { name: "主导航" });
+  await nav.getByRole("button", { name: "评语工作台" }).click();
+  const workbench = page.getByRole("region", { name: "评语工作台" });
+  await expect(workbench).toBeVisible();
+  await expect(nav.getByRole("button", { name: "评语工作台" })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator('.app-motion-switch[data-moving]')).toHaveCount(0);
+  const expanded = await surface.boundingBox();
+  expect(expanded!.y).toBe(original!.y);
+  expect(expanded!.height).toBe(original!.height);
+  expect(expanded!.width).toBeGreaterThan(original!.width);
+  await expect(page.getByRole("button", { name: "展开侧栏", exact: true })).toBeVisible();
+  expect(await workbench.evaluate(node => Boolean(node.closest(".app-work-surface")))).toBe(true);
   await expect(page.getByPlaceholder("AI 授权码")).toHaveCount(0);
-  await expect.poll(() => dialog.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { opacity: style.opacity, transform: style.transform, borderRadius: style.borderRadius };
-  })).toEqual({ opacity: "1", transform: "matrix(1, 0, 0, 1, 0, 0)", borderRadius: "0px" });
-  const shellStyle = await dialog.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { transitionProperty: style.transitionProperty, transitionDuration: style.transitionDuration };
-  });
-  expect(shellStyle).toEqual({ transitionProperty: "opacity, transform, border-radius", transitionDuration: "0.24s, 0.24s, 0.24s" });
-  const paneStyle = await Promise.all([
-    dialog.locator(".comment-workbench-roster"),
-    dialog.locator(".comment-workbench-editor"),
-    dialog.locator(".comment-workbench-materials"),
-  ].map(locator => locator.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { animationName: style.animationName, animationDuration: style.animationDuration, animationDelay: style.animationDelay };
-  })));
-  expect(paneStyle).toEqual([
-    { animationName: "comment-workbench-pane-enter", animationDuration: "0.24s", animationDelay: "0s" },
-    { animationName: "comment-workbench-pane-enter", animationDuration: "0.24s", animationDelay: "0s" },
-    { animationName: "comment-workbench-pane-enter", animationDuration: "0.24s", animationDelay: "0s" },
-  ]);
-  await dialog.getByRole("button", { name: "关闭评语工作台" }).click();
-  await expect(dialog).toHaveAttribute("data-transition-state", "closing");
-  const exitMotion = await Promise.all([
-    dialog.locator(".comment-workbench-topbar"),
-    dialog.locator(".comment-workbench-roster"),
-    dialog.locator(".comment-workbench-editor"),
-    dialog.locator(".comment-workbench-materials"),
-  ].map(locator => locator.evaluate((element) => getComputedStyle(element).animationName)));
-  expect(exitMotion).toEqual([
-    "comment-workbench-pane-enter",
-    "comment-workbench-pane-enter",
-    "comment-workbench-pane-enter",
-    "comment-workbench-pane-enter",
-  ]);
-  await expect(dialog).toBeHidden();
+  const style = await workbench.evaluate(node => ({ position: getComputedStyle(node).position, transform: getComputedStyle(node).transform, modal: node.getAttribute("aria-modal") }));
+  expect(style).toEqual({ position: "relative", transform: "none", modal: null });
+  await workbench.getByRole("button", { name: "返回上一页面" }).click();
+  await expect(workbench).toHaveCount(0);
+  await expect(nav.getByRole("button", { name: /^座位/ })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator('.app-motion-switch[data-moving]')).toHaveCount(0);
+  expect(await surface.boundingBox()).toEqual(original);
+  // Cancel from the sidebar while entry is underway; no full-screen shell may remain.
+  await nav.getByRole("button", { name: "评语工作台" }).click();
+  await nav.getByRole("button", { name: /^座位/ }).click();
+  await expect(workbench).toHaveCount(0);
+  await expect(page.locator('.app-motion-snapshot')).toHaveCount(0);
 });
 
 test("opens student detail from the current comment avatar without a separate detail button", async ({ page }) => {
@@ -715,9 +699,10 @@ test("opens student detail from the current comment avatar without a separate de
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByPlaceholder("姓名", { exact: true }).fill("详情下一位学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
   await page.getByRole("button", { name: "评语工作台" }).click();
 
-  const workbench = page.getByRole("dialog", { name: "评语工作台" });
+  const workbench = page.getByRole("region", { name: "评语工作台" });
   await expect(workbench.getByRole("button", { name: "查看 头像详情学生 的学生详情" })).toBeVisible();
   await expect(workbench.getByRole("button", { name: "查看详情", exact: true })).toHaveCount(0);
   await workbench.getByRole("button", { name: "查看 头像详情学生 的学生详情" }).click();
@@ -746,7 +731,7 @@ test("opens student detail from the current comment avatar without a separate de
   await page.keyboard.press("ArrowLeft");
   await expect(page.getByRole("dialog", { name: "头像详情学生学生详情" })).toBeVisible();
   const layers = await page.evaluate(() => {
-    const workbenchDialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="评语工作台"]');
+    const workbenchDialog = document.querySelector<HTMLElement>('[role="region"][aria-label="评语工作台"]');
     const closeButton = document.querySelector<HTMLElement>('button[aria-label="关闭学生详情"]');
     const detailOverlay = closeButton?.closest<HTMLElement>('.fixed.inset-0');
     if (!workbenchDialog || !detailOverlay) return null;
@@ -754,7 +739,7 @@ test("opens student detail from the current comment avatar without a separate de
     const rect = panel?.getBoundingClientRect();
     const topElement = rect ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + 12) : null;
     return {
-      workbench: Number(getComputedStyle(workbenchDialog).zIndex),
+      workbench: Number(getComputedStyle(workbenchDialog).zIndex) || 0,
       detail: Number(getComputedStyle(detailOverlay).zIndex),
       detailIsTopmost: Boolean(topElement && detailOverlay.contains(topElement)),
     };
@@ -777,7 +762,7 @@ test("previews attention and timeline records inline without interrupting commen
   await page.reload();
   await page.getByRole("button", { name: "评语工作台" }).click();
 
-  const workbench = page.getByRole("dialog", { name: "评语工作台" });
+  const workbench = page.getByRole("region", { name: "评语工作台" });
   await workbench.getByRole("button", { name: /上下文预览学生/ }).first().click();
   const commentEditor = workbench.getByRole("textbox", { name: "评语正文编辑器" });
   await commentEditor.fill("这段评语草稿必须保留。");
@@ -807,9 +792,9 @@ test("previews attention and timeline records inline without interrupting commen
   const taskBPreview = page.getByRole("region", { name: "上下文任务乙事项速览" });
   await expect(taskBPreview).toBeVisible();
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  expect(await taskBPreview.evaluate(element => getComputedStyle(element).transitionDuration)).toContain("0.26s");
+  expect(await taskBPreview.evaluate(element => getComputedStyle(element.closest(".app-motion-collapse")!).transitionDuration)).toContain("0.32s");
   await taskB.click();
-  await expect(taskBPreview).toHaveAttribute("data-phase", "closing");
+  await expect(page.locator('section[aria-label="上下文任务乙事项速览"]')).toBeAttached();
   await expect(page.getByRole("region", { name: "上下文任务乙事项速览" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "创建上下文任务甲事项速览", exact: true }).click();
@@ -887,7 +872,7 @@ test("weekly communication surfaces keep only AI polish and copy actions", async
     gradient: getComputedStyle(button).backgroundImage.includes("linear-gradient"),
     aiTone: button.classList.contains("app-button-ai"),
     alignment: getComputedStyle(button.parentElement!).justifyContent,
-  }))).toEqual({ gradient: true, aiTone: true, alignment: "center" });
+  }))).toEqual({ gradient: false, aiTone: true, alignment: "center" });
   await expect(page.getByRole("button", { name: "复制", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /保存沟通稿|标记已分享|创建后续家校沟通任务/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "分享渠道" })).toHaveCount(0);
@@ -902,7 +887,7 @@ test("weekly communication surfaces keep only AI polish and copy actions", async
     gradient: getComputedStyle(button).backgroundImage.includes("linear-gradient"),
     aiTone: button.classList.contains("app-button-ai"),
     alignment: getComputedStyle(button.parentElement!).justifyContent,
-  }))).toEqual({ gradient: true, aiTone: true, alignment: "center" });
+  }))).toEqual({ gradient: false, aiTone: true, alignment: "center" });
   await expect(weeklyDrawer.getByRole("button", { name: "复制", exact: true })).toBeVisible();
   await expect(weeklyDrawer.getByRole("button", { name: "保存草稿" })).toHaveCount(0);
 });
@@ -924,8 +909,9 @@ test("selected comment text is refined only after teacher confirmation", async (
   await page.getByRole("button", { name: /新增学生/ }).click();
   await page.getByPlaceholder("姓名", { exact: true }).fill("选区测试学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
+  await page.getByRole("button", { name: "关闭工具面板" }).last().click();
   await page.getByRole("button", { name: "评语工作台" }).click();
-  const dialog = page.getByRole("dialog", { name: "评语工作台" });
+  const dialog = page.getByRole("region", { name: "评语工作台" });
   const editor = dialog.getByRole("textbox", { name: "评语正文编辑器" });
   const contextLines = Array.from({ length: 20 }, (_, index) => `第 ${index + 1} 条课堂观察：能够按要求完成当天任务。`).join("\n");
   const original = `${contextLines}\n在数学学习中，她能清楚说明解题过程，也愿意尝试不同方法。`;
@@ -934,7 +920,7 @@ test("selected comment text is refined only after teacher confirmation", async (
     const key = Object.keys(localStorage).find(item => item.startsWith("seat-manager-ai-comment-draft:"));
     return key ? JSON.parse(localStorage.getItem(key) || "{}").generatedComment : "";
   })).toBe(original);
-  await dialog.getByRole("button", { name: "关闭评语工作台" }).click();
+  await dialog.getByRole("button", { name: "返回上一页面" }).click();
   await expect(dialog).toBeHidden();
   await page.getByRole("button", { name: "评语工作台" }).click();
   await expect(editor).toHaveValue(original);
@@ -1145,7 +1131,7 @@ test("creates a class-level followup without a student and supports undo", async
   await page.getByRole("button", { name: /^任务与作业/ }).click();
 
   await expect(page.getByText("不指定学生")).toBeVisible();
-  await page.getByPlaceholder("跟进事项，例如：确认处罚执行情况").fill("准备下周班会材料");
+  await page.getByRole("textbox", { name: "标题", exact: true }).fill("准备下周班会材料");
   await page.getByRole("button", { name: "创建任务", exact: true }).click();
 
   await expect(page.getByText("准备下周班会材料", { exact: true })).toBeVisible();
@@ -1159,7 +1145,7 @@ test("creates a class-level followup without a student and supports undo", async
 test("today completion uses the shared result workflow", async ({ page }) => {
   await login(page);
   await page.getByRole("button", { name: /^任务与作业/ }).click();
-  await page.getByPlaceholder("跟进事项，例如：确认处罚执行情况").fill("今日完成链路测试");
+  await page.getByRole("textbox", { name: "标题", exact: true }).fill("今日完成链路测试");
   await page.getByRole("button", { name: "创建任务", exact: true }).click();
   await page.getByLabel("主导航").getByRole("button", { name: "今日", exact: true }).click();
   await page.getByRole("button", { name: "完成跟进：今日完成链路测试" }).click();
@@ -1194,7 +1180,7 @@ test("today workspace routes into homework and persists the teacher ledger", asy
   const studentOrderBefore = await page.locator("[data-homework-student-id]").evaluateAll(elements => elements.map(element => element.querySelector("strong")?.textContent));
   await page.getByRole("button", { name: "作业学生甲当前待登记，点击设为已交", exact: true }).click();
   await expect(page.getByRole("button", { name: "作业学生甲当前已交，点击设为已交", exact: true })).toBeVisible();
-  const registrationToast = page.getByRole("status").filter({ hasText: "作业学生甲 已设为已交" });
+  const registrationToast = page.getByRole("status").filter({ hasText: "作业已登记，6 秒内再次点击可恢复" });
   await expect(registrationToast).toBeVisible();
   await expect(registrationToast.getByRole("button", { name: "撤销" })).toBeVisible();
   const studentOrderAfter = await page.locator("[data-homework-student-id]").evaluateAll(elements => elements.map(element => element.querySelector("strong")?.textContent));
@@ -1239,7 +1225,7 @@ test("roster, exam, cloud sync and workspace switching keep data isolated", asyn
   await login(page);
 
   await page.getByRole("button", { name: /名单 \/ 备份/ }).click();
-  await page.locator('input[type="file"]').first().setInputFiles({
+  await page.locator('input[type="file"]:not([inert] *)').first().setInputFiles({
     name: "roster.csv",
     mimeType: "text/csv",
     buffer: Buffer.from("姓名,性别\n甲同学,男\n乙同学,女"),
@@ -1249,7 +1235,7 @@ test("roster, exam, cloud sync and workspace switching keep data isolated", asyn
   await expect(page.getByRole("status").filter({ hasText: "导入完成：新增 2 名，当前在班 2 名学生" })).toBeVisible();
 
   await page.getByRole("button", { name: /^成绩/ }).click();
-  await page.locator('input[type="file"]').first().setInputFiles({
+  await page.locator('input[type="file"]:not([inert] *)').first().setInputFiles({
     name: "scores.csv",
     mimeType: "text/csv",
     buffer: Buffer.from("姓名,语文原始分,语文赋分,数学原始分\n甲同学,90,93,95\n乙同学,88,91,92"),
@@ -1332,13 +1318,17 @@ test("BoardUI AI waiting and reduced motion preserve usable results", async ({ p
   await dialog.getByRole("button", { name: "发送", exact: true }).click();
   const status = dialog.getByRole("status", { name: "AI 正在分析" });
   await expect(status).toBeVisible();
-  await expect(status.locator(".ai-loading-track > span")).toHaveCSS("animation-name", "ai-loading-slide");
+  const movingDots = status.locator("[data-agent-thinking-indicator=wave] > span");
+  await expect(movingDots).toHaveCount(9);
+  const originalDots = await movingDots.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).style.opacity));
+  await expect.poll(() => movingDots.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).style.opacity))).not.toEqual(originalDots);
   await expect(status.locator(".ai-generation-orbit, .ai-generation-scan")).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("ai-waiting.png"), animations: "disabled" });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(status.locator(".ai-loading-track > span")).toHaveCSS("animation-name", "none");
+
   const wave = status.locator("[data-agent-thinking-indicator=wave] > span");
   await expect(wave).toHaveCount(9);
+  await expect.poll(() => wave.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).style.opacity))).toEqual(["0.55", "0.3", "0.15", "0.85", "0.55", "0.3", "1", "0.85", "0.55"]);
   const reducedOpacities = await wave.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).style.opacity));
   await page.waitForTimeout(320);
   expect(await wave.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).style.opacity))).toEqual(reducedOpacities);

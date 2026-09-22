@@ -22,7 +22,7 @@ import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuest
 import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
+import { AiGenerationPanel, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 import { toLocalDateKey } from "../../state/dateKey";
@@ -531,23 +531,23 @@ export function ScoresWorkspace({
                 </div>
               )}
               {classAnalysisStatus && <InlineStatus message={classAnalysisStatus} />}
-              {studentAdviceProgress.status && <InlineStatus message={studentAdviceProgress.status} tone="ai" />}
+              {studentAdviceProgress.status && <InlineStatus message={studentAdviceProgress.status} />}
             </div>
           </Panel>
         </aside>
 
         <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
           <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-background-primary-default pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
-          {scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}
+          <MotionSwitch transitionKey={scoreView}>{scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}</MotionSwitch>
         </main>
       </div>
       <DialogPresence open={mappingModalOpen && Boolean(manualMapping)}>
       {mappingModalOpen && manualMapping && (
-        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-text-primary/35 p-5">
-          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-background-primary-default shadow-2xl outline-none">
+        <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
+          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden outline-none">
             <div className="flex items-start justify-between gap-4 border-b border-separator-border px-5 py-4">
               <div>
-                <h3 className="text-title-3-regular text-text-primary" style={{ fontWeight: 900 }}>成绩列映射</h3>
+                <h3 className="text-title-3-semibold text-text-primary">成绩列映射</h3>
                 <p className="mt-1 text-body-regular text-text-secondary">AI 会读取表头和最多 80 行样例，生成后仍可手动调整。</p>
               </div>
               <button
@@ -564,7 +564,7 @@ export function ScoresWorkspace({
               <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-body-regular text-text-primary" style={{ fontWeight: 900 }}>表格预览</div>
+                    <div className="text-body-semibold text-text-primary">表格预览</div>
                     <div className="mt-0.5 text-caption-1-regular text-text-tertiary">{scoreFilename || "成绩表"} · 共 {Math.max(scoreRows.length - 1, 0)} 行数据</div>
                   </div>
                   <span className="rounded-full bg-background-primary-default px-3 py-1 text-caption-1-regular text-text-secondary shadow-sm">显示前 12 行</span>
@@ -597,38 +597,30 @@ export function ScoresWorkspace({
 
               <div className="min-h-0 overflow-y-auto p-4">
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-status-ai-100 bg-status-ai-50 p-3">
+                  <div className="rounded-2xl border border-separator-border bg-background-secondary-default p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <div className="text-body-regular text-status-ai-900" style={{ fontWeight: 900 }}>AI 映射</div>
-                        <div className="mt-0.5 text-caption-1-regular leading-5 text-status-ai-600">先让 AI 填好右侧映射，再由你确认或继续改。</div>
+                        <div className="text-body-semibold text-text-primary">AI 映射</div>
+                        <div className="mt-0.5 text-caption-1-regular leading-5 text-text-tertiary">先让 AI 填好右侧映射，再由你确认或继续改。</div>
                       </div>
-                      <button
-                        type="button"
-                        disabled={aiMappingBusy}
-                        onClick={() => void generateAiMapping()}
-                        className="rounded-xl bg-status-ai-600 px-3 py-2 text-caption-1-regular text-text-white hover:bg-status-ai-700 disabled:opacity-60"
-                        style={{ fontWeight: 900 }}
-                      >
-                        {aiMappingBusy ? "识别中" : "AI 识别"}
-                      </button>
+                      <Button variant="ai" size="sm" disabled={aiMappingBusy} onClick={() => void generateAiMapping()}>{aiMappingBusy ? "识别中" : "AI 识别"}</Button>
                     </div>
                     {!hasAiMappingAuth && (
                       <div className="mt-3 space-y-2">
                         <input
                           value={aiMappingAccessCode}
                           onChange={event => setAiMappingAccessCode(event.target.value)}
-                          className="w-full rounded-xl border border-status-ai-100 bg-background-primary-default px-3 py-2 text-body-regular outline-none focus:border-status-ai-300"
+                          className="w-full rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300"
                           placeholder="输入 AI 授权码"
                         />
-                        <label className="flex items-center gap-2 text-caption-1-regular text-status-ai-700">
+                        <label className="flex items-center gap-2 text-caption-1-regular text-text-secondary">
                           <input type="checkbox" checked={aiMappingRemember} onChange={event => setAiMappingRemember(event.target.checked)} />
                           记住授权码
                         </label>
                       </div>
                     )}
                     {aiMappingSuggestion && (
-                      <div className="mt-3 rounded-xl bg-background-primary-default px-3 py-2 text-caption-1-regular leading-5 text-status-ai-700">
+                      <div className="mt-3 rounded-[var(--app-radius-sm)] border border-separator-border bg-background-primary-default px-3 py-2 text-caption-1-regular leading-5 text-text-secondary">
                         {aiMappingSuggestion.note || "AI 已填入映射，可继续手动修改或直接应用。"}
                       </div>
                     )}
@@ -646,7 +638,7 @@ export function ScoresWorkspace({
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-body-regular text-text-primary" style={{ fontWeight: 900 }}>科目分数列</div>
+                      <div className="text-body-semibold text-text-primary">科目分数列</div>
                       <button
                         type="button"
                         onClick={() => updateManualMapping(mapping => ({

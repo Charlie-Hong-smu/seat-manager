@@ -42,12 +42,12 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
   }, [exam.rows, query]);
 
   return (
-    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-text-primary/35 p-6 backdrop-blur-sm">
-      <div className="modal-panel-enter flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-separator-border bg-background-primary-default shadow-2xl">
+    <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden">
         <div className="shrink-0 px-6 py-4 border-b border-separator-border flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-caption-1-regular text-text-tertiary mb-1">考试表格</div>
-            <h2 className="text-title-2-regular text-text-primary truncate" style={{ fontWeight: 800 }}>{exam.name}</h2>
+            <h2 className="truncate text-title-2-semibold text-text-primary">{exam.name}</h2>
             <div className="mt-1 text-caption-1-regular text-text-tertiary">
               {exam.date || "未填写日期"} · {exam.rows.length} 名学生 · {exam.subjects.length} 个科目
             </div>
@@ -83,7 +83,7 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
                     {subject}
                   </th>
                 ))}
-                <th colSpan={3} className="px-4 py-3 text-center font-semibold border-l border-status-ai-100 bg-status-ai-50/70">
+                <th colSpan={3} className="px-4 py-3 text-center font-semibold border-l border-separator-border bg-accent-50/70">
                   总分
                 </th>
               </tr>
@@ -97,10 +97,10 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
                     </div>
                   </th>
                 ))}
-                <th colSpan={3} className="border-l border-status-ai-100 bg-status-ai-50/70">
+                <th colSpan={3} className="border-l border-separator-border bg-accent-50/70">
                   <div className="grid grid-cols-3">
                     <span className="px-2 py-2">成绩</span>
-                    <span className="px-2 py-2 text-status-ai-600">班排</span>
+                    <span className="px-2 py-2 text-accent-600">班排</span>
                     <span className="px-2 py-2">校排</span>
                   </div>
                 </th>
@@ -123,10 +123,10 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
                       </td>
                     );
                   })}
-                  <td colSpan={3} className="border-l border-status-ai-100 bg-status-ai-50/50">
+                  <td colSpan={3} className="border-l border-separator-border bg-accent-50/50">
                     <div className="grid grid-cols-3 text-center">
-                      <span className="text-status-ai-700" style={{ fontWeight: 800 }}><ScoreValue cell={row.totalCell || { score: row.total }} /></span>
-                      <span className="px-2 py-3 text-status-ai-600">{formatRank(row.rankClass)}</span>
+                      <span className="font-semibold text-accent-700"><ScoreValue cell={row.totalCell || { score: row.total }} /></span>
+                      <span className="px-2 py-3 text-accent-600">{formatRank(row.rankClass)}</span>
                       <span className="px-2 py-3 text-text-secondary">{formatRank(row.rankSchool)}</span>
                     </div>
                   </td>

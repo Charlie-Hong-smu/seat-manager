@@ -8,7 +8,7 @@ import { todayKey } from "../../state/dailyManagement";
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
 import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import { FundTransactionForm } from "../FundTransactionForm";
-import { Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, SelectMenu, useActionToast } from "../ui";
+import { MotionSwitch, Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, SelectMenu, useActionToast } from "../ui";
 import { isValidDateKey, toLocalDateKey } from "../../state/dateKey";
 import { resolveReferencedStudentNames } from "../../state/studentReferences";
 import { createActivityEvent } from "../../state/activityEvents";
@@ -194,7 +194,7 @@ export function ClassFundWorkspace({
             </Card>
           </div>
 
-          {view === "collection" && (
+          <MotionSwitch transitionKey={view}>{view === "collection" && (
             <Card className="surface-enter" title="收缴情况" action={
               <div className="flex items-center gap-2">
                 {incomeCategories.length > 1 && <SelectMenu value={collectionCategory} onChange={value => setCollectionCategory(String(value))} ariaLabel="收缴分类" options={[{ value: "all", label: "全部收入分类" }, ...incomeCategories.map(category => ({ value: category, label: category }))]} />}
@@ -388,7 +388,7 @@ export function ClassFundWorkspace({
                 </div>
               )}
             </div>
-          </div>}
+          </div>}</MotionSwitch>
         </div>
       </div>
       <ConfirmDialog open={confirmClearAll} title="作废全部班费流水？" description={`将把全部 ${transactions.length} 条交易记录标记为已作废。原金额和审计记录会保留，统计默认排除作废项；操作后可在 6 秒内撤销。`} confirmLabel="确认全部作废" onCancel={() => setConfirmClearAll(false)} onConfirm={() => {

@@ -1,6 +1,6 @@
 import { followupStudentLabel, getFollowupStudentIds } from "./followupStudents";
 import type { ActivityEvent, BusinessEntityRef, FollowupTask, SeatManagerState, StudentId } from "./types";
-import { toLocalDateKey } from "./dateKey";
+import { timestampToLocalDateKey, toLocalDateKey } from "./dateKey";
 import { resolveGradeStudent } from "./gradeStudentIdentity";
 
 export type TimelineType = "学生记录" | "出勤" | "跟进" | "作业" | "沟通稿" | "宿舍" | "成绩" | "班费";
@@ -109,7 +109,7 @@ export function buildTimeline(state: SeatManagerState, today = toLocalDateKey())
   state.activityEvents.forEach(event => {
     const studentIds = Array.from(new Set([...(event.studentIds || []), ...(event.ref.studentId ? [event.ref.studentId] : [])]));
     const names = studentIds.map(id => studentMap.get(id)).filter(Boolean) as string[];
-    items.push(finishItem({ id: event.id, date: event.occurredAt.slice(0, 10), occurredAt: event.occurredAt, type: activityType(event), title: event.title, studentId: studentIds[0], studentIds, studentName: names.join("、") || undefined, detail: event.detail, tone: event.action === "deleted" ? "muted" : event.action === "status_changed" ? "success" : "normal", isAi: event.ref.domain === "ai", target: targetFromBusinessRef(event.ref) }));
+    items.push(finishItem({ id: event.id, date: timestampToLocalDateKey(event.occurredAt), occurredAt: event.occurredAt, type: activityType(event), title: event.title, studentId: studentIds[0], studentIds, studentName: names.join("、") || undefined, detail: event.detail, tone: event.action === "deleted" ? "muted" : event.action === "status_changed" ? "success" : "normal", isAi: event.ref.domain === "ai", target: targetFromBusinessRef(event.ref) }));
   });
   state.students.forEach(student => student.records.forEach(record => {
     if (studentRecordActivityKeys.has(`${student.id}:${record.id}`)) return;
@@ -159,19 +159,19 @@ export function buildTimeline(state: SeatManagerState, today = toLocalDateKey())
     }));
   });
   state.followupTasks.filter(task => !activityKeys.has(`followup:${task.id}`)).forEach(task => items.push(finishItem({
-    id: `task-${task.id}`, date: task.updatedAt.slice(0, 10) || task.plannedDate, occurredAt: safeOccurredAt(task.updatedAt.slice(0, 10) || task.plannedDate, task.updatedAt), type: "跟进", title: task.title,
+    id: `task-${task.id}`, date: timestampToLocalDateKey(task.updatedAt) || task.plannedDate, occurredAt: safeOccurredAt(timestampToLocalDateKey(task.updatedAt) || task.plannedDate, task.updatedAt), type: "跟进", title: task.title,
     studentId: task.studentId || undefined, studentIds: getFollowupStudentIds(task), studentName: followupStudentLabel(task, studentMap),
     detail: `旧数据汇总 · ${task.status === "completed" ? "已完成" : task.status === "cancelled" ? "已取消" : `截止 ${task.dueDate || "未设置"}`}`,
     tone: taskTone(task, today), isAi: task.source === "ai",
     target: { kind: "workspace", workspace: "followups", entityId: task.id, studentId: task.studentId || undefined },
   })));
   state.homeworkAssignments.filter(assignment => !activityKeys.has(`homework:${assignment.id}`)).forEach(assignment => items.push(finishItem({
-    id: `homework-${assignment.id}`, date: assignment.updatedAt.slice(0, 10) || assignment.assignedDate, occurredAt: safeOccurredAt(assignment.updatedAt.slice(0, 10) || assignment.assignedDate, assignment.updatedAt), type: "作业", title: assignment.title,
+    id: `homework-${assignment.id}`, date: timestampToLocalDateKey(assignment.updatedAt) || assignment.assignedDate, occurredAt: safeOccurredAt(timestampToLocalDateKey(assignment.updatedAt) || assignment.assignedDate, assignment.updatedAt), type: "作业", title: assignment.title,
     detail: `旧数据汇总 · ${assignment.subject || "未分类"} · 截止 ${assignment.dueDate}`, tone: assignment.dueDate < today ? "reminder" : "normal",
     target: { kind: "workspace", workspace: "followups", entityId: assignment.id },
   })));
   state.communicationDrafts.filter(draft => !activityKeys.has(`communication:${draft.id}`)).forEach(draft => items.push(finishItem({
-    id: `communication-${draft.id}`, date: draft.updatedAt.slice(0, 10), occurredAt: safeOccurredAt(draft.updatedAt.slice(0, 10), draft.updatedAt), type: "沟通稿", title: draft.scope === "student" ? "个人周沟通稿" : "班级周报",
+    id: `communication-${draft.id}`, date: timestampToLocalDateKey(draft.updatedAt), occurredAt: safeOccurredAt(timestampToLocalDateKey(draft.updatedAt), draft.updatedAt), type: "沟通稿", title: draft.scope === "student" ? "个人周沟通稿" : "班级周报",
     studentId: draft.studentId, studentIds: draft.studentId ? [draft.studentId] : [], studentName: draft.studentId ? studentMap.get(draft.studentId) || "未知学生" : undefined, detail: `旧数据汇总 · ${draft.startDate} 至 ${draft.endDate} · ${draft.deliveryStatus === "shared" ? `已通过${draft.channel || "其他方式"}分享` : draft.generatedBy === "ai" ? "AI 润色" : "本地草稿"}`, tone: draft.deliveryStatus === "shared" ? "success" : "normal", isAi: draft.generatedBy === "ai",
     target: draft.studentId ? { kind: "student", entityId: draft.studentId, studentId: draft.studentId, studentTab: "followup" } : { kind: "workspace", workspace: "today", entityId: draft.id },
   })));

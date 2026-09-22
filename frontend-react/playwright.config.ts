@@ -1,13 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const commercial = process.env.E2E_EDITION === "commercial";
-const port = commercial ? 4174 : 4173;
+const port = Number(process.env.E2E_PORT) || (commercial ? 4174 : 4173);
 const basePath = commercial ? "/" : "/seat-manager/";
 
 export default defineConfig({
   workers: process.env.CI ? undefined : 1,
   testDir: "./e2e",
-  testMatch: commercial ? ["commercial.spec.ts", "followup-grouping.spec.ts"] : ["app-state.spec.ts", "pwa.spec.ts", "followup-grouping.spec.ts"],
+  testMatch: commercial ? ["commercial.spec.ts", "followup-grouping.spec.ts", "seat-mode-transition.spec.ts", "functional-state.spec.ts", "registration-settings.spec.ts", "workbench-safety.spec.ts", "class-duties.spec.ts", "app-motion.spec.ts"] : ["app-state.spec.ts", "pwa.spec.ts", "followup-grouping.spec.ts", "seat-mode-transition.spec.ts", "functional-state.spec.ts", "registration-settings.spec.ts", "workbench-safety.spec.ts", "class-duties.spec.ts", "app-motion.spec.ts"],
   outputDir: "./test-results",
   reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   use: {

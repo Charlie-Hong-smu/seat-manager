@@ -4,7 +4,7 @@ import { useState } from "react";
 import { generateAiWeeklyDraft } from "../state/teacherAiService";
 import { buildLocalWeeklyDraft, buildWeeklyFacts, getWeekRange } from "../state/teacherWorkbench";
 import type { AppStudent, AttendanceRecord, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment } from "../state/types";
-import { AiGenerationPanel, Button } from "./ui";
+import { MotionSwitch, AiGenerationPanel, Button } from "./ui";
 
 export function StudentCommunicationPanel({ student, students, attendance, tasks, homework, dormitories, drafts }: { student: AppStudent; students: AppStudent[]; attendance: AttendanceRecord[]; tasks: FollowupTask[]; homework: HomeworkAssignment[]; dormitories: Dormitory[]; drafts: CommunicationDraft[] }) {
   const range = getWeekRange();
@@ -26,5 +26,5 @@ export function StudentCommunicationPanel({ student, students, attendance, tasks
     setStatus("沟通稿已复制，可粘贴到家长群或私聊。");
   }
 
-  return <div className="space-y-4">{busy ? <AiGenerationPanel title={`正在整理 ${student.name} 的沟通稿`} steps={["核对本周事实", "组织家校表达", "生成可编辑草稿"]}/> : <><div className="flex flex-wrap gap-2">{facts.map(fact => <span key={fact} className="rounded-full bg-background-tertiary-default px-3 py-1 text-caption-1-regular text-text-secondary">{fact}</span>)}</div><textarea rows={12} value={content} onChange={event => setContent(event.target.value)} className="w-full resize-y rounded-xl border border-border-button-default px-3 py-3 text-body-regular leading-6 outline-none focus:border-accent-300"/><div className="flex flex-wrap justify-center gap-2"><Button variant="ai" onClick={() => void enhance()}><Sparkles className="h-4 w-4"/>AI 润色</Button><Button variant="secondary" disabled={!content.trim()} onClick={() => void copyDraft()}><Clipboard className="h-4 w-4"/>复制</Button></div></>}{status && <p className="text-caption-1-regular leading-5 text-text-secondary">{status}</p>}</div>;
+  return <div className="space-y-4"><MotionSwitch transitionKey={busy ? "loading" : "draft"} contentClassName="space-y-4">{busy ? <AiGenerationPanel title={`正在整理 ${student.name} 的沟通稿`} steps={["核对本周事实", "组织家校表达", "生成可编辑草稿"]}/> : <><div className="flex flex-wrap gap-2">{facts.map(fact => <span key={fact} className="rounded-full bg-background-tertiary-default px-3 py-1 text-caption-1-regular text-text-secondary">{fact}</span>)}</div><textarea rows={12} value={content} onChange={event => setContent(event.target.value)} className="w-full resize-y rounded-xl border border-border-button-default px-3 py-3 text-body-regular leading-6 outline-none focus:border-accent-300"/><div className="flex flex-wrap justify-center gap-2"><Button variant="ai" onClick={() => void enhance()}><Sparkles className="h-4 w-4"/>AI 润色</Button><Button variant="secondary" disabled={!content.trim()} onClick={() => void copyDraft()}><Clipboard className="h-4 w-4"/>复制</Button></div></>}</MotionSwitch>{status && <p className="text-caption-1-regular leading-5 text-text-secondary">{status}</p>}</div>;
 }

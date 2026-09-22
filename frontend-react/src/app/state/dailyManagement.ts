@@ -1,5 +1,5 @@
 import type { AppStudent, AttendanceRecord, AttendanceStatus, BusinessDomain, DrawSession, FollowupTask, FollowupTaskSource, FollowupTaskStatus, StudentId } from "./types";
-import { isValidDateKey, toLocalDateKey } from "./dateKey";
+import { isValidDateKey, timestampToLocalDateKey, toLocalDateKey } from "./dateKey";
 import { followupHasStudent, getFollowupStudentIds, isIndividualFollowup } from "./followupStudents";
 
 function id(prefix: string): string {
@@ -138,6 +138,11 @@ export function getTaskUrgency(task: FollowupTask, today = todayKey()): "overdue
   if (task.dueDate < today) return "overdue";
   if (task.dueDate === today) return "today";
   return "upcoming";
+}
+
+export function getDueFollowupNotifications(tasks: FollowupTask[], today = todayKey()): FollowupTask[] {
+  return tasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task, today))
+    && timestampToLocalDateKey(task.lastNotifiedAt) !== today);
 }
 
 export function retainDrawSessions(sessions: DrawSession[]): DrawSession[] {

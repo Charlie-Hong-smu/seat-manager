@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, Clipboard, Loader2, MessageSquareText, PlusCircle, Save, Sparkles, Star, Target } from "lucide-react";
+import { AlertTriangle, Check, Clipboard, FilePlus2, Loader2, MessageSquareText, PlusCircle, Save, Sparkles, Star, Target } from "lucide-react";
 
 import {
   generateStudentFollowup,
@@ -9,7 +9,7 @@ import {
   type AiStudentFollowupResult,
 } from "../state/aiStudentFollowupService";
 import type { AppStudent } from "../state/types";
-import { AiGenerationPanel, useAppDialog } from "./ui";
+import { AiGenerationPanel, Button, Checkbox, IconButton, Input, useAppDialog } from "./ui";
 
 interface Props {
   student: AppStudent;
@@ -48,7 +48,6 @@ function buildRecordText(result: AiStudentFollowupResult): string {
 export function AiStudentFollowupPanel({
   student,
   context,
-  compact = false,
   onSaveRecord,
   onAppendCommentMaterial,
   onCreateTask,
@@ -57,6 +56,7 @@ export function AiStudentFollowupPanel({
   const [result, setResult] = useState<AiStudentFollowupResult | null>(() => readLastStudentFollowup(student.id));
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(() => readLastStudentFollowup(student.id) ? "已恢复上次生成的 AI 跟进建议。" : "AI 会结合成绩、标签、记录、宿舍和座位信息生成跟进建议。");
+  const [statusError, setStatusError] = useState(false);
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiFollowupAuth());
@@ -73,6 +73,7 @@ export function AiStudentFollowupPanel({
     setSavedMaterial(false);
     setResultVisible(Boolean(cached));
     setStatus(cached ? "已恢复上次生成的 AI 跟进建议。" : "AI 会结合成绩、标签、记录、宿舍和座位信息生成跟进建议。");
+    setStatusError(false);
     return () => {
       if (revealFrame.current !== null) window.cancelAnimationFrame(revealFrame.current);
     };
@@ -96,6 +97,7 @@ export function AiStudentFollowupPanel({
     setSavedRecord(false);
     setSavedMaterial(false);
     setStatus(`正在为 ${student.name} 生成跟进建议...`);
+    setStatusError(false);
     try {
       const next = await generateStudentFollowup(student, context || {}, {
         accessCode,
@@ -106,6 +108,7 @@ export function AiStudentFollowupPanel({
       setAccessCode("");
       setHasAuth(true);
       setStatus(next.disclaimer);
+      setStatusError(false);
       setBusy(false);
       revealFrame.current = window.requestAnimationFrame(() => {
         revealFrame.current = window.requestAnimationFrame(() => {
@@ -116,6 +119,7 @@ export function AiStudentFollowupPanel({
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       setStatus(getAiErrorMessage(reason));
+      setStatusError(true);
       setHasAuth(hasStoredAiFollowupAuth());
       setBusy(false);
       setResultVisible(Boolean(result));
@@ -128,6 +132,7 @@ export function AiStudentFollowupPanel({
     }
     navigator.clipboard.writeText(result.parentMessageDraft).then(() => {
       setStatus("家校沟通草稿已复制。");
+      setStatusError(false);
     }).catch(() => {});
   }
 
@@ -145,6 +150,7 @@ export function AiStudentFollowupPanel({
     onSaveRecord(text);
     setSavedRecord(true);
     setStatus("已保存到学生记录。");
+    setStatusError(false);
   }
 
   async function appendMaterial() {
@@ -157,6 +163,7 @@ export function AiStudentFollowupPanel({
     onAppendCommentMaterial(materialText);
     setSavedMaterial(true);
     setStatus("已加入评语补充说明。");
+    setStatusError(false);
   }
 
   async function createTask() {
@@ -165,150 +172,116 @@ export function AiStudentFollowupPanel({
     if (!await appDialog.confirm({ title: "转为待办任务？", description: `将根据这条 AI 建议为 ${student.name} 预填待办任务，请在下一步确认日期和内容。`, confirmLabel: "继续填写", variant: "primary" })) return;
     onCreateTask({ title: title.slice(0, 80), description: buildRecordText(result).slice(0, 800) });
     setStatus("已打开待办任务表单，请确认内容后创建。");
+    setStatusError(false);
   }
 
   return <>
-    <section className={`surface-enter overflow-hidden rounded-2xl border border-status-ai-100 bg-background-primary-default shadow-sm ${compact ? "" : "shadow-status-ai-100/40"}`}>
-      <div className="flex items-start justify-between gap-3 border-b border-status-ai-50 bg-status-ai-50/50 px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-status-ai-600 text-text-white">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <h3 className="truncate text-body-regular text-text-primary" style={{ fontWeight: 900 }}>AI 跟进建议</h3>
-              <p className="mt-0.5 truncate text-caption-1-regular text-status-ai-500">{student.name} · 关注、沟通、评语素材</p>
-            </div>
+    <section className="surface-enter overflow-hidden rounded-2xl border border-[var(--app-border)] bg-background-primary-default shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-separator-border px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Sparkles aria-hidden="true" className="size-4 shrink-0 text-status-ai-500" />
+          <div className="min-w-0">
+            <h3 className="truncate text-body-semibold text-text-primary">AI 跟进建议</h3>
+            <p className="mt-0.5 truncate text-caption-1-regular text-text-tertiary">{student.name} · 关注、沟通、评语素材</p>
           </div>
         </div>
-        <button
-          onClick={() => void handleGenerate(true)}
-          disabled={busy}
-          className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-status-ai-600 px-3 text-body-regular text-text-white transition-colors hover:bg-status-ai-700 disabled:opacity-60"
-          style={{ fontWeight: 800 }}
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+        <Button variant="ai" size="sm" onClick={() => void handleGenerate(true)} disabled={busy}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Sparkles className="h-4 w-4" />}
           {hasResult ? "重新生成" : "生成"}
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-4 p-4">
         {!hasAuth && (
-          <div className="flex items-center gap-2 rounded-2xl bg-status-ai-50 p-3">
-            <input
-              type="password"
-              value={accessCode}
-              onChange={event => setAccessCode(event.target.value)}
-              placeholder="AI 授权码"
-              className="h-9 min-w-0 flex-1 rounded-xl border border-status-ai-100 bg-background-primary-default px-3 text-body-regular outline-none focus:border-status-ai-300"
-            />
-            <label className="flex shrink-0 items-center gap-1 text-caption-1-regular text-status-ai-700">
-              <input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-status-ai-600" />
-              记住
-            </label>
+          <div className="flex items-end gap-3 rounded-[var(--app-radius-sm)] bg-background-secondary-default p-3">
+            <div className="min-w-0 flex-1"><Input type="password" label="AI 授权码" value={accessCode} onChange={setAccessCode} placeholder="输入授权码" /></div>
+            <Checkbox isSelected={rememberAuth} onChange={setRememberAuth}>记住</Checkbox>
           </div>
         )}
 
         {busy && <AiGenerationPanel title="正在生成学生跟进建议" steps={["整理学生表现", "提炼关注重点", "形成跟进建议"]} />}
 
         {!busy && !result && (
-          <div className="grid place-items-center rounded-2xl border border-dashed border-status-ai-100 bg-status-ai-50/40 px-4 py-8 text-center">
-            <div className="max-w-sm">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-background-primary-default text-status-ai-600 shadow-sm">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <p className="mt-3 text-body-regular leading-6 text-text-secondary">生成后会给出可保存的跟进记录、可复制的家校沟通草稿，以及可加入评语工作台的素材。</p>
-            </div>
+          <div className="grid place-items-center rounded-[var(--app-radius-md)] border border-dashed border-[var(--app-border)] px-4 py-8 text-center">
+            <p className="max-w-sm text-body-regular leading-6 text-text-secondary">生成后会给出可保存的跟进记录、可复制的家校沟通草稿，以及可加入评语工作台的素材。</p>
           </div>
         )}
 
-        <div aria-hidden={!result || busy || !resultVisible} inert={!result || busy || !resultVisible ? true : undefined} className={`grid transition-[grid-template-rows,opacity,transform] duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${result && !busy && resultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
+        <div aria-hidden={!result || busy || !resultVisible} inert={!result || busy || !resultVisible ? true : undefined} className={`grid transition-[grid-template-rows,opacity,transform] duration-[320ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${result && !busy && resultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
           <div className="overflow-hidden">
-          {result && <div className="ai-followup-result-enter space-y-3 pb-0.5">
-            <div className="rounded-2xl border border-separator-border bg-background-secondary-default p-3">
-              <div className="mb-1 flex items-center gap-1.5 text-caption-1-regular text-text-secondary" style={{ fontWeight: 900 }}>
-                <Target className="h-3.5 w-3.5 text-status-ai-500" />近期判断
+          {result && <div className="divide-y divide-separator-border pb-0.5">
+            <div className="pb-3">
+              <div className="mb-1 flex items-center gap-1.5 text-caption-1-semibold text-text-tertiary">
+                <Target className="h-3.5 w-3.5" />近期判断
               </div>
               <p className="text-body-regular leading-6 text-text-primary">{result.summary || "资料较少，建议先补充课堂观察和近期记录。"}</p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-status-danger-100 bg-status-danger-50/60 p-3">
-                <div className="mb-2 flex items-center gap-1.5 text-caption-1-regular text-status-danger-500" style={{ fontWeight: 900 }}>
-                  <AlertTriangle className="h-3.5 w-3.5" />关注点
+            <div className="grid gap-4 py-3 sm:grid-cols-2">
+              <div>
+                <div className="mb-1.5 flex items-center gap-1.5 text-caption-1-semibold text-text-tertiary">
+                  <AlertTriangle className={`h-3.5 w-3.5 ${result.riskSignals.length ? "text-status-warning-500" : ""}`} />关注点
                 </div>
-                <div className="space-y-1.5">
+                <ul className="space-y-1.5">
                   {(result.riskSignals.length ? result.riskSignals : ["暂未发现明确风险，建议继续观察。"]).map(item => (
-                    <div key={item} className="rounded-xl bg-background-primary-default/70 px-2.5 py-1.5 text-caption-1-regular leading-5 text-status-danger-700">{item}</div>
+                    <li key={item} className="flex gap-1.5 text-caption-1-regular leading-5 text-text-secondary"><span aria-hidden="true" className={result.riskSignals.length ? "text-status-warning-500" : "text-text-tertiary"}>•</span><span className="min-w-0">{item}</span></li>
                   ))}
-                </div>
+                </ul>
               </div>
-              <div className="rounded-2xl border border-status-success-100 bg-status-success-50/60 p-3">
-                <div className="mb-2 flex items-center gap-1.5 text-caption-1-regular text-status-success-600" style={{ fontWeight: 900 }}>
-                  <Star className="h-3.5 w-3.5" />可表扬
+              <div>
+                <div className="mb-1.5 flex items-center gap-1.5 text-caption-1-semibold text-text-tertiary">
+                  <Star className="h-3.5 w-3.5 text-status-success-500" />可表扬
                 </div>
-                <div className="space-y-1.5">
+                <ul className="space-y-1.5">
                   {(result.strengths.length ? result.strengths : ["可补充课堂表现后再提炼亮点。"]).map(item => (
-                    <div key={item} className="rounded-xl bg-background-primary-default/70 px-2.5 py-1.5 text-caption-1-regular leading-5 text-status-success-700">{item}</div>
+                    <li key={item} className="flex gap-1.5 text-caption-1-regular leading-5 text-text-secondary"><span aria-hidden="true" className={result.strengths.length ? "text-status-success-500" : "text-text-tertiary"}>•</span><span className="min-w-0">{item}</span></li>
                   ))}
-                </div>
+                </ul>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-accent-100 bg-accent-50/50 p-3">
-              <div className="mb-2 flex items-center gap-1.5 text-caption-1-regular text-accent-600" style={{ fontWeight: 900 }}>
+            <div className="py-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-caption-1-semibold text-text-tertiary">
                 <PlusCircle className="h-3.5 w-3.5" />下一步动作
               </div>
-              <div className="grid gap-2">
+              <ol className="grid gap-2">
                 {result.actions.map((item, index) => (
-                  <div key={`${index}-${item}`} className="flex gap-2 rounded-xl bg-background-primary-default px-3 py-2 text-body-regular leading-6 text-text-primary shadow-sm shadow-blue-100/40">
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent-600 text-caption-1-regular text-text-white" style={{ fontWeight: 900 }}>{index + 1}</span>
-                    <span>{item}</span>
-                  </div>
+                  <li key={`${index}-${item}`} className="flex gap-2.5 text-body-regular leading-6 text-text-primary">
+                    <span className="grid h-5 w-5 shrink-0 translate-y-0.5 place-items-center rounded-full bg-background-tertiary-default text-[11px] font-semibold text-text-secondary">{index + 1}</span>
+                    <span className="min-w-0">{item}</span>
+                  </li>
                 ))}
-              </div>
+              </ol>
             </div>
 
             {result.parentMessageDraft && (
-              <div className="rounded-2xl border border-separator-border bg-background-primary-default p-3 shadow-sm">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-1.5 text-caption-1-regular text-text-secondary" style={{ fontWeight: 900 }}>
-                    <MessageSquareText className="h-3.5 w-3.5 text-status-ai-500" />家校沟通草稿
+              <div className="py-3">
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 text-caption-1-semibold text-text-tertiary">
+                    <MessageSquareText className="h-3.5 w-3.5" />家校沟通草稿
                   </div>
-                  <button onClick={copyParentDraft} className="flex h-7 items-center gap-1 rounded-lg bg-background-tertiary-default px-2.5 text-caption-1-regular text-text-secondary hover:bg-background-tertiary-hover" style={{ fontWeight: 800 }}>
-                    <Clipboard className="h-3.5 w-3.5" />复制
-                  </button>
+                  <IconButton label="复制家校沟通草稿" size="xs" variant="ghost" onClick={copyParentDraft}><Clipboard className="h-3.5 w-3.5" /></IconButton>
                 </div>
                 <p className="text-body-regular leading-6 text-text-primary">{result.parentMessageDraft}</p>
               </div>
             )}
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                onClick={saveRecord}
-                disabled={!onSaveRecord || savedRecord}
-                className="flex h-10 items-center justify-center gap-2 rounded-xl bg-text-primary text-body-regular text-text-white transition-colors hover:bg-black disabled:bg-background-tertiary-default disabled:text-text-tertiary"
-                style={{ fontWeight: 850 }}
-              >
+            <div className="flex flex-wrap gap-2 pt-3">
+              <Button variant="secondary" size="sm" onClick={saveRecord} disabled={!onSaveRecord || savedRecord}>
                 {savedRecord ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
                 {savedRecord ? "已存记录" : "存入学生记录"}
-              </button>
-              <button
-                onClick={appendMaterial}
-                disabled={!onAppendCommentMaterial || !materialText || savedMaterial}
-                className="flex h-10 items-center justify-center gap-2 rounded-xl bg-status-ai-600 text-body-regular text-text-white transition-colors hover:bg-status-ai-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"
-                style={{ fontWeight: 850 }}
-              >
-                {savedMaterial ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={appendMaterial} disabled={!onAppendCommentMaterial || !materialText || savedMaterial}>
+                {savedMaterial ? <Check className="h-4 w-4" /> : <FilePlus2 className="h-4 w-4" />}
                 {savedMaterial ? "已加入说明" : "加入评语补充说明"}
-              </button>
+              </Button>
+              {onCreateTask && <Button variant="ghost" size="sm" onClick={createTask}><PlusCircle className="h-4 w-4" />转为待办任务</Button>}
             </div>
-            {onCreateTask && <button onClick={createTask} className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-status-ai-200 bg-background-primary-default text-body-semibold text-status-ai-700 hover:bg-status-ai-50"><PlusCircle className="h-4 w-4" />转为待办任务</button>}
           </div>}
           </div>
         </div>
 
-        <p className="text-caption-1-regular leading-5 text-status-ai-600">{status}</p>
+        <p className={`text-caption-1-regular leading-5 ${statusError ? "text-status-danger-600" : "text-text-tertiary"}`} aria-live="polite">{status}</p>
       </div>
     </section>
     {appDialog.dialog}

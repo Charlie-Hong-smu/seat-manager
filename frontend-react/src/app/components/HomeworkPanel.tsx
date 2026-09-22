@@ -1,3 +1,4 @@
+import { useRegistrationUndo } from "../hooks/useRegistrationUndo";
 import { isValidDateKey } from "../state/dateKey";
 import { useWorkspaceDraftState } from "../hooks/useWorkspaceDraftState";
 import { followupHasStudent } from "../state/followupStudents";
@@ -8,9 +9,9 @@ import { useInitialTargetEffect } from "../hooks/useInitialTargetEffect";
 import { todayKey } from "../state/dailyManagement";
 import { createActivityEvent } from "../state/activityEvents";
 import { matchesStudentSearch } from "../state/studentSearch";
-import type { ActivityEvent, AppStudent, FollowupTask, HomeworkAssignment, HomeworkStudentStatus, StudentId } from "../state/types";
+import type { ActivityEvent, AppStudent, FollowupTask, HomeworkAssignment, HomeworkStudentStatus, HomeworkStudentState, StudentId } from "../state/types";
 import { LinkedTaskBadge } from "./LinkedWorkflow";
-import { Button, Card, DatePicker, MetricStrip, SegmentedControl, SelectMenu, ToolDrawer, useActionToast, useAppDialog, Input, Textarea } from "./ui";
+import { MotionList, MotionSwitch, Button, Card, DatePicker, MetricStrip, SegmentedControl, SelectMenu, ToolDrawer, useActionToast, useAppDialog, Input, Textarea } from "./ui";
 
 const STATUS_OPTIONS: Array<{ value: HomeworkStudentStatus; label: string }> = [
   { value: "unrecorded", label: "待登记" },
@@ -44,7 +45,6 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
   const appDialog = useAppDialog();
   const actionToast = useActionToast();
   const assignmentsRef = useRef(assignments);
-  const undoActivityRef = useRef<(() => void) | null>(null);
   const feedbackTimerRef = useRef<number | null>(null);
   assignmentsRef.current = assignments;
   const [title, setTitle] = useWorkspaceDraftState("homework:new:title", "");
@@ -56,7 +56,6 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
   const [markStatus, setMarkStatus] = useState<HomeworkStudentStatus>("submitted");
   const [filter, setFilter] = useState<"all" | HomeworkStudentStatus>("all");
   const [search, setSearch] = useState("");
-  const [undoAssignments, setUndoAssignments] = useState<HomeworkAssignment[] | null>(null);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [draftSubjects, setDraftSubjects] = useState<string[]>(subjectCatalog);
   const [newSubject, setNewSubject] = useWorkspaceDraftState("homework:new:newSubject", "");
@@ -70,6 +69,18 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
   const [recentUpdate, setRecentUpdate] = useState<{ studentId: StudentId; message: string } | null>(null);
   const visibleAssignments = assignments.filter(item => (item.lifecycle || "active") === lifecycleFilter);
   const selected = visibleAssignments.find(item => item.id === selectedId) || visibleAssignments[0];
+
+  const registration = useRegistrationUndo<HomeworkStudentState>({ scope: `homework:${selected?.id || ""}`, entries: selected?.studentStates || {}, onRestore: values => {
+    const now = new Date().toISOString();
+    const next = assignmentsRef.current.map(item => {
+      if (item.id !== selected?.id) return item;
+      const studentStates = { ...item.studentStates };
+      Object.entries(values).forEach(([id, value]) => { if (value) studentStates[id] = value; else delete studentStates[id]; });
+      return { ...item, studentStates, updatedAt: now };
+    });
+    assignmentsRef.current = next;
+    onChange(next);
+  } });
 
   const participantIds = useMemo(() => new Set(selected?.participantStudentIds?.length ? selected.participantStudentIds : Object.keys(selected?.studentStates || {})), [selected]);
   const participantStudents = useMemo(() => students.filter(student => participantIds.has(student.id)), [participantIds, students]);
@@ -125,36 +136,27 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
     });
   }
 
-  function updateStudents(studentIds: StudentId[], status: HomeworkStudentStatus): boolean {
-    if (!selected || !studentIds.length) return false;
+  function updateStudents(studentIds: StudentId[], status: HomeworkStudentStatus, repeat = false) {
+    if (!selected || !studentIds.length) return undefined;
+    if (repeat && studentIds.length === 1 && registration.tryRevert(studentIds[0], status)) { actionToast.show("已恢复上次作业状态"); return undefined; }
     const changedIds = studentIds.filter(studentId => studentStates.get(studentId) !== status);
-    if (!changedIds.length) return false;
-    const previous = assignments;
+    if (!changedIds.length) return undefined;
     const now = new Date().toISOString();
-    setUndoAssignments(previous);
-    onChange(assignments.map(item => item.id === selected.id ? {
-      ...item,
-      studentStates: { ...item.studentStates, ...Object.fromEntries(changedIds.map(studentId => [studentId, { status, note: item.studentStates[studentId]?.note || "", updatedAt: now }])) },
-      updatedAt: now,
-    } : item));
+    const nextStates = { ...selected.studentStates, ...Object.fromEntries(changedIds.map(studentId => [studentId, { status, note: selected.studentStates[studentId]?.note || "", updatedAt: now }])) };
     const undoActivity = onActivity?.(createActivityEvent({ action: "status_changed", ref: { domain: "homework", entityId: selected.id }, studentIds: changedIds, title: `登记作业：${selected.title}`, detail: `${changedIds.length} 人设为${STATUS_META[status].label}` }));
-    undoActivityRef.current = typeof undoActivity === "function" ? undoActivity : null;
-    return true;
+    const undo = registration.record(nextStates, repeat ? status : undefined, undoActivity);
+    const next = assignments.map(item => item.id === selected.id ? { ...item, studentStates: nextStates, updatedAt: now } : item);
+    assignmentsRef.current = next;
+    onChange(next);
+    if (undo) actionToast.show({ message: repeat ? "作业已登记，6 秒内再次点击可恢复" : "作业状态已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5"/>, onAction: () => { undo(); }, duration: 6000 });
+    return undo;
   }
 
   function markStudent(student: AppStudent) {
-    const previous = assignments;
-    const changed = updateStudents([student.id], markStatus);
+    updateStudents([student.id], markStatus, true);
     if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
-    setRecentUpdate({ studentId: student.id, message: changed ? `${student.name} 已设为${STATUS_META[markStatus].label}` : `${student.name} 已是${STATUS_META[markStatus].label}` });
+    setRecentUpdate({ studentId: student.id, message: `${student.name} 作业状态已更新` });
     feedbackTimerRef.current = window.setTimeout(() => setRecentUpdate(null), 1400);
-    if (changed) actionToast.show({
-      message: `${student.name} 已设为${STATUS_META[markStatus].label}`,
-      actionLabel: "撤销",
-      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
-      onAction: () => { onChange(previous); undoActivityRef.current?.(); undoActivityRef.current = null; setUndoAssignments(null); setRecentUpdate(null); },
-      duration: 6000,
-    });
   }
 
   function updateStudentNote(studentId: StudentId, studentNote: string) {
@@ -168,16 +170,11 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
     const confirmed = await appDialog.confirm({ title: "全部设为已交？", description: `将“${selected.title}”的 ${participantStudents.length} 名参与学生全部设为已交。操作后仍可撤销或单独修改异常学生。`, confirmLabel: "全部设为已交" });
     if (!confirmed) return;
     updateStudents(participantStudents.map(student => student.id), "submitted");
-    const previous = assignments;
-    actionToast.show({ message: `${participantStudents.length} 名学生已全部设为已交`, actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5"/>, onAction: () => { onChange(previous); undoActivityRef.current?.(); undoActivityRef.current = null; setUndoAssignments(null); }, duration: 6000 });
   }
 
   function undoLastRegistration() {
-    if (!undoAssignments) return;
-    onChange(undoAssignments);
-    undoActivityRef.current?.();
-    undoActivityRef.current = null;
-    setUndoAssignments(null);
+    registration.undoLast();
+    actionToast.dismiss();
   }
 
   function openCatalog() {
@@ -265,27 +262,27 @@ export function HomeworkPanel({ students, assignments, tasks, subjectCatalog, on
           <Button className="w-full" disabled={!title.trim() || !subject} onClick={add}><Plus className="h-4 w-4"/>保存作业</Button>
           {!subject && <p className="text-caption-1-regular text-[var(--app-text-muted)]">选择学科后即可保存；自定义学科可在“管理”中添加。</p>}
         </div></Card>
-        <Card title="作业列表" bodyClassName="p-2"><SegmentedControl value={lifecycleFilter} onChange={value => { setLifecycleFilter(value as typeof lifecycleFilter); setFilter("all"); setSearch(""); }} ariaLabel="作业生命周期" className="mb-2 w-full" options={[{ value: "active", label: "进行中" }, { value: "closed", label: "已结束" }, { value: "archived", label: "已归档" }]}/><div className="space-y-1">{visibleAssignments.map(item => {
+        <Card title="作业列表" bodyClassName="p-2"><SegmentedControl value={lifecycleFilter} onChange={value => { setLifecycleFilter(value as typeof lifecycleFilter); setFilter("all"); setSearch(""); }} ariaLabel="作业生命周期" className="mb-2 w-full" options={[{ value: "active", label: "进行中" }, { value: "closed", label: "已结束" }, { value: "archived", label: "已归档" }]}/><MotionSwitch transitionKey={lifecycleFilter} contentClassName="space-y-1">{visibleAssignments.map(item => {
           const ids = item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates);
           const unrecorded = ids.filter(studentId => (item.studentStates[studentId]?.status || "unrecorded") === "unrecorded").length;
           const missing = ids.filter(studentId => item.studentStates[studentId]?.status === "pending").length;
-          return <button type="button" key={item.id} onClick={() => { setSelectedId(item.id); setFilter("all"); setSearch(""); setUndoAssignments(null); }} className={`w-full rounded-[var(--app-radius-sm)] px-3 py-3 text-left transition-colors ${selected?.id === item.id ? "bg-accent-50 text-accent-800" : "hover:bg-background-secondary-default"}`}><span className="flex items-center gap-2"><strong className="min-w-0 flex-1 truncate text-body-regular">{item.title}</strong>{item.subject && <span className="rounded-md bg-background-primary-default/80 px-2 py-0.5 text-[10px] font-bold text-accent-600">{item.subject}</span>}</span><span className="mt-1 block text-caption-1-regular text-text-tertiary">{item.dueDate} · 待登记 {unrecorded} · 未交 {missing}</span></button>;
-        })}{!visibleAssignments.length && <p className="py-8 text-center text-body-regular text-text-tertiary">当前分类暂无作业</p>}</div></Card>
+          return <button type="button" key={item.id} onClick={() => { setSelectedId(item.id); setFilter("all"); setSearch(""); }} className={`w-full rounded-[var(--app-radius-sm)] px-3 py-3 text-left transition-colors ${selected?.id === item.id ? "bg-accent-50 text-accent-800" : "hover:bg-background-secondary-default"}`}><span className="flex items-center gap-2"><strong className="min-w-0 flex-1 truncate text-body-regular">{item.title}</strong>{item.subject && <span className="rounded-md bg-background-primary-default/80 px-2 py-0.5 text-[10px] font-bold text-accent-600">{item.subject}</span>}</span><span className="mt-1 block text-caption-1-regular text-text-tertiary">{item.dueDate} · 待登记 {unrecorded} · 未交 {missing}</span></button>;
+        })}{!visibleAssignments.length && <p className="py-8 text-center text-body-regular text-text-tertiary">当前分类暂无作业</p>}</MotionSwitch></Card>
       </div>
 
       <Card title={selected ? selected.title : "学生交付状态"} action={selected ? <div className="flex items-center gap-2">{pendingIds.length > 0 && <Button size="sm" variant="secondary" onClick={() => onCreateFollowups(selected, pendingIds)}>为未交 {pendingIds.length} 人建跟进</Button>}<Button size="sm" variant="ghost" onClick={openManage}><Pencil className="h-4 w-4"/>管理</Button></div> : undefined}>
         {selected ? <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="text-caption-1-semibold text-text-secondary">快速登记 · 进度 <span className="tabular-nums text-text-primary">{registeredCount}/{participantStudents.length}</span></span>
+            <span className="text-caption-1-semibold text-text-secondary">快速登记（6 秒内再点恢复）· 进度 <span className="tabular-nums text-text-primary">{registeredCount}/{participantStudents.length}</span></span>
             <SegmentedControl value={markStatus} onChange={value => setMarkStatus(value as HomeworkStudentStatus)} ariaLabel="快速登记状态" className="min-w-48 flex-1 overflow-x-auto" options={STATUS_OPTIONS.map(option => ({ value: option.value, label: option.label }))}/>
-            <div className="flex flex-wrap items-center gap-2"><Button size="sm" onClick={() => void markAllSubmitted()}><Check className="h-4 w-4"/>全部已交</Button><Button size="sm" variant="ghost" disabled={!undoAssignments} onClick={undoLastRegistration}><RotateCcw className="h-4 w-4"/>撤销上一步</Button></div>
+            <div className="flex flex-wrap items-center gap-2"><Button size="sm" onClick={() => void markAllSubmitted()}><Check className="h-4 w-4"/>全部已交</Button><Button size="sm" variant="ghost" disabled={!registration.canUndo} onClick={undoLastRegistration}><RotateCcw className="h-4 w-4"/>撤销上一步</Button></div>
           </div>
 
           <p aria-live="polite" className="sr-only">{recentUpdate?.message || ""}</p>
 
           <div className="flex flex-wrap items-center gap-2"><MetricStrip size="sm" items={[{ key: "all", label: "全部", value: participantStudents.length, selected: filter === "all", onOpen: () => setFilter("all") }, ...STATUS_OPTIONS.map(option => ({ key: option.value, label: option.label, value: counts[option.value], dot: { unrecorded: "bg-text-tertiary", submitted: "bg-status-success-500", pending: "bg-status-rose-500", resubmitted: "bg-accent-500", excused: "bg-status-warning-500" }[option.value], selected: filter === option.value, onOpen: () => setFilter(option.value) }))]} /><Input value={search} onChange={setSearch} leadingIcon={Search} placeholder="搜索学生" className="ml-auto min-w-48 flex-1 sm:max-w-64" /><SegmentedControl value={viewMode} onChange={value => setViewMode(value as "quick" | "detail")} ariaLabel="作业登记视图" options={[{ value: "quick", label: "快速", icon: <LayoutGrid className="h-4 w-4"/> }, { value: "detail", label: "详细", icon: <List className="h-4 w-4"/> }]}/></div>
 
-          {viewMode === "quick" ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{shownStudents.map(student => { const status = studentStates.get(student.id) || "unrecorded"; const meta = STATUS_META[status]; const task = linkedTask(student.id); return <button key={student.id} type="button" data-homework-student-id={student.id} aria-label={`${student.name}当前${meta.label}，点击设为${STATUS_META[markStatus].label}`} onClick={() => markStudent(student)} className={`flex min-h-16 items-center gap-3 rounded-[var(--app-radius-sm)] border px-3 py-2 text-left transition-[border-color,background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 motion-reduce:transition-none registration-tile ${recentUpdate?.studentId === student.id ? "ring-2 ring-accent-400 ring-offset-1 shadow-md" : ""}`}><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${status === "submitted" ? "bg-status-success-500 text-text-white" : "bg-background-primary-default text-text-tertiary"}`}>{status === "submitted" ? <Check className="h-4 w-4"/> : student.name.slice(0, 1)}</span><span className="min-w-0 flex-1"><strong className="block truncate text-body-regular text-text-primary">{student.name}</strong><span className="mt-1 flex flex-wrap gap-1"><span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold ${meta.badge}`}>{meta.label}</span>{task && <LinkedTaskBadge task={task} onOpen={onOpenTask}/>}</span></span></button>; })}</div> : <div className="space-y-2">{shownStudents.map(student => { const state = selected.studentStates[student.id] || { status: "unrecorded" as const, note: "" }; const task = linkedTask(student.id); return <div key={student.id} className="grid items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] p-3 sm:grid-cols-[8rem_8rem_minmax(0,1fr)]"><div className="min-w-0"><strong className="block truncate text-body-regular text-text-primary">{student.name}</strong>{task && <LinkedTaskBadge task={task} onOpen={onOpenTask}/>}</div><SelectMenu value={state.status} onChange={value => updateStudents([student.id], value as HomeworkStudentStatus)} ariaLabel={`${student.name}作业状态`} options={STATUS_OPTIONS}/><Input value={state.note} onChange={value => updateStudentNote(student.id, value)} placeholder={state.status === "submitted" ? "备注（可选）" : "记录原因或说明"}  /></div>; })}</div>}
+          <MotionSwitch transitionKey={`${selected?.id}:${viewMode}`} sharedLayout>{viewMode === "quick" ? <MotionList className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{shownStudents.map(student => { const status = studentStates.get(student.id) || "unrecorded"; const meta = STATUS_META[status]; const task = linkedTask(student.id); return <button key={student.id} type="button" data-homework-student-id={student.id} data-motion-surface={student.id} aria-label={`${student.name}当前${meta.label}，点击设为${STATUS_META[markStatus].label}`} onClick={() => markStudent(student)} className={`flex min-h-16 items-center gap-3 rounded-[var(--app-radius-sm)] border px-3 py-2 text-left transition-[border-color,background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 motion-reduce:transition-none registration-tile ${recentUpdate?.studentId === student.id ? "ring-2 ring-accent-400 ring-offset-1 shadow-md" : ""}`}><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${status === "submitted" ? "bg-status-success-500 text-text-white" : "bg-background-primary-default text-text-tertiary"}`}>{status === "submitted" ? <Check className="h-4 w-4"/> : student.name.slice(0, 1)}</span><span className="min-w-0 flex-1"><strong className="block truncate text-body-regular text-text-primary">{student.name}</strong><span className="mt-1 flex flex-wrap gap-1"><span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold ${meta.badge}`}>{meta.label}</span>{task && <LinkedTaskBadge task={task} onOpen={onOpenTask}/>}</span></span></button>; })}</MotionList> : <MotionList className="space-y-2">{shownStudents.map(student => { const state = selected.studentStates[student.id] || { status: "unrecorded" as const, note: "" }; const task = linkedTask(student.id); return <div key={student.id} data-motion-surface={student.id} className="registration-tile grid items-center gap-2 border p-3 sm:grid-cols-[8rem_8rem_minmax(0,1fr)]"><div className="min-w-0"><strong className="block truncate text-body-regular text-text-primary">{student.name}</strong>{task && <LinkedTaskBadge task={task} onOpen={onOpenTask}/>}</div><SelectMenu value={state.status} onChange={value => updateStudents([student.id], value as HomeworkStudentStatus)} ariaLabel={`${student.name}作业状态`} options={STATUS_OPTIONS}/><Input value={state.note} onChange={value => updateStudentNote(student.id, value)} placeholder={state.status === "submitted" ? "备注（可选）" : "记录原因或说明"}  /></div>; })}</MotionList>}</MotionSwitch>
           {!shownStudents.length && <div className="py-14 text-center text-body-regular text-[var(--app-text-muted)]">没有符合当前筛选的学生</div>}
         </div> : <div className="py-16 text-center text-text-tertiary"><CheckCircle2 className="mx-auto h-7 w-7"/><p className="mt-2 text-body-regular">先在左侧布置一项作业</p></div>}
       </Card>

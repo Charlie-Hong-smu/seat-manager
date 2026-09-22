@@ -1,3 +1,6 @@
+import { captureSeatChange, restoreSeatChange, restoreSeatSnapshot, type SeatUndoEntry } from "./state/seatWorkflow";
+import { normalizeFollowupTypes } from "./state/followupTypes";
+import { getDutyGroups, readClassDuties, type ClassDutiesBinding } from "./state/classDuties";
 import { useWorkspaceWriteAccess } from "./hooks/useWorkspaceWriteAccess";
 import { exportUnsavedClassBackup } from "./state/backupStorage";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +19,7 @@ import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import { HistorySeatModal } from "./components/HistorySeatModal";
 import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ClassFundWorkspace, AttendanceWorkspace, FollowupWorkspace } from "./components/workspaces";
-import { RetryableLazy } from "./components/RetryableLazy";
+import { preloadFeature, RetryableLazy } from "./components/RetryableLazy";
 import {
   buildSeatOrderByStudentList,
   swapSeatOrder,
@@ -34,13 +37,13 @@ import type { ActivityEvent, AppStudent, BusinessEntityRef, GradeExam, GradeItem
 import { useStudentActions } from "./hooks/useStudentActions";
 import { useDormitoryActions } from "./hooks/useDormitoryActions";
 import { useClassFundActions } from "./hooks/useClassFundActions";
-import { editFollowupTask, findMatchingFollowupTask, getTaskUrgency, prepareFollowupTasks, todayKey } from "./state/dailyManagement";
+import { editFollowupTask, findMatchingFollowupTask, getDueFollowupNotifications, getTaskUrgency, prepareFollowupTasks, todayKey } from "./state/dailyManagement";
 import { getFollowupStudentIds } from "./state/followupStudents";
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, businessEntityExists, inspectStateHealth, targetFromBusinessRef, type TimelineTarget } from "./state/dataInsights";
 import { createActivityEvent } from "./state/activityEvents";
 import { archiveStudent, changeFollowupTaskStatus, permanentlyDeleteStudent, restoreStudent, syncCompletedFollowupHomework, undoFollowupChange, undoFollowupHomework, updateFollowupResolution } from "./state/classManagementCommands";
-import { Button, Card, DialogPresence, useActionToast, useAppDialog } from "./components/ui";
+import { MotionSwitch, Button, Card, DialogPresence, useActionToast, useAppDialog } from "./components/ui";
 import { normalizeDormitoryPeriodSettings } from "./state/dormitoryPeriods";
 import { resolveSeatLayout } from "./state/seatLayout";
 import { WorkspaceRecoveryScreen } from "./components/WorkspaceRecoveryScreen";
@@ -50,7 +53,7 @@ import { QuickRecordDrawer, type QuickRecordInput } from "./components/QuickReco
 import { normalizeGradeThresholds, normalizeSubjectCatalog, type GradeThresholds } from "./state/teacherWorkbench";
 import { deleteStudentCommentDraft } from "./state/commentStorage";
 import { removeStudentFromCommentBatch } from "./components/commentBatchStorage";
-import { AiAssistantLauncher } from "./components/AiAssistantLauncher";
+import { AiAssistantLauncher, AiAssistantLoading } from "./components/AiAssistantLauncher";
 
 type AppTab = SidebarTab;
 type StudentAdviceProgress = {
@@ -77,9 +80,10 @@ const APP_TAB_LABELS: Record<AppTab, string> = {
   followups: "任务与作业",
   dormitories: "宿舍",
   scores: "成绩",
+  comments: "评语工作台",
   funds: "班费",
-  data: "名单 / 备份",
   history: "历史",
+  data: "名单 / 备份",
 };
 
 export default function App() {
@@ -89,11 +93,13 @@ export default function App() {
   const controller = useSeatManagerController(initialState);
   const appState = controller.state;
   const { students: allStudents, dormitories, fundTransactions, attendanceRecords, followupTasks, drawSessions, seatOrder, seatSettings, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts } = appState;
-  const students = allStudents.filter(student => student.enrollmentStatus !== "archived");
+  const students = useMemo(() => allStudents.filter(student => student.enrollmentStatus !== "archived"), [allStudents]);
   const savedSeatHistory = appState.seatHistory;
   const lockedSeats = new Set(appState.lockedSeats);
-  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatOrder, setSeatSettings, setSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory, setSchedule, setHomeworkAssignments, setQuickRecordPresets, setActivityEvents } = controller;
+  const { setStudents, setDormitories, setFundTransactions, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSeatSettings, setSettings, setLockedSeats, setSeatHistory: setSavedSeatHistory, setSchedule, setHomeworkAssignments, setQuickRecordPresets, setActivityEvents } = controller;
   const dormitoryPeriodSettings = normalizeDormitoryPeriodSettings(appState.settings.dormitoryPeriod);
+  const taskTypes = normalizeFollowupTypes(appState.settings.followupTypes);
+  const onTaskTypesChange = (values: string[]) => setSettings(current => ({ ...current, followupTypes: values }));
   const subjectCatalog = normalizeSubjectCatalog(appState.settings.subjectCatalog, [
     ...schedule.entries.map(entry => entry.subject),
     ...homeworkAssignments.map(assignment => assignment.subject),
@@ -101,21 +107,27 @@ export default function App() {
   ]);
   const gradeThresholds = normalizeGradeThresholds(appState.settings.gradeThresholds);
   const { persist: persistState, reload: reloadState, replace: replaceState } = controller;
+  const classDuties: ClassDutiesBinding = {
+    value: readClassDuties(appState), groups: getDutyGroups(appState), students, dormitories,
+    notify: message => actionToast.show({ message }),
+    onChange: update => replaceState(current => ({ ...current, settings: { ...current.settings, classDuties: update(readClassDuties(current)) } })),
+  };
   const writeAccess = useWorkspaceWriteAccess(reloadState);
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [workspaceStorage, setWorkspaceStorage] = useState(() => inspectWorkspaceStorage());
-  const [sidebarTab, setSidebarTab] = useState<AppTab>("today");
+  const [sidebarTab, commitSidebarTab] = useState<AppTab>("today");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1199px)").matches);
   const [selectedStudentId, setSelectedStudentId] = useState<StudentId | null>(null);
   const selectedStudent = allStudents.find(student => student.id === selectedStudentId) || null;
   const [selectedStudentInitialTab, setSelectedStudentInitialTab] = useState<StudentDetailTab>("records");
-  const [showCommentWorkbench, setShowCommentWorkbench] = useState(false);
-  const [commentWorkbenchTransition, setCommentWorkbenchTransition] = useState<"preparing" | "open" | "closing">("preparing");
+  const showCommentWorkbench = sidebarTab === "comments";
+  const commentReturnTab = useRef<Exclude<AppTab, "comments">>("today");
+  const commentReturnSidebarCollapsed = useRef(sidebarCollapsed);
   const [CommentWorkbenchComponent, setCommentWorkbenchComponent] = useState<Awaited<ReturnType<typeof loadCommentWorkbench>>["default"] | null>(null);
   const [aiCompanionMounted, setAiCompanionMounted] = useState(false);
   const [aiCompanionOpen, setAiCompanionOpen] = useState(false);
   const [aiCompanionBusy, setAiCompanionBusy] = useState(false);
-  const [seatHistory, setSeatHistory] = useState<SeatOrder[]>([]);
+  const [seatHistory, setSeatHistory] = useState<SeatUndoEntry[]>([]);
   const [selectedHistorySnapshot, setSelectedHistorySnapshot] = useState<SeatHistorySnapshot | null>(null);
   const [shufflePreview, setShufflePreview] = useState<ShuffleCandidate | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -250,35 +262,24 @@ export default function App() {
     };
   }
 
-  async function openCommentWorkbench() {
-    if (!CommentWorkbenchComponent) {
-      try {
-        const Workbench = (await loadCommentWorkbench()).default;
-        setCommentWorkbenchComponent(() => Workbench);
-      } catch {
-        setShowCommentWorkbench(true);
-        return;
-      }
+  function setSidebarTab(tab: AppTab) {
+    if (tab === "comments" && sidebarTab !== "comments") {
+      commentReturnTab.current = sidebarTab;
+      commentReturnSidebarCollapsed.current = sidebarCollapsed;
+      setSidebarCollapsed(true);
+    } else if (tab !== "comments" && sidebarTab === "comments") {
+      setSidebarCollapsed(commentReturnSidebarCollapsed.current);
     }
-    setCommentWorkbenchTransition("preparing");
-    setShowCommentWorkbench(true);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => setCommentWorkbenchTransition("open"));
-    });
+    commitSidebarTab(tab);
   }
+
+  function openCommentWorkbench() { setSidebarTab("comments"); }
 
   function closeCommentWorkbench() {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setShowCommentWorkbench(false);
-      setCommentWorkbenchTransition("preparing");
-      return;
-    }
-    setCommentWorkbenchTransition("closing");
-  }
-
-  function finishClosingCommentWorkbench() {
-    setShowCommentWorkbench(false);
-    setCommentWorkbenchTransition("preparing");
+    setSidebarTab(commentReturnTab.current);
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('nav[aria-label="主导航"] [aria-current="page"]')?.focus({ preventScroll: true });
+    });
   }
 
   function confirmFollowupTask(draft: FollowupTaskDraft) {
@@ -332,9 +333,11 @@ export default function App() {
       cancelIdleCallback?: (handle: number) => void;
     };
     const preload = () => {
-      void loadCommentWorkbench()
+      void preloadFeature(loadCommentWorkbench)
         .then(module => setCommentWorkbenchComponent(() => module.default))
         .catch(() => undefined);
+      void preloadFeature(loadScoresWorkspace).catch(() => undefined);
+      void preloadFeature(loadAiAssistantCompanion).catch(() => undefined);
     };
     if (idleWindow.requestIdleCallback) {
       const handle = idleWindow.requestIdleCallback(preload, { timeout: 2_000 });
@@ -387,7 +390,7 @@ export default function App() {
 
   useEffect(() => {
     if (!loggedIn || typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    const due = followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task)) && task.lastNotifiedAt?.slice(0, 10) !== todayKey());
+    const due = getDueFollowupNotifications(followupTasks);
     if (!due.length) return;
     new Notification("班级跟进提醒", { body: `今天有 ${due.length} 项待处理或已逾期任务。` });
     const now = new Date().toISOString();
@@ -422,9 +425,22 @@ export default function App() {
     });
   }
 
+  function commitSeating(patch: Partial<Pick<typeof appState, "seatOrder" | "seatSettings" | "lockedSeats">>) {
+    replaceState(current => {
+      const next = {
+        ...current,
+        seatOrder: patch.seatOrder ?? current.seatOrder,
+        seatSettings: patch.seatSettings ?? current.seatSettings,
+        lockedSeats: patch.lockedSeats ?? current.lockedSeats,
+      };
+      if (JSON.stringify([next.seatOrder, next.seatSettings.layout, next.lockedSeats]) === JSON.stringify([current.seatOrder, current.seatSettings.layout, current.lockedSeats])) return current;
+      setSeatHistory(previous => [captureSeatChange(current, next), ...previous].slice(0, 20));
+      return next;
+    });
+  }
+
   function commitSeatOrder(next: SeatOrder) {
-    setSeatHistory(prev => [seatOrder, ...prev].slice(0, 20));
-    setSeatOrder(next);
+    commitSeating({ seatOrder: next });
   }
 
   function handleMoveSeat(fromIndex: number, toIndex: number) {
@@ -442,7 +458,7 @@ export default function App() {
   }
 
   function handleAssignStudentToSeat(studentId: StudentId, seatIndex: number) {
-    if (lockedSeats.has(seatIndex) || seatIndex < 0 || seatIndex >= seatOrder.length) return;
+    if (!students.some(student => student.id === studentId) || lockedSeats.has(seatOrder.indexOf(studentId)) || lockedSeats.has(seatIndex) || seatIndex < 0 || seatIndex >= seatOrder.length) return;
     const next = seatOrder.map(id => id === studentId ? null : id);
     next[seatIndex] = studentId;
     commitSeatOrder(next);
@@ -487,15 +503,8 @@ export default function App() {
     nextOrder.forEach((id, index) => { if (!id && remaining.length) nextOrder[index] = remaining.shift() || null; });
     const lockedSeatIds = new Set([...lockedSeats].map(index => previousLayout.seats[index]?.id).filter((id): id is string => Boolean(id)));
     const nextLocked = new Set(layout.seats.map((seat, index) => lockedSeatIds.has(seat.id) ? index : -1).filter(index => index >= 0));
-    setSeatHistory(previous => [seatOrder, ...previous].slice(0, 20));
-    setSeatOrder(nextOrder);
-    setLockedSeats(nextLocked);
-    setSeatSettings(current => ({ ...current, layout }));
+    commitSeating({ seatOrder: nextOrder, lockedSeats: [...nextLocked], seatSettings: { ...seatSettings, layout } });
     actionToast.show({ message: remaining.length ? `布局已应用，${remaining.length} 名学生进入待排区` : "座位布局已应用" });
-  }
-
-  function normalizeNameForHistory(name: string): string {
-    return name.trim().replace(/\u3000/g, " ").replace(/[()（）][^()（）]*[()（）]/g, "").replace(/(同学|学生)$/g, "").replace(/\s+/g, "");
   }
 
   function createSnapshotId(): string {
@@ -544,6 +553,8 @@ export default function App() {
       note: note.trim(),
       rows,
       seats: seatOrder.map(id => (id ? studentById.get(id)?.name || "" : "")),
+      studentIds: [...seatOrder],
+      lockedSeats: [...lockedSeats],
       layout: seatSettings.layout,
     };
     const nextHistory = [snapshot, ...savedSeatHistory].slice(0, 20);
@@ -574,41 +585,23 @@ export default function App() {
   }
 
   function handleApplySeatHistory(snapshot: SeatHistorySnapshot) {
-    const queues = new Map<string, StudentId[]>();
-    students.forEach(student => {
-      const key = normalizeNameForHistory(student.name);
-      if (!queues.has(key)) {
-        queues.set(key, []);
-      }
-      queues.get(key)?.push(student.id);
-    });
-    const next = snapshot.seats.map(name => {
-      if (!name) {
-        return null;
-      }
-      const queue = queues.get(normalizeNameForHistory(name));
-      return queue?.shift() || null;
-    });
-    if (snapshot.layout) {
-      setSeatSettings(current => ({ ...current, layout: snapshot.layout }));
-      setLockedSeats(current => new Set([...current].filter(index => index < snapshot.layout!.seats.length)));
-    }
-    commitSeatOrder(next);
+    const { state, unresolved } = restoreSeatSnapshot(appState, snapshot);
+    commitSeating(state);
     setSelectedHistorySnapshot(null);
+    actionToast.show({ message: unresolved ? `快照已恢复，${unresolved} 个原座位未匹配；请在待排区核对学生` : "座位快照已恢复，可撤销" });
   }
 
   function handleOrderSeatsByList() {
-    commitSeatOrder(buildSeatOrderByStudentList(students, seatSettings.layout));
+    commitSeatOrder(buildSeatOrderByStudentList(students, seatSettings.layout, seatOrder, lockedSeats));
+    actionToast.show({ message: lockedSeats.size ? "已按名单排列，锁定座位保持不变" : "已按名单排列，可撤销" });
   }
 
   function handleUndoSeatOrder() {
-    setSeatHistory(prev => {
-      const [last, ...rest] = prev;
-      if (last) {
-        setSeatOrder(last);
-      }
-      return rest;
-    });
+    const [last, ...rest] = seatHistory;
+    if (!last) return;
+    replaceState(current => restoreSeatChange(current, last));
+    setSeatHistory(rest);
+    actionToast.show({ message: "已撤销上一次座位调整" });
   }
 
   function openStudentDetail(student: AppStudent, initialTab: StudentDetailTab = "records") {
@@ -1065,8 +1058,7 @@ export default function App() {
           gradeExams={appState.gradeExams}
           savedSeatHistoryCount={savedSeatHistory.length}
           pendingTaskCount={followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task))).length}
-          onTabChange={setSidebarTab}
-          onOpenCommentWorkbench={openCommentWorkbench}
+          onTabChange={tab => tab === "comments" ? openCommentWorkbench() : setSidebarTab(tab)}
         />
       }
       overlays={
@@ -1096,23 +1088,18 @@ export default function App() {
                 onAppendCommentMaterial: handleAppendAiAssistantMaterial,
               }}
               fallback={
-                <div role="status" aria-label="正在打开 AI 助手" className="fixed inset-x-2 bottom-2 top-16 z-[70] grid place-items-center rounded-[var(--app-radius-lg)] border border-status-ai-100 bg-background-primary-default text-body-semibold text-status-ai-600 shadow-[var(--app-shadow-float)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-[72px] sm:w-[420px]">
-                  正在打开 AI 助手…
-                </div>
+                <AiAssistantLoading open={aiCompanionOpen} onClose={() => setAiCompanionOpen(false)} />
               }
             />
           )}
-          {showCommentWorkbench && (
-            CommentWorkbenchComponent
-              ? <CommentWorkbenchComponent students={students} transitionState={commentWorkbenchTransition} onClose={closeCommentWorkbench} onExitComplete={finishClosingCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />
-              : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, transitionState: commentWorkbenchTransition, onClose: closeCommentWorkbench, onExitComplete: finishClosingCommentWorkbench, onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
-          )}
+
 
           <DialogPresence open={Boolean(selectedStudent)}>
           {selectedStudent && (
             <StudentDetail
+              leavesWorkbench={showCommentWorkbench}
+              classDuties={classDuties}
               student={selectedStudent}
-              elevated={showCommentWorkbench}
               students={students}
               dormitories={dormitories}
               onClose={() => {
@@ -1127,7 +1114,6 @@ export default function App() {
               onOpenDormitories={() => {
                 setSidebarTab("dormitories");
                 setSidebarCollapsed(false);
-                finishClosingCommentWorkbench();
                 setSelectedStudentInitialTab("records");
                 setSelectedStudentId(null);
               }}
@@ -1154,7 +1140,6 @@ export default function App() {
               onOpenEntity={ref => {
                 setSelectedStudentInitialTab("records");
                 setSelectedStudentId(null);
-                if (showCommentWorkbench) finishClosingCommentWorkbench();
                 navigateToEntity(ref);
               }}
             />
@@ -1195,7 +1180,7 @@ export default function App() {
               onBeforeUpload={saveCurrentLegacySnapshot}
               onRestored={reloadFromLegacyState}
             />
-          <FollowupTaskDrawer open={Boolean(followupDraft)} students={students} draft={followupDraft} onClose={() => { followupAfterSave.current = null; setFollowupDraft(null); }} onConfirm={confirmFollowupTask} />
+          <FollowupTaskDrawer taskTypes={taskTypes} onTaskTypesChange={onTaskTypesChange} open={Boolean(followupDraft)} students={students} draft={followupDraft} onClose={() => { followupAfterSave.current = null; setFollowupDraft(null); }} onConfirm={confirmFollowupTask} />
           <QuickRecordDrawer open={quickRecordOpen} students={students} presets={quickRecordPresets} onClose={() => setQuickRecordOpen(false)} onApply={applyQuickRecord} onPresetsChange={setQuickRecordPresets} />
 
           <InstallHelpModal open={showInstallHelp} message={installMessage} onClose={() => setShowInstallHelp(false)} />
@@ -1214,11 +1199,17 @@ export default function App() {
         </>
       }
     >
-      <div className="h-full">
-        {sidebarTab === "today" && <div className="h-full workspace-tab-enter"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
+      <MotionSwitch transitionKey={sidebarTab} navigationIndex={Object.keys(APP_TAB_LABELS).indexOf(sidebarTab)} fixed className="h-full">
+        {showCommentWorkbench && (
+          CommentWorkbenchComponent
+            ? <CommentWorkbenchComponent students={students} onClose={closeCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />
+            : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, onClose: closeCommentWorkbench, onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
+        )}
+        {sidebarTab === "today" && <div className="h-full"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
         {sidebarTab === "daily" && (
-          <div className="h-full workspace-tab-enter">
+          <div className="h-full">
             <DailyWorkspace
+              classDuties={classDuties}
               students={students}
               seatOrder={seatOrder}
               lockedSeats={lockedSeats}
@@ -1247,12 +1238,20 @@ export default function App() {
         )}
 
         {sidebarTab === "dormitories" && (
-          <div className="h-full workspace-tab-enter">
+          <div className="h-full">
             <DormitoryWorkspace
+              classDuties={classDuties}
               students={students}
               dormitories={dormitories}
               onCreateDormitory={handleCreateDormitory}
-              onDeleteDormitory={handleDeleteDormitory}
+              onDeleteDormitory={id => {
+                const leader = classDuties.value.dormitoryLeaders[id];
+                const undo = handleDeleteDormitory(id);
+                return () => {
+                  undo();
+                  if (leader) classDuties.onChange(current => ({ ...current, dormitoryLeaders: { ...current.dormitoryLeaders, [id]: leader } }));
+                };
+              }}
               onAssignStudentDormitory={handleAssignStudentDormitory}
               onAddDormitoryEvent={handleAddDormitoryEvent}
               onUpdateDormitoryEvent={handleUpdateDormEvent}
@@ -1272,18 +1271,18 @@ export default function App() {
           </div>
         )}
 
-        {sidebarTab === "attendance" && <div className="h-full workspace-tab-enter"><AttendanceWorkspace students={students} records={attendanceRecords} tasks={followupTasks} onChange={setAttendanceRecords} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenTask={taskId => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId })} initialTarget={timelineTarget?.workspace === "attendance" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} /></div>}
+        {sidebarTab === "attendance" && <div className="h-full"><AttendanceWorkspace students={students} records={attendanceRecords} tasks={followupTasks} onChange={setAttendanceRecords} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenTask={taskId => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId })} initialTarget={timelineTarget?.workspace === "attendance" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} /></div>}
 
-        {sidebarTab === "followups" && <div className="h-full workspace-tab-enter"><FollowupWorkspace onCreateTask={confirmFollowupTask} onTaskStatusChange={handleChangeTaskStatus} onSaveResolution={handleSaveTodayTaskResolution} key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenSource={navigateToEntity} sourceExists={ref => businessEntityExists(appState, ref)} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} initialMode={followupMode} /></div>}
+        {sidebarTab === "followups" && <div className="h-full"><FollowupWorkspace taskTypes={taskTypes} onTaskTypesChange={onTaskTypesChange} onCreateTask={confirmFollowupTask} onTaskStatusChange={handleChangeTaskStatus} onSaveResolution={handleSaveTodayTaskResolution} key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenSource={navigateToEntity} sourceExists={ref => businessEntityExists(appState, ref)} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} initialMode={followupMode} /></div>}
 
         {sidebarTab === "scores" && (
-          <div className="h-full workspace-tab-enter">
+          <div className="h-full">
             <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, tasks: followupTasks, gradeThresholds, onGradeThresholdsChange: (next: GradeThresholds) => setSettings(current => ({ ...current, gradeThresholds: next })), initialTarget: timelineTarget?.workspace === "scores" ? timelineTarget : undefined, onInitialTargetConsumed: consumeTimelineTarget, onOpenTask: (taskId: string) => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId }), onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, studentId } }), onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => requestFollowupTask({ studentId: studentIds[0], studentIds, title: `跟进${exam.name} · ${question.label}`, type: "学业关注", description: question.knowledgePoints.length ? `薄弱知识点：${question.knowledgePoints.join("、")}` : `${question.label}得分低于 60%`, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, subEntityId: question.id } }) }} />
           </div>
         )}
 
         {sidebarTab === "data" && (
-          <div className="h-full workspace-tab-enter">
+          <div className="h-full">
             <DataWorkspace
               students={students}
               archivedStudents={allStudents.filter(student => student.enrollmentStatus === "archived")}
@@ -1300,7 +1299,7 @@ export default function App() {
         )}
 
         {sidebarTab === "history" && (
-          <div className="h-full workspace-tab-enter">
+          <div className="h-full">
             <HistoryWorkspace
               students={students}
               history={savedSeatHistory}
@@ -1316,7 +1315,7 @@ export default function App() {
         )}
 
         {sidebarTab === "funds" && (
-          <div className="h-full workspace-tab-enter">
+          <div className="h-full">
             <ClassFundWorkspace
               transactions={fundTransactions}
               students={students}
@@ -1330,7 +1329,7 @@ export default function App() {
             />
           </div>
         )}
-      </div>
+      </MotionSwitch>
       {appDialog.dialog}
       {actionToast.toast}
     </AppShell>

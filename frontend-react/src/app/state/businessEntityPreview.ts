@@ -1,3 +1,4 @@
+import { timestampToLocalDateKey } from "./dateKey";
 import { followupStudentLabel } from "./followupStudents";
 import { listDormitoryEvents } from "./dormitoryPeriods";
 import type {
@@ -42,7 +43,7 @@ function unavailable(ref: BusinessEntityRef, fallback?: BusinessEntityPreviewFal
     ref,
     domainLabel: DOMAIN_LABELS[ref.domain],
     title: fallback?.title || "原始内容已不存在",
-    subtitle: fallback?.occurredAt?.slice(0, 10),
+    subtitle: timestampToLocalDateKey(fallback?.occurredAt) || undefined,
     description: fallback?.detail || "这条历史记录仍可查看，但对应的业务内容可能已删除或来自旧版数据。",
     facts: [],
     availability: "missing",
@@ -56,7 +57,7 @@ function unsupported(ref: BusinessEntityRef, fallback?: BusinessEntityPreviewFal
     ref,
     domainLabel: DOMAIN_LABELS[ref.domain],
     title: fallback?.title || DOMAIN_LABELS[ref.domain],
-    subtitle: fallback?.occurredAt?.slice(0, 10),
+    subtitle: timestampToLocalDateKey(fallback?.occurredAt) || undefined,
     description: fallback?.detail || "当前记录可以在这里查看摘要，暂不支持打开独立工作区。",
     facts: [],
     availability: "unsupported",
@@ -139,7 +140,7 @@ export function resolveBusinessEntityPreview(
     const studentState = ref.studentId ? assignment.studentStates[ref.studentId] : undefined;
     const statusLabels = { unrecorded: "待登记", pending: "未交", submitted: "已交", resubmitted: "补交", excused: "免交" } as const;
     const status = studentState ? statusLabels[studentState.status] : assignment.lifecycle === "archived" ? "已归档" : assignment.lifecycle === "closed" ? "已结束" : "进行中";
-    return { ref, domainLabel: DOMAIN_LABELS.homework, title: assignment.title, subtitle: assignment.subject, status, statusTone: studentState?.status === "pending" ? "danger" : studentState?.status === "submitted" || studentState?.status === "resubmitted" ? "success" : "default", facts: [{ label: "布置日期", value: assignment.assignedDate }, { label: "截止日期", value: assignment.dueDate }, ...(studentState?.updatedAt ? [{ label: "状态更新", value: studentState.updatedAt.slice(0, 10) }] : [])], description: studentState?.note || assignment.note, availability: "available", navigationLabel: NAVIGATION_LABELS.homework };
+    return { ref, domainLabel: DOMAIN_LABELS.homework, title: assignment.title, subtitle: assignment.subject, status, statusTone: studentState?.status === "pending" ? "danger" : studentState?.status === "submitted" || studentState?.status === "resubmitted" ? "success" : "default", facts: [{ label: "布置日期", value: assignment.assignedDate }, { label: "截止日期", value: assignment.dueDate }, ...(studentState?.updatedAt ? [{ label: "状态更新", value: timestampToLocalDateKey(studentState.updatedAt) }] : [])], description: studentState?.note || assignment.note, availability: "available", navigationLabel: NAVIGATION_LABELS.homework };
   }
 
   if (ref.domain === "attendance") {
@@ -162,7 +163,7 @@ export function resolveBusinessEntityPreview(
   if (ref.domain === "communication") {
     const draft = state.communicationDrafts.find(item => item.id === ref.entityId);
     if (!draft) return unavailable(ref, fallback);
-    return { ref, domainLabel: DOMAIN_LABELS.communication, title: draft.scope === "student" ? "学生周沟通稿" : "班级周报", subtitle: `${draft.startDate} 至 ${draft.endDate}`, status: draft.deliveryStatus === "shared" ? "已分享" : "草稿", statusTone: draft.deliveryStatus === "shared" ? "success" : "default", facts: [...(draft.channel ? [{ label: "分享渠道", value: draft.channel }] : []), ...(draft.sharedAt ? [{ label: "分享时间", value: draft.sharedAt.slice(0, 10) }] : []), { label: "生成方式", value: draft.generatedBy === "ai" ? "AI 润色" : "本地事实" }], description: draft.content, availability: "available", navigationLabel: NAVIGATION_LABELS.communication };
+    return { ref, domainLabel: DOMAIN_LABELS.communication, title: draft.scope === "student" ? "学生周沟通稿" : "班级周报", subtitle: `${draft.startDate} 至 ${draft.endDate}`, status: draft.deliveryStatus === "shared" ? "已分享" : "草稿", statusTone: draft.deliveryStatus === "shared" ? "success" : "default", facts: [...(draft.channel ? [{ label: "分享渠道", value: draft.channel }] : []), ...(draft.sharedAt ? [{ label: "分享时间", value: timestampToLocalDateKey(draft.sharedAt) }] : []), { label: "生成方式", value: draft.generatedBy === "ai" ? "AI 润色" : "本地事实" }], description: draft.content, availability: "available", navigationLabel: NAVIGATION_LABELS.communication };
   }
 
   if (ref.domain === "fund") {
@@ -175,7 +176,7 @@ export function resolveBusinessEntityPreview(
     const student: AppStudent | undefined = state.students.find(item => item.id === (ref.studentId || ref.entityId));
     if (!student) return unavailable(ref, fallback);
     const record = student.records.find(item => item.id === ref.entityId);
-    return { ref, domainLabel: DOMAIN_LABELS.student, title: record?.note || fallback?.title || student.name, subtitle: record?.date || fallback?.occurredAt?.slice(0, 10), status: record ? record.type === "reward" ? "表扬" : record.type === "punish" ? "提醒" : "备注" : "学生档案", statusTone: record?.type === "reward" ? "success" : record?.type === "punish" ? "warning" : "default", facts: record?.score === undefined ? [] : [{ label: "分值", value: `${record.score > 0 ? "+" : ""}${record.score}` }], description: fallback?.detail, availability: "available", navigationLabel: NAVIGATION_LABELS.student };
+    return { ref, domainLabel: DOMAIN_LABELS.student, title: record?.note || fallback?.title || student.name, subtitle: record?.date || timestampToLocalDateKey(fallback?.occurredAt) || undefined, status: record ? record.type === "reward" ? "表扬" : record.type === "punish" ? "提醒" : "备注" : "学生档案", statusTone: record?.type === "reward" ? "success" : record?.type === "punish" ? "warning" : "default", facts: record?.score === undefined ? [] : [{ label: "分值", value: `${record.score > 0 ? "+" : ""}${record.score}` }], description: fallback?.detail, availability: "available", navigationLabel: NAVIGATION_LABELS.student };
   }
 
   return unsupported(ref, fallback);

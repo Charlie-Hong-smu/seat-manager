@@ -72,7 +72,7 @@ test("commercial keeps comment context while previewing a student task", async (
   await page.reload();
   await page.getByRole("button", { name: "评语工作台" }).click();
 
-  const workbench = page.getByRole("dialog", { name: "评语工作台" });
+  const workbench = page.getByRole("region", { name: "评语工作台" });
   await workbench.getByRole("button", { name: /商用速览学生/ }).first().click();
   await workbench.getByRole("button", { name: "查看 商用速览学生 的学生详情" }).click();
   await page.getByRole("tab", { name: "建议与沟通" }).click();

@@ -1,5 +1,8 @@
+import { useAttendanceUndo } from "../hooks/useAttendanceUndo";
+import { StudentDutiesSection } from "./StudentDutiesSection";
+import type { ClassDutiesBinding } from "../state/classDuties";
 import { followupHasStudent } from "../state/followupStudents";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
 import { RetryableLazy } from "./RetryableLazy";
@@ -17,7 +20,7 @@ import { normalizeAttendancePatch } from "../state/classManagementCommands";
 import { createActivityEvent } from "../state/activityEvents";
 import { matchesStudentSearch } from "../state/studentSearch";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
-import { AiGenerationPanel, Button, ConfirmDialog, DialogPresence, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { MotionSwitch, AiGenerationPanel, Button, ConfirmDialog, DialogPresence, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import { StudentPicker } from "./StudentPicker";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
@@ -62,6 +65,7 @@ const STUDENT_DETAIL_TABS: Array<{ value: StudentDetailTab; label: string; tone?
 ];
 
 interface Props {
+  classDuties?: ClassDutiesBinding;
   student: AppStudent;
   students: AppStudent[];
   dormitories: Dormitory[];
@@ -95,6 +99,7 @@ interface Props {
 }
 
 export function StudentModal({
+  classDuties,
   student,
   students,
   dormitories,
@@ -129,10 +134,7 @@ export function StudentModal({
   const modalPanelRef = useModalFocus(true, onClose);
   const appDialog = useAppDialog();
   const actionToast = useActionToast();
-  const modalHeaderRef = useRef<HTMLDivElement>(null);
-  const modalTabsRef = useRef<HTMLDivElement>(null);
-  const modalContentMeasureRef = useRef<HTMLDivElement>(null);
-  const [modalHeight, setModalHeight] = useState<number>();
+  const attendanceUndo = useAttendanceUndo(attendanceRecords, next => onAttendanceChange?.(next), todayKey());
   const [nameInput, setNameInput] = useState(student.name);
   const [genderInput, setGenderInput] = useState<Gender>(student.gender);
   const [aliasesInput, setAliasesInput] = useState(student.aliases.join("、"));
@@ -172,6 +174,7 @@ export function StudentModal({
   const [aiTrendResult, setAiTrendResult] = useState<AiTrendResult | null>(() => readCachedStudentAiTrend(student));
   const [aiTrendResultVisible, setAiTrendResultVisible] = useState(true);
   const [aiTrendStatus, setAiTrendStatus] = useState("");
+  const [aiTrendError, setAiTrendError] = useState(false);
   const [aiTrendBusy, setAiTrendBusy] = useState(false);
   const [aiTrendAccessCode, setAiTrendAccessCode] = useState("");
   const [rememberAiTrendAuth, setRememberAiTrendAuth] = useState(true);
@@ -208,6 +211,7 @@ export function StudentModal({
     setAiTrendResult(cached);
     setAiTrendResultVisible(Boolean(cached));
     setAiTrendStatus(cached ? "已载入上次生成的趋势分析。" : "");
+    setAiTrendError(false);
     setAiTrendAccessCode("");
     setHasAiTrendAuth(hasStoredAiTrendAuth());
   }, [student]);
@@ -297,14 +301,16 @@ export function StudentModal({
     if (!onAttendanceChange) return;
     const date = todayKey();
     const current = attendanceRecords.find(item => item.studentId === student.id && item.date === date);
+    const action = patch.status ? `status:${patch.status}` : "late" in patch ? "late" : "earlyLeave";
+    if (attendanceUndo.tryRevert(student.id, action)) { actionToast.show("已恢复上次出勤状态"); return; }
+    if (patch.status && (current?.status || "normal") === patch.status) return;
     const normalized = patch.status ? normalizeAttendancePatch(current, patch.status) : null;
     const next = upsertAttendance(attendanceRecords, { studentId: student.id, date, status: normalized?.status ?? current?.status ?? "normal", late: patch.late ?? normalized?.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? normalized?.earlyLeave ?? current?.earlyLeave ?? false, note: current?.note || "", leaveStart: patch.status ? normalized?.leaveStart : current?.leaveStart, leaveEnd: patch.status ? normalized?.leaveEnd : current?.leaveEnd });
     const saved = next.find(item => item.studentId === student.id && item.date === date);
-    onAttendanceChange(next);
-    if (!saved) return;
-    const statusLabel = saved.status === "leave" ? "请假" : saved.status === "absent" ? "缺勤" : "正常";
-    const undoActivity = onActivity?.(createActivityEvent({ action: current ? "updated" : "created", ref: { domain: "attendance", entityId: saved.id, studentId: student.id, date }, studentIds: [student.id], title: `登记出勤：${student.name}`, detail: `${statusLabel}${saved.late ? " · 迟到" : ""}${saved.earlyLeave ? " · 早退" : ""}` }));
-    actionToast.show({ message: "出勤状态已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { onAttendanceChange(attendanceRecords); if (typeof undoActivity === "function") undoActivity(); }, duration: 6000 });
+    const statusLabel = saved?.status === "leave" ? "请假" : saved?.status === "absent" ? "缺勤" : "正常";
+    const undoActivity = onActivity?.(createActivityEvent({ action: "status_changed", ref: { domain: "attendance", entityId: saved?.id || current?.id || `${date}:${student.id}`, studentId: student.id, date }, studentIds: [student.id], title: `登记出勤：${student.name}`, detail: `${statusLabel}${saved?.late ? " · 迟到" : ""}${saved?.earlyLeave ? " · 早退" : ""}` }));
+    const undo = attendanceUndo.commit(next, action, undoActivity);
+    if (undo) actionToast.show({ message: "出勤已保存，6 秒内再次点击可恢复", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { undo(); }, duration: 6000 });
   }
   const preservedManualTagIds = useMemo(
     () => student.manualTagIds.filter(id => !BEHAVIOR_TAG_IDS.has(id)),
@@ -482,6 +488,7 @@ export function StudentModal({
     setAiTrendBusy(true);
     setAiTrendResultVisible(false);
     setAiTrendStatus("正在生成趋势分析...");
+    setAiTrendError(false);
     try {
       const result = await generateStudentAiTrend(student, {
         accessCode: aiTrendAccessCode,
@@ -491,6 +498,7 @@ export function StudentModal({
       setAiTrendResult(result);
       window.requestAnimationFrame(() => setAiTrendResultVisible(true));
       setAiTrendStatus("AI 趋势分析已生成。");
+      setAiTrendError(false);
       setAiTrendAccessCode("");
       setHasAiTrendAuth(hasStoredAiTrendAuth());
     } catch (error) {
@@ -507,52 +515,30 @@ export function StudentModal({
         ai_insufficient_trend: "至少需要两次考试才能生成趋势分析。",
       };
       setAiTrendStatus(messages[reason] || "AI 趋势分析暂时不可用，本地趋势图不受影响。");
+      setAiTrendError(true);
       setHasAiTrendAuth(hasStoredAiTrendAuth());
     } finally {
       setAiTrendBusy(false);
     }
   }
 
-  useLayoutEffect(() => {
-    const header = modalHeaderRef.current;
-    const tabs = modalTabsRef.current;
-    const content = modalContentMeasureRef.current;
-    if (!header || !tabs || !content) return;
-    const updateHeight = () => {
-      const viewportLimit = Math.min(768, window.innerHeight - 32);
-      setModalHeight(Math.min(viewportLimit, header.offsetHeight + tabs.offsetHeight + content.scrollHeight));
-    };
-    updateHeight();
-    const resizeObserver = new ResizeObserver(updateHeight);
-    resizeObserver.observe(header);
-    resizeObserver.observe(tabs);
-    resizeObserver.observe(content);
-    const mutationObserver = new MutationObserver(updateHeight);
-    mutationObserver.observe(content, { childList: true, subtree: true, characterData: true });
-    window.addEventListener("resize", updateHeight);
-    return () => {
-      resizeObserver.disconnect();
-      mutationObserver.disconnect();
-      window.removeEventListener("resize", updateHeight);
-    };
-  }, [activeTab, profileEditing, student.id]);
 
   return (
-    <div className={`soft-backdrop-enter fixed inset-0 ${layerClassName} flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm`}>
-      <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} style={modalHeight ? { height: modalHeight } : undefined} className="modal-panel-enter flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-white/60 bg-background-primary-default shadow-[var(--app-shadow-float)] outline-none transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none">
+    <div className={`soft-backdrop-enter app-modal-overlay fixed inset-0 ${layerClassName} flex items-center justify-center p-4`}>
+      <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} className="modal-panel-enter app-modal-panel flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden outline-none">
         {/* Header */}
-        <div ref={modalHeaderRef} className="shrink-0 border-b border-separator-border p-5 pb-4">
+        <div className="shrink-0 border-b border-separator-border p-5 pb-4">
           <div className="relative flex min-h-10 items-center justify-between">
             {onNavigate && <IconButton label="上一位学生" size="sm" onClick={() => navigateStudent(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
             {!onNavigate && <span className="h-8 w-8" aria-hidden="true" />}
             <div className="pointer-events-none absolute left-1/2 top-1/2 w-[min(16rem,calc(100%_-_10rem))] -translate-x-1/2 -translate-y-1/2 text-center">
-              <div key={student.id} className={`student-tab-content-enter ${tabDirection === "left" ? "student-tab-enter-left" : "student-tab-enter-right"}`}>
+              <MotionSwitch transitionKey={student.id} direction={tabDirection}>
                 <div className="mb-1 text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
                 <h3 className="truncate text-text-primary" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`} style={{ fontSize: "1.25rem" }}>
                   {student.name}
                   <span className="ml-2 hidden text-text-tertiary 2xl:inline" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
                 </h3>
-              </div>
+              </MotionSwitch>
             </div>
             <div className="ml-auto flex items-center gap-1.5">
               {onNavigate && <IconButton label="下一位学生" size="sm" onClick={() => navigateStudent(1)}><ChevronRight className="h-4 w-4" /></IconButton>}
@@ -561,12 +547,12 @@ export function StudentModal({
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
                 {onSelectStudent && <div className="w-40 shrink-0"><StudentPicker compact students={students} value={student.id} onChange={selectStudent} label="直接选择学生" /></div>}
-                <Button type="button" size="sm" variant="ghost" aria-label="AI跟进" onClick={() => changeActiveTab("followup")} className="shrink-0 whitespace-nowrap border-status-ai-200 bg-status-ai-50 px-2 text-status-ai-700 hover:border-status-ai-200 hover:bg-status-ai-100 sm:px-2.5">
-                  <Sparkles className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI跟进</span>
+                <Button type="button" size="sm" variant="ghost" aria-label="AI跟进" onClick={() => changeActiveTab("followup")} className="shrink-0 whitespace-nowrap px-2 sm:px-2.5">
+                  <Sparkles className="h-3.5 w-3.5 text-status-ai-500" /><span className="hidden sm:inline">AI跟进</span>
                 </Button>
                 {onOpenAiComment && (
-                  <Button type="button" size="sm" variant="ghost" aria-label="AI评语" onClick={onOpenAiComment} className="shrink-0 whitespace-nowrap border-status-ai-200 px-2 text-status-ai-600 hover:border-status-ai-200 hover:bg-status-ai-50 sm:px-2.5">
-                    <Sparkles className="h-3.5 w-3.5" /><span className="hidden sm:inline">AI评语</span>
+                  <Button type="button" size="sm" variant="ghost" aria-label="AI评语" onClick={onOpenAiComment} className="shrink-0 whitespace-nowrap px-2 sm:px-2.5">
+                    <Sparkles className="h-3.5 w-3.5 text-status-ai-500" /><span className="hidden sm:inline">AI评语</span>
                   </Button>
                 )}
                 <Button type="button" size="sm" variant="ghost" aria-label="移出当前班级" onClick={() => setShowDeleteConfirm(true)} className="shrink-0 whitespace-nowrap border-status-danger-200 px-2 text-status-danger-500 hover:border-status-danger-200 hover:bg-status-danger-50 sm:px-2.5">
@@ -575,13 +561,12 @@ export function StudentModal({
           </div>
         </div>
 
-        <div ref={modalTabsRef} className="relative shrink-0 border-b border-separator-border pr-28">
+        <div className="relative shrink-0 border-b border-separator-border pr-28">
           <UnderlineTabs value={activeTab} options={STUDENT_DETAIL_TABS} onChange={changeActiveTab} ariaLabel="学生详情" className="border-b-0 px-6 pt-3" />
           {activeTab === "profile" && <div className="absolute bottom-2 right-6">{profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存</Button></div> : <Button size="sm" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}</div>}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-        <div ref={modalContentMeasureRef} key={`${student.id}-${activeTab}`} className={`student-tab-content-enter space-y-5 p-6 ${tabDirection === "left" ? "student-tab-enter-left" : "student-tab-enter-right"}`}>
+        <MotionSwitch scrollable transitionKey={`${student.id}-${activeTab}`} contentClassName="space-y-5 p-6">
           {activeTab === "profile" && (
           <div className="rounded-2xl border border-separator-border">
             <div className="flex items-center justify-between border-b border-separator-border bg-background-secondary-default px-4 py-3">
@@ -621,9 +606,11 @@ export function StudentModal({
                 />
               </label>
 
+              {classDuties && <StudentDutiesSection key={student.id} binding={classDuties} studentId={student.id} />}
+
               <div className="rounded-xl border border-accent-100 bg-accent-50/40 px-3 py-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="text-caption-1-regular text-accent-700" style={{ fontWeight: 800 }}>联系与住宿信息</span>
+                  <span className="text-caption-1-semibold text-accent-700">联系与住宿信息</span>
                   <span className="text-caption-1-regular text-accent-500/70">仅保存在本机 / 同步备份中</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -677,9 +664,9 @@ export function StudentModal({
               <div className="rounded-xl border border-separator-border bg-background-secondary-default px-3 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-caption-1-regular text-text-tertiary" style={{ fontWeight: 800 }}>宿舍</div>
+                    <div className="text-caption-1-semibold text-text-tertiary">宿舍</div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-body-regular">
-                      <span className="text-text-primary" style={{ fontWeight: 900 }}>{currentDormitory?.name || "未分配"}</span>
+                      <span className="text-body-semibold text-text-primary">{currentDormitory?.name || "未分配"}</span>
                       <span className="text-text-tertiary">成员 {currentDormitory?.memberIds.length ?? "—"}</span>
                     </div>
                     <div className="mt-1 truncate text-caption-1-regular text-text-tertiary">
@@ -687,9 +674,9 @@ export function StudentModal({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <button onClick={() => setDormAssignmentOpen(true)} className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-regular text-text-secondary hover:bg-background-secondary-default" style={{ fontWeight: 800 }}>更换宿舍</button>
-                    <button onClick={() => setDormEventOpen(true)} disabled={!currentDormitory} className="rounded-lg bg-accent-600 px-3 py-1.5 text-caption-1-regular text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary" style={{ fontWeight: 800 }}>记宿舍事件</button>
-                    <button onClick={onOpenDormitories} className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-regular text-text-secondary hover:bg-background-secondary-default" style={{ fontWeight: 800 }}>管理</button>
+                    <button onClick={() => setDormAssignmentOpen(true)} className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-semibold text-text-secondary hover:bg-background-secondary-default">更换宿舍</button>
+                    <button onClick={() => setDormEventOpen(true)} disabled={!currentDormitory} className="rounded-lg bg-accent-600 px-3 py-1.5 text-caption-1-semibold text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary">记宿舍事件</button>
+                    <button onClick={onOpenDormitories} className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-semibold text-text-secondary hover:bg-background-secondary-default">管理</button>
                   </div>
                 </div>
                 {dormStatus && <p className="mt-2 text-caption-1-regular text-accent-600">{dormStatus}</p>}
@@ -850,7 +837,7 @@ export function StudentModal({
               leavesWorkbench={leavesWorkbench}
             />
             <UnderlineTabs value={followupView} onChange={nextView => { setContextPreview(null); setFollowupView(nextView); }} ariaLabel="跟进与沟通" options={[{ value: "advice", label: "跟进建议", tone: "ai" }, { value: "communication", label: "周沟通稿" }]} />
-            {followupView === "advice" ? <AiStudentFollowupPanel
+            <MotionSwitch transitionKey={followupView}>{followupView === "advice" ? <AiStudentFollowupPanel
               student={student}
               context={{
                 dormitories,
@@ -863,7 +850,7 @@ export function StudentModal({
               onSaveRecord={saveAiFollowupRecord}
               onAppendCommentMaterial={appendAiFollowupMaterial}
               onCreateTask={input => onCreateFollowupTask?.({ studentId: student.id, ...input })}
-            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} drafts={communicationDrafts} />}
+            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} drafts={communicationDrafts} />}</MotionSwitch>
             </div>
           )}
 
@@ -897,22 +884,17 @@ export function StudentModal({
                 </div>
               )}
 
-              <div className="rounded-2xl border border-status-ai-100 bg-status-ai-50/40 p-4 space-y-3">
+              <div className="rounded-2xl border border-[var(--app-border)] bg-background-primary-default p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-1.5 text-body-regular text-status-ai-700" style={{ fontWeight: 700 }}>
-                      <Sparkles className="w-4 h-4" />AI 成绩趋势分析
+                    <div className="flex items-center gap-1.5 text-body-semibold text-text-primary">
+                      <Sparkles className="w-4 h-4 text-status-ai-500" />AI 成绩趋势分析
                     </div>
                   </div>
-                  <button
-                    onClick={handleGenerateAiTrend}
-                    disabled={aiTrendBusy || chronologicalExams.length < 2}
-                    className="inline-flex shrink-0 items-center justify-center gap-2 px-3.5 py-2 bg-status-ai-600 hover:bg-status-ai-700 text-text-white rounded-xl text-body-regular transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ fontWeight: 700 }}
-                  >
-                    {aiTrendBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <Button variant="ai" size="sm" onClick={handleGenerateAiTrend} disabled={aiTrendBusy || chronologicalExams.length < 2}>
+                    {aiTrendBusy && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
                     {aiTrendBusy ? "正在分析" : aiTrendResult ? "重新生成" : "生成分析"}
-                  </button>
+                  </Button>
                 </div>
 
                 {!hasAiTrendAuth && (
@@ -922,28 +904,28 @@ export function StudentModal({
                       onChange={event => setAiTrendAccessCode(event.target.value)}
                       type="password"
                       placeholder="输入 AI 授权码"
-                      className="min-w-0 px-3 py-2 text-body-regular bg-background-primary-default border border-status-ai-100 rounded-xl outline-none focus:border-status-ai-300"
+                      className="min-w-0 px-3 py-2 text-body-regular bg-background-primary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
                     />
-                    <label className="flex items-center gap-2 px-2 text-caption-1-regular text-status-ai-500 cursor-pointer">
-                      <input type="checkbox" checked={rememberAiTrendAuth} onChange={event => setRememberAiTrendAuth(event.target.checked)} className="accent-status-ai-600" />
+                    <label className="flex items-center gap-2 px-2 text-caption-1-regular text-text-secondary cursor-pointer">
+                      <input type="checkbox" checked={rememberAiTrendAuth} onChange={event => setRememberAiTrendAuth(event.target.checked)} className="accent-accent-600" />
                       记住授权
                     </label>
                   </div>
                 )}
 
                 {aiTrendBusy && <AiGenerationPanel title="正在生成成绩趋势分析" steps={["整理历次考试", "识别关键变化", "形成教师建议"]} />}
-                {!aiTrendBusy && aiTrendStatus && <p className="text-caption-1-regular text-status-ai-600">{aiTrendStatus}</p>}
-                <div aria-hidden={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible} inert={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible ? true : undefined} className={`grid transition-[grid-template-rows,opacity,transform] duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${aiTrendResult && !aiTrendBusy && aiTrendResultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
+                {!aiTrendBusy && aiTrendStatus && <p className={`text-caption-1-regular ${aiTrendError ? "text-status-danger-600" : "text-text-tertiary"}`}>{aiTrendStatus}</p>}
+                <div aria-hidden={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible} inert={!aiTrendResult || aiTrendBusy || !aiTrendResultVisible ? true : undefined} className={`grid transition-[grid-template-rows,opacity,transform] duration-[320ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${aiTrendResult && !aiTrendBusy && aiTrendResultVisible ? "grid-rows-[1fr] translate-y-0 opacity-100" : "grid-rows-[0fr] -translate-y-1 opacity-0"}`}>
                   <div className="overflow-hidden">
-                  {aiTrendResult && <div className="ai-followup-result-enter grid grid-cols-1 gap-2 pb-0.5">
+                  {aiTrendResult && <div className="grid grid-cols-1 gap-2 pb-0.5">
                     {[
                       ["总体判断", aiTrendResult.overall],
                       ["重点变化", aiTrendResult.changes],
                       ["建议关注", aiTrendResult.suggestions],
                       ["参考提示", aiTrendResult.disclaimer],
                     ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
-                      <div key={label} className="rounded-xl border border-status-ai-100 bg-background-primary-default px-3 py-2.5">
-                        <div className="text-caption-1-regular text-status-ai-500 mb-1" style={{ fontWeight: 700 }}>{label}</div>
+                      <div key={label} className="rounded-xl border border-separator-border bg-background-primary-default px-3 py-2.5">
+                        <div className="text-caption-1-semibold text-text-tertiary mb-1">{label}</div>
                         <p className="text-body-regular text-text-primary leading-relaxed">{value}</p>
                       </div>
                     ))}
@@ -1007,7 +989,7 @@ export function StudentModal({
                       <div className="flex items-center gap-4 text-body-regular">
                         <div className="flex items-center gap-1.5 text-text-secondary">
                           <span className="text-text-tertiary">总分</span>
-                          <span className="text-accent-700" style={{ fontWeight: 800, fontSize: "1.125rem" }}>{Math.round(total * 10) / 10}</span>
+                          <span className="text-headline-semibold text-accent-700" style={{ fontSize: "1.125rem" }}>{Math.round(total * 10) / 10}</span>
                         </div>
                         {(exam.rank || hasGradeScore(exam.totalCell?.rankClass)) && (
                           <div className="flex items-center gap-1 text-text-tertiary">
@@ -1035,19 +1017,18 @@ export function StudentModal({
           </div>
           )}
 
-        </div>
-        </div>
+        </MotionSwitch>
       </div>
 
       <DialogPresence open={dormAssignmentOpen}>
       {dormAssignmentOpen && (
-        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[1px]">
-          <div className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-separator-border bg-background-primary-default p-5 shadow-[var(--app-shadow-float)]">
-            <div className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>更换宿舍</div>
+        <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="modal-panel-enter app-modal-panel w-full max-w-sm p-5">
+            <div className="text-headline-semibold text-text-primary">更换宿舍</div>
             <SelectMenu value={pendingDormitoryId} onChange={setPendingDormitoryId} ariaLabel="选择宿舍" className="mt-4 w-full bg-background-secondary-default" options={[{ value: "", label: "未分配" }, ...dormitories.map(dormitory => ({ value: dormitory.id, label: dormitory.name }))]} />
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <button onClick={() => setDormAssignmentOpen(false)} className="rounded-xl border border-border-button-default bg-background-primary-default py-2 text-body-regular text-text-secondary hover:bg-background-secondary-default" style={{ fontWeight: 800 }}>取消</button>
-              <button onClick={() => handleDormitoryChange(pendingDormitoryId)} className="rounded-xl bg-accent-600 py-2 text-body-regular text-text-white hover:bg-accent-700" style={{ fontWeight: 800 }}>保存</button>
+              <button onClick={() => setDormAssignmentOpen(false)} className="rounded-xl border border-border-button-default bg-background-primary-default py-2 text-body-semibold text-text-secondary hover:bg-background-secondary-default">取消</button>
+              <button onClick={() => handleDormitoryChange(pendingDormitoryId)} className="rounded-xl bg-accent-600 py-2 text-body-semibold text-text-white hover:bg-accent-700">保存</button>
             </div>
           </div>
         </div>
@@ -1056,11 +1037,11 @@ export function StudentModal({
 
       <DialogPresence open={dormEventOpen && Boolean(currentDormitory)}>
       {dormEventOpen && currentDormitory && (
-        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[1px]">
-          <div className="modal-panel-enter w-full max-w-md rounded-[var(--app-radius-lg)] border border-separator-border bg-background-primary-default p-5 shadow-[var(--app-shadow-float)]">
+        <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="modal-panel-enter app-modal-panel w-full max-w-md p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>记宿舍事件</div>
+                <div className="text-headline-semibold text-text-primary">记宿舍事件</div>
                 <div className="mt-1 text-caption-1-regular text-text-tertiary">{student.name} · {currentDormitory.name}</div>
               </div>
               <button onClick={() => setDormEventOpen(false)} className="rounded-lg p-1 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary">

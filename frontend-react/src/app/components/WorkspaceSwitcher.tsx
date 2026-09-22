@@ -24,7 +24,7 @@ import {
 } from "../state/workspaces";
 import { exportPreImportBackup } from "../state/backupStorage";
 import type { TermSeason } from "../state/types";
-import { AnimatedPopover, ConfirmDialog, useActionToast, useAppDialog } from "./ui";
+import { MotionSwitch, AnimatedPopover, ConfirmDialog, useActionToast, useAppDialog } from "./ui";
 
 interface Props {
   /** 切换/新建/删除等触碰文件柜前调用，App 用它同步 flush 防抖中的持久化。 */
@@ -384,6 +384,7 @@ export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
         open={open}
         className="absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-lg"
       >
+            <MotionSwitch transitionKey={mode}>
             {mode === "menu" && (
               <div className="max-h-[70vh] overflow-y-auto">
                 <div className="p-2">
@@ -500,6 +501,7 @@ export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
                 />
               );
             })()}
+            </MotionSwitch>
       </AnimatedPopover>
       <ConfirmDialog open={Boolean(pendingDeleteSlice)} title="删除这个学期？" description={`将删除“${pendingDeleteSlice?.label || "当前学期"}”的学生、成绩、出勤、任务及其他学期数据。删除前会自动导出安全备份，但此操作仍不可直接撤销。`} confirmLabel="确认删除学期" error={deleteError} onCancel={() => { setPendingDeleteSlice(null); setDeleteError(""); }} onConfirm={() => pendingDeleteSlice && handleDeleteSlice(pendingDeleteSlice.id)} />
       {appDialog.dialog}

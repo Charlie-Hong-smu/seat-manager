@@ -37,7 +37,7 @@ class LazyErrorBoundary extends Component<{
 
 function FeatureSkeleton() {
   return (
-    <div className="h-full animate-pulse space-y-4 bg-background-secondary-default p-5" aria-label="正在加载功能模块">
+    <div className="h-full animate-pulse space-y-4 bg-background-secondary-default p-5" aria-label="正在加载功能模块" data-motion-pending="true">
       <div className="h-12 rounded-2xl bg-background-tertiary-hover/80" />
       <div className="grid h-[calc(100%-4rem)] grid-cols-[16rem_1fr] gap-4">
         <div className="rounded-2xl bg-background-tertiary-hover/70" />
@@ -47,16 +47,42 @@ function FeatureSkeleton() {
   );
 }
 
+// lazy 实例缓存到模块级：React.lazy 的解析结果挂在实例上，挂载即新建会让
+// 已加载的模块再走一次微任务挂起、骨架屏闪一帧。按 load 函数缓存后，首次解析
+// 完成即永久生效，之后每次进入路由都同步渲染、零闪烁。重试时绕过缓存重建。
+const resolvedCache = new WeakMap<() => Promise<unknown>, ComponentType<object>>();
+
+// Preloading also resolves the renderable component: a warm feature never paints a fallback.
+// eslint-disable-next-line react-refresh/only-export-components
+export async function preloadFeature<T extends { default: unknown }>(load: () => Promise<T>): Promise<T> {
+  const module = await load();
+  resolvedCache.set(load, module.default as ComponentType<object>);
+  return module;
+}
+
+const lazyCache = new WeakMap<() => Promise<unknown>, ComponentType<Record<string, unknown>>>();
+
+function cachedLazy(load: () => Promise<unknown>) {
+  let component = lazyCache.get(load);
+  if (!component) {
+    component = lazy(load as () => Promise<{ default: ComponentType<Record<string, unknown>> }>);
+    lazyCache.set(load, component);
+  }
+  return component;
+}
+
 export function RetryableLazy<P extends object>({ load, componentProps, fallback = <FeatureSkeleton /> }: {
   load: () => Promise<{ default: ComponentType<P> }>;
   componentProps: P;
   fallback?: ReactNode;
 }) {
   const [attempt, setAttempt] = useState(0);
-  const LazyComponent = useMemo(() => lazy(() => {
-    void attempt;
-    return load();
-  }), [attempt, load]);
+  const LazyComponent = useMemo(() => (attempt === 0
+    ? resolvedCache.get(load) || cachedLazy(load)
+    : lazy(() => {
+      void attempt;
+      return load();
+    })), [attempt, load]);
   return (
     <LazyErrorBoundary resetKey={attempt} onRetry={() => setAttempt((value) => value + 1)}>
       <Suspense fallback={fallback}>{createElement(

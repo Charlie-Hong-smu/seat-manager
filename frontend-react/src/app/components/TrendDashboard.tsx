@@ -1,8 +1,9 @@
+import { ChartViewport } from "./ui";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import {
   CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -42,6 +43,7 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
       return row;
     }, { exam: exam.name }));
 
+  const reducedMotion = useReducedMotion();
   return (
     <>
       <div className="bg-background-primary-default rounded-2xl p-6 border border-separator-border shadow-sm">
@@ -59,8 +61,8 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
             ))}
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={trendData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <ChartViewport height={280}>{(width, height) =>
+          <LineChart width={width} height={height} data={trendData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
             <XAxis dataKey="exam" tick={{ fontSize: 13, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} />
             <YAxis domain={[55, 95]} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
@@ -68,9 +70,9 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
               contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }}
               formatter={(value: number, name: string) => [`${value} 分`, name]}
             />
-            {subjects.map(sub => (
-              <Line
-                key={`trend-line-${sub}`}
+            {subjects.map((sub, index) => (
+              <Line isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out"
+                key={`trend-line-${index}`}
                 type="monotone"
                 dataKey={sub}
                 stroke={SUBJECT_COLORS[sub] || "var(--app-chart-fallback)"}
@@ -80,7 +82,7 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
               />
             ))}
           </LineChart>
-        </ResponsiveContainer>
+        }</ChartViewport>
       </div>
 
       <div className="bg-background-primary-default rounded-2xl border border-separator-border shadow-sm overflow-hidden">

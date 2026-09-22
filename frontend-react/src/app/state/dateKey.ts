@@ -11,3 +11,11 @@ export function isValidDateKey(value: string): boolean {
   const date = new Date(`${value}T12:00:00`);
   return Number.isFinite(date.getTime()) && toLocalDateKey(date) === value;
 }
+
+/** ISO timestamps use the viewer's local day; legacy date-only values remain dates. */
+export function timestampToLocalDateKey(value?: string): string {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return isValidDateKey(value) ? value : "";
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? toLocalDateKey(date) : "";
+}

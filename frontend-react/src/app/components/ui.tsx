@@ -1,3 +1,6 @@
+import { DIALOG_EXIT_DURATION, MotionSwitch, PresenceMotion } from "./motion";
+export { MotionSwitch, MotionCollapse, MotionList } from "./motion";
+export { ChartViewport } from "./ChartViewport";
 import { AgentThinking } from "@/components/application/agent-thinking/agent-thinking";
 import { Input } from "@/components/base/input/input";
 export { Input };
@@ -11,8 +14,29 @@ import { Button as BoardButton } from "@/components/base/buttons/button";
 import { SegmentedControl as BoardSegments, SegmentedControlItem } from "@/components/base/segmented-control/segmented-control";
 import { cx } from "@/utils/cx";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
-import { createPortal } from "react-dom";
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Search, TriangleAlert, X } from "lucide-react";
+import { createPortal, flushSync } from "react-dom";
+
+let activeViewTransition: ViewTransition | null = null;
+
+/**
+ * 同构详情区切换（宿舍间切换、评语工作台切换学生等）走 View Transition：
+ * 浏览器捕获旧帧与新帧做交叉淡化——旧内容不先消失、新内容不带位移，
+ * 读起来是内容原地"溶"成新内容。不支持或减弱动效时直接瞬时提交。
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function runViewTransition(commit: () => void) {
+  if (typeof document === "undefined"
+    || typeof document.startViewTransition !== "function"
+    || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    commit();
+    return;
+  }
+  activeViewTransition?.skipTransition();
+  const transition = document.startViewTransition(() => { flushSync(commit); });
+  activeViewTransition = transition;
+  void transition.finished.catch(() => undefined).finally(() => { if (activeViewTransition === transition) activeViewTransition = null; });
+}
 
 /**
  * 统一按钮组件
@@ -44,15 +68,16 @@ export function Button({
   </BoardButton>;
 }
 
-export function IconButton({ label, size = "md", active = false, tone = "default", className = "", children, ...props }: {
+export function IconButton({ label, size = "md", active = false, tone = "default", variant = "secondary", className = "", children, ...props }: {
   label: string;
   size?: "xs" | "sm" | "md" | "lg";
   active?: boolean;
   tone?: "default" | "success" | "danger";
+  variant?: "secondary" | "ghost";
   className?: string;
   children: ReactNode;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <BoardButton {...props} aria-label={label} title={label} variant="secondary" size={size === "xs" ? "xs" : size === "sm" ? "small" : "medium"}
+  return <BoardButton {...props} aria-label={label} title={label} variant={variant} size={size === "xs" ? "xs" : size === "sm" ? "small" : "medium"}
     className={cx("app-icon-button shrink-0 p-0", { xs: "size-5", sm: "size-8", md: "size-9", lg: "size-11" }[size],
       active && "bg-button-ghost-background text-button-ghost-foreground",
       tone === "success" && "text-status-success-600 bg-status-success-50",
@@ -142,7 +167,7 @@ export function useModalFocus(open: boolean, onEscape: () => void) {
         return;
       }
       if (event.key !== "Tab" || !panel) return;
-      const focusable = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(element => !element.hidden);
+      const focusable = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(element => !element.hidden && !element.closest("[inert], [aria-hidden=true]") && element.getClientRects().length > 0);
       if (!focusable.length) {
         event.preventDefault();
         panel.focus();
@@ -171,11 +196,11 @@ export function DialogPresence({ open, children }: { open: boolean; children: Re
   useEffect(() => {
     if (open) { setPresent(true); return; }
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : 460);
+    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : DIALOG_EXIT_DURATION + 20);
     return () => window.clearTimeout(timer);
   }, [open]);
   if (!open && !present) return null;
-  return <div ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className="dialog-presence contents">{open ? children : lastContent.current}</div>;
+  return <PresenceMotion active={open} className="dialog-presence contents">{open ? children : lastContent.current}</PresenceMotion>;
 }
 
 export function ModalShell({ open, title, description, children, footer, onClose, className = "max-w-lg" }: {
@@ -190,11 +215,11 @@ export function ModalShell({ open, title, description, children, footer, onClose
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useModalFocus(open, onClose);
-  return createPortal(<DialogPresence open={open}><div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter w-full overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)] outline-none ${className}`}>
-      <header className="flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-headline-semibold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
+  return createPortal(<DialogPresence open={open}><div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[90] grid place-items-center p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter app-modal-panel w-full overflow-hidden outline-none ${className}`}>
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-title-3-semibold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
       <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
-      {footer && <footer className="flex flex-wrap justify-end gap-2 border-t border-[var(--app-border)] p-4">{footer}</footer>}
+      {footer && <footer className="app-modal-footer flex flex-wrap justify-end gap-2 px-5 py-3.5">{footer}</footer>}
     </div>
   </div></DialogPresence>, document.body);
 }
@@ -228,12 +253,19 @@ export function ConfirmDialog({
   const descriptionId = useId();
   const panelRef = useModalFocus(open, onCancel);
 
-  return createPortal(<DialogPresence open={open}><div className="soft-backdrop-enter fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
-    <div ref={panelRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="modal-panel-enter w-full max-w-sm rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default p-5 shadow-[var(--app-shadow-float)] outline-none">
-      <h2 id={titleId} className="text-headline-semibold text-[var(--app-text)]">{title}</h2>
-      <p id={descriptionId} className="mt-2 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>
-      {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-status-danger-50 px-3 py-2 text-caption-1-semibold text-status-danger-600">{error}</p>}
-      <div className="mt-5 flex flex-wrap justify-end gap-2">{showCancel && <Button variant="ghost" onClick={onCancel}>取消</Button>}{alternateLabel && onAlternate && <Button variant="secondary" onClick={onAlternate}>{alternateLabel}</Button>}<Button autoFocus variant={variant} onClick={onConfirm}>{confirmLabel}</Button></div>
+  return createPortal(<DialogPresence open={open}><div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[90] grid place-items-center p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel(); }}>
+    <div ref={panelRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} className="modal-panel-enter app-modal-panel w-full max-w-sm overflow-hidden outline-none">
+      <div className="p-5">
+        <div className="flex items-start gap-3.5">
+          {variant === "danger" && <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-status-danger-50 text-status-danger-600"><TriangleAlert className="h-4 w-4" aria-hidden /></span>}
+          <div className="min-w-0">
+            <h2 id={titleId} className="text-title-3-semibold text-[var(--app-text)]">{title}</h2>
+            <p id={descriptionId} className="mt-1.5 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>
+          </div>
+        </div>
+        {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-status-danger-50 px-3 py-2 text-caption-1-semibold text-status-danger-600">{error}</p>}
+      </div>
+      <div className="app-modal-footer flex flex-wrap justify-end gap-2 px-5 py-3.5">{showCancel && <Button variant="ghost" onClick={onCancel}>取消</Button>}{alternateLabel && onAlternate && <Button variant="secondary" onClick={onAlternate}>{alternateLabel}</Button>}<Button autoFocus variant={variant} onClick={onConfirm}>{confirmLabel}</Button></div>
     </div>
   </div></DialogPresence>, document.body);
 }
@@ -347,16 +379,22 @@ export function AiGenerationPanel({ title, steps, compact = false }: { title: st
   useEffect(() => {
     setActiveStep(0);
     if (steps.length < 2) return;
-    const timer = window.setInterval(() => setActiveStep(current => Math.min(current + 1, steps.length - 1)), 1200);
+    const timer = window.setInterval(() => setActiveStep(current => Math.min(current + 1, steps.length - 1)), 1000);
     return () => window.clearInterval(timer);
   }, [steps.length]);
   return <div className={`ai-generation-panel ai-followup-loading-enter relative overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default text-left ${compact ? "p-3" : "p-4"}`} role="status" aria-live="polite" aria-label={title}>
-    <div className="relative flex items-center gap-3">
-
-      <span className="min-w-0 flex-1"><AgentThinking label={title} variant="wave" tone="primary" shimmer={false} showTimer={false} /><span className="ai-message-enter mt-1 block text-caption-1-regular text-text-secondary" key={activeStep}>{steps[activeStep] || "正在生成内容"}</span></span>
-    </div>
-    <div aria-hidden="true" className="ai-loading-track mt-3"><span /></div>
-    {!compact && <div className="relative mt-4 grid gap-2 sm:grid-cols-3">{steps.map((step, index) => <div key={step} className={`flex items-center gap-2 rounded-[var(--app-radius-sm)] border px-2.5 py-2 text-[11px] font-semibold transition-colors duration-300 ${index < activeStep ? "border-status-success-100 bg-status-success-50 text-status-success-700" : index === activeStep ? "border-status-ai-200 bg-background-primary-default text-status-ai-700 shadow-sm" : "border-white/70 bg-background-primary-default/55 text-text-tertiary"}`}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] ${index < activeStep ? "bg-status-success-500 text-text-white" : index === activeStep ? "bg-status-ai-600 text-text-white" : "bg-background-tertiary-default text-text-tertiary"}`}>{index < activeStep ? "✓" : index + 1}</span><span className="truncate">{step}</span></div>)}</div>}
+    <AgentThinking label={title} variant="wave" tone="primary" shimmer={false} showTimer={false} />
+    <ol className={`mt-3 ${compact ? "space-y-1" : "space-y-1.5"}`}>
+      {steps.map((step, index) => {
+        const state = index < activeStep ? "done" : index === activeStep ? "active" : "pending";
+        return <li key={step} className="ai-step-item flex items-center gap-2" style={{ animationDelay: `${index * 90}ms` }}>
+          <span aria-hidden="true" className={`grid size-[18px] shrink-0 place-items-center rounded-full transition-colors duration-300 ${state === "done" ? "bg-status-success-500 text-text-white" : state === "active" ? "bg-status-ai-600 text-text-white" : "border border-separator-border"}`}>
+            {state === "done" ? <Check className="ai-step-check size-3" /> : state === "active" ? <span className="ai-step-active-dot size-1.5 rounded-full bg-current" /> : null}
+          </span>
+          <span className={`min-w-0 text-caption-1-regular leading-snug ${state === "done" ? "ai-step-done-label text-text-tertiary" : state === "active" ? "text-text-primary" : "text-text-tertiary"}`}>{step}</span>
+        </li>;
+      })}
+    </ol>
   </div>;
 }
 
@@ -396,6 +434,7 @@ export function SegmentedControl<T extends string>({
   options,
   onChange,
   ariaLabel,
+  onPress,
   className = "",
   disabled = false,
 }: {
@@ -403,13 +442,14 @@ export function SegmentedControl<T extends string>({
   options: Array<{ value: T; label: string; icon?: ReactNode }>;
   onChange: (value: T) => void;
   ariaLabel: string;
+  onPress?: (value: T) => void;
   className?: string;
   disabled?: boolean;
 }) {
   return <div role="group" aria-label={ariaLabel} className={cx("inline-flex", className)}><BoardSegments aria-label={ariaLabel} selectedKeys={[value]} isDisabled={disabled}
-    onSelectionChange={keys => { const selected = Array.from(keys).find(key => String(key) !== value); if (selected !== undefined) onChange(String(selected) as T); }}
+    onSelectionChange={keys => { if (onPress) return; const selected = Array.from(keys).find(key => String(key) !== value); if (selected !== undefined) onChange(String(selected) as T); }}
     className="app-segments w-full flex-wrap">
-    {options.map(option => <SegmentedControlItem key={option.value} id={option.value} className="min-h-8 min-w-max flex-1 gap-1.5 px-2.5">
+    {options.map(option => <SegmentedControlItem key={option.value} id={option.value} onPress={onPress ? () => onPress(option.value) : undefined} className="min-h-8 min-w-max flex-1 gap-1.5 px-2.5">
       {option.icon}{option.label}
     </SegmentedControlItem>)}
   </BoardSegments></div>;
@@ -481,7 +521,7 @@ export function AnimatedPopover({
       openFrameRef.current = window.requestAnimationFrame(() => setPhase("open"));
     } else {
       setPhase(current => current === "closed" ? "closed" : "closing");
-      closeTimerRef.current = window.setTimeout(() => setPhase("closed"), 240);
+      closeTimerRef.current = window.setTimeout(() => setPhase("closed"), window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 200);
     }
 
     return () => {
@@ -644,7 +684,7 @@ export function DatePicker({ value, onChange, ariaLabel, className = "", min, ma
     {createPortal(<AnimatedPopover open={open} className="fixed z-[125] w-[304px] rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-3 shadow-[var(--app-shadow-float)]" style={position}><div ref={panelRef} role="dialog" aria-label={ariaLabel}>
       <div className="mb-3 flex items-center justify-between"><IconButton size="sm" label="上个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4"/></IconButton><strong className="text-body-regular text-[var(--app-text)]">{visibleMonth.getFullYear()}年 {visibleMonth.getMonth() + 1}月</strong><IconButton size="sm" label="下个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4"/></IconButton></div>
       <div className="grid grid-cols-7 text-center text-[11px] font-bold text-[var(--app-text-muted)]">{"日一二三四五六".split("").map(day => <span key={day} className="py-1">{day}</span>)}</div>
-      <div className="mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-caption-1-regular transition-colors disabled:opacity-25 ${active ? "bg-accent-600 font-bold text-text-white" : dayValue === today ? "bg-accent-50 font-bold text-accent-700" : currentMonth ? "text-text-primary hover:bg-background-tertiary-default" : "text-text-tertiary hover:bg-background-secondary-default"}`}>{day.getDate()}</button>; })}</div>
+      <MotionSwitch transitionKey={`${visibleMonth.getFullYear()}-${visibleMonth.getMonth()}`} contentClassName="mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-caption-1-regular transition-colors disabled:opacity-25 ${active ? "bg-accent-600 font-bold text-text-white" : dayValue === today ? "bg-accent-50 font-bold text-accent-700" : currentMonth ? "text-text-primary hover:bg-background-tertiary-default" : "text-text-tertiary hover:bg-background-secondary-default"}`}>{day.getDate()}</button>; })}</MotionSwitch>
       <div className="mt-3 flex justify-between border-t border-separator-border pt-2"><Button size="sm" variant="ghost" disabled={required} onClick={() => { if (!required) onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" disabled={Boolean((min && today < min) || (max && today > max))} onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
     </div></AnimatedPopover>, document.body)}
   </>;
@@ -658,8 +698,8 @@ export function ToolDrawer({
   widthClassName = "w-[400px]",
   bodyClassName = "p-4",
   positionClassName = "fixed",
-  backdropLayerClassName = "z-20",
-  panelLayerClassName = "z-30",
+  backdropLayerClassName = "z-50",
+  panelLayerClassName = "z-[60]",
   footer,
   children,
 }: {
@@ -676,10 +716,13 @@ export function ToolDrawer({
   children: ReactNode;
 }) {
   const [present, setPresent] = useState(open);
+  const lastView = useRef({ title, children, footer });
+  if (open) lastView.current = { title, children, footer };
+  const view = open ? { title, children, footer } : lastView.current;
   useEffect(() => {
     if (open) { setPresent(true); return; }
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : 150);
+    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : 220);
     return () => window.clearTimeout(timer);
   }, [open]);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -706,11 +749,11 @@ export function ToolDrawer({
 
   if (!open && !present) return null;
   const drawerContent = (
-    <>
+    <PresenceMotion active={open}>
       <button type="button" aria-label="关闭工具面板" tabIndex={-1} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-backdrop soft-backdrop-enter inset-0 bg-text-primary/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
       <aside ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-24px)] flex-col overflow-hidden border-l border-border-button-default bg-background-primary-default shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
         <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-separator-border px-4">
-          <h2 className="text-headline-semibold text-[var(--app-text)]">{title}</h2>
+          <h2 className="text-headline-semibold text-[var(--app-text)]">{view.title}</h2>
           <button
             ref={closeRef}
             type="button"
@@ -722,10 +765,10 @@ export function ToolDrawer({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className={cx("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{children}</div>
-        {footer && <div className="shrink-0 border-t border-separator-border p-3">{footer}</div>}
+        <div className={cx("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{view.children}</div>
+        {view.footer && <div className="shrink-0 border-t border-separator-border p-3">{view.footer}</div>}
       </aside>
-    </>
+    </PresenceMotion>
   );
   return typeof document === "undefined" ? null : createPortal(drawerContent, document.body);
 }

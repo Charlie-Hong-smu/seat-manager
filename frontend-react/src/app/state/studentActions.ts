@@ -57,7 +57,7 @@ export function updateStudentProfile(student: AppStudent, input: StudentProfileI
   const manualTagIds = Array.from(new Set(input.manualTagIds.map(id => id.trim()).filter(Boolean)));
   const aliases = Array.from(new Set(input.aliases.map(alias => alias.trim()).filter(Boolean)));
   const derivedTags = deriveTagLabels(manualTagIds, student.autoTagIds);
-  const hasStoredTagIds = manualTagIds.length > 0 || student.autoTagIds.length > 0;
+  const previousLabels = deriveTagLabels(student.manualTagIds, student.autoTagIds);
 
   return {
     ...student,
@@ -69,8 +69,8 @@ export function updateStudentProfile(student: AppStudent, input: StudentProfileI
     emergencyContact: input.emergencyContact?.trim() || undefined,
     isBoarding: input.isBoarding === true,
     manualTagIds,
-    tags: hasStoredTagIds ? derivedTags.tags : student.tags,
-    academicTags: student.autoTagIds.length > 0 ? derivedTags.academicTags : student.academicTags,
+    tags: previousLabels.tags.length || derivedTags.tags.length ? derivedTags.tags : student.tags,
+    academicTags: previousLabels.academicTags.length || derivedTags.academicTags.length ? derivedTags.academicTags : student.academicTags,
   };
 }
 

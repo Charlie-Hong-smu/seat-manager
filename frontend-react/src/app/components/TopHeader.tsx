@@ -193,8 +193,8 @@ export function TopHeader({
 
       <DialogPresence open={searchOpen}>
       {searchOpen && (
-        <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-start justify-center bg-text-primary/20 px-4 pt-[12vh] backdrop-blur-[2px]" onMouseDown={event => event.currentTarget === event.target && closeSearch()}>
-          <div className="modal-panel-enter w-full max-w-xl overflow-hidden rounded-[var(--app-radius-lg)] border border-white bg-background-primary-default shadow-[var(--app-shadow-float)]" role="dialog" aria-label="搜索学生">
+        <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]" onMouseDown={event => event.currentTarget === event.target && closeSearch()}>
+          <div className="modal-panel-enter app-modal-panel w-full max-w-xl overflow-hidden" role="dialog" aria-label="搜索学生">
             <div className="flex items-center gap-3 border-b border-[var(--app-border)] px-4">
               <Search className="h-5 w-5 text-text-tertiary" />
               <input

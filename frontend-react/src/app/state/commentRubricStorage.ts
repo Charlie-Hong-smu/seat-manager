@@ -1,3 +1,4 @@
+import { writeStudentComment } from "./commentPersistence";
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import type {
   AppStudent,
@@ -263,21 +264,29 @@ function normalizeProfile(value: unknown): StudentCommentProfile {
   };
 }
 
-export function readStudentCommentProfile(student: AppStudent): StudentCommentProfile {
+function resolveStudentCommentProfile(student: AppStudent, persistedStudent: unknown): StudentCommentProfile {
   const aiComments = isRecord(student.aiComments) ? student.aiComments : {};
   const draft = isRecord(aiComments.draft) ? aiComments.draft : {};
   const rawProfile = isRecord(aiComments.profile) ? aiComments.profile : {};
   const fromStudent = normalizeProfile({ ...draft, ...rawProfile });
-  const root = readLegacyRootState();
-  const persistedStudent = isRecord(root) && Array.isArray(root.students)
-    ? root.students.find(item => isRecord(item) && String(item.id || "") === student.id)
-    : null;
   if (!isRecord(persistedStudent)) return fromStudent;
   const persistedComments = isRecord(persistedStudent.aiComments) ? persistedStudent.aiComments : {};
   const persistedDraft = isRecord(persistedComments.draft) ? persistedComments.draft : {};
   const persistedProfile = isRecord(persistedComments.profile) ? persistedComments.profile : {};
   const fromStorage = normalizeProfile({ ...persistedDraft, ...persistedProfile });
-  return Date.parse(fromStorage.updatedAt || "") > Date.parse(fromStudent.updatedAt || "") ? fromStorage : fromStudent;
+  return (Date.parse(fromStorage.updatedAt || "") || 0) >= (Date.parse(fromStudent.updatedAt || "") || 0) ? fromStorage : fromStudent;
+}
+
+export function readStudentCommentProfile(student: AppStudent): StudentCommentProfile {
+  return readStudentCommentProfiles([student])[student.id];
+}
+
+export function readStudentCommentProfiles(students: AppStudent[]): Record<StudentId, StudentCommentProfile> {
+  const root = readLegacyRootState();
+  const persisted = new Map(isRecord(root) && Array.isArray(root.students)
+    ? root.students.filter(isRecord).map(student => [String(student.id || ""), student])
+    : []);
+  return Object.fromEntries(students.map(student => [student.id, resolveStudentCommentProfile(student, persisted.get(student.id))]));
 }
 
 export function summarizeCommentProfile(rubric: CommentRubric, profile: StudentCommentProfile): {
@@ -372,7 +381,8 @@ export function saveStudentCommentProfile(studentId: StudentId, rubric: CommentR
   };
   aiComments.profile = nextProfile;
   student.aiComments = aiComments;
+  const previousTags = Array.isArray(student.manualTags) ? student.manualTags.map(String) : [];
   syncProfileTags(student, rubric, nextProfile);
-  writeLegacyRootState(root);
+  writeStudentComment(root, student, previousTags);
   return nextProfile;
 }

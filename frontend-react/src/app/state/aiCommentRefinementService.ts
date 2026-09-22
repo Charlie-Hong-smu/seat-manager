@@ -19,6 +19,7 @@ interface CommentRefinementInput {
   action: CommentRefinementAction;
   accessCode?: string;
   remember?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface CommentRefinementResult {
@@ -60,6 +61,7 @@ export async function refineCommentSelection(input: CommentRefinementInput): Pro
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
+    signal: input.signal,
   });
 
   let auth = await getAiAuth({ accessCode: input.accessCode, remember: input.remember });

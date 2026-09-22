@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, ChevronDown, Copy, FilePlus2, Loader2, RotateCcw, Save, Send, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowRight, Bot, Check, ChevronDown, Copy, FilePlus2, Loader2, RotateCcw, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 
 import {
   buildAiAssistantBaseContext,
@@ -11,7 +11,7 @@ import {
 } from "../state/aiAssistantService";
 import { getCurrentSlice, sliceDisplayName } from "../state/workspaces";
 import type { AppStudent, Dormitory, FundTransaction, GradeExam, StudentId } from "../state/types";
-import { AiGenerationPanel, ConfirmDialog, IconButton, useAppDialog } from "./ui";
+import { AiGenerationPanel, ConfirmDialog, DialogPresence, IconButton, MotionCollapse, useAppDialog } from "./ui";
 
 const QUICK_PROMPTS = [
   "帮我分析这个班当前最需要关注的学生，并给出跟进建议。",
@@ -329,13 +329,12 @@ export function AiAssistantCompanion({
   const [input, setInput] = useState(() => loadDraftInput(currentStorageKey));
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("AI 只读取当前班级、当前学期的相关摘要，不会自动修改数据。");
+  const [statusError, setStatusError] = useState(false);
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>(QUICK_PROMPTS);
   const [copiedMessageId, setCopiedMessageId] = useState("");
   const [savedActionKey, setSavedActionKey] = useState("");
   const [studentSuggestOpen, setStudentSuggestOpen] = useState(false);
   const [contextExpanded, setContextExpanded] = useState(false);
-  const [rendered, setRendered] = useState(open);
-  const [transitionState, setTransitionState] = useState<"opening" | "open" | "closing">(open ? "opening" : "closing");
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -398,22 +397,12 @@ export function AiAssistantCompanion({
     setMessages(loadChatHistory(currentStorageKey));
     setInput(loadDraftInput(currentStorageKey));
     setStatus("已切换到当前班级与学期的 AI 对话。");
+    setStatusError(false);
     setSavedActionKey("");
     setContextExpanded(false);
   }, [currentStorageKey, sessionStorageKey]);
 
-  useEffect(() => {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (open) {
-      setRendered(true);
-      setTransitionState("opening");
-      const timer = window.setTimeout(() => setTransitionState("open"), reducedMotion ? 0 : 240);
-      return () => window.clearTimeout(timer);
-    }
-    setTransitionState("closing");
-    const timer = window.setTimeout(() => setRendered(false), reducedMotion ? 0 : 150);
-    return () => window.clearTimeout(timer);
-  }, [open]);
+
 
   useEffect(() => {
     onBusyChange?.(busy);
@@ -423,7 +412,7 @@ export function AiAssistantCompanion({
     saveDraftInput(input, sessionStorageKey);
     const textarea = inputRef.current;
     if (textarea) {
-      textarea.style.height = "44px";
+      textarea.style.height = "32px";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 112)}px`;
     }
   }, [input, sessionStorageKey]);
@@ -435,10 +424,9 @@ export function AiAssistantCompanion({
   useEffect(() => {
     if (!open) return;
     const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({ block: "end" });
       if (messagesScrollRef.current) messagesScrollRef.current.scrollTop = messagesScrollRef.current.scrollHeight;
     };
-    const focusFrame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    const focusFrame = window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     const scrollFrame = window.requestAnimationFrame(scrollToBottom);
     const timer = window.setTimeout(scrollToBottom, 80);
     function handleKeyDown(event: KeyboardEvent) {
@@ -453,13 +441,13 @@ export function AiAssistantCompanion({
       window.cancelAnimationFrame(scrollFrame);
       window.clearTimeout(timer);
       window.removeEventListener("keydown", handleKeyDown);
-      document.getElementById("ai-assistant-launcher")?.focus();
+      document.getElementById("ai-assistant-launcher")?.focus({ preventScroll: true });
     };
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    messagesScrollRef.current?.scrollTo({ top: messagesScrollRef.current.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }, [busy, messages.length, open]);
 
   function handleInputChange(value: string) {
@@ -470,7 +458,7 @@ export function AiAssistantCompanion({
   function chooseStudentSuggestion(student: AppStudent) {
     handleInputChange(applyStudentSuggestion(input, student.name));
     setStudentSuggestOpen(false);
-    window.requestAnimationFrame(() => inputRef.current?.focus());
+    window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   }
 
   function copyMessage(message: AiChatMessage) {
@@ -521,6 +509,7 @@ export function AiAssistantCompanion({
       ...(activeContext.comparisonContext?.notice ? [activeContext.comparisonContext.notice] : []),
     ];
     setStatus(activeLabelsText.length ? `正在分析，并附带：${activeLabelsText.join("、")}` : "正在分析当前班级摘要…");
+    setStatusError(false);
     try {
       const result = await sendAiAssistantChat({ messages: nextMessages, context: activeContext });
       const assistantMessage = makeMessage("assistant", result.message, {
@@ -534,11 +523,13 @@ export function AiAssistantCompanion({
         setMessages(saved);
         setSuggestedPrompts(result.suggestedPrompts.length ? result.suggestedPrompts : initialQuickPrompts);
         setStatus(result.disclaimer);
+        setStatusError(false);
       }
     } catch (error) {
       if (sessionStorageKeyRef.current === requestStorageKey) {
         const reason = error instanceof Error ? error.message : "";
         setStatus(getAiErrorMessage(reason));
+        setStatusError(true);
       }
     } finally {
       setBusy(false);
@@ -549,27 +540,24 @@ export function AiAssistantCompanion({
     setMessages([]);
     saveChatHistory([], sessionStorageKey);
     setStatus("已开始新的对话。AI 不会自动修改班级数据。");
+    setStatusError(false);
     setSuggestedPrompts(initialQuickPrompts);
     setConfirmClearMessages(false);
   }
 
-  if (!rendered) return <>{appDialog.dialog}</>;
-
   return (
     <>
-      <aside
+      <DialogPresence open={open}><aside
         id="ai-assistant-companion"
         data-testid="ai-assistant-companion"
-        data-transition-state={transitionState}
+        data-transition-state={open ? "open" : "closing"}
         role="dialog"
         aria-modal={false}
         aria-label="AI助手浮窗"
-        className="ai-companion-panel fixed inset-x-2 bottom-2 top-16 z-[70] flex min-w-0 flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-status-ai-100 bg-background-primary-default shadow-[var(--app-shadow-float)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-[72px] sm:w-[420px]"
+        className="ai-companion-panel fixed inset-x-2 bottom-2 top-16 z-[70] flex min-w-0 flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-[72px] sm:w-[420px]"
       >
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--app-border)] px-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-status-ai-50 text-status-ai-600">
-            <Sparkles className="h-[18px] w-[18px]" />
-          </span>
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--app-border)] px-3">
+          <Sparkles aria-hidden="true" className="size-4 shrink-0 text-status-ai-500" />
           <div className="min-w-0 flex-1">
             <h2 className="text-body-semibold text-[var(--app-text)]">AI 助手</h2>
             <p className="truncate text-caption-1-regular text-[var(--app-text-muted)]">{className} · {termLabel} · {activeSurfaceLabel}</p>
@@ -582,13 +570,13 @@ export function AiAssistantCompanion({
           </IconButton>
         </header>
 
-        <div className="shrink-0 border-b border-[var(--app-border)] bg-[var(--app-surface-muted)]/60">
+        <div className="shrink-0 border-b border-[var(--app-border)]">
           <button
             type="button"
             aria-expanded={contextExpanded}
             aria-controls="ai-assistant-context"
             onClick={() => setContextExpanded(value => !value)}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-status-ai-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-status-ai-300"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-background-secondary-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring"
           >
             <span className="min-w-0 flex-1">
               <span className="block text-caption-1-semibold text-text-primary">当前上下文 · {activeSurfaceLabel}</span>
@@ -596,106 +584,119 @@ export function AiAssistantCompanion({
                 {contextPackLabels.length ? `将附带：${contextPackLabels.join("、")}` : `学生 ${baseContext.studentCount} 人 · 考试 ${exams.length} 次 · 重点候选 ${baseContext.focusStudents.length} 人`}
               </span>
             </span>
-            <span className="rounded-full bg-status-ai-50 px-2 py-1 text-[10px] font-bold text-status-ai-600">{evidenceMode}</span>
+            <span className="shrink-0 text-[11px] text-text-tertiary">{evidenceMode}</span>
             <ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${contextExpanded ? "rotate-180" : ""}`} />
           </button>
-          {contextExpanded && (
-            <div id="ai-assistant-context" className="surface-enter max-h-48 overflow-y-auto border-t border-status-ai-100 bg-background-primary-default px-3 py-3">
+          <MotionCollapse open={contextExpanded}>
+            <div id="ai-assistant-context" className="max-h-48 overflow-y-auto border-t border-separator-border px-3 py-3">
               <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
                 <div className="rounded-[var(--app-radius-sm)] bg-background-secondary-default px-2 py-2"><strong className="block text-body-regular text-text-primary">{baseContext.studentCount}</strong><span className="text-text-tertiary">学生</span></div>
                 <div className="rounded-[var(--app-radius-sm)] bg-background-secondary-default px-2 py-2"><strong className="block text-body-regular text-text-primary">{exams.length}</strong><span className="text-text-tertiary">考试</span></div>
                 <div className="rounded-[var(--app-radius-sm)] bg-background-secondary-default px-2 py-2"><strong className="block text-body-regular text-text-primary">{baseContext.focusStudents.length}</strong><span className="text-text-tertiary">重点候选</span></div>
               </div>
               {activeEvidence.length > 0 && <div className="mt-2 space-y-1.5">{activeEvidence.slice(0, 4).map(item => (
-                <div key={`${item.title}-${item.detail}`} className="rounded-[var(--app-radius-sm)] border border-status-ai-100 bg-status-ai-50/50 px-2.5 py-2">
+                <div key={`${item.title}-${item.detail}`} className="rounded-[var(--app-radius-sm)] bg-background-secondary-default px-2.5 py-2">
                   <div className="truncate text-caption-1-semibold text-text-primary">{item.title}</div>
                   <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-text-tertiary">{item.detail}</div>
                 </div>
               ))}</div>}
             </div>
-          )}
+          </MotionCollapse>
         </div>
 
-        <section ref={messagesScrollRef} aria-label="AI 对话内容" className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background-primary-default p-3.5">
+        <section ref={messagesScrollRef} aria-label="AI 对话内容" className="min-h-0 flex-1 overflow-y-auto bg-background-primary-default px-3.5 py-4">
           {messages.length === 0 && (
             <div className="flex min-h-full flex-col justify-center py-4">
               <div className="text-center">
-                <span className="mx-auto grid h-12 w-12 place-items-center rounded-[var(--app-radius-md)] bg-status-ai-50 text-status-ai-600"><Bot className="h-6 w-6" /></span>
+                <span className="mx-auto grid h-12 w-12 place-items-center rounded-[var(--app-radius-md)] bg-background-secondary-default text-status-ai-500"><Bot className="h-6 w-6" /></span>
                 <h3 className="mt-3 text-headline-semibold text-text-primary">问问当前班级</h3>
                 <p className="mx-auto mt-1 max-w-xs text-caption-1-regular leading-5 text-text-tertiary">AI 会按问题附带有限的班级摘要，不会在打开面板时自动请求，也不会自动写入数据。</p>
               </div>
-              <div className="mt-4 space-y-2">{suggestedPrompts.slice(0, 4).map(prompt => (
-                <button key={prompt} type="button" disabled={busy} onClick={() => void sendPrompt(prompt)} className="w-full rounded-[var(--app-radius-sm)] border border-status-ai-100 bg-status-ai-50/70 px-3 py-2.5 text-left text-caption-1-semibold leading-5 text-status-ai-700 transition-colors hover:bg-status-ai-100 disabled:opacity-50">{prompt}</button>
+              <div className="mt-4 divide-y divide-separator-border overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)]">{suggestedPrompts.slice(0, 4).map(prompt => (
+                <button key={prompt} type="button" disabled={busy} onClick={() => void sendPrompt(prompt)} className="group flex w-full items-center gap-2 px-3 py-2.5 text-left text-body-regular leading-6 text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring disabled:opacity-50"><span className="min-w-0 flex-1">{prompt}</span><ArrowRight aria-hidden="true" className="size-3.5 shrink-0 text-foreground-icon-tertiary transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none" /></button>
               ))}</div>
             </div>
           )}
 
-          {messages.map((message, index) => (
-            <div key={message.id} className={`ai-message-enter flex gap-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-              {message.role === "assistant" && <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-status-ai-50 text-status-ai-600"><Bot className="h-3.5 w-3.5" /></span>}
-              <div className={`max-w-[88%] rounded-[var(--app-radius-md)] px-3 py-2.5 text-body-regular leading-6 ${message.role === "user" ? "bg-text-primary text-text-white" : "bg-background-secondary-default text-text-primary"}`}>
-                <div className="whitespace-pre-wrap">{formatChatDisplayText(message)}</div>
-                {message.role === "assistant" && index === messages.length - 1 && message.suggestedPrompts?.length ? (
-                  <div className="mt-2.5 space-y-1.5 border-t border-separator-border pt-2.5">{message.suggestedPrompts.slice(0, 3).map(prompt => (
-                    <button key={prompt} type="button" disabled={busy} onClick={() => void sendPrompt(prompt)} className="block w-full rounded-lg border border-status-ai-100 bg-background-primary-default px-2.5 py-1.5 text-left text-[11px] leading-4 text-status-ai-700 transition-colors hover:bg-status-ai-50 disabled:opacity-50">{prompt}</button>
-                  ))}</div>
-                ) : null}
-                <div className={`mt-2 flex flex-wrap items-center gap-3 text-[11px] ${message.role === "user" ? "text-text-tertiary" : "text-text-tertiary"}`}>
-                  <button type="button" onClick={() => copyMessage(message)} aria-label={message.role === "user" ? "复制老师发送的问题" : "复制 AI 回复"} className={`inline-flex items-center gap-1 ${message.role === "user" ? "hover:text-text-white" : "hover:text-text-secondary"}`}>
-                    {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{copiedMessageId === message.id ? "已复制" : "复制"}
-                  </button>
-                  {message.role === "assistant" && findMessageTargetStudent(message) && <>
-                    <button type="button" onClick={() => { const target = findMessageTargetStudent(message); if (target) void saveAssistantRecord(message, target); }} aria-label="保存为学生跟进记录" className="inline-flex items-center gap-1 hover:text-text-secondary">{savedActionKey === `${message.id}:record` ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}{savedActionKey === `${message.id}:record` ? "已存记录" : "存记录"}</button>
-                    <button type="button" onClick={() => { const target = findMessageTargetStudent(message); if (target) void appendAssistantMaterial(message, target); }} aria-label="加入评语素材" className="inline-flex items-center gap-1 hover:text-text-secondary">{savedActionKey === `${message.id}:material` ? <Check className="h-3.5 w-3.5" /> : <FilePlus2 className="h-3.5 w-3.5" />}{savedActionKey === `${message.id}:material` ? "已加素材" : "加素材"}</button>
-                  </>}
-                  {message.role === "user" && <button type="button" disabled={busy} onClick={() => void sendPrompt(message.content)} aria-label="重试这条问题" className="inline-flex items-center gap-1 hover:text-text-white disabled:opacity-50"><RotateCcw className="h-3.5 w-3.5" />重试</button>}
+          <div className="space-y-5">
+            {messages.map((message, index) => (
+              message.role === "user" ? (
+                <div key={message.id} className="ai-message-enter flex justify-end">
+                  <div className="max-w-[85%]">
+                    <div className="rounded-[var(--app-radius-md)] bg-background-secondary-default px-3 py-2 text-body-regular leading-6 text-text-primary">
+                      <div className="whitespace-pre-wrap">{formatChatDisplayText(message)}</div>
+                    </div>
+                    <div className="mt-1 flex justify-end gap-0.5">
+                      <IconButton label={copiedMessageId === message.id ? "已复制" : "复制老师发送的问题"} size="xs" variant="ghost" onClick={() => copyMessage(message)}>{copiedMessageId === message.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</IconButton>
+                      <IconButton label="重试这条问题" size="xs" variant="ghost" disabled={busy} onClick={() => void sendPrompt(message.content)}><RotateCcw className="h-3.5 w-3.5" /></IconButton>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              ) : (
+                <div key={message.id} className="ai-message-enter">
+                  <div className="flex items-center gap-1.5 text-caption-1-semibold text-text-tertiary"><Sparkles aria-hidden="true" className="size-3.5 text-status-ai-500" />AI 助手</div>
+                  <div className="mt-1.5 whitespace-pre-wrap text-body-regular leading-6 text-text-primary">{formatChatDisplayText(message)}</div>
+                  {index === messages.length - 1 && message.suggestedPrompts?.length ? (
+                    <div className="mt-2.5 divide-y divide-separator-border overflow-hidden rounded-[var(--app-radius-sm)] border border-[var(--app-border)]">{message.suggestedPrompts.slice(0, 3).map(prompt => (
+                      <button key={prompt} type="button" disabled={busy} onClick={() => void sendPrompt(prompt)} className="group flex w-full items-center gap-2 px-2.5 py-2 text-left text-caption-1-regular leading-4 text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring disabled:opacity-50"><span className="min-w-0 flex-1">{prompt}</span><ArrowRight aria-hidden="true" className="size-3 shrink-0 text-foreground-icon-tertiary" /></button>
+                    ))}</div>
+                  ) : null}
+                  <div className="mt-1.5 flex items-center gap-0.5">
+                    <IconButton label={copiedMessageId === message.id ? "已复制" : "复制 AI 回复"} size="xs" variant="ghost" onClick={() => copyMessage(message)}>{copiedMessageId === message.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</IconButton>
+                    {findMessageTargetStudent(message) && <>
+                      <IconButton label={savedActionKey === `${message.id}:record` ? "已保存为学生跟进记录" : "保存为学生跟进记录"} size="xs" variant="ghost" onClick={() => { const target = findMessageTargetStudent(message); if (target) void saveAssistantRecord(message, target); }}>{savedActionKey === `${message.id}:record` ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}</IconButton>
+                      <IconButton label={savedActionKey === `${message.id}:material` ? "已加入评语素材" : "加入评语素材"} size="xs" variant="ghost" onClick={() => { const target = findMessageTargetStudent(message); if (target) void appendAssistantMaterial(message, target); }}>{savedActionKey === `${message.id}:material` ? <Check className="h-3.5 w-3.5" /> : <FilePlus2 className="h-3.5 w-3.5" />}</IconButton>
+                    </>}
+                  </div>
+                </div>
+              )
+            ))}
+          </div>
 
-          {busy && <div className="ai-message-enter ml-9"><AiGenerationPanel title="AI 正在分析" steps={["整理当前问题", "核对相关班级摘要", "形成教师可用建议"]} compact /></div>}
+          {busy && <div className="ai-message-enter mt-4"><AiGenerationPanel title="AI 正在分析" steps={["整理当前问题", "核对相关班级摘要", "形成教师可用建议"]} compact /></div>}
           <div ref={messagesEndRef} />
         </section>
 
         <footer className="shrink-0 border-t border-[var(--app-border)] bg-background-primary-default p-3">
-          <p className="mb-2 line-clamp-2 text-[11px] leading-4 text-status-ai-600" aria-live="polite">{status}</p>
-          <form className="relative flex items-end gap-2" onSubmit={event => { event.preventDefault(); void sendPrompt(input); }}>
+          <p className={`mb-2 line-clamp-2 text-[11px] leading-4 ${statusError ? "text-status-danger-600" : "text-text-tertiary"}`} aria-live="polite">{status}</p>
+          <form className="relative" onSubmit={event => { event.preventDefault(); void sendPrompt(input); }}>
             {showStudentSuggestions && (
-              <div className="ai-suggestion-enter absolute bottom-full left-0 right-0 z-10 mb-2 overflow-hidden rounded-[var(--app-radius-md)] border border-status-ai-100 bg-background-primary-default shadow-[var(--app-shadow-float)]">
-                <div className="flex items-center justify-between border-b border-separator-border px-3 py-2"><span className="text-caption-1-semibold text-text-secondary">可能想问的学生</span><span className="text-[11px] text-status-ai-500">点击插入姓名</span></div>
+              <div className="ai-suggestion-enter absolute bottom-full left-0 right-0 z-10 mb-2 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-float)]">
+                <div className="flex items-center justify-between border-b border-separator-border px-3 py-2"><span className="text-caption-1-semibold text-text-secondary">可能想问的学生</span><span className="text-[11px] text-text-tertiary">点击插入姓名</span></div>
                 <div className="max-h-48 overflow-y-auto p-1.5">{studentSuggestions.map(item => (
-                  <button key={item.student.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseStudentSuggestion(item.student)} className="flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2 text-left transition-colors hover:bg-status-ai-50">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-status-ai-50 text-body-semibold text-status-ai-700">{item.student.name.slice(0, 1)}</span>
+                  <button key={item.student.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseStudentSuggestion(item.student)} className="flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2 text-left transition-colors hover:bg-background-secondary-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-background-tertiary-default text-body-semibold text-text-secondary">{item.student.name.slice(0, 1)}</span>
                     <span className="min-w-0 flex-1"><span className="block truncate text-body-semibold text-text-primary">{item.student.name}</span><span className="block truncate text-caption-1-regular text-text-tertiary">{item.reason}{item.student.aliases.length ? ` · ${item.student.aliases.slice(0, 2).join(" / ")}` : ""}</span></span>
                   </button>
                 ))}</div>
               </div>
             )}
-            <textarea
-              ref={inputRef}
-              value={input}
-              rows={1}
-              maxLength={1000}
-              onChange={event => handleInputChange(event.target.value)}
-              onFocus={() => setStudentSuggestOpen(true)}
-              onBlur={() => window.setTimeout(() => setStudentSuggestOpen(false), 140)}
-              onKeyDown={event => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void sendPrompt(input);
-                }
-              }}
-              disabled={busy}
-              placeholder="输入问题，Enter 发送，Shift+Enter 换行"
-              className="min-h-11 min-w-0 flex-1 resize-none overflow-y-auto rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-secondary-default px-3 py-2.5 text-body-regular leading-6 text-text-primary outline-none transition-colors placeholder:text-text-tertiary focus:border-status-ai-300 focus:bg-background-primary-default disabled:opacity-60"
-            />
-            <IconButton label="发送" size="lg" disabled={busy || !input.trim()} className="ai-companion-primary-action" type="submit">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Send className="h-4 w-4" />}
-            </IconButton>
+            <div className={`flex items-end gap-1.5 rounded-[var(--app-radius-md)] border bg-background-secondary-default p-1.5 transition-colors focus-within:bg-background-primary-default focus-within:ring-2 ${busy ? "border-status-ai-200 focus-within:ring-status-ai-500/15" : "border-border-button-default focus-within:border-accent-300 focus-within:ring-accent-500/15"}`}>
+              <textarea
+                ref={inputRef}
+                value={input}
+                rows={1}
+                maxLength={1000}
+                onChange={event => handleInputChange(event.target.value)}
+                onFocus={() => setStudentSuggestOpen(true)}
+                onBlur={() => window.setTimeout(() => setStudentSuggestOpen(false), 140)}
+                onKeyDown={event => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void sendPrompt(input);
+                  }
+                }}
+                disabled={busy}
+                placeholder="输入问题，Enter 发送，Shift+Enter 换行"
+                className="min-h-8 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-1 text-body-regular leading-6 text-text-primary outline-none placeholder:text-text-tertiary disabled:opacity-60"
+              />
+              <IconButton label="发送" size="sm" disabled={busy || !input.trim()} className="ai-companion-primary-action" type="submit">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Send className="h-4 w-4" />}
+              </IconButton>
+            </div>
           </form>
         </footer>
-      </aside>
+      </aside></DialogPresence>
       <ConfirmDialog open={confirmClearMessages} title="开始新的 AI 对话？" description="将清空当前工作区缓存的这段对话。已保存到学生记录或评语素材的数据不会受到影响。" confirmLabel="清空并新建" onCancel={() => setConfirmClearMessages(false)} onConfirm={clearMessages} />
       {appDialog.dialog}
     </>

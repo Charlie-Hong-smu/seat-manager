@@ -140,3 +140,7 @@ export function filterDormitoryEventsByRange(dormitory: Dormitory, range: Dormit
 export function calculateDormitoryPeriodScore(dormitory: Dormitory, range: DormitoryPeriodRange): number {
   return filterDormitoryEventsByRange(dormitory, range).reduce((sum, entry) => sum + entry.event.score, 0);
 }
+
+export function hasPendingDormitoryPunishment(event: Pick<DormEvent, "punishment" | "punishmentDone">): boolean {
+  return Boolean(event.punishment?.trim()) && !event.punishmentDone;
+}

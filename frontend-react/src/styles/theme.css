@@ -140,6 +140,13 @@
     0 1px 1px 0 rgb(0 0 0 / 0.04),
     0 4px 4px 0 rgb(0 0 0 / 0.02);
 
+  /* Centered dialog elevation: 1px contact ring keeps the edge crisp over the
+   * scrim, mid layer grounds the panel, broad ambient layer carries the float. */
+  --shadow-modal:
+    0 0 0 1px rgb(0 0 0 / 0.04),
+    0 8px 16px -8px rgb(0 0 0 / 0.12),
+    0 24px 56px -16px rgb(0 0 0 / 0.24);
+
   /* Floating template waitlist (Figma node 4117:32737). This extends the
    * sidebar elevation recipe with the two broad ambient layers used by the
    * signup surface. */
@@ -538,6 +545,10 @@
     0 0 1px 0 rgb(0 0 0 / 0.42),
     0 1px 12px 0 rgb(0 0 0 / 0.14),
     0 1px 0 0 rgb(0 0 0 / 0.08);
+  --shadow-modal:
+    0 0 0 1px rgb(0 0 0 / 0.32),
+    0 8px 16px -8px rgb(0 0 0 / 0.30),
+    0 24px 56px -16px rgb(0 0 0 / 0.48);
 
   /* Badges */
   --color-badge-neutral-background: var(--color-neutral-800);
@@ -1219,7 +1230,7 @@
 @keyframes surface-enter {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.985);
+    transform: translateY(6px);
   }
 
   to {
@@ -1243,24 +1254,24 @@
 @keyframes action-toast-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, 14px) scale(0.96);
+    transform: translate(-50%, 6px);
   }
 
   to {
     opacity: 1;
-    transform: translate(-50%, 0) scale(1);
+    transform: translate(-50%, 0);
   }
 }
 
 @keyframes action-toast-exit {
   from {
     opacity: 1;
-    transform: translate(-50%, 0) scale(1);
+    transform: translate(-50%, 0);
   }
 
   to {
     opacity: 0;
-    transform: translate(-50%, 10px) scale(0.98);
+    transform: translate(-50%, 6px);
   }
 }
 
@@ -1542,26 +1553,6 @@
   }
 }
 
-@keyframes dorm-member-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.94);
-    box-shadow: 0 0 0 rgba(37, 99, 235, 0);
-  }
-
-  62% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1.015);
-    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.14);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
-  }
-}
-
 @keyframes entity-focus-highlight {
   0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
   24% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18); background-color: rgba(239, 246, 255, 0.9); }
@@ -1572,45 +1563,55 @@
   animation: workspace-tab-enter 260ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
 }
 
-.comment-workbench-shell {
-  isolation: isolate;
-  backface-visibility: hidden;
-  contain: paint;
-  border-radius: 24px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px) scale(.99);
-  transform-origin: center;
-  transition: opacity 240ms ease-out, transform 240ms ease-out, border-radius 240ms ease-out;
+.comment-workbench-shell { container: comment-workbench / inline-size; min-width: 0; }
+.comment-workbench-columns { grid-template-columns: clamp(156px, 17cqw, 208px) minmax(0, 1fr) clamp(236px, 26cqw, 316px); }
+@container comment-workbench (max-width: 650px) {
+  .comment-workbench-columns { grid-template-columns: 156px minmax(0, 1fr); grid-template-rows: minmax(360px, 1fr) auto; overflow: auto; }
+  .comment-workbench-roster { grid-row: 1 / 3; }
+  .comment-workbench-materials { grid-column: 2; max-height: 420px; border-top: 1px solid var(--app-border); }
 }
-.comment-workbench-shell[data-transition-state="preparing"] { pointer-events: none; }
-.comment-workbench-shell[data-transition-state="open"] {
-  border-radius: 0;
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0) scale(1);
-}
-.comment-workbench-shell[data-transition-state="closing"] {
-  border-radius: 24px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px) scale(.99);
-  transition: opacity 150ms ease-out, transform 150ms ease-out, border-radius 150ms ease-out;
-}
-@keyframes comment-workbench-pane-enter {
-  from { opacity: 0; filter: blur(1px); }
-  to { opacity: 1; filter: blur(0); }
-}
-.comment-workbench-shell[data-transition-state="open"] .comment-workbench-pane {
-  animation: comment-workbench-pane-enter 240ms ease-out both;
-}
-.comment-workbench-shell[data-transition-state="closing"] .comment-workbench-topbar,
-.comment-workbench-shell[data-transition-state="closing"] .comment-workbench-pane {
-  animation: comment-workbench-pane-enter 150ms ease-out reverse both;
-}
+/* Content travels with the workbench shell; no independent second entrance. */
 
 .surface-enter {
   animation: surface-enter 300ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+/* 同构详情区切换（宿舍间切换、评语工作台切换学生等）：View Transition
+   捕获旧帧与新帧交叉淡化——旧内容不先消失、新内容不带位移，读起来是
+   内容原地"溶"成新内容。每屏各面片一个独立命名，互不冲突。 */
+.vt-dorm-detail { view-transition-name: vt-dorm-detail; }
+.vt-comment-editor { view-transition-name: vt-comment-editor; }
+.vt-comment-tools { view-transition-name: vt-comment-tools; }
+
+::view-transition-old(vt-dorm-detail),
+::view-transition-new(vt-dorm-detail),
+::view-transition-old(vt-comment-editor),
+::view-transition-new(vt-comment-editor),
+::view-transition-old(vt-comment-tools),
+::view-transition-new(vt-comment-tools) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* One geometry transition for seats and one rolling track for the toolbar. */
+.seat-mode-toolbar { display: grid; position: relative; overflow: hidden; }
+.seat-mode-toolbar__board, .seat-mode-toolbar__editor {
+  grid-area: 1 / 1; min-width: 0;
+  transition: transform 440ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.seat-mode-toolbar__editor { transform: translateY(100%); }
+.seat-mode-toolbar[data-editing="true"] .seat-mode-toolbar__board { transform: translateY(-100%); }
+.seat-mode-toolbar[data-editing="true"] .seat-mode-toolbar__editor { transform: translateY(0); }
+[data-seat-mode-transition] .seat-card-enter,
+[data-seat-mode-transition] .seat-layout-slot__face,
+[data-seat-mode-transition] .surface-enter { animation: none !important; }
+[data-seat-mode-transition] .seat-layout-editor-cell .seat-layout-slot__face { transform: none; }
+.seat-mode-flight { position: absolute; inset: 0; pointer-events: none; z-index: 20; overflow: hidden; }
+.seat-mode-flight__cell { position: absolute; transform-origin: top left; }
+.seat-mode-flight__cell > * { width: 100%; height: 100%; margin: 0; }
+.seat-mode-flight * { animation: none !important; transition: none !important; pointer-events: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .seat-mode-toolbar__board, .seat-mode-toolbar__editor { transition: none; }
 }
 
 .entity-focus-highlight {
@@ -1699,14 +1700,30 @@
   transition: width 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Charts settle once at the destination size; MotionSwitch moves the shared shell.
+   Data, axes, colors and title crossfade together without a second chart entrance. */
+.grade-chart-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.grade-chart-grid[data-split="false"] { grid-template-columns: minmax(0, 1fr); }
+
+/* 图表标题换科时轻淡入，避免文字瞬跳 */
+@keyframes grade-label-swap {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.grade-label-swap {
+  animation: grade-label-swap 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grade-label-swap {
+    animation: none;
+  }
+}
+
 .grade-trend-subject-enter {
   animation: grade-trend-subject-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-.ai-comment-reveal-glow {
-  animation: ai-comment-reveal-glow 1.35s ease-out both;
-}
-
 
 .selection-ai-inline-old {
   text-decoration-color: var(--app-primary);
@@ -1783,10 +1800,6 @@
   transform-origin: bottom center;
 }
 
-.ai-thinking-dot {
-  animation: ai-thinking-dot 900ms ease-in-out infinite;
-}
-
 .tool-drawer-enter {
   animation: tool-drawer-enter 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -1804,7 +1817,7 @@
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-7px) scale(0.985);
+  transform: translateY(-4px);
   transform-origin: top center;
   transition:
     opacity 180ms ease-out,
@@ -1823,7 +1836,7 @@
   visibility: visible;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-7px) scale(0.985);
+  transform: translateY(-4px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2063,10 +2076,6 @@
   color: var(--app-primary);
 }
 
-.dorm-member-enter {
-  animation: dorm-member-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 .dorm-event-form-reveal,
 .dorm-preset-delete-confirm {
   display: grid;
@@ -2170,8 +2179,13 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .grade-chart-grid {
+  .grade-chart-grid,
+  .grade-chart-grid[data-split] {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grade-chart-grid[data-split="false"] .grade-distribution-chart {
+    display: none;
   }
 
   .grade-main-chart,
@@ -2309,9 +2323,12 @@
 .seat-layout-surface {
   --seat-group-line: #b7a47a;
   --seat-group-active: #b45309;
+  --seat-row-min: 32px;
+  --seat-row-max: 58px;
   display: flex; flex-direction: column; gap: 10px;
   width: 100%; max-width: 1180px; height: 100%; margin-inline: auto; padding: 14px 5px 3px;
 }
+.seat-layout-surface[data-detail="true"] { --seat-row-min: 78px; --seat-row-max: 94px; }
 .seat-layout-surface__grid, .seat-layout-editor-grid {
   position: relative; display: grid; flex: 1; isolation: isolate;
 }
@@ -2336,6 +2353,13 @@
   position: relative; min-width: 0; min-height: 0; margin: 5px;
 }
 .seat-layout-surface__seat > * { height: 100%; }
+/* 简洁/详细切换的位移窗口内静音卡片内部过渡：卡片位置交给合成器
+   transform FLIP，内部排布(top 行定位、次要信息淡入)直接落位,
+   否则 48 张卡的 layout 过渡会逐帧重排导致掉帧。 */
+[data-seat-settling="true"] [data-seat-index],
+[data-seat-settling="true"] [data-seat-index] * {
+  transition: none !important;
+}
 .seat-layout-editor-cell .seat-layout-slot__face { min-height: 30px; }
 .seat-layout-editor-cell[data-group-hovered="true"] .seat-layout-slot__face {
   box-shadow: 0 0 0 2px #fbbf24; transform: translateY(-1px);
@@ -2486,9 +2510,13 @@
  --app-radius-lg: 24px;
  --app-shadow-card: var(--shadow-card);
  --app-shadow-float: var(--shadow-dropdown);
+ --app-shadow-modal: 0 4px 12px -4px rgb(24 32 48 / 0.08), 0 24px 64px -20px rgb(24 32 48 / 0.22);
+ --app-overlay: rgb(24 32 48 / 0.16);
+ --app-modal-enter: 320ms;
+ --app-modal-exit: 240ms;
  --app-motion-enter: 240ms;
  --app-motion-exit: 150ms;
- --app-motion-ease: cubic-bezier(0.32, 0.72, 0, 1);
+ --app-motion-ease: cubic-bezier(.22,1,.36,1);
 }
 @theme inline {
  --color-status-ai-50: var(--color-iris-50);
@@ -2606,56 +2634,110 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
  input[type=checkbox], input[type=radio] { accent-color: var(--app-primary); }
  button { transition-timing-function: var(--app-motion-ease); }
 }
-.app-popover-motion { transform-origin: top; transition: opacity 150ms ease-out, transform 150ms ease-out, filter 150ms ease-out; }
+.app-popover-motion { transform-origin: top; transition: opacity 200ms var(--app-motion-ease), transform 200ms var(--app-motion-ease); }
 .app-popover-motion[data-phase="open"] { filter: blur(0); }
-.app-popover-motion[data-phase="closing"] { filter: blur(2px); }
+.app-popover-motion[data-phase="closing"] { filter: none; }
 @keyframes modal-panel-enter {
- from { opacity: 0; transform: translateY(6px) scale(.96); filter: blur(2px); }
- to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+ from { opacity: 0; transform: translateY(6px); }
+ to { opacity: 1; transform: translateY(0); }
 }
-.modal-panel-enter { animation-duration: var(--app-motion-enter); animation-timing-function: var(--app-motion-ease); }
+.modal-panel-enter { animation-duration: var(--app-modal-enter); animation-timing-function: var(--app-motion-ease); }
 @media (prefers-reduced-motion: reduce) {
- *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+ *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
  .app-popover-motion { filter: none !important; }
 }
 
 /* BoardUI preview: AI uses the same short surface motion as ordinary controls. */
 @keyframes ai-surface-enter {
-  from { opacity: 0; transform: translateY(6px) scale(.98); filter: blur(2px); }
-  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes ai-surface-exit {
   from { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  to { opacity: 0; transform: translateY(4px) scale(.98); filter: blur(2px); }
+  to { opacity: 0; transform: translateY(6px); }
 }
-@keyframes ai-loading-slide {
-  from { transform: translateX(-110%); }
-  to { transform: translateX(360%); }
+.ai-step-item { animation: ai-surface-enter 280ms var(--app-motion-ease) both; }
+@keyframes ai-step-check-pop {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-.ai-loading-track { height: 2px; overflow: hidden; border-radius: 999px; background: var(--color-background-tertiary-default); }
-.ai-loading-track > span { display: block; width: 30%; height: 100%; border-radius: inherit; background: var(--app-ai); opacity: .55; animation: ai-loading-slide 1.6s var(--app-motion-ease) infinite; }
+.ai-step-check { animation: ai-step-check-pop 240ms var(--app-motion-ease) both; }
+.ai-step-done-label { position: relative; }
+.ai-step-done-label::after { content: ""; position: absolute; left: -1px; right: -1px; top: 55%; height: 1px; background: currentColor; opacity: .45; transform-origin: left center; animation: ai-step-strike 320ms var(--app-motion-ease) both; }
+@keyframes ai-step-strike {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes ai-step-pulse {
+  0%, 100% { opacity: .4; }
+  50% { opacity: 1; }
+}
+.ai-step-active-dot { animation: ai-step-pulse 1s ease-in-out infinite; }
 .ai-followup-loading-enter, .ai-followup-result-enter, .ai-message-enter, .ai-suggestion-enter, .selection-ai-inline-new {
   animation: ai-surface-enter var(--app-motion-enter) var(--app-motion-ease) both;
 }
-.ai-companion-panel[data-transition-state="opening"] { animation: ai-surface-enter 240ms var(--app-motion-ease) both; }
-.ai-companion-panel[data-transition-state="closing"] { animation: ai-surface-exit 150ms var(--app-motion-ease) both; }
-.ai-comment-reveal-glow { animation: none; background: transparent; box-shadow: none; }
+.ai-companion-panel { animation: ai-surface-enter 240ms var(--app-motion-ease) both; }
+.dialog-presence[data-phase="closing"] .ai-companion-panel { animation: ai-surface-exit 200ms var(--app-motion-ease) both; }
 .selection-ai-glass-inline { -webkit-box-decoration-break: clone; box-decoration-break: clone; border-radius: 4px; background: var(--color-background-secondary-default); color: var(--color-text-secondary); box-shadow: inset 0 -2px color-mix(in srgb, var(--app-ai) 25%, transparent); animation: none; }
-.ai-thinking-dot { animation: none; }
 @keyframes tool-drawer-enter {
   from { opacity: 0; transform: translateX(16px); }
   to { opacity: 1; transform: translateX(0); }
 }
 .tool-drawer-enter { animation-duration: 240ms; animation-timing-function: var(--app-motion-ease); }
 .dialog-presence[data-phase="closing"] { pointer-events: none; }
-.dialog-presence[data-phase="closing"] .modal-panel-enter { animation: modal-panel-enter 450ms var(--app-motion-ease) reverse both; }
-.dialog-presence[data-phase="closing"] .soft-backdrop-enter { animation: soft-backdrop-enter 400ms ease-out reverse both; }
-.tool-drawer-enter[data-phase="closing"] { pointer-events: none; animation: tool-drawer-enter 150ms var(--app-motion-ease) reverse both; }
-.tool-drawer-backdrop[data-phase="closing"] { pointer-events: none; animation: soft-backdrop-enter 150ms ease-out reverse both; }
+@keyframes modal-panel-exit {
+  from { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  to { opacity: 0; transform: translateY(6px); }
+}
+@keyframes soft-backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes tool-drawer-exit {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(16px); }
+}
+.dialog-presence[data-phase="closing"] .modal-panel-enter { animation: modal-panel-exit var(--app-modal-exit) var(--app-motion-ease) both; }
+.dialog-presence[data-phase="closing"] .soft-backdrop-enter:not(.app-modal-overlay) { animation: soft-backdrop-exit 200ms ease-out both; }
+.tool-drawer-enter[data-phase="closing"] { pointer-events: none; animation: tool-drawer-exit 150ms var(--app-motion-ease) both; }
+.tool-drawer-backdrop[data-phase="closing"] { pointer-events: none; animation: soft-backdrop-exit 150ms ease-out both; }
+
+/* Shared dialog surfaces: one scrim recipe and one elevated panel recipe for
+ * every overlay in the app, so hand-rolled call sites cannot drift. */
+/* Animate the scrim independently: fading a parent and its panel multiplies
+ * their opacities and makes an otherwise smooth entrance feel like a pop. */
+.app-modal-overlay { isolation: isolate; background: transparent; }
+.app-modal-overlay.soft-backdrop-enter { animation: none; }
+.app-modal-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--app-overlay);
+  -webkit-backdrop-filter: blur(1px);
+  backdrop-filter: blur(1px);
+  animation: soft-backdrop-enter var(--app-modal-enter) var(--app-motion-ease) both;
+}
+.dialog-presence[data-phase="closing"] .app-modal-overlay::before {
+  animation: soft-backdrop-exit var(--app-modal-exit) var(--app-motion-ease) both;
+}
+.app-modal-panel {
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-modal);
+}
+.app-modal-footer {
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface-muted);
+}
 @media (prefers-reduced-motion: reduce) {
-  .ai-loading-track > span, .ai-followup-loading-enter, .ai-followup-result-enter, .ai-message-enter, .ai-suggestion-enter, .selection-ai-inline-new,
+  .ai-followup-loading-enter, .ai-followup-result-enter, .ai-message-enter, .ai-suggestion-enter, .selection-ai-inline-new,
+  .ai-step-item, .ai-step-check, .ai-step-done-label::after, .ai-step-active-dot,
   .ai-companion-panel[data-transition-state], .tool-drawer-enter, .tool-drawer-enter[data-phase="closing"], .tool-drawer-backdrop[data-phase="closing"] { animation: none; }
-  .dialog-presence .modal-panel-enter, .dialog-presence .soft-backdrop-enter { animation: none !important; }
+  .dialog-presence .modal-panel-enter, .dialog-presence .soft-backdrop-enter,
+  .app-modal-overlay::before { animation: none !important; }
 }
 
 /* BoardUI fields render one visual shell around a borderless native control. */
@@ -2673,3 +2755,39 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
   border-color: var(--color-border-button-hover);
 }
 
+
+
+/* Continuous content replacement and intrinsic-height disclosures. */
+.app-motion-list { position: relative; }
+.app-motion-switch { position: relative; min-width: 0; }
+.app-motion-switch--navigation { isolation: isolate; overflow: hidden; background: var(--app-surface); }
+.app-motion-switch--navigation[data-moving] > .app-motion-content { will-change: transform; }
+.app-motion-switch--fixed, .app-motion-switch--fixed > .app-motion-content { height: 100%; min-height: 0; }
+.app-motion-switch[data-moving] { overflow: clip; }
+.app-motion-switch--scrollable { flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.app-motion-switch--scrollable[data-moving] { overflow: hidden; }
+.app-motion-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.app-motion-snapshot { pointer-events: none !important; background: var(--motion-surface, var(--app-surface)); }
+.app-motion-snapshot, .app-motion-snapshot * { animation: none !important; transition: none !important; pointer-events: none !important; }
+.app-motion-collapse { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease; }
+.app-motion-collapse[data-open="true"] { grid-template-rows: 1fr; opacity: 1; }
+.app-motion-collapse__clip { min-height: 0; overflow: hidden; }
+.app-motion-collapse__content { display: flow-root; }
+@media (prefers-reduced-motion: reduce) {
+  .app-motion-collapse { transition: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat-card-enter, .seat-layout-slot--active { animation: none !important; }
+}
+
+.app-motion-content .surface-enter { animation: none; }
+.app-motion-surface { pointer-events: none; contain: layout paint; }
+
+/* Native detail snapshots only affect the named panels, never the whole app. */
+::view-transition { pointer-events: none; }
+::view-transition-group(root), ::view-transition-new(root) { animation: none; }
+::view-transition-old(root) { display: none; }
+::view-transition-group(vt-dorm-detail),
+::view-transition-group(vt-comment-editor),
+::view-transition-group(vt-comment-tools) { animation-duration: 320ms; animation-timing-function: var(--app-motion-ease); }

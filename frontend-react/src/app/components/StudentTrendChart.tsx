@@ -1,3 +1,4 @@
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import {
   CartesianGrid,
   Line,
@@ -16,6 +17,7 @@ export default function StudentTrendChart({ data, metric }: {
   data: Array<Record<string, string | number | null>>;
   metric: string;
 }) {
+  const reducedMotion = useReducedMotion();
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
@@ -27,7 +29,7 @@ export default function StudentTrendChart({ data, metric }: {
           formatter={(value) => [formatScore(typeof value === "number" ? value : null), metric === "total" ? "总分" : metric]}
           contentStyle={{ borderRadius: 12, border: "1px solid var(--app-border)", fontSize: 13 }}
         />
-        <Line
+        <Line isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out"
           type="monotone"
           dataKey={metric}
           stroke="var(--app-primary)"

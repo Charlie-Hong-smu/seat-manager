@@ -1,4 +1,4 @@
-import { saveStudentCommentDraft } from "./commentStorage";
+import { getCurrentWorkspaceScope } from "./workspaces";
 import { getProductAuthToken } from "./authStorage";
 import { clearAiApiAuth, fetchAiRoute, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
@@ -111,7 +111,7 @@ function validatePayloadSize(payload: unknown): boolean {
 export async function generateStudentAiComment(
   student: AppStudent,
   draft: StudentCommentDraft,
-  input?: { accessCode?: string; remember?: boolean; force?: boolean },
+  input?: { accessCode?: string; remember?: boolean; force?: boolean; signal?: AbortSignal },
 ): Promise<AiResult> {
   if (typeof window !== "undefined" && window.location.protocol === "file:") {
     throw new Error("ai_file_protocol");
@@ -124,11 +124,10 @@ export async function generateStudentAiComment(
   if (!validatePayloadSize(payload)) {
     throw new Error("ai_payload_too_large");
   }
-  const signature = getCacheSignature({ studentId: student.id, payload });
+  const signature = getCacheSignature({ workspace: getCurrentWorkspaceScope(), studentId: student.id, payload });
   if (!input?.force) {
     const cached = getCachedComment(signature);
     if (cached?.comment) {
-      saveStudentCommentDraft(student.id, { ...draft, generatedComment: cached.comment });
       return cached;
     }
   }
@@ -140,6 +139,7 @@ export async function generateStudentAiComment(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
+    signal: input?.signal,
   });
 
   let auth = await getAiAuth(input);
@@ -176,7 +176,7 @@ export async function generateStudentAiComment(
     needsMoreInfo: Boolean(data.needsMoreInfo),
     missingInfo: Array.isArray(data.missingInfo) ? data.missingInfo : [],
   };
+  if (input?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
   storeCachedComment(signature, result);
-  saveStudentCommentDraft(student.id, { ...draft, generatedComment: comment });
   return result;
 }

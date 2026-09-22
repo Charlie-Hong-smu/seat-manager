@@ -8,6 +8,7 @@ import {
   getSeatPreviewStats,
   type SeatEvaluation,
   type ShuffleCandidate,
+  settleDurationFor,
 } from "../state/seatPlanner";
 import { resolveSeatLayout } from "../state/seatLayout";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
@@ -49,6 +50,7 @@ interface PreviewDragVisual {
   phase: "dragging" | "settling";
   settleLeft?: number;
   settleTop?: number;
+  settleMs?: number;
 }
 
 function PreviewStat({ active, label, value, onClick }: { active: boolean; label: string; value: string; onClick: () => void }) {
@@ -232,7 +234,8 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
     return { x: dx / length * amount, y: dy / length * amount };
   }
 
-  function finishSwap(fromIndex: number, targetIndex: number) {
+  // 与主座位板一致：松手即提交交换，被挤开的卡片从挤压预览位置滑向空出的座位。
+  function commitSwap(fromIndex: number, targetIndex: number) {
     const sourceRect = seatRectsRef.current.get(fromIndex);
     const targetRect = seatRectsRef.current.get(targetIndex);
     const targetPush = getTargetPush(fromIndex, targetIndex, 1);
@@ -241,8 +244,6 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
     const next = [...candidate.order];
     next[fromIndex] = targetStudentId;
     next[targetIndex] = sourceStudentId;
-    setDragVisual(null);
-    setDragIndex(null);
     onOrderChange(next);
     // Empty-slot moves finish with the overlay snap, without replaying a fade.
     if (!targetStudentId || !studentById.has(targetStudentId)) return;
@@ -254,20 +255,18 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
         cards.find(card => card.dataset.previewStudentId === sourceStudentId)?.animate([
           { opacity: 0.35, transform: "scale(0.96)" },
           { opacity: 1, transform: "scale(1)" },
-        ], { duration: 680, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+        ], { duration: 460, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
       }
-      if (targetStudentId) {
-        const startX = targetRect.left + targetPush.x - sourceRect.left;
-        const startY = targetRect.top + targetPush.y - sourceRect.top;
-        const arcX = Math.abs(startY) > Math.abs(startX) ? 7 : 0;
-        const arcY = Math.abs(startX) >= Math.abs(startY) ? -6 : 0;
-        cards.find(card => card.dataset.previewStudentId === targetStudentId)?.animate([
-          { offset: 0, opacity: 0.86, transform: `translate3d(${startX}px, ${startY}px, 0) scale(0.945)` },
-          { offset: 0.2, opacity: 1, transform: `translate3d(${startX * 0.92 + arcX * 0.35}px, ${startY * 0.92 + arcY * 0.35}px, 0) scale(0.965)` },
-          { offset: 0.72, opacity: 1, transform: `translate3d(${startX * 0.2 + arcX}px, ${startY * 0.2 + arcY}px, 0) scale(1.008)` },
-          { offset: 1, opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
-        ], { duration: 1180, easing: "cubic-bezier(0.45, 0, 0.15, 1)" });
-      }
+      const startX = targetRect.left + targetPush.x - sourceRect.left;
+      const startY = targetRect.top + targetPush.y - sourceRect.top;
+      const arcX = Math.abs(startY) > Math.abs(startX) ? 7 : 0;
+      const arcY = Math.abs(startX) >= Math.abs(startY) ? -6 : 0;
+      cards.find(card => card.dataset.previewStudentId === targetStudentId)?.animate([
+        { offset: 0, opacity: 0.92, transform: `translate3d(${startX}px, ${startY}px, 0) scale(0.97)` },
+        { offset: 0.28, opacity: 1, transform: `translate3d(${startX * 0.72 + arcX * 0.4}px, ${startY * 0.72 + arcY * 0.4}px, 0) scale(0.985)` },
+        { offset: 0.78, opacity: 1, transform: `translate3d(${startX * 0.16 + arcX}px, ${startY * 0.16 + arcY}px, 0) scale(1)` },
+        { offset: 1, opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+      ], { duration: 460, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
     }));
   }
 
@@ -308,17 +307,16 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
       pointerEvent.preventDefault();
       const { targetIndex } = cancelled ? { targetIndex: null } : targetAtPoint(pointerEvent.clientX, pointerEvent.clientY, fromIndex);
       const destination = targetIndex === null ? seatRectsRef.current.get(fromIndex) : seatRectsRef.current.get(targetIndex);
-      setDragVisual(current => current ? { ...current, targetIndex, proximity: targetIndex === null ? 0 : 1, phase: "settling", settleLeft: destination?.left, settleTop: destination?.top } : current);
+      const settleMs = destination ? settleDurationFor(pointerEvent.clientX - offsetX, pointerEvent.clientY - offsetY, destination.left, destination.top) : 440;
+      setDragVisual(current => current ? { ...current, targetIndex, proximity: targetIndex === null ? 0 : 1, phase: "settling", settleLeft: destination?.left, settleTop: destination?.top, settleMs } : current);
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      // 与主座位板一致：落点有效时松手即提交，位移卡片与拖拽浮层同时开始移动。
+      if (targetIndex !== null) commitSwap(fromIndex, targetIndex);
       settleTimerRef.current = window.setTimeout(() => {
         settleTimerRef.current = null;
-        if (targetIndex === null) {
-          setDragVisual(null);
-          setDragIndex(null);
-        } else {
-          finishSwap(fromIndex, targetIndex);
-        }
-      }, reducedMotion ? 0 : targetIndex === null ? 420 : 440);
+        setDragVisual(null);
+        setDragIndex(null);
+      }, reducedMotion ? 0 : settleMs);
     };
     const handlePointerUp = (pointerEvent: PointerEvent) => finishDrag(pointerEvent, false);
     const handlePointerCancel = (pointerEvent: PointerEvent) => finishDrag(pointerEvent, true);
@@ -365,8 +363,8 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
   ];
 
   return (
-    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm">
-      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="随机排座预览" className="modal-panel-enter flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white bg-background-primary-default shadow-2xl outline-none">
+    <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="随机排座预览" className="modal-panel-enter app-modal-panel flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden outline-none">
         <div className="flex items-start justify-between px-6 py-5 border-b border-separator-border">
           <div>
             <div className="text-caption-1-regular text-accent-500 mb-1" style={{ fontWeight: 800 }}>座位调整</div>
@@ -460,7 +458,7 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
       {dragVisual && createPortal(
         <div
           aria-hidden="true"
-          className={`pointer-events-none fixed z-[100] overflow-hidden rounded-xl border border-accent-300 bg-background-primary-default/95 shadow-[0_18px_45px_rgba(37,99,235,0.24)] backdrop-blur-sm transition-[transform,opacity,box-shadow] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${dragVisual.phase === "settling" ? "duration-[440ms]" : "duration-150"}`}
+          className="pointer-events-none fixed z-[100] overflow-hidden rounded-xl border border-accent-300 bg-background-primary-default/95 shadow-[0_18px_45px_rgba(37,99,235,0.24)] backdrop-blur-sm transition-[transform,opacity,box-shadow] ease-[cubic-bezier(0.16,1,0.3,1)] duration-150 motion-reduce:transition-none"
           style={{
             left: 0,
             top: 0,
@@ -468,9 +466,10 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
             height: dragVisual.height,
             opacity: dragVisual.phase === "settling" ? 0.92 : 1,
             transform: `translate3d(${overlayLeft || 0}px, ${overlayTop || 0}px, 0) scale(${dragVisual.phase === "settling" ? 0.985 : 1.025})`,
+            transitionDuration: dragVisual.phase === "settling" ? `${dragVisual.settleMs ?? 440}ms` : undefined,
           }}
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-accent-50/80 via-white to-status-ai-50/60" />
+          <div className="absolute inset-0 bg-gradient-to-br from-accent-50/80 via-background-primary-default to-background-secondary-default" />
           <div className="relative flex h-full min-w-0 items-center gap-2 px-2">
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${draggedStudent?.gender === "男" ? "bg-accent-400" : draggedStudent?.gender === "女" ? "bg-status-pink-400" : "bg-background-primary-disabled"}`} />
             <span className="min-w-0 flex-1 truncate text-body-semibold text-text-primary">{draggedStudent?.name || "空"}</span>

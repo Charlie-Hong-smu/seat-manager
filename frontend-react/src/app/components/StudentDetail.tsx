@@ -1,3 +1,4 @@
+import type { ClassDutiesBinding } from "../state/classDuties";
 import { useState } from "react";
 
 import { AiCommentDrawer } from "./AiCommentDrawer";
@@ -6,8 +7,10 @@ import type { NewDormEventInput } from "../state/dormitoryActions";
 import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreviewFallback, BusinessEntityPreviewModel, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 
 interface StudentDetailProps {
+  classDuties?: ClassDutiesBinding;
   student: AppStudent;
   elevated?: boolean;
+  leavesWorkbench?: boolean;
   students: AppStudent[];
   dormitories: Dormitory[];
   onClose: () => void;
@@ -37,8 +40,10 @@ interface StudentDetailProps {
 }
 
 export function StudentDetail({
+  classDuties,
   student,
   elevated = false,
+  leavesWorkbench = elevated,
   students,
   dormitories,
   onClose,
@@ -71,6 +76,7 @@ export function StudentDetail({
   return (
     <>
       <StudentModal
+        classDuties={classDuties}
         student={student}
         students={students}
         dormitories={dormitories}
@@ -99,7 +105,7 @@ export function StudentDetail({
         activityEvents={activityEvents}
         onOpenEntity={onOpenEntity}
         resolveEntityPreview={resolveEntityPreview}
-        leavesWorkbench={elevated}
+        leavesWorkbench={leavesWorkbench}
         layerClassName={elevated ? "z-[90]" : "z-[60]"}
       />
       <AiCommentDrawer

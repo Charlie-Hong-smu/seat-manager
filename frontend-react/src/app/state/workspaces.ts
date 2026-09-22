@@ -1,3 +1,4 @@
+import { resetClassDutiesForNewTerm } from "./classDuties";
 // 文件柜(多班级 / 学期)管理。
 //
 // 设计目标:在不改动现有各功能读写逻辑的前提下,支持"多个班级 × 多个学期"。
@@ -548,7 +549,7 @@ function copyRosterForNewTerm(data: Record<string, unknown>): Record<string, unk
     seatOrder: [],
     lockedSeats: [],
     seatSettings: isRecord(data.settings) ? data.settings : (data.seatSettings ?? {}),
-    settings: isRecord(data.settings) ? data.settings : {},
+    settings: resetClassDutiesForNewTerm(isRecord(data.settings) ? data.settings : {}),
     dormitories,
     seatHistory: [],
     savedExams: [],

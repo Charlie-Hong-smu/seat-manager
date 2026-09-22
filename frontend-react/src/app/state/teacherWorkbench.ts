@@ -1,3 +1,4 @@
+import { timestampToLocalDateKey } from "./dateKey";
 import { findStudentCandidates } from "./studentIdentity";
 import { isMissingScore, parseScoreNumber } from "./scoreValue";
 import { followupHasStudent, followupStudentLabel } from "./followupStudents";
@@ -18,7 +19,7 @@ import type {
   RecordType,
   StudentId,
 } from "./types";
-import { listDormitoryEvents } from "./dormitoryPeriods";
+import { hasPendingDormitoryPunishment, listDormitoryEvents } from "./dormitoryPeriods";
 
 const HOMEWORK_STATUSES = new Set<HomeworkStudentStatus>(["unrecorded", "pending", "submitted", "resubmitted", "excused"]);
 const RECORD_TYPES = new Set<RecordType>(["reward", "punish", "note"]);
@@ -199,13 +200,14 @@ export function buildWeeklyFacts(input: { students: AppStudent[]; attendance: At
   const inRange = (date: string) => date >= input.startDate && date <= input.endDate;
   const studentIds = input.studentId ? new Set([input.studentId]) : new Set(input.students.map(student => student.id));
   const attendance = input.attendance.filter(item => studentIds.has(item.studentId) && inRange(item.date) && (item.status !== "normal" || item.late || item.earlyLeave));
-  const completed = input.tasks.filter(item => (!input.studentId || followupHasStudent(item, input.studentId)) && item.status === "completed" && item.completedAt && inRange(item.completedAt.slice(0, 10))).length;
+  const completed = input.tasks.filter(item => (!input.studentId || followupHasStudent(item, input.studentId)) && item.status === "completed" && item.completedAt && inRange(timestampToLocalDateKey(item.completedAt))).length;
   const pending = input.tasks.filter(item => (!input.studentId || followupHasStudent(item, input.studentId)) && item.status === "pending" && item.dueDate <= input.endDate).length;
   const records = input.students.filter(student => studentIds.has(student.id)).flatMap(student => student.records).filter(record => inRange(record.date));
   const assignments = input.homework.filter(item => (item.lifecycle || "active") !== "archived" && (inRange(item.assignedDate) || inRange(item.dueDate)));
   const pendingHomework = assignments.reduce((sum, item) => { const participants = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates)); return sum + [...studentIds].filter(id => participants.has(id) && item.studentStates[id]?.status === "pending").length; }, 0);
   const unrecordedHomework = assignments.reduce((sum, item) => { const participants = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates)); return sum + [...studentIds].filter(id => participants.has(id) && (item.studentStates[id]?.status || "unrecorded") === "unrecorded").length; }, 0);
   const dormEvents = (input.dormitories || []).flatMap(dormitory => listDormitoryEvents(dormitory).map(item => item.event)).filter(event => inRange(event.date) && (!input.studentId || event.responsibleStudentId === input.studentId || event.responsibleStudentIds?.includes(input.studentId)));
+  const pendingDormEvents = dormEvents.filter(hasPendingDormitoryPunishment).length;
   const gradeFacts = input.studentId
     ? input.students.find(student => student.id === input.studentId)?.exams.filter(exam => inRange(exam.date)).map(exam => `${exam.name}${exam.total !== undefined ? ` ${exam.total} 分` : ""}`) || []
     : (input.gradeExams || []).filter(exam => inRange(exam.date)).map(exam => exam.name);
@@ -214,7 +216,7 @@ export function buildWeeklyFacts(input: { students: AppStudent[]; attendance: At
     `完成跟进 ${completed} 项，待处理 ${pending} 项`,
     `记录表扬 ${records.filter(item => item.type === "reward").length} 条、提醒 ${records.filter(item => item.type === "punish").length} 条`,
     `本周作业 ${assignments.length} 项，当前未交 ${pendingHomework} 人次、待登记 ${unrecordedHomework} 人次`,
-    `宿舍事件 ${dormEvents.length} 条${dormEvents.filter(event => !event.punishmentDone).length ? `，待处理 ${dormEvents.filter(event => !event.punishmentDone).length} 条` : ""}`,
+    `宿舍事件 ${dormEvents.length} 条${pendingDormEvents ? `，待处理 ${pendingDormEvents} 条` : ""}`,
     `本周成绩记录 ${gradeFacts.length ? gradeFacts.join("、") : "无新增考试"}`,
   ];
 }

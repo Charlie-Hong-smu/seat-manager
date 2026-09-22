@@ -1,6 +1,17 @@
 # BoardUI 独立预览
 
-## 当前状态：质感修正完成（2026-09-14）
+## 当前状态：AI 界面治理完成（2026-09-15）
+
+在 09-14 鸢尾紫基础上收敛"AI 味"：用户反馈 AI 界面紫色过载、气泡式对话和装饰性标记显得模板化。本轮按"中性工作台 + 语义标记"方案实施，仍未推送、合并或部署。
+
+- 基线同步：先把 09-14 未提交改动检查点为 `02337b6`，再合入 `main` 的 `d12d52e`（数据完整性、required 日期、撤销、草稿缓存、SeatLayoutSurface 统一渲染），merge 提交 `13e81ff`。合并原则：保留 main 的业务修复，用分支 BoardUI token 表达。
+- 表面中性化：Companion 头部、跟进建议分区、AI 映射卡、授权条、云同步等一律中性；鸢尾紫只剩三处语义位——主动生成按钮（`variant="ai"`）、小号 `Sparkles` 身份标记、生成中进度线。状态文字默认 `text-text-tertiary`，仅错误着色。
+- Companion 重构：AI 回复改为文档流（左侧小标记、无气泡），用户消息为浅灰右置泡；建议提示为 ghost 行加箭头；消息操作改 hover ghost `IconButton`（`IconButton` 新增可选 `variant`）；textarea 与发送键合并为单个圆角 composer 卡。
+- 入口中性化：右下角 Launcher 改白色悬浮钮 + iris 小图标，忙态用角标圆点替代旋转圈。
+- 动效清理：删除无引用的 `ai-comment-reveal-glow`、`ai-thinking-dot`；`ai-followup-*`、`ai-message-enter`、`ai-suggestion-enter` 等统一映射到 `ai-surface-enter`；误用 `status-ai-*` 当高亮色的非 AI 区域（排名列、随机预览、导出弹窗）改回中性/语义色。
+- 修复分支自带缺陷：`ui.test.tsx` 的 ToolDrawer 用例查询了 render container，而抽屉经 portal 挂在 `document.body`，改查 `document.body` 后 190 项单测全绿。
+
+## 早前状态：质感修正完成（2026-09-14）
 
 用户评审 09-08 版本后指出两点：与 BoardUI 官网质感差距明显、AI 石墨灰过于单调死板。经官网对照定位到五个落差（只用了 StatCards 紧凑变体、AI 全量中性化、Inter 字体未真正加载、表面语言不同、图表彩虹色脱节），本轮按用户选定的"鸢尾紫 + 质感全包"方案实施，仍未推送、合并或部署；main 已前进至 d12d52e，本分支落后 1 个提交，合并前需重新三方对比 SeatBoard 与 DESIGN_SYSTEM。
 

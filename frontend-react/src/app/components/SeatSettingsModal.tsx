@@ -191,11 +191,9 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
     const itemId = `${kind}-${a}-${b}`;
     animateSelectionTransfer({
       itemId,
-      itemName: `${nameById.get(a) || "未知"} ${kind === "locked" ? "＋" : "✕"} ${nameById.get(b) || "未知"}`,
       sourceElement: source,
       sourceContainer: source,
       targetContainer: kind === "locked" ? lockedSelectedRef.current : noSelectedRef.current,
-      tone: "indigo",
       commit: () => {
         onUpdate(current => {
           const key = kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs";
@@ -211,11 +209,9 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
   function removePair(kind: "locked" | "no", a: StudentId, b: StudentId, sourceElement: HTMLElement) {
     animateSelectionTransfer({
       itemId: `${kind}-${a}-${b}`,
-      itemName: `${nameById.get(a) || "未知"} ${kind === "locked" ? "＋" : "✕"} ${nameById.get(b) || "未知"}`,
       sourceElement,
       sourceContainer: kind === "locked" ? lockedSelectedRef.current : noSelectedRef.current,
       targetContainer: kind === "locked" ? lockedInputsRef.current : noInputsRef.current,
-      tone: "indigo",
       commit: () => onUpdate(current => {
         const key = kind === "locked" ? "lockedDeskmatePairs" : "noDeskmatePairs";
         return { ...current, constraints: { ...current.constraints, [key]: current.constraints[key].filter(pair => !(pair.a === a && pair.b === b)) } };
@@ -230,11 +226,9 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
     const id = frontStudentId;
     animateSelectionTransfer({
       itemId: id,
-      itemName: nameById.get(id) || "未知",
       sourceElement: source,
       sourceContainer: source,
       targetContainer: frontSelectedRef.current,
-      tone: "blue",
       commit: () => {
         onUpdate(current => {
           if (current.constraints.frontRowStudentIds.includes(id)) return current;
@@ -248,18 +242,16 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
   function removeFrontStudent(id: StudentId, sourceElement: HTMLElement) {
     animateSelectionTransfer({
       itemId: id,
-      itemName: nameById.get(id) || "未知",
       sourceElement,
       sourceContainer: frontSelectedRef.current,
       targetContainer: frontPickerRef.current,
-      tone: "blue",
       commit: () => updateConstraints({ frontRowStudentIds: constraints.frontRowStudentIds.filter(item => item !== id) }),
     });
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4">
-      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="seat-settings-title" className="modal-panel-enter flex max-h-[88vh] w-full max-w-lg flex-col rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl outline-none">
+    <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="seat-settings-title" className="modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-lg flex-col outline-none">
         <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
           <div>
             <h2 id="seat-settings-title" className="text-headline-semibold text-text-primary">排座</h2>
@@ -294,7 +286,7 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
               {COMPLEMENT_RULES.map(rule => {
                 const active = settings.complementRuleIds.includes(rule.id);
                 return (
-                  <button key={rule.id} onClick={() => toggleComplement(rule.id)} className={`rounded-lg border px-3 py-2 text-left text-caption-1-semibold transition-[background,border-color,color,transform] active:scale-95 ${active ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-default bg-background-primary-default text-text-secondary hover:border-accent-200 hover:bg-accent-50/40"}`}>
+                  <button key={rule.id} onClick={() => toggleComplement(rule.id)} className={`rounded-lg border px-3 py-2 text-left text-caption-1-semibold transition-[background-color,border-color,color] duration-200 ${active ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-default bg-background-primary-default text-text-secondary hover:border-accent-200 hover:bg-accent-50/40"}`}>
                     {rule.label}
                   </button>
                 );

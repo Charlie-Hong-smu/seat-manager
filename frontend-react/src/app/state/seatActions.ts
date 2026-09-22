@@ -8,13 +8,14 @@ export function getSeatCapacityForStudents(studentCount: number, layout?: SeatLa
   return layout ? layout.seats.length : studentCount ? Math.ceil(studentCount / COLS) * COLS : 0;
 }
 
-export function buildSeatOrderByStudentList(students: AppStudent[], layout?: SeatLayoutV1): SeatOrder {
-  const seatOrder = new Array<StudentId | null>(getSeatCapacityForStudents(students.length, layout)).fill(null);
-  students.forEach((student, index) => {
-    if (index < seatOrder.length) {
-      seatOrder[index] = student.id;
-    }
-  });
+export function buildSeatOrderByStudentList(students: AppStudent[], layout?: SeatLayoutV1, currentOrder?: SeatOrder, lockedSeats = new Set<number>()): SeatOrder {
+  const capacity = layout?.seats.length ?? (currentOrder?.length || getSeatCapacityForStudents(students.length));
+  const seatOrder = new Array<StudentId | null>(capacity).fill(null);
+  const valid = new Set(students.map(student => student.id));
+  const used = new Set<StudentId>();
+  lockedSeats.forEach(index => { const id = currentOrder?.[index]; if (index >= 0 && index < capacity && id && valid.has(id) && !used.has(id)) { seatOrder[index] = id; used.add(id); } });
+  const remaining = students.filter(student => !used.has(student.id));
+  seatOrder.forEach((_, index) => { if (!lockedSeats.has(index)) seatOrder[index] = remaining.shift()?.id || null; });
   return seatOrder;
 }
 
@@ -39,7 +40,7 @@ export function placeStudentInFirstEmptySeat(seatOrder: SeatOrder, studentId: St
 }
 
 export function swapSeatOrder(seatOrder: SeatOrder, fromIndex: number, toIndex: number, lockedSeats: Set<number>): SeatOrder {
-  if (fromIndex === toIndex || lockedSeats.has(fromIndex) || lockedSeats.has(toIndex)) {
+  if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex) || fromIndex < 0 || toIndex < 0 || fromIndex >= seatOrder.length || toIndex >= seatOrder.length || fromIndex === toIndex || lockedSeats.has(fromIndex) || lockedSeats.has(toIndex)) {
     return seatOrder;
   }
 

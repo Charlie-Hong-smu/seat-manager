@@ -498,3 +498,8 @@ export function getSeatPreviewStats(students: AppStudent[], currentOrder: SeatOr
     softPenalty: evaluation.softPenalty,
   };
 }
+
+// 拖拽松手后的吸附时长随飞行距离伸缩：短距离不拖沓，长距离不"傻快"。
+export function settleDurationFor(fromX: number, fromY: number, toX: number, toY: number) {
+  return Math.round(Math.min(460, Math.max(240, 220 + Math.hypot(toX - fromX, toY - fromY) * 0.35)));
+}

@@ -31,7 +31,7 @@ export function SeatLayoutSurface({ layout: source, detail = false, renderSeat }
   const rows = Math.max(1, ...occupied.map(cell => cell.row + 1));
   return <div className="seat-layout-surface" data-seat-layout-surface data-detail={detail ? "true" : "false"} style={{ minWidth: `${columns * 76}px` }}>
     {!layout.podium && layout.frontEdge === "top" && <div className="seat-layout-surface__podium">讲台</div>}
-    <div className="seat-layout-surface__grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(${detail ? 78 : 32}px, 1fr))`, minHeight: rows * (detail ? 78 : 32), maxHeight: rows * (detail ? 94 : 58) }} onPointerLeave={() => setHovered(null)}>
+    <div className="seat-layout-surface__grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(var(--seat-row-min), 1fr))`, minHeight: `calc(${rows} * var(--seat-row-min))`, maxHeight: `calc(${rows} * var(--seat-row-max))` }} onPointerLeave={() => setHovered(null)}>
       <SeatGroupOverlay groups={layout.groups} cells={grid.seats} podium={grid.podium} columns={columns} rows={rows} hovered={hovered} onHover={setHovered} />
       {layout.seats.map((seat, index) => {
         const cell = grid.seats.get(seat.id);

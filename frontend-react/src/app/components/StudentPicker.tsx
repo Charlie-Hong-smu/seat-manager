@@ -61,15 +61,17 @@ export function StudentPicker({ students, value, onChange, label = "选择学生
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
       setOpen(false);
       setSearch("");
       triggerRef.current?.focus();
     };
     document.addEventListener("mousedown", closeOnOutside);
-    window.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", closeOnEscape, true);
     return () => {
       document.removeEventListener("mousedown", closeOnOutside);
-      window.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("keydown", closeOnEscape, true);
     };
   }, [open]);
 
@@ -107,7 +109,6 @@ export function StudentMultiPicker({ students, values, onChange, label = "选择
       : null;
     animateSelectionTransfer({
       itemId: student.id,
-      itemName: student.name,
       sourceElement: isSelected ? selectedElement || event.currentTarget : event.currentTarget,
       sourceContainer: isSelected ? selectedContainerRef.current : candidatesContainerRef.current,
       targetContainer: isSelected ? candidatesContainerRef.current : selectedContainerRef.current,
@@ -119,7 +120,6 @@ export function StudentMultiPicker({ students, values, onChange, label = "选择
     const chip = event.currentTarget.closest<HTMLElement>("[data-selection-motion-id]") || event.currentTarget;
     animateSelectionTransfer({
       itemId: student.id,
-      itemName: student.name,
       sourceElement: chip,
       sourceContainer: selectedContainerRef.current,
       targetContainer: candidatesContainerRef.current,
@@ -134,7 +134,7 @@ export function StudentMultiPicker({ students, values, onChange, label = "选择
       <ChevronDown className={`h-4 w-4 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
     </button>
     <div ref={selectedContainerRef} className={`flex flex-wrap gap-1.5 transition-[margin] duration-200 motion-reduce:transition-none ${values.length ? "mt-2" : ""}`}>
-      {values.map(id => { const student = students.find(item => item.id === id); return student ? <span key={id} data-selection-motion-id={id} className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-accent-200 bg-accent-50 py-1 pl-2.5 pr-1 text-caption-1-semibold text-accent-700"><span>{student.name}</span><button type="button" onClick={event => removeWithAnimation(event, student)} className="grid h-5 w-5 place-items-center rounded-full text-accent-400 transition-colors hover:bg-status-danger-100 hover:text-status-danger-500" aria-label={`移除 ${student.name}`}><X className="h-3 w-3" /></button></span> : null; })}
+      {values.map(id => { const student = students.find(item => item.id === id); return student ? <span key={id} data-selection-motion-id={id} className="inline-flex items-center gap-1 rounded-lg border border-accent-200 bg-accent-50 py-1 pl-2.5 pr-1 text-caption-1-semibold text-accent-700"><span>{student.name}</span><button type="button" onClick={event => removeWithAnimation(event, student)} className="grid h-5 w-5 place-items-center rounded-md text-accent-400 transition-colors hover:bg-status-danger-100 hover:text-status-danger-500" aria-label={`移除 ${student.name}`}><X className="h-3 w-3" /></button></span> : null; })}
     </div>
     <AnimatedPopover open={open} className={cx(MENU_POPOVER_SURFACE, "absolute inset-x-0 top-full z-30 mt-2 p-2")}>
       <Input value={search} onChange={setSearch} leadingIcon={Search} placeholder="搜索姓名或别名" className="mb-2" />

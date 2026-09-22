@@ -1,6 +1,10 @@
-import { type KeyboardEvent as ReactKeyboardEvent, type TransitionEvent as ReactTransitionEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useScopedRequest } from "../hooks/useScopedRequest";
+import { getCurrentWorkspaceScope } from "../state/workspaces";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
+  ArrowLeft,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -26,16 +30,17 @@ import {
   type CommentRefinementAction,
 } from "../state/aiCommentRefinementService";
 import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
-import { cacheStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
+import { cacheStudentCommentDraft, readStudentCommentDraft, readStudentCommentDrafts, saveStudentCommentDraft } from "../state/commentStorage";
 import {
   readCommentRubric,
   readStudentCommentProfile,
+  readStudentCommentProfiles,
   saveCommentRubric,
   saveStudentCommentProfile,
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
-import { AiGenerationPanel, Button, IconButton, SegmentedControl, useAppDialog } from "./ui";
+import { MotionList, MotionCollapse, DialogPresence, AiGenerationPanel, Button, IconButton, MotionSwitch, SegmentedControl, useModalFocus, useAppDialog } from "./ui";
 import {
   addCommentCustomOption,
   COMMENT_LENGTH_MODES,
@@ -62,6 +67,7 @@ interface CommentState {
   failed: boolean;
   lengthMode: string;
   style: string;
+  targetWordCount: number;
 }
 
 type CommentFilterMode = "all" | "pending" | "needsInfo";
@@ -120,8 +126,9 @@ function measureTextareaSelection(textarea: HTMLTextAreaElement, selectionStart:
 
 function buildInitialComments(students: AppStudent[], failedIds: StudentId[] = []): CommentState[] {
   const failedSet = new Set(failedIds);
+  const drafts = readStudentCommentDrafts(students);
   return students.map(s => {
-    const draft = readStudentCommentDraft(s);
+    const draft = drafts[s.id];
     return {
     studentId: s.id,
     text: draft.generatedComment,
@@ -130,15 +137,14 @@ function buildInitialComments(students: AppStudent[], failedIds: StudentId[] = [
     failed: failedSet.has(s.id),
     lengthMode: draft.lengthMode,
     style: draft.style,
+    targetWordCount: draft.targetWordCount,
   };
   });
 }
 
 interface Props {
   students: AppStudent[];
-  transitionState: "preparing" | "open" | "closing";
   onClose: () => void;
-  onExitComplete: () => void;
   onSelectStudent: (student: AppStudent) => void;
 }
 
@@ -169,16 +175,25 @@ function downloadTextFile(filename: string, content: string, type: string): void
   URL.revokeObjectURL(link.href);
 }
 
-export function CommentWorkbench({ students, transitionState, onClose, onExitComplete, onSelectStudent }: Props) {
+export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) {
   const appDialog = useAppDialog();
-  const initialBatchState = useMemo(() => loadCommentBatchState(students), [students]);
+  const [initialBatchState] = useState(() => loadCommentBatchState(students));
   const initialRubric = useMemo(() => readCommentRubric(), []);
-  const [comments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
+  const [storedComments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
+  const comments = useMemo(() => {
+    const byId = new Map(storedComments.map(comment => [comment.studentId, comment]));
+    return students.map(student => byId.get(student.id) || buildInitialComments([student])[0]);
+  }, [storedComments, students]);
   const [rubric, setRubric] = useState<CommentRubric>(() => initialRubric);
-  const [commentProfiles, setCommentProfiles] = useState<Record<StudentId, StudentCommentProfile>>(() =>
-    Object.fromEntries(students.map(student => [student.id, readStudentCommentProfile(student)]))
-  );
-  const [selectedId, setSelectedId] = useState<StudentId>(students[0]?.id || "");
+  const persistedProfiles = useMemo(() => readStudentCommentProfiles(students), [students]);
+  const [storedProfiles, setCommentProfiles] = useState(persistedProfiles);
+  const commentProfiles = useMemo(() => Object.fromEntries(students.map(student => {
+    const local = storedProfiles[student.id];
+    const saved = persistedProfiles[student.id];
+    return [student.id, !local || (Date.parse(saved.updatedAt) || 0) > (Date.parse(local.updatedAt) || 0) ? saved : local];
+  })), [students, storedProfiles, persistedProfiles]);
+  const [requestedStudentId, setSelectedId] = useState<StudentId>(students[0]?.id || "");
+  const selectedId = students.some(student => student.id === requestedStudentId) ? requestedStudentId : students[0]?.id || "";
   const [filterSearch, setFilterSearch] = useState("");
   const [filterMode, setFilterMode] = useState<CommentFilterMode>("all");
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<StudentId>>(() => new Set());
@@ -189,8 +204,8 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       .map(criterion => criterion.id)
   ));
   const [showGenerationSettings, setShowGenerationSettings] = useState(false);
-  const [showTeacherNote, setShowTeacherNote] = useState(false);
-  const [teacherNote, setTeacherNote] = useState("");
+  const [showTeacherNote, setShowTeacherNote] = useState(() => Boolean(commentProfiles[students[0]?.id]?.teacherNote || comments[0]?.needsInfo));
+  const [teacherNote, setTeacherNote] = useState(() => commentProfiles[students[0]?.id]?.teacherNote || "");
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchState, setBatchState] = useState<CommentBatchState>(() => initialBatchState);
   const [accessCode, setAccessCode] = useState("");
@@ -202,21 +217,16 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   const [commentSelection, setCommentSelection] = useState<CommentTextSelection | null>(null);
   const [refinementPhase, setRefinementPhase] = useState<RefinementPhase>("idle");
   const [refinementSuggestion, setRefinementSuggestion] = useState("");
-  const [customWordCount, setCustomWordCount] = useState(120);
+
   const [customMaterialCriterionId, setCustomMaterialCriterionId] = useState("");
   const [customMaterialLabel, setCustomMaterialLabel] = useState("");
   const [showExportModal, setShowExportModal] = useState(false);
+  const exportPanelRef = useModalFocus(showExportModal, () => setShowExportModal(false));
   const [showFollowupPanel, setShowFollowupPanel] = useState(false);
   const [exportSelectedIds, setExportSelectedIds] = useState<Set<StudentId>>(() => new Set());
 
-  function handleWorkbenchTransitionEnd(event: ReactTransitionEvent<HTMLDivElement>) {
-    if (event.target === event.currentTarget && event.propertyName === "transform" && transitionState === "closing") {
-      onExitComplete();
-    }
-  }
   const [exportFormat, setExportFormat] = useState<"csv" | "txt">("csv");
   const pauseRequested = useRef(false);
-  const workbenchRef = useRef<HTMLDivElement>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentPreviewScrollRef = useRef<HTMLDivElement>(null);
   const selectionToolbarRef = useRef<HTMLDivElement>(null);
@@ -247,10 +257,23 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     });
   }, [commentByStudentId, filterMode, filterSearch, students]);
   const filteredStudentIds = useMemo(() => filteredStudents.map(student => student.id), [filteredStudents]);
-  const selectedBatchCount = selectedBatchIds.size;
+  const selectedBatchCount = students.filter(student => selectedBatchIds.has(student.id)).length;
+  const currentScope = getCurrentWorkspaceScope();
+  const generation = useScopedRequest(`${currentScope}:${selectedId}`);
+  const refinement = useScopedRequest(`${currentScope}:${selectedId}`);
+  const rosterScope = `${currentScope}:${students.map(student => student.id).join("|")}`;
+  const batchRequest = useScopedRequest(rosterScope);
+  useEffect(() => { setBatchRunning(false); setSingleGenerationPhase("idle"); }, [rosterScope]);
+  const draftContext = useRef({ selectedId, teacherNote, commentProfiles, rubric, students });
+  draftContext.current = { selectedId, teacherNote, commentProfiles, rubric, students };
+  const commentsRef = useRef(comments);
+  commentsRef.current = comments;
+  const revision = useRef(new Map<StudentId, number>());
+  const unsavedComments = comments.filter(comment => comment.text !== (commentProfiles[comment.studentId]?.generatedComment || ""));
   const allFilteredSelected = filteredStudentIds.length > 0 && filteredStudentIds.every(id => selectedBatchIds.has(id));
 
-  const selectedStudent = students.find(s => s.id === selectedId) || students[0];
+  const selectedStudentIndex = students.findIndex(student => student.id === selectedId);
+  const selectedStudent = students[selectedStudentIndex] || students[0];
   const selectedComment = comments.find(c => c.studentId === selectedStudent?.id) || comments[0];
   const selectedProfile = selectedStudent ? commentProfiles[selectedStudent.id] || readStudentCommentProfile(selectedStudent) : null;
   const selectedSummary = selectedProfile ? summarizeCommentProfile(rubric, selectedProfile) : { criteriaSummary: [], customOptions: [] };
@@ -259,7 +282,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   useEffect(() => {
     if (selectedProfile && selectedStudent) {
       const recoveredDraft = readStudentCommentDraft(selectedStudent);
-      const draftIsNewer = Date.parse(recoveredDraft.updatedAt || "") > Date.parse(selectedProfile.updatedAt || "");
+      const draftIsNewer = (Date.parse(recoveredDraft.updatedAt || "") || 0) >= (Date.parse(selectedProfile.updatedAt || "") || 0);
       const recoveredTeacherNote = draftIsNewer ? recoveredDraft.teacherNote : selectedProfile.teacherNote;
       setTeacherNote(recoveredTeacherNote);
       setShowTeacherNote(Boolean(recoveredTeacherNote || selectedComment?.needsInfo));
@@ -274,10 +297,6 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       }
     }
   }, [selectedComment?.needsInfo, selectedId, selectedProfile, selectedStudent]);
-
-  useEffect(() => {
-    workbenchRef.current?.focus();
-  }, []);
 
   useEffect(() => {
     if (commentRevealFrame.current !== null) {
@@ -317,24 +336,15 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       else onClose();
       return;
     }
-    if (event.key !== "Tab" || !workbenchRef.current) return;
-    const focusable = Array.from(workbenchRef.current.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )).filter(element => !element.closest("[inert]") && element.offsetParent !== null);
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && (document.activeElement === first || document.activeElement === workbenchRef.current)) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
   }
 
   function updateComment(id: StudentId, patch: Partial<CommentState>) {
-    setComments(prev => prev.map(c => c.studentId === id ? { ...c, ...patch } : c));
+    revision.current.set(id, (revision.current.get(id) || 0) + 1);
+    const next = commentsRef.current.map(comment => comment.studentId === id ? { ...comment, ...patch, generated: Boolean((patch.text ?? comment.text).trim()) } : comment);
+    commentsRef.current = next;
+    setComments(next);
+    const changed = next.find(comment => comment.studentId === id);
+    if (changed) cacheStudentCommentDraft(id, buildDraft(changed));
   }
 
   function cacheSelectedCommentText(text: string, nextTeacherNote = teacherNote) {
@@ -344,12 +354,13 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       teacherNote: nextTeacherNote,
       style: selectedComment.style as "warm" | "formal" | "brief",
       lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: resolveCommentWordCount(selectedComment.lengthMode as "short" | "standard" | "long" | "custom", customWordCount),
+      targetWordCount: resolveCommentWordCount(selectedComment.lengthMode as "short" | "standard" | "long" | "custom", selectedComment.targetWordCount),
       updatedAt: new Date().toISOString(),
     });
   }
 
   function dismissCommentRefinement() {
+    refinement.cancel();
     setCommentSelection(null);
     setRefinementPhase("idle");
     setRefinementSuggestion("");
@@ -387,6 +398,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       setAiStatus("一次最多优化 600 个字，请缩小选中文字范围。");
       return;
     }
+    const request = refinement.start();
     commentScrollPosition.current = commentTextareaRef.current?.scrollTop || 0;
     setRefinementPhase("loading");
     setRefinementSuggestion("");
@@ -400,11 +412,14 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
         contextAfter: selectedComment.text.slice(commentSelection.end),
         accessCode,
         remember: rememberAuth,
+        signal: request.signal,
       });
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
       setRefinementSuggestion(result.replacement);
       setRefinementPhase("ready");
       setAiStatus("");
     } catch (error) {
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
       setRefinementPhase("idle");
       setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
     }
@@ -426,7 +441,6 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     const caretPosition = commentSelection.start + refinementSuggestion.length;
     setDisplayedCommentText(nextText);
     updateComment(selectedId, { text: nextText, generated: Boolean(nextText) });
-    cacheSelectedCommentText(nextText);
     dismissCommentRefinement();
     setAiStatus("已应用到当前草稿；请继续检查，保存后才会写入评语记录。");
     window.requestAnimationFrame(() => {
@@ -438,22 +452,20 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   function persistRubric(next: CommentRubric) {
     const saved = saveCommentRubric(next);
     setRubric(saved);
-    setCommentProfiles(prev => {
-      Object.entries(prev).forEach(([studentId, profile]) => {
-        saveStudentCommentProfile(studentId, saved, profile);
-      });
-      return { ...prev };
-    });
+    const profiles = Object.fromEntries(Object.entries(commentProfiles).map(([studentId, profile]) => [studentId, saveStudentCommentProfile(studentId, saved, profile)]));
+    setCommentProfiles(profiles);
+    commentsRef.current.forEach(comment => cacheStudentCommentDraft(comment.studentId, buildDraft(comment)));
   }
 
   function updateSelectedProfile(updater: (profile: StudentCommentProfile) => StudentCommentProfile) {
     if (!selectedStudent || !selectedProfile) {
       return;
     }
+    revision.current.set(selectedStudent.id, (revision.current.get(selectedStudent.id) || 0) + 1);
     const nextProfile = updater({ ...selectedProfile });
     const saved = saveStudentCommentProfile(selectedStudent.id, rubric, nextProfile);
     setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: saved }));
-    setTeacherNote(saved.teacherNote);
+    if (selectedComment) cacheStudentCommentDraft(selectedStudent.id, { ...buildDraft(selectedComment, teacherNote), updatedAt: saved.updatedAt });
   }
 
   function toggleBatchSelection(studentId: StudentId) {
@@ -496,15 +508,18 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   }
 
   function buildDraft(comment: CommentState, note?: string): StudentCommentDraft {
-    const profile = commentProfiles[comment.studentId];
-    const summary = profile ? summarizeCommentProfile(rubric, profile) : { criteriaSummary: [], customOptions: [] };
-    const draftTeacherNote = note ?? (comment.studentId === selectedId ? teacherNote : profile?.teacherNote || "");
+    const context = draftContext.current;
+    const profile = context.commentProfiles[comment.studentId];
+    const summary = profile ? summarizeCommentProfile(context.rubric, profile) : { criteriaSummary: [], customOptions: [] };
+    const student = context.students.find(item => item.id === comment.studentId);
+    const recoveredNote = student ? readStudentCommentDraft(student).teacherNote : "";
+    const draftTeacherNote = note ?? (comment.studentId === context.selectedId ? context.teacherNote : recoveredNote);
     return {
       generatedComment: comment.text,
       teacherNote: draftTeacherNote,
       style: comment.style as "warm" | "formal" | "brief",
       lengthMode: comment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: resolveCommentWordCount(comment.lengthMode as "short" | "standard" | "long" | "custom", customWordCount),
+      targetWordCount: resolveCommentWordCount(comment.lengthMode as "short" | "standard" | "long" | "custom", comment.targetWordCount),
       updatedAt: new Date().toISOString(),
       criteriaSummary: summary.criteriaSummary,
       customOptions: summary.customOptions,
@@ -524,6 +539,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   }
 
   function revealGeneratedComment(text: string) {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setDisplayedCommentText(text); setSingleGenerationPhase("idle"); return; }
     if (commentRevealFrame.current !== null) window.cancelAnimationFrame(commentRevealFrame.current);
     setSingleGenerationPhase("revealing");
     setDisplayedCommentText("");
@@ -547,12 +563,14 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
 
   async function generateSingle() {
     if (!selectedStudent || !selectedComment || singleGenerationPhase !== "idle") return;
+    const request = generation.start();
     setSingleGenerationPhase("loading");
     setDisplayedCommentText("");
     setAiStatus("");
     try {
       const draft = buildDraft(selectedComment);
-      const result = await generateStudentAiComment(selectedStudent, draft, { accessCode, remember: rememberAuth, force: true });
+      const result = await generateStudentAiComment(selectedStudent, draft, { accessCode, remember: rememberAuth, force: true, signal: request.signal });
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
       if (!result.comment) {
         setAiStatus(result.missingInfo?.length ? `需要补充：${result.missingInfo.join("、")}` : "信息不足，暂未生成评语。");
         setDisplayedCommentText(selectedComment.text);
@@ -560,18 +578,6 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
         return;
       }
       updateComment(selectedId, { text: result.comment, generated: true, needsInfo: Boolean(result.needsMoreInfo), failed: false });
-      if (selectedProfile) {
-        setCommentProfiles(prev => ({
-          ...prev,
-          [selectedId]: {
-            ...selectedProfile,
-            teacherNote,
-            generatedComment: result.comment,
-            status: "generated",
-            updatedAt: new Date().toISOString(),
-          },
-        }));
-      }
       if (batchState.failed.includes(selectedId)) {
         commitBatchState({
           ...batchState,
@@ -580,9 +586,10 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       }
       setAccessCode("");
       setHasAuth(true);
-      setAiStatus("");
+      setAiStatus("草稿已生成，请核对后保存。");
       revealGeneratedComment(result.comment);
     } catch (error) {
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
       setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
       setHasAuth(hasStoredAiAuth());
       setDisplayedCommentText(selectedComment.text);
@@ -609,10 +616,26 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       teacherNote,
       style: selectedComment.style as "warm" | "formal" | "brief",
       lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: resolveCommentWordCount(selectedComment.lengthMode as "short" | "standard" | "long" | "custom", customWordCount),
+      targetWordCount: resolveCommentWordCount(selectedComment.lengthMode as "short" | "standard" | "long" | "custom", selectedComment.targetWordCount),
       updatedAt: new Date().toISOString(),
     });
     updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
+    setAiStatus(`${selectedStudent.name} 的评语已保存。`);
+  }
+
+  async function saveUnsavedComments() {
+    const drafts = unsavedComments.filter(comment => comment.text.trim());
+    if (!drafts.length || !await appDialog.confirm({ title: `保存 ${drafts.length} 人的评语？`, description: "请先核对生成内容。确认后，这些草稿将成为正式保存的评语，并替换对应学生原先保存的正文。", confirmLabel: "确认保存评语", variant: "primary" })) return;
+    if (getCurrentWorkspaceScope() !== currentScope) return;
+    const nextProfiles = { ...commentProfiles };
+    drafts.forEach(comment => {
+      const draft = buildDraft(comment);
+      const profile = nextProfiles[comment.studentId];
+      if (profile) nextProfiles[comment.studentId] = saveStudentCommentProfile(comment.studentId, rubric, { ...profile, generatedComment: draft.generatedComment, teacherNote: draft.teacherNote, style: draft.style, lengthMode: draft.lengthMode, targetWordCount: draft.targetWordCount, updatedAt: draft.updatedAt, status: "edited" });
+      saveStudentCommentDraft(comment.studentId, draft);
+    });
+    setCommentProfiles(nextProfiles);
+    setAiStatus(`已保存 ${drafts.length} 人的评语。`);
   }
 
   function selectStudent(studentId: StudentId) {
@@ -684,6 +707,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     });
     setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
     setTeacherNote(savedProfile.teacherNote);
+    draftContext.current.teacherNote = savedProfile.teacherNote;
     setShowTeacherNote(true);
     updateComment(selectedStudent.id, { needsInfo: false });
     setAiStatus(`已把 AI 跟进素材加入 ${selectedStudent.name} 的补充说明。`);
@@ -741,6 +765,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
 
   async function runBatchQueue(seed: CommentBatchState) {
     if (batchRunning) return;
+    const request = batchRequest.start();
     if (commentRevealFrame.current !== null) {
       window.cancelAnimationFrame(commentRevealFrame.current);
       commentRevealFrame.current = null;
@@ -752,12 +777,13 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
     const queue = [...seed.queue];
     const failed = [...seed.failed];
     let done = seed.done;
-    let selectedBatchResult: string | null = null;
+    let skippedEdits = 0;
     const total = seed.total || queue.length;
     commitBatchState({ ...seed, queue, failed, done, total, status: "running" });
 
     try {
       for (let i = 0; i < queue.length; i += 1) {
+        if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
         if (pauseRequested.current) {
           const paused = { queue: queue.slice(i), failed, done, total, status: "paused" as const, updatedAt: "" };
           commitBatchState(paused);
@@ -765,26 +791,30 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           return;
         }
         const studentId = queue[i];
-        const student = students.find(s => s.id === studentId);
+        const student = draftContext.current.students.find(s => s.id === studentId);
         if (!student) {
           done += 1;
           continue;
         }
-        const comment = comments.find(c => c.studentId === studentId);
+        const comment = commentsRef.current.find(c => c.studentId === studentId);
         if (!comment) {
           done += 1;
           continue;
         }
         setAiStatus(`正在生成 ${done + 1}/${total}：${student.name}`);
+        const inputRevision = revision.current.get(studentId) || 0;
         try {
           const result = await generateStudentAiComment(student, buildDraft(comment), {
             accessCode,
             remember: rememberAuth,
             force: true,
+            signal: request.signal,
           });
+          if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
           done += 1;
-          if (result.comment) {
-            if (student.id === selectedId) selectedBatchResult = result.comment;
+          if ((revision.current.get(studentId) || 0) !== inputRevision) {
+            skippedEdits += 1;
+          } else if (result.comment) {
             updateComment(student.id, {
               text: result.comment,
               generated: true,
@@ -803,6 +833,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
             updatedAt: "",
           });
         } catch (error) {
+          if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
           const reason = error instanceof Error ? error.message : "";
           failed.push(student.id);
           updateComment(student.id, { needsInfo: true, failed: true });
@@ -829,25 +860,20 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       if (failed.length) {
         setAiStatus(`批量生成完成，${failed.length} 人失败，可重试失败项。`);
       } else {
-        setAiStatus("批量生成完成。");
+        setAiStatus(skippedEdits ? `草稿生成完成；${skippedEdits} 人保留了生成期间的手动修改。请核对后保存。` : "草稿生成完成，请核对后保存。");
       }
     } catch (error) {
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
       setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
       setHasAuth(hasStoredAiAuth());
     } finally {
-      setBatchRunning(false);
-      if (selectedBatchResult) {
-        revealGeneratedComment(selectedBatchResult);
-      } else {
-        setDisplayedCommentText(selectedComment?.text || "");
-        setSingleGenerationPhase("idle");
-      }
+      if (request.isCurrent() && getCurrentWorkspaceScope() === currentScope) { setBatchRunning(false); setSingleGenerationPhase("idle"); }
     }
   }
 
-  function startBatch() {
+  async function startBatch() {
     const failedIds = new Set(batchState.failed);
-    const selectedIds = Array.from(selectedBatchIds);
+    const selectedIds = students.filter(student => selectedBatchIds.has(student.id)).map(student => student.id);
     const pending = selectedIds.length
       ? comments.filter(c => selectedIds.includes(c.studentId))
       : comments.filter(c => !c.generated || failedIds.has(c.studentId));
@@ -856,6 +882,9 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
       clearBatchState();
       return;
     }
+    const replacing = pending.filter(comment => comment.text.trim()).length;
+    if (replacing && !await appDialog.confirm({ title: `重新生成 ${replacing} 份已有草稿？`, description: "生成结果会替换这些学生当前的草稿；正式保存的评语保持原样，直到你再次确认保存。", confirmLabel: "重新生成", variant: "primary" })) return;
+    if (getCurrentWorkspaceScope() !== currentScope) return;
     const next = {
       queue: pending.map(c => c.studentId),
       failed: [],
@@ -952,11 +981,11 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
 
   if (!selectedStudent || !selectedComment) {
     return (
-      <div role="dialog" aria-modal="true" aria-label="评语工作台" data-transition-state={transitionState} onTransitionEnd={handleWorkbenchTransitionEnd} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-background-primary-default">
+      <div role="region" aria-label="评语工作台" className="comment-workbench-shell relative h-full w-full flex flex-col overflow-hidden bg-background-primary-default">
         <div className="comment-workbench-topbar shrink-0 bg-background-primary-default border-b border-separator-border px-6 py-4 flex items-center justify-between">
           <h2 className="text-text-primary">评语工作台</h2>
-          <button aria-label="关闭评语工作台" onClick={onClose} className="p-2 text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default rounded-xl transition-colors">
-            <X className="w-5 h-5" />
+          <button aria-label="返回上一页面" onClick={onClose} className="p-2 text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default rounded-xl transition-colors">
+            <ArrowLeft className="w-5 h-5" />
           </button>
         </div>
         <div className="comment-workbench-pane comment-workbench-editor flex-1 grid place-items-center text-text-tertiary">暂无学生</div>
@@ -965,9 +994,10 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
   }
 
   return (
-    <div ref={workbenchRef} role="dialog" aria-modal="true" aria-label="评语工作台" tabIndex={-1} data-transition-state={transitionState} onKeyDown={handleWorkbenchKeyDown} onTransitionEnd={handleWorkbenchTransitionEnd} className="comment-workbench-shell fixed inset-0 z-[80] flex flex-col overflow-hidden bg-background-primary-default text-[var(--app-text)] outline-none">
+    <div role="region" aria-label="评语工作台" tabIndex={-1} onKeyDown={handleWorkbenchKeyDown} className="comment-workbench-shell relative h-full w-full flex flex-col overflow-hidden bg-background-primary-default text-[var(--app-text)] outline-none">
       <header className="comment-workbench-topbar flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--app-border)] bg-background-primary-default px-4">
         <div className="flex min-w-0 items-center gap-3">
+          <IconButton label="返回上一页面" onClick={onClose}><ArrowLeft className="h-4 w-4" /></IconButton>
           <h2 className="shrink-0 text-headline-semibold text-text-primary">评语工作台</h2>
           <span className="text-body-semibold text-text-tertiary">
             <span className="text-status-success-600">{generatedCount}</span> / {students.length} 已生成
@@ -991,6 +1021,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Button size="sm" variant="secondary" disabled={batchRunning || singleGenerationPhase !== "idle" || !unsavedComments.some(comment => comment.text.trim())} onClick={() => void saveUnsavedComments()}><Save className="h-4 w-4"/>保存待确认评语 {unsavedComments.filter(comment => comment.text.trim()).length || ""}</Button>
           <button
             type="button"
             onClick={() => { setExportSelectedIds(new Set(generatedExportIds)); setShowExportModal(true); }}
@@ -998,13 +1029,11 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           >
             <Download className="h-4 w-4" />导出
           </button>
-          <button type="button" aria-label="关闭评语工作台" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-[var(--app-radius-sm)] text-text-tertiary transition-colors hover:bg-background-tertiary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30">
-            <X className="h-5 w-5" />
-          </button>
+
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[184px_minmax(520px,1fr)_300px] overflow-hidden xl:grid-cols-[216px_minmax(680px,1fr)_340px]">
+      <div className="comment-workbench-columns grid min-h-0 flex-1 overflow-hidden">
         <aside className="comment-workbench-pane comment-workbench-roster flex min-h-0 flex-col border-r border-[var(--app-border)] bg-background-primary-default">
           <div className="space-y-3 border-b border-[var(--app-border)] p-3">
             <SegmentedControl value={workbenchMode} onChange={setWorkbenchMode} ariaLabel="评语处理模式" className="w-full" options={[{ value: "single", label: "逐人", icon: <UserRound className="h-3.5 w-3.5" /> }, { value: "batch", label: "批量", icon: <Users className="h-3.5 w-3.5" /> }]}/>
@@ -1032,7 +1061,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
-            <div key={filterMode} className="comment-list-enter">
+            <MotionList>
             {filteredStudents.map(student => {
               const state = commentByStudentId.get(student.id);
               if (!state) return null;
@@ -1043,30 +1072,31 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                 <div
                   key={student.id}
                   role="button"
+                  aria-label={`${student.name}，${status.label}`}
+                  aria-pressed={active}
+                  data-comment-student-id={student.id}
                   tabIndex={0}
                   onClick={() => selectStudent(student.id)}
                   onKeyDown={event => {
+                    if (event.target !== event.currentTarget) return;
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       selectStudent(student.id);
                     }
                   }}
-                  className={`relative mx-1.5 flex min-h-12 cursor-pointer items-center rounded-[var(--app-radius-sm)] px-2 text-left transition-[background-color,transform] duration-200 hover:bg-accent-50/60 ${active ? "bg-accent-50" : ""}`}
+                  className={`relative mx-1.5 flex min-h-11 cursor-pointer items-center rounded-[var(--app-radius-sm)] px-3 text-left transition-colors duration-200 hover:bg-background-secondary-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring ${active ? "bg-accent-50" : ""}`}
                 >
                   <span className={`absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent-600 transition-opacity ${active ? "opacity-100" : "opacity-0"}`} />
                   <span aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch" ? true : undefined} className={`grid shrink-0 overflow-hidden transition-[width,margin,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "mr-2 w-4 translate-x-0 opacity-100" : "mr-0 w-0 -translate-x-2 opacity-0"}`}>
                     <input type="checkbox" checked={batchSelected} onClick={event => event.stopPropagation()} onChange={() => toggleBatchSelection(student.id)} className="h-4 w-4 accent-accent-600" aria-label={`选择 ${student.name} 用于批量生成`} />
                   </span>
-                  <span className={`mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-full text-body-semibold ${active ? "bg-accent-100 text-accent-700" : "bg-background-tertiary-default text-text-secondary"}`}>{student.name.slice(0, 1)}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-body-semibold text-text-primary">{student.name}</span>
-                    <span className={`mt-0.5 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${status.badge}`}>{status.label}</span>
-                  </span>
+                  <span className={`min-w-0 flex-1 truncate text-body-semibold ${active ? "text-accent-700" : "text-text-primary"}`}>{student.name}</span>
+                  <span className={`ml-2 shrink-0 text-caption-1-regular ${state.failed ? "text-status-danger-500" : state.generated ? "text-status-success-600" : "text-text-tertiary"}`}>{state.failed ? "待重试" : status.label}</span>
                 </div>
               );
             })}
             {filteredStudents.length === 0 && <div className="px-3 py-10 text-center text-body-regular text-text-tertiary">没有符合条件的学生</div>}
-            </div>
+            </MotionList>
           </div>
 
           <div aria-hidden={workbenchMode !== "batch"} inert={workbenchMode !== "batch" ? true : undefined} className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${workbenchMode === "batch" ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
@@ -1085,9 +1115,10 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
         </aside>
 
         <main className="comment-workbench-pane comment-workbench-editor min-h-0 min-w-0 bg-background-primary-default">
-          <section key={`editor-${selectedId}`} className="comment-detail-enter flex h-full min-h-0 flex-col bg-background-primary-default">
-            <div className="shrink-0 border-b border-[var(--app-border)] px-4 py-3.5 xl:px-5">
-              <div className="flex items-start justify-between gap-4">
+          <MotionSwitch transitionKey={selectedId} contentIndex={selectedStudentIndex} fixed className="h-full">
+          <section className="flex h-full min-h-0 flex-col bg-background-primary-default">
+            <div className="shrink-0 overflow-hidden border-b border-[var(--app-border)] px-4 py-3.5 xl:px-5">
+              <div data-motion-shift className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <button type="button" aria-label={`查看 ${selectedStudent.name} 的学生详情`} title="查看学生详情" onClick={() => onSelectStudent(selectedStudent)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-100 text-headline-semibold text-accent-700 transition-colors duration-200 hover:bg-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30 focus-visible:ring-offset-2">{selectedInitial}</button>
                   <div className="min-w-0">
@@ -1110,13 +1141,14 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 xl:px-6 xl:py-5">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-headline-semibold text-text-primary">评语正文</h3>
+                  <h3 className="text-headline-semibold text-text-primary">评语正文 <span className="ml-2 text-caption-1-regular text-text-tertiary">{selectedComment.text !== (selectedProfile?.generatedComment || "") ? "草稿 · 未保存" : selectedComment.text ? "已保存" : "未填写"}</span></h3>
                 </div>
                 <span className="shrink-0 text-caption-1-regular tabular-nums text-text-tertiary">{selectedComment.text.length} 字</span>
               </div>
-              <div className="relative min-h-[260px] flex-1 overflow-hidden rounded-[var(--app-radius-sm)]">
+              <div data-comment-editor-frame className="relative min-h-[260px] flex-1 overflow-hidden rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default transition-colors duration-200 focus-within:border-accent-300">
                 {refinementPhase === "idle" ? (
                   <textarea
+                    data-motion-shift
                     ref={commentTextareaRef}
                     value={displayedCommentText}
                     readOnly={singleGenerationPhase !== "idle"}
@@ -1126,18 +1158,18 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                       dismissCommentRefinement();
                       setDisplayedCommentText(event.target.value);
                       updateComment(selectedId, { text: event.target.value });
-                      cacheSelectedCommentText(event.target.value);
                     }}
                     placeholder="点击「生成评语」后会在这里显示；也可以选中文字，让 AI 局部优化表达。"
                     aria-label="评语正文编辑器"
-                    className={`h-full min-h-[260px] w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-5 py-4 text-[15px] leading-7 outline-none transition-[border-color,opacity] duration-200 focus:border-accent-300 ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
+                    className={`h-full min-h-[260px] w-full resize-none border-0 bg-transparent px-5 py-4 text-[15px] leading-7 outline-none transition-opacity duration-200 ${singleGenerationPhase === "loading" ? "opacity-0" : "opacity-100"}`}
                   />
                 ) : commentSelection ? (
                   <div
+                    data-motion-shift
                     ref={commentPreviewScrollRef}
                     role="status"
                     aria-label={refinementPhase === "loading" ? "正在优化选中文字" : "AI 修订预览"}
-                    className="h-full min-h-[260px] w-full overflow-auto rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default text-[15px] leading-7 text-text-primary"
+                    className="h-full min-h-[260px] w-full overflow-auto bg-transparent text-[15px] leading-7 text-text-primary"
                   >
                     <div className="min-h-full whitespace-pre-wrap break-words px-5 py-4">
                       {displayedCommentText.slice(0, commentSelection.start)}
@@ -1172,7 +1204,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                           type="button"
                           onMouseDown={event => event.preventDefault()}
                           onClick={() => requestCommentRefinement(action.value)}
-                          className="h-8 rounded-[6px] px-2.5 text-caption-1-semibold text-text-secondary transition-colors hover:bg-status-ai-50 hover:text-status-ai-700"
+                          className="h-8 rounded-[6px] px-2.5 text-caption-1-semibold text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary"
                         >
                           {action.label}
                         </button>
@@ -1187,8 +1219,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                 {singleGenerationPhase === "loading" && (
                   <div className="absolute inset-0"><AiGenerationPanel compact title={batchRunning ? "正在批量生成评语" : "正在生成评语"} steps={["整理学生素材", "组织评语结构", "生成评语草稿"]} /></div>
                 )}
-                {singleGenerationPhase === "revealing" && <span aria-hidden="true" className="ai-comment-reveal-glow pointer-events-none absolute inset-0 rounded-[var(--app-radius-sm)]" />}
-              </div>
+                </div>
               {refinementPhase === "ready" && commentSelection && refinementSuggestion && (
                 <div className="mt-3 flex shrink-0 justify-end">
                   <Button type="button" variant="ai" size="sm" onClick={applyCommentRefinement}>应用 AI 修改</Button>
@@ -1203,40 +1234,43 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                   {selectedComment.generated ? <CheckCircle2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{selectedComment.generated ? "保存并下一位" : "生成评语"}
                 </Button>
                 {selectedComment.generated && <IconButton label="重新生成" size="lg" onClick={generateSingle} disabled={batchRunning || singleGenerationPhase !== "idle"}><Sparkles className="h-4 w-4" /></IconButton>}
-                <IconButton label="保存" size="lg" onClick={saveSelectedComment}><Save className="h-4 w-4" /></IconButton>
-                <IconButton label="复制" size="lg" onClick={() => { if (selectedComment.text) navigator.clipboard.writeText(selectedComment.text).catch(() => {}); }} disabled={!selectedComment.text}><Copy className="h-4 w-4" /></IconButton>
+                <IconButton label="保存" size="lg" disabled={batchRunning || singleGenerationPhase !== "idle"} onClick={saveSelectedComment}><Save className="h-4 w-4" /></IconButton>
+                <IconButton label="复制" size="lg" onClick={() => { if (selectedComment.text) navigator.clipboard.writeText(selectedComment.text).then(() => setAiStatus("评语已复制。")).catch(() => setAiStatus("复制失败，请选中正文后手动复制。")); }} disabled={!selectedComment.text}><Copy className="h-4 w-4" /></IconButton>
               </div>
             </div>
           </section>
+          </MotionSwitch>
         </main>
 
         <aside className="comment-workbench-pane comment-workbench-materials min-h-0 border-l border-[var(--app-border)] bg-background-primary-default">
-          <section key={`tools-${selectedId}`} className="comment-detail-enter flex h-full min-h-0 flex-col bg-background-primary-default">
+          <MotionSwitch transitionKey={selectedId} contentIndex={selectedStudentIndex} fixed className="h-full">
+          <section className="flex h-full min-h-0 flex-col bg-background-primary-default">
             <div className="shrink-0 border-b border-[var(--app-border)] px-3.5 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h3 className="text-headline-semibold text-text-primary">素材与 AI</h3>
                   <p className="mt-0.5 text-caption-1-regular text-text-tertiary">为当前评语补充依据</p>
                 </div>
-                <button type="button" aria-expanded={showFollowupPanel} onClick={() => setShowFollowupPanel(value => !value)} className={`flex h-8 shrink-0 items-center gap-1 rounded-[var(--app-radius-sm)] px-2.5 text-caption-1-semibold transition-colors ${showFollowupPanel ? "bg-status-ai-600 text-text-white" : "border border-status-ai-100 bg-status-ai-50 text-status-ai-700 hover:bg-status-ai-100"}`}>
-                  <Sparkles className="h-3.5 w-3.5" />AI 补充
+                <button type="button" aria-expanded={showFollowupPanel} onClick={() => setShowFollowupPanel(value => !value)} className={`flex h-8 shrink-0 items-center gap-1 rounded-[var(--app-radius-sm)] px-2.5 text-caption-1-semibold transition-colors ${showFollowupPanel ? "bg-background-tertiary-default text-text-primary" : "border border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}>
+                  <Sparkles className="h-3.5 w-3.5 text-status-ai-500" />AI 补充
                 </button>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
+              <div data-motion-shift>
               <div className="border-b border-[var(--app-border)] px-3 py-2.5">
               <button type="button" aria-expanded={showGenerationSettings} onClick={() => setShowGenerationSettings(value => !value)} className="flex h-10 w-full items-center justify-between rounded-[var(--app-radius-sm)] bg-background-secondary-default px-3 text-left">
                 <span className="flex items-center gap-2 text-body-semibold text-text-primary"><Settings2 className="h-4 w-4 text-text-tertiary" />生成设置</span>
                 <span className="flex items-center gap-1 text-caption-1-semibold text-text-secondary">{selectedLengthLabel}字 · {selectedStyleLabel}<ChevronDown className={`h-4 w-4 transition-transform ${showGenerationSettings ? "rotate-180" : ""}`} /></span>
               </button>
-              <div aria-hidden={!showGenerationSettings} inert={!showGenerationSettings ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ${showGenerationSettings ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+              <MotionCollapse open={showGenerationSettings}>
                 <div className="overflow-hidden">
                   <div className="space-y-3 pt-3">
                     <div>
                       <div className="mb-1.5 text-caption-1-semibold text-text-secondary">字数目标</div>
                       <SegmentedControl value={selectedComment.lengthMode} ariaLabel="评语字数目标" onChange={value => updateComment(selectedId, { lengthMode: value })} options={[...LENGTH_MODES]} className="flex w-full" />
-                      {selectedComment.lengthMode === "custom" && <input type="number" value={customWordCount} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value > 0) setCustomWordCount(value); }} min={10} max={999} placeholder="自定义字数" className="mt-2 h-9 w-full rounded-[var(--app-radius-sm)] border border-border-button-default px-3 text-body-regular outline-none focus:border-accent-300" />}
+                      {selectedComment.lengthMode === "custom" && <input type="number" aria-label="自定义字数" value={selectedComment.targetWordCount || ""} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateComment(selectedId, { targetWordCount: Math.min(999, Math.max(0, Math.round(value))) }); }} onBlur={() => updateComment(selectedId, { targetWordCount: Math.max(10, selectedComment.targetWordCount || 120) })} min={10} max={999} placeholder="自定义字数" className="mt-2 h-9 w-full rounded-[var(--app-radius-sm)] border border-border-button-default px-3 text-body-regular outline-none focus:border-accent-300" />}
                     </div>
                     <div>
                       <div className="mb-1.5 text-caption-1-semibold text-text-secondary">评语风格</div>
@@ -1244,15 +1278,15 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                     </div>
                   </div>
                 </div>
-              </div>
+              </MotionCollapse>
             </div>
 
               {!hasAuth && (
-              <div className="shrink-0 border-b border-status-ai-100 bg-status-ai-50 p-3">
-                <div className="mb-2 flex items-center gap-1.5 text-caption-1-semibold text-status-ai-700"><Sparkles className="h-3.5 w-3.5" />连接 AI 生成评语</div>
+              <div className="shrink-0 border-b border-separator-border bg-background-secondary-default p-3">
+                <div className="mb-2 flex items-center gap-1.5 text-caption-1-semibold text-text-secondary"><Sparkles className="h-3.5 w-3.5 text-status-ai-500" />连接 AI 生成评语</div>
                 <div className="flex items-center gap-2">
-                  <input type="password" value={accessCode} onChange={event => setAccessCode(event.target.value)} placeholder="AI 授权码" className="h-9 min-w-0 flex-1 rounded-[var(--app-radius-sm)] border border-status-ai-100 bg-background-primary-default px-3 text-body-regular outline-none focus:border-status-ai-300" />
-                  <label className="flex shrink-0 items-center gap-1 text-caption-1-regular text-status-ai-700"><input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-status-ai-600" />记住</label>
+                  <input type="password" value={accessCode} onChange={event => setAccessCode(event.target.value)} placeholder="AI 授权码" className="h-9 min-w-0 flex-1 rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 text-body-regular outline-none focus:border-accent-300" />
+                  <label className="flex shrink-0 items-center gap-1 text-caption-1-regular text-text-secondary"><input type="checkbox" checked={rememberAuth} onChange={event => setRememberAuth(event.target.checked)} className="accent-accent-600" />记住</label>
                 </div>
               </div>
             )}
@@ -1262,19 +1296,19 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                 <span className="flex items-center gap-2 text-body-semibold text-text-primary">老师补充说明{selectedComment.needsInfo && <span className="rounded-full bg-status-warning-50 px-2 py-0.5 text-[10px] text-status-warning-700">建议补充</span>}</span>
                 <ChevronDown className={`h-4 w-4 text-text-tertiary transition-transform ${showTeacherNote ? "rotate-180" : ""}`} />
               </button>
-              <div aria-hidden={!showTeacherNote} inert={!showTeacherNote ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ${showTeacherNote ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+              <MotionCollapse open={showTeacherNote}>
                 <div className="overflow-hidden">
-                  <textarea value={teacherNote} onChange={event => { setTeacherNote(event.target.value); cacheSelectedCommentText(selectedComment.text, event.target.value); }} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-regular leading-5 outline-none focus:border-accent-300" />
+                  <textarea value={teacherNote} onChange={event => { revision.current.set(selectedId, (revision.current.get(selectedId) || 0) + 1); setTeacherNote(event.target.value); cacheSelectedCommentText(selectedComment.text, event.target.value); }} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-regular leading-5 outline-none focus:border-accent-300" />
                   <div className="mt-2 flex justify-end"><button type="button" onClick={saveSelectedTeacherNote} disabled={!hasUnsavedTeacherNote} className={`flex h-8 items-center gap-1.5 rounded-[var(--app-radius-sm)] px-3 text-caption-1-semibold ${hasUnsavedTeacherNote ? "bg-accent-50 text-accent-700 hover:bg-accent-100" : "bg-background-secondary-default text-text-tertiary"}`}><Save className="h-3.5 w-3.5" />暂存说明</button></div>
                 </div>
-              </div>
+              </MotionCollapse>
             </div>
 
-              {showFollowupPanel && (
-                <div className="border-b border-status-ai-100 bg-status-ai-50/40 p-3">
+              <MotionCollapse open={showFollowupPanel}>
+                <div className="border-b border-separator-border p-3">
                   <AiStudentFollowupPanel compact student={selectedStudent} context={{ scenario: "comment", teacherNote, commentDraft: buildDraft(selectedComment, teacherNote) }} onAppendCommentMaterial={appendFollowupMaterialToTeacherNote} />
                 </div>
-              )}
+              </MotionCollapse>
 
               {selectedProfile && (
                 <div className="p-3">
@@ -1312,7 +1346,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                             </span>
                             <ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
                           </button>
-                          <div aria-hidden={!open} inert={!open ? true : undefined} className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+                          <MotionCollapse open={open}>
                             <div className="overflow-hidden">
                               <div className="border-t border-separator-border bg-background-secondary-default/40 px-3 py-3">
                                 <div className="flex flex-wrap gap-1.5">
@@ -1327,30 +1361,34 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                                 {criterionSelectedCount > 0 && <div className="mt-2 flex justify-end"><button type="button" onClick={() => clearCriterion(criterion.id)} className="text-caption-1-regular text-text-tertiary hover:text-status-danger-600">清空本组</button></div>}
                               </div>
                             </div>
-                          </div>
+                          </MotionCollapse>
                         </article>
                       );
                     })}
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </section>
+          </MotionSwitch>
         </aside>
       </div>
 
-      {showExportModal && (
+      {createPortal(<DialogPresence open={showExportModal}>{showExportModal && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[90] flex items-center justify-center p-4"
           onClick={() => setShowExportModal(false)}
         >
           <div
-            className="flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-background-primary-default shadow-xl"
+            ref={exportPanelRef} role="dialog" aria-modal="true" aria-label="导出评语" tabIndex={-1}
+            className="modal-panel-enter app-modal-panel flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-separator-border px-5 py-3.5">
-              <h3 className="text-headline-regular text-text-primary" style={{ fontWeight: 800 }}>导出评语</h3>
+              <h3 className="text-headline-semibold text-text-primary">导出评语</h3>
               <button
+                aria-label="关闭导出评语"
                 onClick={() => setShowExportModal(false)}
                 className="grid h-8 w-8 place-items-center rounded-xl text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary"
               >
@@ -1362,8 +1400,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               <div className="flex min-w-0 items-center gap-4">
                 <button
                   onClick={() => setExportSelectedIds(prev => (prev.size === students.length ? new Set() : new Set(students.map(s => s.id))))}
-                  className="flex shrink-0 items-center gap-2 text-body-regular text-text-primary"
-                  style={{ fontWeight: 800 }}
+                  className="flex shrink-0 items-center gap-2 text-body-semibold text-text-primary"
                 >
                   <span className={`grid h-4 w-4 place-items-center rounded border ${exportSelectedIds.size === students.length ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-hover"}`}>
                     {exportSelectedIds.size === students.length && <Check className="h-3 w-3" />}
@@ -1378,8 +1415,7 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
                     return next;
                   })}
                   disabled={generatedExportIds.size === 0}
-                  className="flex shrink-0 items-center gap-2 text-body-regular text-text-primary disabled:text-text-tertiary"
-                  style={{ fontWeight: 800 }}
+                  className="flex shrink-0 items-center gap-2 text-body-semibold text-text-primary disabled:text-text-tertiary"
                 >
                   <span className={`grid h-4 w-4 place-items-center rounded border ${
                     allGeneratedExportSelected ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-hover"
@@ -1421,15 +1457,13 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               <div className="flex rounded-xl border border-border-button-default p-0.5">
                 <button
                   onClick={() => setExportFormat("csv")}
-                  className={`rounded-lg px-3 py-1.5 text-caption-1-regular transition-colors ${exportFormat === "csv" ? "bg-accent-600 text-text-white" : "text-text-secondary"}`}
-                  style={{ fontWeight: 800 }}
+                  className={`rounded-lg px-3 py-1.5 text-caption-1-semibold transition-colors ${exportFormat === "csv" ? "bg-accent-600 text-text-white" : "text-text-secondary"}`}
                 >
                   CSV
                 </button>
                 <button
                   onClick={() => setExportFormat("txt")}
-                  className={`rounded-lg px-3 py-1.5 text-caption-1-regular transition-colors ${exportFormat === "txt" ? "bg-accent-600 text-text-white" : "text-text-secondary"}`}
-                  style={{ fontWeight: 800 }}
+                  className={`rounded-lg px-3 py-1.5 text-caption-1-semibold transition-colors ${exportFormat === "txt" ? "bg-accent-600 text-text-white" : "text-text-secondary"}`}
                 >
                   纯文本
                 </button>
@@ -1437,15 +1471,14 @@ export function CommentWorkbench({ students, transitionState, onClose, onExitCom
               <button
                 onClick={() => exportSelectedComments(exportFormat)}
                 disabled={exportSelectedIds.size === 0}
-                className="flex-1 rounded-xl bg-accent-600 py-2.5 text-body-regular text-text-white transition-colors hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"
-                style={{ fontWeight: 800 }}
+                className="flex-1 rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white transition-colors hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"
               >
                 {exportSelectedIds.size > 0 ? `导出 ${exportSelectedIds.size} 人` : "导出"}
               </button>
             </div>
           </div>
         </div>
-      )}
+      )}</DialogPresence>, document.body)}
       {appDialog.dialog}
     </div>
   );

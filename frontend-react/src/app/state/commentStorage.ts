@@ -1,5 +1,6 @@
+import { writeStudentComment } from "./commentPersistence";
 import type { AppStudent, CommentLengthMode, CommentStyle, StudentCommentDraft, StudentId } from "./types";
-import { readLegacyRootState, writeLegacyRootState } from "./storage";
+import { readLegacyRootState } from "./storage";
 import { getCurrentWorkspaceScope } from "./workspaces";
 
 const AI_COMMENT_DRAFT_KEY_PREFIX = "seat-manager-ai-comment-draft";
@@ -12,8 +13,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function getStudentCommentCacheKey(studentId: StudentId): string {
-  return `${AI_COMMENT_DRAFT_KEY_PREFIX}:${getCurrentWorkspaceScope()}:${studentId || "unknown"}`;
+function getStudentCommentCacheKey(studentId: StudentId, scope = getCurrentWorkspaceScope()): string {
+  return `${AI_COMMENT_DRAFT_KEY_PREFIX}:${scope}:${studentId || "unknown"}`;
 }
 
 export function deleteStudentCommentDraft(studentId: StudentId): void {
@@ -66,10 +67,11 @@ function getDraftFromStudent(student: AppStudent): StudentCommentDraft | null {
   return profile || draft || latest;
 }
 
-function getDraftFromBrowserStorage(studentId: StudentId): StudentCommentDraft | null {
+function getDraftFromBrowserStorage(studentId: StudentId, scope?: string | null): StudentCommentDraft | null {
+  if (scope === null) return null;
   if (typeof window !== "undefined" && window.localStorage) {
     try {
-      return normalizeStudentCommentDraft(JSON.parse(window.localStorage.getItem(getStudentCommentCacheKey(studentId)) || "null"));
+      return normalizeStudentCommentDraft(JSON.parse(window.localStorage.getItem(getStudentCommentCacheKey(studentId, scope)) || "null"));
     } catch {
       return null;
     }
@@ -84,7 +86,7 @@ function isNewerDraft(candidate: StudentCommentDraft | null, current: StudentCom
   if (!current) {
     return true;
   }
-  return Date.parse(candidate.updatedAt || "") > Date.parse(current.updatedAt || "");
+  return (Date.parse(candidate.updatedAt || "") || 0) >= (Date.parse(current.updatedAt || "") || 0);
 }
 
 function saveDraftToLegacyStudent(studentId: StudentId, draft: StudentCommentDraft): void {
@@ -118,12 +120,12 @@ function saveDraftToLegacyStudent(studentId: StudentId, draft: StudentCommentDra
     updatedAt: draft.updatedAt,
   };
   student.aiComments = aiComments;
-  writeLegacyRootState(nextRoot);
+  writeStudentComment(nextRoot, student, Array.isArray(student.manualTags) ? student.manualTags.map(String) : []);
 }
 
-export function readStudentCommentDraft(student: AppStudent): StudentCommentDraft {
+export function readStudentCommentDraft(student: AppStudent, scope?: string | null): StudentCommentDraft {
   const fromStudent = getDraftFromStudent(student);
-  const fromStorage = getDraftFromBrowserStorage(student.id);
+  const fromStorage = getDraftFromBrowserStorage(student.id, scope);
   if (isNewerDraft(fromStorage, fromStudent)) {
     return fromStorage as StudentCommentDraft;
   }
@@ -142,6 +144,13 @@ export function readStudentCommentDraft(student: AppStudent): StudentCommentDraf
     targetWordCount: DEFAULT_TARGET_WORD_COUNT,
     updatedAt: "",
   };
+}
+
+// Resolve the workspace once per read batch; do not cache across edits or class changes.
+export function readStudentCommentDrafts(students: AppStudent[]): Record<StudentId, StudentCommentDraft> {
+  let scope: string | null = null;
+  try { scope = getCurrentWorkspaceScope(); } catch { /* Match single-draft reads when storage is unavailable. */ }
+  return Object.fromEntries(students.map(student => [student.id, readStudentCommentDraft(student, scope)]));
 }
 
 export function cacheStudentCommentDraft(studentId: StudentId, draft: StudentCommentDraft): StudentCommentDraft {

@@ -6,7 +6,7 @@ import { FUND_EXPENSE_PRESETS, FUND_INCOME_PRESETS, type NewFundTxInput } from "
 import { matchesStudentSearch } from "../state/studentSearch";
 import type { AppStudent, FundTxType } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
-import { DatePicker } from "./ui";
+import { MotionCollapse, MotionSwitch, DatePicker } from "./ui";
 import { isValidDateKey, toLocalDateKey } from "../state/dateKey";
 
 interface FundTransactionFormProps {
@@ -27,10 +27,6 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
   const studentCandidatesRef = useRef<HTMLDivElement>(null);
 
   const presets = type === "income" ? FUND_INCOME_PRESETS : FUND_EXPENSE_PRESETS;
-  const activeClass = type === "income"
-    ? "bg-status-success-500 text-text-white"
-    : "bg-status-danger-500 text-text-white";
-  const inactiveClass = "bg-background-tertiary-default text-text-secondary hover:bg-background-tertiary-hover";
   const selectedPresetClass = type === "income"
     ? "bg-status-success-500 text-text-white border-status-success-500"
     : "bg-status-danger-500 text-text-white border-status-danger-500";
@@ -58,7 +54,6 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
       : null;
     animateSelectionTransfer({
       itemId: student.id,
-      itemName: student.name,
       sourceElement: selected ? selectedElement || event.currentTarget : event.currentTarget,
       sourceContainer: selected ? selectedStudentsRef.current : studentCandidatesRef.current,
       targetContainer: selected ? studentCandidatesRef.current : selectedStudentsRef.current,
@@ -70,7 +65,6 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
     const chip = event.currentTarget.closest<HTMLElement>("[data-selection-motion-id]") || event.currentTarget;
     animateSelectionTransfer({
       itemId: student.id,
-      itemName: student.name,
       sourceElement: chip,
       sourceContainer: selectedStudentsRef.current,
       targetContainer: studentCandidatesRef.current,
@@ -106,26 +100,28 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
 
   return (
     <div className="space-y-4">
-      {/* 收入/支出切换 */}
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => switchType("expense")}
-          className={`rounded-xl px-4 py-2.5 text-body-semibold transition-colors ${
-            type === "expense" ? activeClass : inactiveClass
+      {/* 收入/支出切换：滑动色块 thumb，与共享分段控件同一运动语言 */}
+      <div className="relative grid grid-cols-2 rounded-xl bg-background-tertiary-default p-1" role="group" aria-label="收支类型">
+        <span
+          aria-hidden="true"
+          style={{ transform: type === "income" ? "translateX(100%)" : "translateX(0)" }}
+          className={`absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-lg shadow-2xs transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+            type === "expense" ? "bg-status-danger-500" : "bg-status-success-500"
           }`}
-        >
-          支出
-        </button>
-        <button
-          type="button"
-          onClick={() => switchType("income")}
-          className={`rounded-xl px-4 py-2.5 text-body-semibold transition-colors ${
-            type === "income" ? activeClass : inactiveClass
-          }`}
-        >
-          收入
-        </button>
+        />
+        {(["expense", "income"] as const).map(option => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={type === option}
+            onClick={() => switchType(option)}
+            className={`relative z-10 rounded-lg px-4 py-2 text-body-semibold transition-colors duration-200 ${
+              type === option ? "text-text-white" : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            {option === "expense" ? "支出" : "收入"}
+          </button>
+        ))}
       </div>
 
       {/* 金额 */}
@@ -145,7 +141,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
       {/* 类别 */}
       <div>
         <div className="mb-2 text-caption-1-regular text-text-tertiary">类别</div>
-        <div className="flex flex-wrap gap-2">
+        <MotionSwitch transitionKey={type} contentClassName="flex flex-wrap gap-2">
           {presets.map(preset => (
             <button
               key={preset.category}
@@ -158,7 +154,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
               {preset.category}
             </button>
           ))}
-        </div>
+        </MotionSwitch>
       </div>
 
       {/* 说明 */}
@@ -183,24 +179,20 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
           关联学生（可选，可多选）
           {relatedIds.length > 0 && <span className="text-accent-500">· 已选 {relatedIds.length} 人</span>}
         </button>
-        <div
-          className={`overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] ${
-            showRelated ? "max-h-96 mt-3 opacity-100" : "max-h-0 mt-0 opacity-0"
-          }`}
-        >
+        <MotionCollapse open={showRelated} contentClassName="pt-3">
           {/* 已选学生：精确飞入落点，删除时反向返回候选列表 */}
           <div ref={selectedStudentsRef} className="mb-2 flex min-h-9 flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-accent-100 bg-accent-50/40 px-2 py-1.5">
             {selectedRelatedStudents.length > 0 ? selectedRelatedStudents.map(student => (
               <span
                 key={student.id}
                 data-selection-motion-id={student.id}
-                className="dorm-member-enter inline-flex items-center gap-1 rounded-full border border-accent-200 bg-background-primary-default py-1 pl-2.5 pr-1 text-caption-1-semibold text-accent-700 shadow-sm"
+                className="inline-flex items-center gap-1 rounded-lg border border-accent-200 bg-background-primary-default py-1 pl-2.5 pr-1 text-caption-1-semibold text-accent-700 shadow-sm"
               >
                 {student.name}
                 <button
                   type="button"
                   onClick={event => removeRelatedWithAnimation(event, student)}
-                  className="grid h-4 w-4 place-items-center rounded-full text-accent-300 hover:bg-status-danger-100 hover:text-status-danger-500"
+                  className="grid h-4 w-4 place-items-center rounded-md text-accent-300 hover:bg-status-danger-100 hover:text-status-danger-500"
                   title={`取消关联 ${student.name}`}
                 >
                   <X className="h-2.5 w-2.5" />
@@ -249,7 +241,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
               })
             )}
           </div>
-        </div>
+        </MotionCollapse>
       </div>
 
       {/* 提交 */}

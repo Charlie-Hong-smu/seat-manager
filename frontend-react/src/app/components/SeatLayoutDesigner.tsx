@@ -1,4 +1,5 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Grid2X2, Link2, Presentation, RotateCcw, Save, Trash2, UsersRound, X } from "lucide-react";
 
 import {
@@ -23,6 +24,8 @@ interface Props {
   seatCount: number;
   onApply: (layout: SeatLayoutV1) => void;
   onCancel: () => void;
+  // 提供时把工具栏渲染到工作区顶栏槽位（滚轮接管），面板内不再显示标题行
+  toolbarHost?: HTMLElement | null;
 }
 
 function cloneLayout(layout: SeatLayoutV1): SeatLayoutV1 {
@@ -78,7 +81,7 @@ function addSeatToLayout(layout: SeatLayoutV1, slot: SeatLayoutSlot, slotByCoord
   });
 }
 
-export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel }: Props) {
+export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel, toolbarHost }: Props) {
   const appDialog = useAppDialog();
   const dialogOpenRef = useRef(false);
   const beforeAxisRects = useRef<Map<string, DOMRect> | null>(null);
@@ -467,29 +470,33 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel }: Pr
     setGroupDrag(null);
   }
 
-  return (
-    <div className="surface-enter flex h-full min-h-0 flex-col" data-seat-layout-editor>
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--app-border)] px-4 py-3">
-        <div className="min-w-[15rem] flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-body-semibold text-[var(--app-text)]">编辑座位槽位</h2>
-            <span className="rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-700">{draft.seats.length} 个已启用</span>
-            {rangePreview && rangeMode && <span aria-live="polite" className="rounded-full bg-accent-600 px-2 py-0.5 text-[11px] font-bold text-text-white">{rangePreview.column + 1} 列 × {rangePreview.row + 1} 行</span>}
-            {groupDrag && groupMode && <span aria-live="polite" className="rounded-full bg-status-warning-100 px-2 py-0.5 text-[11px] font-bold text-status-warning-900">{groupPreviewSeatIds.size} 个座位</span>}
-          </div>
-        </div>
-        <Button size="sm" variant={rangeMode ? "secondary" : "ghost"} aria-pressed={rangeMode} onClick={() => { setRangeMode(value => !value); setRangePreview(null); setGroupMode(false); setGroupDrag(null); }}>
-          <Grid2X2 className="h-4 w-4" />{rangeMode ? "批量框选中" : "批量框选"}
-        </Button>
-        <Button size="sm" variant={groupMode ? "secondary" : "ghost"} aria-pressed={groupMode} onClick={() => { setGroupMode(value => !value); setGroupDrag(null); setRangeMode(false); setRangePreview(null); }}>
-          <UsersRound className="h-4 w-4" />{groupMode ? "框选成组中" : "框选成组"}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => { setDraft(cloneLayout(resolvedCurrent)); setSelected(new Set()); setRangeMode(false); setGroupMode(false); setGroupDrag(null); }}>
-          <RotateCcw className="h-4 w-4" />恢复进入时布局
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onCancel}><X className="h-4 w-4" />取消</Button>
-        <Button size="sm" onClick={() => { onApply(cloneLayout(draft)); onCancel(); }}><Save className="h-4 w-4" />应用布局</Button>
+  const toolbarContent = <>
+    <div className="min-w-[15rem] flex-1">
+      <div className="flex items-center gap-2">
+        <h2 className="text-body-semibold text-[var(--app-text)]">编辑座位槽位</h2>
+        <span className="rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-700">{draft.seats.length} 个已启用</span>
+        {rangePreview && rangeMode && <span aria-live="polite" className="rounded-full bg-accent-600 px-2 py-0.5 text-[11px] font-bold text-text-white">{rangePreview.column + 1} 列 × {rangePreview.row + 1} 行</span>}
+        {groupDrag && groupMode && <span aria-live="polite" className="rounded-full bg-status-warning-100 px-2 py-0.5 text-[11px] font-bold text-status-warning-900">{groupPreviewSeatIds.size} 个座位</span>}
       </div>
+    </div>
+    <Button size="sm" variant={rangeMode ? "secondary" : "ghost"} aria-pressed={rangeMode} onClick={() => { setRangeMode(value => !value); setRangePreview(null); setGroupMode(false); setGroupDrag(null); }}>
+      <Grid2X2 className="h-4 w-4" />{rangeMode ? "批量框选中" : "批量框选"}
+    </Button>
+    <Button size="sm" variant={groupMode ? "secondary" : "ghost"} aria-pressed={groupMode} onClick={() => { setGroupMode(value => !value); setGroupDrag(null); setRangeMode(false); setRangePreview(null); }}>
+      <UsersRound className="h-4 w-4" />{groupMode ? "框选成组中" : "框选成组"}
+    </Button>
+    <Button size="sm" variant="ghost" onClick={() => { setDraft(cloneLayout(resolvedCurrent)); setSelected(new Set()); setRangeMode(false); setGroupMode(false); setGroupDrag(null); }}>
+      <RotateCcw className="h-4 w-4" />恢复进入时布局
+    </Button>
+    <Button size="sm" variant="ghost" onClick={onCancel}><X className="h-4 w-4" />取消</Button>
+    <Button size="sm" onClick={() => { onApply(cloneLayout(draft)); onCancel(); }}><Save className="h-4 w-4" />应用布局</Button>
+  </>;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" data-seat-layout-editor>
+      {toolbarHost
+        ? createPortal(toolbarContent, toolbarHost)
+        : <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--app-border)] px-4 py-3">{toolbarContent}</div>}
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto flex h-full min-h-0 max-w-6xl flex-col gap-3">
@@ -546,7 +553,7 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel }: Pr
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 text-caption-1-regular">
+          <div data-designer-status className="flex shrink-0 items-center gap-2 text-caption-1-regular">
             {selected.size > 0 ? <>
               <span>已选 {selected.size} 座</span>
               <Button size="sm" variant="ghost" disabled={selected.size < 2} onClick={groupSelected}><UsersRound className="h-4 w-4" />组成小组</Button>

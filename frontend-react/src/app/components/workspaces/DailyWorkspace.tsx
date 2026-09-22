@@ -1,3 +1,6 @@
+import { Users } from "lucide-react";
+import type { ClassDutiesBinding } from "../../state/classDuties";
+import { RetryableLazy } from "../RetryableLazy";
 import { useMemo, useState } from "react";
 import {
   ChevronDown,
@@ -14,7 +17,7 @@ import {
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
 import { SeatLayoutDesigner } from "../SeatLayoutDesigner";
-import { Checkbox, Button, DialogPresence, MetricStrip, SegmentedControl, SelectMenu, ToolDrawer, Input, useAppDialog } from "../ui";
+import { MotionCollapse, MotionSwitch, Checkbox, Button, DialogPresence, MetricStrip, SegmentedControl, SelectMenu, ToolDrawer, Input, useAppDialog } from "../ui";
 import type {
   AppStudent,
   Gender,
@@ -22,11 +25,15 @@ import type {
   StudentId,
 } from "../../state/types";
 import { matchesStudentSearch } from "../../state/studentSearch";
+import { useSeatModeTransition } from "../useSeatModeTransition";
 import { SeatBoard } from "../SeatBoard";
 import { getDrawRound, retainDrawSessions, drawStudents, todayKey } from "../../state/dailyManagement";
 import type { AttendanceRecord, DrawSession, FollowupTask } from "../../state/types";
 
+const loadClassDutiesPanel = () => import("../ClassDutiesPanel");
+
 export function DailyWorkspace({
+  classDuties,
   students,
   seatOrder,
   lockedSeats,
@@ -51,6 +58,7 @@ export function DailyWorkspace({
   onOpenAttendance,
   onOpenFollowups,
 }: {
+  classDuties?: ClassDutiesBinding;
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
   lockedSeats: Set<number>;
@@ -76,8 +84,9 @@ export function DailyWorkspace({
   onOpenFollowups: () => void;
 }) {
   const [showSeatSettings, setShowSeatSettings] = useState(false);
-  const [editingLayout, setEditingLayout] = useState(false);
-  const [activeTool, setActiveTool] = useState<"student" | "draw" | null>(null);
+  const { editingLayout, transitioning, seatPanelRef, switchLayoutEditing } = useSeatModeTransition();
+  const [designerToolbarHost, setDesignerToolbarHost] = useState<HTMLDivElement | null>(null);
+  const [activeTool, setActiveTool] = useState<"student" | "draw" | "duties" | null>(null);
   const [cardMode, setCardMode] = useState<"compact" | "detail">("compact");
   const [name, setName] = useState("");
   const [gender, setGender] = useState<Gender>("");
@@ -137,7 +146,8 @@ export function DailyWorkspace({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-background-primary-default">
-      <div className="daily-toolbar flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--app-border)] bg-background-primary-default px-4 py-3">
+      <div className="daily-toolbar seat-mode-toolbar shrink-0 border-b border-[var(--app-border)] bg-background-primary-default" data-editing={editingLayout ? "true" : "false"}>
+        <div className="seat-mode-toolbar__board flex flex-wrap items-center gap-3 px-4 py-3" aria-hidden={editingLayout} inert={editingLayout || transitioning ? true : undefined}>
         <div className="daily-toolbar-primary flex flex-1 items-center gap-3">
           <MetricStrip size="sm" items={[
             { key: "students", label: "学生", value: students.length },
@@ -147,8 +157,10 @@ export function DailyWorkspace({
           ]} />
         </div>
 
-        <div className="daily-toolbar-actions ml-auto flex shrink-0 items-center justify-end gap-2 whitespace-nowrap">
-          {!editingLayout && <SegmentedControl
+        <div
+          className="daily-toolbar-actions ml-auto flex shrink-0 items-center justify-end gap-2 whitespace-nowrap"
+        >
+          <SegmentedControl
             value={cardMode}
             ariaLabel="座位卡显示方式"
             onChange={value => setCardMode(value as "compact" | "detail")}
@@ -156,33 +168,44 @@ export function DailyWorkspace({
               { value: "compact", label: "简洁", icon: <Minimize2 className="h-3.5 w-3.5" /> },
               { value: "detail", label: "详细", icon: <Maximize2 className="h-3.5 w-3.5" /> },
             ]}
-          />}
-          {!editingLayout && <Button id="seat-layout-editor-trigger" size="sm" variant="ghost" onClick={() => { setActiveTool(null); setEditingLayout(true); }}>
+          />
+          <Button id="seat-layout-editor-trigger" size="sm" variant="ghost" onClick={() => { setActiveTool(null); switchLayoutEditing(true); }}>
             <LayoutGrid className="h-4 w-4" />编辑布局
-          </Button>}
-          {!editingLayout && <Button size="sm" variant="ghost" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}>
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}>
             <Undo2 className="h-4 w-4" />撤销
-          </Button>}
-          {!editingLayout && <Button id="daily-student-tool-trigger" size="sm" variant={activeTool === "student" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "student" ? null : "student")}>
+          </Button>
+          {classDuties && <Button id="daily-duties-trigger" size="sm" variant={activeTool === "duties" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "duties" ? null : "duties")}><Users className="h-4 w-4" />班级职务</Button>}
+          <Button id="daily-student-tool-trigger" size="sm" variant={activeTool === "student" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "student" ? null : "student")}>
             <UserPlus className="h-4 w-4" />新增学生
-          </Button>}
-          {!editingLayout && <Button id="daily-draw-tool-trigger" size="sm" variant={activeTool === "draw" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
+          </Button>
+          <Button id="daily-draw-tool-trigger" size="sm" variant={activeTool === "draw" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
             <Dices className="h-4 w-4" />抽签
-          </Button>}
-          {!editingLayout && <Button size="sm" onClick={() => setShowSeatSettings(true)}>
+          </Button>
+          <Button size="sm" onClick={() => setShowSeatSettings(true)}>
             <Shuffle className="h-4 w-4" />排座
             {activeConstraintCount > 0 && <span className="text-[11px] font-medium text-accent-100">· {activeConstraintCount} 条规则</span>}
-          </Button>}
+          </Button>
         </div>
+
+        </div>
+        <div ref={setDesignerToolbarHost} className="seat-mode-toolbar__editor flex flex-wrap items-center gap-3 px-4 py-3" aria-hidden={!editingLayout} inert={!editingLayout || transitioning ? true : undefined} />
       </div>
 
       <div className="min-h-0 flex-1 p-4">
-        <div className={`h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)] ${editingLayout ? "" : "p-4"}`}>
-          {editingLayout
-            ? <SeatLayoutDesigner current={seatSettings.layout} seatCount={seatOrder.length} onApply={onApplySeatLayout} onCancel={() => setEditingLayout(false)} />
-            : <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onMoveStudentToWaiting={onMoveStudentToWaiting} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />}
+        <div ref={seatPanelRef} className="relative h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
+          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-4" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout} inert={editingLayout || transitioning ? true : undefined}>
+            <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onMoveStudentToWaiting={onMoveStudentToWaiting} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+          </div>}
+          {(editingLayout || transitioning) && (
+            <div data-seat-designer-layer className="absolute inset-0" style={{ visibility: editingLayout ? undefined : "hidden" }} aria-hidden={!editingLayout} inert={!editingLayout || transitioning ? true : undefined}>
+              <SeatLayoutDesigner current={seatSettings.layout} seatCount={seatOrder.length} onApply={onApplySeatLayout} onCancel={() => switchLayoutEditing(false)} toolbarHost={designerToolbarHost} />
+            </div>
+          )}
         </div>
       </div>
+
+      {classDuties && <ToolDrawer open={activeTool === "duties"} title="班级职务" returnFocusId="daily-duties-trigger" onClose={() => setActiveTool(null)}>{activeTool === "duties" && <RetryableLazy load={loadClassDutiesPanel} componentProps={{ binding: classDuties }} />}</ToolDrawer>}
 
       <ToolDrawer open={activeTool === "student"} title="学生工具" returnFocusId="daily-student-tool-trigger" onClose={() => setActiveTool(null)}>
         <div className="space-y-5">
@@ -228,20 +251,20 @@ export function DailyWorkspace({
             </div>
             <Button className="mt-4 w-full" disabled={drawBusy} onClick={() => void draw()}><Dices className="h-4 w-4" />开始抽签</Button>
           </div>
-          {drawResult.length > 0 && (
-            <div className="surface-enter rounded-[var(--app-radius-md)] border border-accent-100 bg-accent-50 p-4">
+          <MotionCollapse open={drawResult.length > 0} className="!mt-0" contentClassName="pt-4">
+            <div className=" rounded-[var(--app-radius-md)] border border-accent-100 bg-accent-50 p-4">
               <div className="mb-2 text-caption-1-semibold text-accent-500">本次结果</div>
-              <div className="flex flex-wrap gap-2">{drawResult.map((resultName, index) => <span key={index} className="rounded-full bg-accent-600 px-3 py-1.5 text-body-semibold text-text-white">{resultName}</span>)}</div>
+              <MotionSwitch transitionKey={drawResult.join("|")} contentClassName="flex flex-wrap gap-2" className="[--motion-surface:var(--color-accent-50)]">{drawResult.map((resultName, index) => <span key={index} className="rounded-full bg-accent-600 px-3 py-1.5 text-body-semibold text-text-white">{resultName}</span>)}</MotionSwitch>
             </div>
-          )}
+          </MotionCollapse>
           {drawHistory.length > 0 && (
             <div className="overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default">
               <button type="button" onClick={() => setHistoryOpen(value => !value)} className="flex h-11 w-full items-center justify-between px-3 text-body-semibold text-text-secondary hover:bg-background-secondary-default">
                 最近 {drawHistory.length} 次<ChevronDown className={`h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
               </button>
-              {historyOpen && <div className="divide-y divide-separator-border border-t border-[var(--app-border)]">{drawHistory.map(item => (
+              <MotionCollapse open={historyOpen}><div className="divide-y divide-separator-border border-t border-[var(--app-border)]">{drawHistory.map(item => (
                 <div key={item.id} className="px-3 py-3"><div className="text-caption-1-regular text-text-tertiary">{item.time}</div><div className="mt-1.5 flex flex-wrap gap-1.5">{item.names.map(resultName => <span key={`${item.id}-${resultName}`} className="rounded-full bg-background-tertiary-default px-2 py-0.5 text-caption-1-regular text-text-primary">{resultName}</span>)}</div></div>
-              ))}</div>}
+              ))}</div></MotionCollapse>
             </div>
           )}
         </div>

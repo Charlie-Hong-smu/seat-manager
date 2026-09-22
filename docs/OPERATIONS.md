@@ -119,3 +119,5 @@ netlify deploy --prod
 Worker 发布入口为 `worker-entry.js`，`wrangler.toml` 包含 `ACCOUNT_COORDINATOR` 绑定及 `v1-account-coordinator` SQLite migration；现有 shared-services workflow 会一起部署配置和入口，代理无新公共路由。
 
 首次晋升前应备份授权 KV，确认旧 Worker 写入已结束并给 KV 留足传播时间，再从原键初始化协调器。既有 KV 仍按原键和格式镜像；后续授权修改必须通过管理员接口，不能直接改 KV 并期待覆盖协调器。回滚 Worker 到不使用协调器的版本会恢复旧 KV 写入；再向前升级前必须校准协调器与 KV，不能直接复用期间已过期的对象状态。协调器不可用时 AI 返回 503，避免在无法计数时继续付费请求。开发检查可设置 `WRANGLER_LOG_PATH` 指向临时目录，避免本机日志目录权限影响 dry-run 输出。
+
+BoardUI 并行本地验证时，可用 `E2E_PORT=4193 pnpm exec playwright test app-motion.spec.ts` 指定独立端口；商业版同时设置 `E2E_EDITION=commercial` 并另选端口。默认 4173/4174 不变，避免复用另一任务的旧预览产物。

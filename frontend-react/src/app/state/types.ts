@@ -429,6 +429,9 @@ export interface SeatHistorySnapshot {
   note: string;
   rows: number;
   seats: string[];
+  /** Stable identities alongside display names; older backups may omit these fields. */
+  studentIds?: Array<StudentId | null>;
+  lockedSeats?: number[];
   layout?: SeatLayoutV1;
 }
 

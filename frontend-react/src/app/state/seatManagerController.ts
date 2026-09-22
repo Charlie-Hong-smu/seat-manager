@@ -1,4 +1,7 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
+import { applyStudentCommentWrite, subscribeStudentCommentWrites } from "./commentPersistence";
+import { getCurrentWorkspaceScope } from "./workspaces";
+import { reconcileClassDuties } from "./classDuties";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { createSeatManagerState } from "./legacyStateAdapter";
 import { saveLegacySnapshot } from "./legacyWriteAdapter";
@@ -34,17 +37,38 @@ export interface SeatManagerController {
   setActivityEvents: Dispatch<SetStateAction<ActivityEvent[]>>;
 }
 
-export function useSeatManagerController(initialState: SeatManagerState): SeatManagerController {
-  const [state, setState] = useState(initialState);
+function readControllerScope(): string | null {
+  try { return getCurrentWorkspaceScope(); } catch { return null; }
+}
 
-  const replace = useCallback<SeatManagerController["replace"]>(next => setState(next), []);
+export function useSeatManagerController(initialState: SeatManagerState): SeatManagerController {
+  const [state, setRawState] = useState(() => reconcileClassDuties(initialState));
+  const currentState = useRef(state);
+  const stateScope = useRef<string | null>();
+  if (stateScope.current === undefined) stateScope.current = readControllerScope();
+  const setState = useCallback<SeatManagerController["replace"]>(update => {
+    const next = reconcileClassDuties(resolveUpdate(currentState.current, update));
+    currentState.current = next;
+    setRawState(next);
+  }, []);
+  useEffect(() => {
+    return subscribeStudentCommentWrites(write => {
+      if (write.scope === stateScope.current && readControllerScope() === stateScope.current) setState(current => applyStudentCommentWrite(current, write));
+    });
+  }, [setState]);
+
+  const replace = useCallback<SeatManagerController["replace"]>(next => setState(next), [setState]);
   const reload = useCallback(() => {
+    stateScope.current = readControllerScope();
     const next = createSeatManagerState(readLegacyRootState());
     setState(next);
     return next;
-  }, []);
+  }, [setState]);
 
-  const persist = useCallback(() => saveLegacySnapshot({
+  const persist = useCallback(() => {
+    if (!stateScope.current || readControllerScope() !== stateScope.current) return false;
+    const state = currentState.current;
+    return saveLegacySnapshot({
     students: state.students,
     seatOrder: state.seatOrder,
     lockedSeats: state.lockedSeats,
@@ -63,44 +87,45 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
     activityEvents: state.activityEvents,
     savedExams: state.savedExams,
     exams: state.exams,
-  }), [state]);
+    });
+  }, []);
 
   const setStudents = useCallback<SeatManagerController["setStudents"]>(update => {
     setState(current => ({ ...current, students: resolveUpdate(current.students, update) }));
-  }, []);
+  }, [setState]);
   const setDormitories = useCallback<SeatManagerController["setDormitories"]>(update => {
     setState(current => ({ ...current, dormitories: resolveUpdate(current.dormitories, update) }));
-  }, []);
+  }, [setState]);
   const setFundTransactions = useCallback<SeatManagerController["setFundTransactions"]>(update => {
     setState(current => ({ ...current, fundTransactions: resolveUpdate(current.fundTransactions, update) }));
-  }, []);
+  }, [setState]);
   const setSeatOrder = useCallback<SeatManagerController["setSeatOrder"]>(update => {
     setState(current => ({ ...current, seatOrder: resolveUpdate(current.seatOrder, update) }));
-  }, []);
+  }, [setState]);
   const setLockedSeats = useCallback<SeatManagerController["setLockedSeats"]>(update => {
     setState(current => {
       const next = resolveUpdate(new Set(current.lockedSeats), update);
       return { ...current, lockedSeats: [...next] };
     });
-  }, []);
+  }, [setState]);
   const setSeatSettings = useCallback<SeatManagerController["setSeatSettings"]>(update => {
     setState(current => ({ ...current, seatSettings: resolveUpdate(current.seatSettings, update) }));
-  }, []);
+  }, [setState]);
   const setSettings = useCallback<SeatManagerController["setSettings"]>(update => {
     setState(current => ({ ...current, settings: resolveUpdate(current.settings, update) }));
-  }, []);
+  }, [setState]);
   const setSeatHistory = useCallback<SeatManagerController["setSeatHistory"]>(update => {
     setState(current => ({ ...current, seatHistory: resolveUpdate(current.seatHistory, update) }));
-  }, []);
+  }, [setState]);
 
-  const setAttendanceRecords = useCallback<SeatManagerController["setAttendanceRecords"]>(update => setState(current => ({ ...current, attendanceRecords: resolveUpdate(current.attendanceRecords, update) })), []);
-  const setFollowupTasks = useCallback<SeatManagerController["setFollowupTasks"]>(update => setState(current => ({ ...current, followupTasks: resolveUpdate(current.followupTasks, update) })), []);
-  const setDrawSessions = useCallback<SeatManagerController["setDrawSessions"]>(update => setState(current => ({ ...current, drawSessions: resolveUpdate(current.drawSessions, update) })), []);
-  const setSchedule = useCallback<SeatManagerController["setSchedule"]>(update => setState(current => ({ ...current, schedule: resolveUpdate(current.schedule, update) })), []);
-  const setHomeworkAssignments = useCallback<SeatManagerController["setHomeworkAssignments"]>(update => setState(current => ({ ...current, homeworkAssignments: resolveUpdate(current.homeworkAssignments, update) })), []);
-  const setQuickRecordPresets = useCallback<SeatManagerController["setQuickRecordPresets"]>(update => setState(current => ({ ...current, quickRecordPresets: resolveUpdate(current.quickRecordPresets, update) })), []);
-  const setCommunicationDrafts = useCallback<SeatManagerController["setCommunicationDrafts"]>(update => setState(current => ({ ...current, communicationDrafts: resolveUpdate(current.communicationDrafts, update) })), []);
-  const setActivityEvents = useCallback<SeatManagerController["setActivityEvents"]>(update => setState(current => ({ ...current, activityEvents: resolveUpdate(current.activityEvents, update) })), []);
+  const setAttendanceRecords = useCallback<SeatManagerController["setAttendanceRecords"]>(update => setState(current => ({ ...current, attendanceRecords: resolveUpdate(current.attendanceRecords, update) })), [setState]);
+  const setFollowupTasks = useCallback<SeatManagerController["setFollowupTasks"]>(update => setState(current => ({ ...current, followupTasks: resolveUpdate(current.followupTasks, update) })), [setState]);
+  const setDrawSessions = useCallback<SeatManagerController["setDrawSessions"]>(update => setState(current => ({ ...current, drawSessions: resolveUpdate(current.drawSessions, update) })), [setState]);
+  const setSchedule = useCallback<SeatManagerController["setSchedule"]>(update => setState(current => ({ ...current, schedule: resolveUpdate(current.schedule, update) })), [setState]);
+  const setHomeworkAssignments = useCallback<SeatManagerController["setHomeworkAssignments"]>(update => setState(current => ({ ...current, homeworkAssignments: resolveUpdate(current.homeworkAssignments, update) })), [setState]);
+  const setQuickRecordPresets = useCallback<SeatManagerController["setQuickRecordPresets"]>(update => setState(current => ({ ...current, quickRecordPresets: resolveUpdate(current.quickRecordPresets, update) })), [setState]);
+  const setCommunicationDrafts = useCallback<SeatManagerController["setCommunicationDrafts"]>(update => setState(current => ({ ...current, communicationDrafts: resolveUpdate(current.communicationDrafts, update) })), [setState]);
+  const setActivityEvents = useCallback<SeatManagerController["setActivityEvents"]>(update => setState(current => ({ ...current, activityEvents: resolveUpdate(current.activityEvents, update) })), [setState]);
 
   return { state, replace, reload, persist, setStudents, setDormitories, setFundTransactions, setSeatOrder, setLockedSeats, setSeatSettings, setSettings, setSeatHistory, setAttendanceRecords, setFollowupTasks, setDrawSessions, setSchedule, setHomeworkAssignments, setQuickRecordPresets, setCommunicationDrafts, setActivityEvents };
 }

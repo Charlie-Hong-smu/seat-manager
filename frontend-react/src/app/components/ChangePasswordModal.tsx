@@ -40,8 +40,8 @@ export function ChangePasswordModal({ onClose, onPasswordChanged }: ChangePasswo
   }
 
   return (
-    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="modal-panel-enter w-full max-w-md overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl">
+    <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+      <form onSubmit={handleSubmit} className="modal-panel-enter app-modal-panel w-full max-w-md overflow-hidden">
         <div className="px-5 py-4 border-b border-separator-border flex items-start justify-between">
           <div>
             <div className="text-caption-1-regular text-accent-500 mb-0.5" style={{ fontWeight: 700 }}>账户安全</div>

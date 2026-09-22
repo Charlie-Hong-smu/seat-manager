@@ -15,7 +15,7 @@ import {
 
 import type { AppStudent, Dormitory, GradeExam, StudentId } from "../state/types";
 
-export type SidebarTab = "today" | "daily" | "attendance" | "followups" | "dormitories" | "scores" | "funds" | "data" | "history";
+export type SidebarTab = "today" | "daily" | "attendance" | "followups" | "dormitories" | "scores" | "comments" | "funds" | "data" | "history";
 
 interface Props {
   activeTab: SidebarTab;
@@ -27,12 +27,11 @@ interface Props {
   savedSeatHistoryCount: number;
   pendingTaskCount: number;
   onTabChange: (tab: SidebarTab) => void;
-  onOpenCommentWorkbench: () => void;
 }
 
 type NavInput = Pick<Props, "students" | "dormitories" | "gradeExams" | "seatOrder" | "savedSeatHistoryCount" | "pendingTaskCount">;
 type NavEntry = {
-  key: SidebarTab | "comments";
+  key: SidebarTab;
   label: string;
   icon: ReactNode;
   getBadge?: (input: NavInput) => string;
@@ -81,7 +80,6 @@ export function Sidebar({
   savedSeatHistoryCount,
   pendingTaskCount,
   onTabChange,
-  onOpenCommentWorkbench,
 }: Props) {
   const navInput = { students, dormitories, gradeExams, seatOrder, savedSeatHistoryCount, pendingTaskCount };
   const navRef = useRef<HTMLElement>(null);
@@ -164,7 +162,7 @@ export function Sidebar({
             </div>
             <div className="space-y-1">
               {group.items.map(item => {
-                const active = item.key !== "comments" && activeTab === item.key;
+                const active = activeTab === item.key;
                 const badge = item.getBadge?.(navInput);
                 return (
                   <button
@@ -173,10 +171,10 @@ export function Sidebar({
                     type="button"
                     title={collapsed ? item.label : undefined}
                     aria-current={active ? "page" : undefined}
-                    onClick={() => item.key === "comments" ? onOpenCommentWorkbench() : onTabChange(item.key)}
-                    className={`group relative flex h-10 w-full items-center gap-2.5 overflow-hidden rounded-[var(--app-radius-sm)] px-2.5 text-body-semibold [-webkit-tap-highlight-color:transparent] transition-[color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30 motion-reduce:transition-none ${active ? "text-button-ghost-foreground" : item.key === "comments" ? "text-status-ai-600  hover:bg-status-ai-50" : "text-text-secondary  hover:bg-background-tertiary-default hover:text-text-primary"}`}
+                    onClick={() => onTabChange(item.key)}
+                    className={`group relative flex h-10 w-full items-center gap-2.5 overflow-hidden rounded-[var(--app-radius-sm)] px-2.5 text-body-semibold [-webkit-tap-highlight-color:transparent] transition-[color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30 motion-reduce:transition-none ${active ? "text-button-ghost-foreground" : "text-text-secondary  hover:bg-background-tertiary-default hover:text-text-primary"}`}
                   >
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-[background-color,transform] duration-200  ${active ? "bg-background-primary-default" : item.key === "comments" ? "bg-status-ai-50 group-hover:bg-status-ai-100" : "bg-background-secondary-default group-hover:bg-background-primary-default"}`}>
+                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-[background-color,transform] duration-200  ${active ? "bg-background-primary-default" : "bg-background-secondary-default group-hover:bg-background-primary-default"}`}>
                       {item.icon}
                     </span>
                     <span className={`min-w-0 flex-1 truncate text-left whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${collapsed ? "max-w-0 translate-x-2 opacity-0" : "max-w-28 translate-x-0 opacity-100"}`}>{item.label}</span>

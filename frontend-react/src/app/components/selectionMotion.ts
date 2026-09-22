@@ -1,15 +1,11 @@
 import { flushSync } from "react-dom";
 
-type MotionTone = "blue" | "indigo";
-
 interface SelectionTransferOptions {
   itemId: string;
-  itemName: string;
   sourceElement: HTMLElement;
   sourceContainer: HTMLElement | null;
   targetContainer: HTMLElement | null;
   commit: () => void;
-  tone?: MotionTone;
 }
 
 interface MotionSnapshot {
@@ -32,6 +28,14 @@ function findMotionItem(container: HTMLElement | null, itemId: string): HTMLElem
   return motionItems(container).find(element => element.dataset.selectionMotionId === itemId) || null;
 }
 
+function isEffectivelyVisible(element: HTMLElement): boolean {
+  for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (style.display === "none" || style.visibility !== "visible" || Number.parseFloat(style.opacity) < 0.95) return false;
+  }
+  return true;
+}
+
 function animateReflow(container: HTMLElement | null, before: MotionSnapshot[], excludedId: string) {
   if (!container) return;
   const beforeById = new Map(before.map(item => [item.id, item.rect]));
@@ -51,66 +55,23 @@ function animateReflow(container: HTMLElement | null, before: MotionSnapshot[], 
   });
 }
 
-function createFlyingName(name: string, start: DOMRect, end: DOMRect, tone: MotionTone) {
-  const label = document.createElement("div");
-  const palette = tone === "indigo"
-    ? { border: "rgba(129, 140, 248, .45)", background: "rgba(238, 242, 255, .98)", color: "#4338ca" }
-    : { border: "rgba(96, 165, 250, .45)", background: "rgba(239, 246, 255, .98)", color: "#1d4ed8" };
-  const startX = start.left + Math.min(14, start.width * 0.15);
-  const startY = start.top + start.height / 2 - 13;
-  const endX = end.left + Math.min(14, end.width * 0.15);
-  const endY = end.top + end.height / 2 - 13;
-  const dx = endX - startX;
-  const dy = endY - startY;
-  Object.assign(label.style, {
-    position: "fixed",
-    zIndex: "140",
-    left: `${startX}px`,
-    top: `${startY}px`,
-    height: "26px",
-    maxWidth: "132px",
-    padding: "4px 10px",
-    borderRadius: "999px",
-    border: `1px solid ${palette.border}`,
-    background: palette.background,
-    color: palette.color,
-    boxShadow: "0 14px 32px rgba(37, 99, 235, .22)",
-    fontSize: "12px",
-    fontWeight: "700",
-    lineHeight: "16px",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    pointerEvents: "none",
-    willChange: "transform, opacity",
-  });
-  label.textContent = name;
-  document.body.appendChild(label);
-  const arc = Math.min(38, Math.max(16, Math.abs(dy) * 0.1));
-  const direction = dy <= 0 ? -1 : 1;
-  const animation = label.animate([
-    { offset: 0, opacity: 0.2, transform: "translate3d(0, 4px, 0) scale(.9)" },
-    { offset: 0.16, opacity: 1, transform: `translate3d(${dx * 0.08}px, ${dy * 0.08 + arc * direction}px, 0) scale(1.06)` },
-    { offset: 0.76, opacity: 1, transform: `translate3d(${dx * 0.8}px, ${dy * 0.8 + arc * direction * 0.3}px, 0) scale(.98)` },
-    { offset: 1, opacity: 0, transform: `translate3d(${dx}px, ${dy}px, 0) scale(.9)` },
-  ], { duration: 760, easing: "cubic-bezier(.22,.72,.2,1)" });
-  animation.finished.catch(() => undefined).finally(() => label.remove());
-}
-
 /**
- * 在两个选择容器之间移动一个姓名：新项精确飞到最终 DOM 位置，
- * 其他项通过 FLIP 动画让位或合拢。commit 仍是页面原本的数据更新。
+ * 在两个选择容器之间移动一项：commit 后先把新出现的目标元素滚入视口（瞬时，
+ * 让位 FLIP 的位移会自然带上这次滚动），其余项做让位/合拢 FLIP；目标元素
+ * 本体隐身，由"目标元素的克隆"挂在 body 层飞行——不被滚动容器裁剪、不受
+ * 弹层层叠顺序遮挡，始终可见。克隆起飞时先压回源元素的形状（矩形行↔小
+ * 矩形 chip 之间连续形变），飞行途中恢复成目标原形——落地帧与真实元素
+ * 像素级一致，交接不可见，不存在"替身消失再生成"的闪烁。commit 仍是页面
+ * 原本的数据更新。
  */
 export function animateSelectionTransfer({
   itemId,
-  itemName,
   sourceElement,
   sourceContainer,
   targetContainer,
   commit,
-  tone = "blue",
 }: SelectionTransferOptions) {
-  if (!targetContainer || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (!targetContainer || !targetContainer.isConnected || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     commit();
     return;
   }
@@ -119,17 +80,77 @@ export function animateSelectionTransfer({
   const targetBefore = snapshotItems(targetContainer);
   flushSync(commit);
 
+  // 目标必须真实可见才放克隆飞行：弹层关闭后其子树仍挂载（visibility/opacity
+  // 隐藏），矩形有值但不可见——朝它飞就是"飞出到空气里"。祖先链逐层查
+  // display/visibility/opacity，把"正在淡出"（opacity 过渡中途）也判为不可见。
   const destination = findMotionItem(targetContainer, itemId);
-  const targetRect = destination?.getBoundingClientRect() || targetContainer.getBoundingClientRect();
+  const destinationVisible = Boolean(destination?.isConnected && isEffectivelyVisible(destination));
+  if (destination && destinationVisible) destination.scrollIntoView({ block: "nearest" });
   animateReflow(sourceContainer, sourceBefore, itemId);
   animateReflow(targetContainer, targetBefore, itemId);
-
-  if (destination) {
-    destination.animate([
-      { offset: 0, opacity: 0 },
-      { offset: 0.78, opacity: 0 },
-      { offset: 1, opacity: 1 },
-    ], { duration: 760, easing: "ease-out" });
+  if (!destination || !destinationVisible) {
+    if (sourceRect.width < 1) return;
+    // 无可见落点（如弹层已关闭）：源元素原地淡出收缩，避免生硬消失。
+    const ghost = sourceElement.cloneNode(true) as HTMLElement;
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.removeAttribute("data-selection-motion-id");
+    Object.assign(ghost.style, {
+      position: "fixed",
+      left: `${sourceRect.left}px`,
+      top: `${sourceRect.top}px`,
+      width: `${sourceRect.width}px`,
+      height: `${sourceRect.height}px`,
+      margin: "0",
+      zIndex: "140",
+      pointerEvents: "none",
+      transformOrigin: "center",
+    });
+    document.body.appendChild(ghost);
+    const fade = ghost.animate([
+      { opacity: 1, transform: "scale(1)" },
+      { opacity: 0, transform: "scale(0.98)" },
+    ], { duration: 200, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+    fade.finished.catch(() => undefined).finally(() => ghost.remove());
+    return;
   }
-  createFlyingName(itemName, sourceRect, targetRect, tone);
+
+  const targetRect = destination.getBoundingClientRect();
+  const dx = sourceRect.left + sourceRect.width / 2 - (targetRect.left + targetRect.width / 2);
+  const dy = sourceRect.top + sourceRect.height / 2 - (targetRect.top + targetRect.height / 2);
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+
+  const duration = Math.min(560, Math.max(320, 300 + Math.hypot(dx, dy) * 0.45));
+  destination.style.animation = "none";
+  destination.style.opacity = "0";
+
+  const clone = destination.cloneNode(true) as HTMLElement;
+  clone.setAttribute("aria-hidden", "true");
+  clone.removeAttribute("data-selection-motion-id");
+  clone.style.animation = "none";
+  Object.assign(clone.style, {
+    position: "fixed",
+    left: `${targetRect.left}px`,
+    top: `${targetRect.top}px`,
+    width: `${targetRect.width}px`,
+    height: `${targetRect.height}px`,
+    margin: "0",
+    zIndex: "140",
+    pointerEvents: "none",
+    transformOrigin: "center",
+  });
+  document.body.appendChild(clone);
+  // 起飞帧把克隆缩放回源元素的宽高比：长方形行压扁成 chip、chip 拉宽
+  // 成行的近似形状；形变幅度钳制在不会把文字拉得失真的范围内。
+  const sx = Math.max(0.3, Math.min(2.2, sourceRect.width / Math.max(targetRect.width, 1)));
+  const sy = Math.max(0.3, Math.min(1.6, sourceRect.height / Math.max(targetRect.height, 1)));
+  const flight = clone.animate([
+    { offset: 0, opacity: 0.9, transform: `translate3d(${dx}px, ${dy}px, 0) scale(${sx}, ${sy})` },
+    { offset: 0.2, opacity: 1 },
+    { offset: 1, opacity: 1, transform: "translate3d(0, 0, 0) scale(1, 1)" },
+  ], { duration, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+  flight.finished.catch(() => undefined).finally(() => {
+    clone.remove();
+    destination.style.opacity = "";
+    destination.style.animation = "";
+  });
 }

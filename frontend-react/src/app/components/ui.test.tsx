@@ -113,16 +113,16 @@ describe("ToolDrawer presence", () => {
     const trigger = document.createElement("button");
     document.body.append(trigger);
     trigger.focus();
-    const { rerender, container } = render(<ToolDrawer open title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
+    const { rerender } = render(<ToolDrawer open title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
     expect(screen.getByRole("complementary", { name: "测试抽屉" })).toBeVisible();
     rerender(<ToolDrawer open={false} title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
     expect(trigger).toHaveFocus();
-    expect(container.querySelector("aside")?.inert).toBe(true);
+    expect(document.body.querySelector("aside")?.inert).toBe(true);
     expect(screen.queryByRole("complementary")).toBeNull();
     rerender(<ToolDrawer open title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
-    expect(container.querySelector("aside")?.inert).toBe(false);
+    expect(document.body.querySelector("aside")?.inert).toBe(false);
     rerender(<ToolDrawer open={false} title="测试抽屉" onClose={() => {}}>内容</ToolDrawer>);
-    await waitFor(() => expect(container.querySelector("aside")).toBeNull());
+    await waitFor(() => expect(document.body.querySelector("aside")).toBeNull());
     trigger.remove();
   });
 });
@@ -150,5 +150,17 @@ describe("shared modal exit motion", () => {
     rerender(view(false, ""));
     await waitFor(() => expect(document.querySelector(".dialog-presence")).toBeNull());
     trigger.remove();
+  });
+});
+
+describe("registration segment presses", () => {
+  it("supports selected-option repeat presses without duplicate change callbacks", () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    const press = vi.fn(); const change = vi.fn();
+    render(<SegmentedControl value="leave" ariaLabel="登记测试" onChange={change} onPress={press} options={[{ value: "normal", label: "正常" }, { value: "leave", label: "请假" }]}/>);
+    fireEvent.click(screen.getByRole("button", { name: "请假" }));
+    fireEvent.click(screen.getByRole("button", { name: "正常" }));
+    expect(press.mock.calls).toEqual([["leave"], ["normal"]]);
+    expect(change).not.toHaveBeenCalled();
   });
 });

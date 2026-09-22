@@ -1,4 +1,3 @@
-import { cx } from "@/utils/cx";
 import { useWorkspaceDraftState } from "../../hooks/useWorkspaceDraftState";
 import { ArrowRight, Clock3, Plus, BookOpenCheck, CalendarDays, CheckCircle2, Clipboard, ClipboardList, FileSpreadsheet, LayoutGrid, Sparkles, UserRoundCheck } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -8,7 +7,7 @@ import { generateAiWeeklyDraft } from "../../state/teacherAiService";
 import { buildLocalWeeklyDraft, buildTodayWorkItems, buildWeeklyFacts, getWeekRange, parseScheduleRows } from "../../state/teacherWorkbench";
 import { readRowsFromFile } from "../../state/scoreImport";
 import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, CommunicationDraft, Dormitory, FollowupTask, GradeExam, HomeworkAssignment } from "../../state/types";
-import { AiGenerationPanel, Button, Card, Chip, FileDropZone, IconButton, InlineStatus, MetricStrip, Textarea, ToolDrawer } from "../ui";
+import { AiGenerationPanel, MotionSwitch, MotionList, Button, Card, Chip, FileDropZone, IconButton, InlineStatus, MetricStrip, Textarea, ToolDrawer } from "../ui";
 import { ResolutionEditor } from "../LinkedWorkflow";
 
 export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
@@ -77,37 +76,30 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
     (item.kind === "attendance" ? onOpenAttendance : item.kind === "homework" ? onOpenHomework : onOpenTasks)();
   }
 
-  // 跟进任务就地完成：先做 180ms 收起补位，再交给来源领域写状态（可经 toast 撤销）。
-  function completeItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
-    if (!onCompleteTask || item.kind !== "task") return;
-    const finish = async () => {
+  // Commit through the shared command immediately; keyed rows handle visual removal.
+  async function completeItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
+    if (!onCompleteTask || item.kind !== "task" || completingIds.has(item.id)) return;
+    setCompletingIds(current => new Set(current).add(item.id));
+    try {
       if (await onCompleteTask(item.entityId)) {
         setQueueOpen(false);
         setResolutionTaskId(item.entityId);
       }
-    };
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      void finish();
-      return;
-    }
-    setCompletingIds(current => new Set(current).add(item.id));
-    window.setTimeout(() => {
-      void finish();
+    } finally {
       setCompletingIds(current => { const next = new Set(current); next.delete(item.id); return next; });
-    }, 180);
+    }
   }
 
   function renderQueueItem(item: ReturnType<typeof buildTodayWorkItems>[number], onOpen: () => void) {
-    const collapsing = completingIds.has(item.id);
     const Icon = item.kind === "homework" ? BookOpenCheck : item.kind === "attendance" ? UserRoundCheck : ClipboardList;
-    return <div key={item.id} className={cx("overflow-hidden transition-[max-height,opacity] duration-200 ease-out motion-reduce:transition-none", collapsing ? "max-h-0 opacity-0" : "max-h-32")}>
+    return <div key={item.id}>
       <div className="group flex items-center gap-2 rounded-xl px-2 transition-colors duration-150 hover:bg-background-secondary-default">
         <button type="button" aria-label={`${item.title} ${item.detail}`} onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border-button-default bg-background-primary-default text-foreground-icon-secondary"><Icon className="size-4"/></span>
           <span className="min-w-0 flex-1"><strong className="block truncate text-body-medium text-text-primary">{item.title}</strong><span className="mt-1 block text-caption-1-regular text-text-secondary">{item.detail.replace(/ · (今日截止|已逾期)$/, "")}</span></span>
           <Chip variant="caption" color={item.urgency === 0 ? "rose" : "soft"} className="hidden sm:inline-flex">{item.urgency === 0 ? "已逾期" : item.kind === "attendance" ? "需关注" : "今日截止"}</Chip>
         </button>
-        {item.kind === "task" && onCompleteTask ? <IconButton label={`完成跟进：${item.title}`} size="sm" onClick={() => completeItem(item)}><CheckCircle2 className="size-4"/></IconButton> : <ArrowRight aria-hidden="true" className="mx-2 size-4 shrink-0 text-foreground-icon-tertiary"/>}
+        {item.kind === "task" && onCompleteTask ? <IconButton label={`完成跟进：${item.title}`} size="sm" disabled={completingIds.has(item.id)} onClick={() => void completeItem(item)}><CheckCircle2 className="size-4"/></IconButton> : <ArrowRight aria-hidden="true" className="mx-2 size-4 shrink-0 text-foreground-icon-tertiary"/>}
       </div>
     </div>;
   }
@@ -149,8 +141,8 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]">
         <Card title="需要处理" className="min-w-0" bodyClassName="px-3 pb-3" action={<Button size="sm" variant="ghost" onClick={() => setQueueOpen(true)}>查看全部 <span className="text-text-secondary">{items.length}</span></Button>}>
           <div className="flex items-center justify-between border-b border-separator-border px-2 pb-3 text-caption-1-regular text-text-secondary"><span>事项 · 按紧急程度排序</span><span>操作</span></div>
-          <div className="divide-y divide-separator-border">{items.slice(0, 8).map(item => renderQueueItem(item, () => openItem(item)))}</div>
-          {!items.length && <div className="flex min-h-60 flex-col items-center justify-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-background-secondary-default text-foreground-icon-secondary"><CheckCircle2 className="size-6"/></span><p className="text-body-medium text-text-primary">今天没有待处理事项</p><p className="text-body-regular text-text-secondary">可以从右侧开始登记新的班务。</p></div>}
+          <MotionList className="divide-y divide-separator-border">{items.slice(0, 8).map(item => renderQueueItem(item, () => openItem(item)))}
+          {!items.length && <div className="flex min-h-60 flex-col items-center justify-center gap-3"><span className="grid size-12 place-items-center rounded-2xl bg-background-secondary-default text-foreground-icon-secondary"><CheckCircle2 className="size-6"/></span><p className="text-body-medium text-text-primary">今天没有待处理事项</p><p className="text-body-regular text-text-secondary">可以从右侧开始登记新的班务。</p></div>}</MotionList>
         </Card>
         <div className="flex min-w-0 flex-col gap-6">
           <Card title="今日课表" bodyClassName="px-4 pb-4" action={<IconButton label="管理课表" size="sm" onClick={() => setScheduleOpen(true)}><CalendarDays className="size-4"/></IconButton>}>
@@ -172,11 +164,11 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
     </ToolDrawer>
     <ToolDrawer open={weeklyOpen} title="本周班级复盘" widthClassName="w-[520px]" onClose={() => setWeeklyOpen(false)} footer={<div className="flex flex-wrap justify-center gap-2"><Button variant="ai" disabled={aiBusy} onClick={() => void enhanceWeekly()}><Sparkles className="size-4"/>AI 润色</Button><Button variant="secondary" disabled={aiBusy || !weeklyContent.trim()} onClick={() => void copyWeekly()}><Clipboard className="size-4"/>复制</Button></div>}>
       <div className="flex flex-col gap-5"><p className="text-body-regular text-text-secondary">{range.startDate} — {range.endDate}</p><div><h3 className="mb-3 text-body-medium text-text-primary">本周事实</h3><div className="flex flex-wrap gap-2">{facts.map(fact => <Chip key={fact} variant="caption" color="soft">{fact}</Chip>)}</div></div>
-        {aiBusy ? <AiGenerationPanel title="正在润色周报" steps={["读取本周事实", "整理表达", "生成可编辑草稿"]}/> : <Textarea label="复盘草稿" rows={14} value={weeklyContent} onChange={setWeeklyContent} hint="核对并编辑后，可复制到家长群或其他渠道。"/>}
-        {weeklyStatus && <InlineStatus message={weeklyStatus} tone="ai"/>}
+        <MotionSwitch transitionKey={aiBusy ? "loading" : "draft"}>{aiBusy ? <AiGenerationPanel title="正在润色周报" steps={["读取本周事实", "整理表达", "生成可编辑草稿"]}/> : <Textarea label="复盘草稿" rows={14} value={weeklyContent} onChange={setWeeklyContent} hint="核对并编辑后，可复制到家长群或其他渠道。"/>}</MotionSwitch>
+        {weeklyStatus && <InlineStatus message={weeklyStatus}/>}
       </div>
     </ToolDrawer>
-    <ToolDrawer open={queueOpen} title={`全部待处理 · ${items.length}`} widthClassName="w-[520px]" onClose={() => setQueueOpen(false)}><div className="divide-y divide-separator-border">{items.map(item => renderQueueItem(item, () => { setQueueOpen(false); openItem(item); }))}{!items.length && <p className="py-12 text-center text-body-regular text-text-secondary">今天没有待处理事项</p>}</div></ToolDrawer>
+    <ToolDrawer open={queueOpen} title={`全部待处理 · ${items.length}`} widthClassName="w-[520px]" onClose={() => setQueueOpen(false)}><MotionList className="divide-y divide-separator-border">{items.map(item => renderQueueItem(item, () => { setQueueOpen(false); openItem(item); }))}{!items.length && <p className="py-12 text-center text-body-regular text-text-secondary">今天没有待处理事项</p>}</MotionList></ToolDrawer>
     <ToolDrawer open={Boolean(resolutionTaskId)} title="补充处理结果" onClose={() => setResolutionTaskId("")}>{(() => { const task = tasks.find(item => item.id === resolutionTaskId); return task ? <ResolutionEditor task={task} onSave={note => { onSaveTaskResolution?.(task.id, note); setResolutionTaskId(""); }} onContinue={() => { onContinueTask?.(task.id); setResolutionTaskId(""); }}/> : null; })()}</ToolDrawer>
   </div>;
 }

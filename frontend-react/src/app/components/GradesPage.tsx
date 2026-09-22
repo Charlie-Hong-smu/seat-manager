@@ -1,3 +1,4 @@
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart,
@@ -7,7 +8,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
 } from "recharts";
 import {
   Search,
@@ -20,7 +20,7 @@ import {
 
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
-import { AnimatedPopover, Button, DialogPresence, SegmentedControl } from "./ui";
+import { ChartViewport, MotionSwitch, AnimatedPopover, Button, DialogPresence, SegmentedControl } from "./ui";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholds } from "../state/teacherWorkbench";
 import { createCompetitionRankMap } from "../state/gradeRanking";
@@ -203,6 +203,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     ? trendSubjects
     : [trendSubject];
   const rows = selectedExam?.rows || EMPTY_ROWS;
+  const reducedMotion = useReducedMotion();
   const metricKey = selectedSubject === "total" || subjects.includes(selectedSubject) ? selectedSubject : "total";
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const studentByName = useMemo(() => {
@@ -375,11 +376,11 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               }`}
               style={{ fontWeight: 600 }}
             >
-              <span key={activeTab} className="grade-toolbar-copy-enter min-w-0 flex-1 truncate text-left">
+              <MotionSwitch transitionKey={`${activeTab}-${selectedExam.id}`} className="min-w-0 flex-1 text-left [--motion-surface:transparent]" contentClassName="truncate">
                 {activeTab === "single"
                   ? `${selectedExam.name} · ${selectedExam.date || "未填写日期"}`
                   : `全部考试 · ${exams.length} 场趋势`}
-              </span>
+              </MotionSwitch>
               <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-tertiary transition-[opacity,transform] duration-300 ${activeTab === "single" ? "opacity-100" : "-translate-y-0.5 opacity-0"}`} />
             </button>
             <AnimatedPopover
@@ -477,7 +478,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
         </div>
       </div>
 
-      <div key={activeTab} className="view-switch-enter p-6 flex flex-col gap-5">
+      <MotionSwitch transitionKey={activeTab} contentClassName="p-6 flex flex-col gap-5">
         {activeTab === "single" ? (
           <>
             <div className="grid grid-cols-4 divide-x divide-separator-border overflow-hidden rounded-xl border border-separator-border bg-background-primary-default">
@@ -497,45 +498,45 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               ))}
             </div>
 
-            <div className={`grade-chart-grid ${metricKey === "total" ? "grid grid-cols-5 gap-4" : "grid grid-cols-1 gap-4"}`}>
-              <div className={`grade-main-chart surface-enter ${metricKey === "total" ? "col-span-3" : ""} rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm`}>
-                <h3 className="text-text-primary mb-1">{metricKey === "total" ? "各科平均分对比" : `${metricLabel}分数分布`}</h3>
-                <p className="text-caption-1-regular text-text-tertiary mb-4">
-                  {metricKey === "total" ? "不同科目的班级平均表现" : `共 ${rows.length} 名学生的成绩区间分布`}
-                </p>
-                <ResponsiveContainer width="100%" height={metricKey === "total" ? 200 : 260}>
-                  <BarChart data={metricKey === "total" ? subjectAvgData : distributionData} barSize={32}>
+            <MotionSwitch sharedLayout preserveContent transitionKey={`${selectedExam.id}-${metricKey}-${thresholds.pass}-${thresholds.good}-${thresholds.excellent}`} className="grade-chart-transition">
+            <div className="grade-chart-grid grid gap-4" data-split={metricKey === "total" ? "true" : "false"}>
+              <div data-motion-surface="grade-main-chart" className="grade-main-chart min-w-0 rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
+                  <h3 className="text-text-primary mb-1">{metricKey === "total" ? "各科平均分对比" : `${metricLabel}分数分布`}</h3>
+                  <p className="text-caption-1-regular text-text-tertiary mb-4">
+                    {metricKey === "total" ? "不同科目的班级平均表现" : `共 ${rows.length} 名学生的成绩区间分布`}
+                  </p>
+                <ChartViewport height={metricKey === "total" ? 200 : 260}>{(width, height) =>
+                  <BarChart width={width} height={height} data={metricKey === "total" ? subjectAvgData : distributionData} barSize={32}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
                     <XAxis dataKey={metricKey === "total" ? "subject" : "label"} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={0} />
                     <YAxis domain={metricKey === "total" ? [0, 100] : undefined} allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
                     <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} />
-                    <Bar key="main-chart-bar" dataKey={metricKey === "total" ? "avg" : "count"} name={metricKey === "total" ? "平均分" : "人数"} radius={[5, 5, 0, 0]}>
+                    <Bar isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out" key="main-chart-bar" dataKey={metricKey === "total" ? "avg" : "count"} name={metricKey === "total" ? "平均分" : "人数"} radius={[5, 5, 0, 0]}>
                       {(metricKey === "total" ? subjectAvgData : distributionData).map((item, index) => (
                         <Cell key={`main-cell-${index}`} fill={item.fill} />
                       ))}
                     </Bar>
                   </BarChart>
-                </ResponsiveContainer>
+                }</ChartViewport>
               </div>
 
-              {metricKey === "total" && (
-                <div className="grade-distribution-chart surface-enter col-span-2 rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
-                  <h3 className="text-text-primary mb-1">全部分布</h3>
-                  <p className="text-caption-1-regular text-text-tertiary mb-4">{totalThresholdHint}</p>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={distributionData} barSize={26}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={0} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
-                      <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} />
-                      <Bar dataKey="count" name="人数" radius={[5, 5, 0, 0]}>
-                        {distributionData.map((item, index) => <Cell key={`dist-cell-${index}`} fill={item.fill} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+              {metricKey === "total" && <div className="grade-distribution-chart min-w-0 overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
+                <h3 className="text-text-primary mb-1">全部分布</h3>
+                <p className="text-caption-1-regular text-text-tertiary mb-4">{totalThresholdHint}</p>
+                <ChartViewport height={200}>{(width, height) =>
+                  <BarChart width={width} height={height} data={distributionData} barSize={26}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={0} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} />
+                    <Bar isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out" dataKey="count" name="人数" radius={[5, 5, 0, 0]}>
+                      {distributionData.map((item, index) => <Cell key={`dist-cell-${index}`} fill={item.fill} />)}
+                    </Bar>
+                  </BarChart>
+                }</ChartViewport>
+              </div>}
             </div>
+            </MotionSwitch>
 
             <div className="bg-background-primary-default rounded-2xl border border-separator-border shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-separator-border">
@@ -617,11 +618,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                     onOpenStudentFollowup(matchedStudent);
                                   }
                                 }}
-                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-status-ai-100 bg-status-ai-50 px-2.5 text-caption-1-regular text-status-ai-600 transition-colors hover:bg-status-ai-100 disabled:border-separator-border disabled:bg-background-secondary-default disabled:text-text-tertiary"
-                                style={{ fontWeight: 800 }}
+                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] px-2.5 text-caption-1-semibold text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary disabled:text-text-tertiary"
                                 title={matchedStudent ? "查看 AI 建议" : "未匹配到学生档案"}
                               >
-                                <Sparkles className="h-3.5 w-3.5" />AI 建议
+                                <Sparkles className="h-3.5 w-3.5 text-status-ai-500" />AI 建议
                               </button>
                             </td>
                           </tr>
@@ -673,11 +673,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                     onOpenStudentFollowup(item.matchedStudent);
                                   }
                                 }}
-                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-status-ai-100 bg-status-ai-50 px-2.5 text-caption-1-regular text-status-ai-600 transition-colors hover:bg-status-ai-100 disabled:border-separator-border disabled:bg-background-secondary-default disabled:text-text-tertiary"
-                                style={{ fontWeight: 800 }}
+                                className="mx-auto inline-flex h-8 min-w-[4.25rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--app-radius-sm)] px-2.5 text-caption-1-semibold text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary disabled:text-text-tertiary"
                                 title={item.matchedStudent ? "查看 AI 建议" : "未匹配到学生档案"}
                               >
-                                <Sparkles className="h-3.5 w-3.5" />AI 建议
+                                <Sparkles className="h-3.5 w-3.5 text-status-ai-500" />AI 建议
                               </button>
                             </td>
                           </tr>
@@ -691,14 +690,14 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           </>
         ) : (
           <>
-            <div key={visibleTrendSubjects.join("|") || "all"} className="grade-trend-subject-enter flex flex-col gap-5">
+            <div className="flex flex-col gap-5">
               <TrendDashboard exams={exams} subjects={visibleTrendSubjects} />
             </div>
             {trendFollowupCandidates.length > 0 && (
-              <div className="surface-enter rounded-2xl border border-status-ai-100 bg-background-primary-default p-5 shadow-sm">
+              <div className="rounded-2xl border border-[var(--app-border)] bg-background-primary-default p-5 shadow-sm">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-text-primary" style={{ fontWeight: 900 }}>AI 跟进候选</h3>
+                    <h3 className="text-headline-semibold text-text-primary">AI 跟进候选</h3>
                     <p className="mt-0.5 text-body-regular text-text-tertiary">按最近两次考试班排变化挑出需要先看的学生，分数仅作说明</p>
                   </div>
                   <Sparkles className="h-5 w-5 text-status-ai-500" />
@@ -708,17 +707,17 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                     <button
                       key={item.student.id}
                       onClick={() => onOpenStudentFollowup(item.student)}
-                      className="group rounded-2xl border border-separator-border bg-background-secondary-default p-3 text-left transition-all hover:-translate-y-0.5 hover:border-status-ai-100 hover:bg-status-ai-50/60 hover:shadow-sm"
+                      className="group rounded-2xl border border-separator-border bg-background-secondary-default p-3 text-left transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-button-hover hover:bg-background-primary-default hover:shadow-sm motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-body-regular text-text-primary" style={{ fontWeight: 900 }}>{item.student.name}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-caption-1-regular ${item.diff !== null && item.diff < 0 ? "bg-status-danger-50 text-status-danger-500" : "bg-background-tertiary-default text-text-tertiary"}`} style={{ fontWeight: 800 }}>
+                        <span className="text-body-semibold text-text-primary">{item.student.name}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-caption-1-semibold ${item.diff !== null && item.diff < 0 ? "bg-status-danger-50 text-status-danger-500" : "bg-background-tertiary-default text-text-tertiary"}`}>
                           {item.diff !== null ? `↓${Math.abs(item.diff)}名` : "关注"}
                         </span>
                       </div>
                       <p className="mt-2 line-clamp-2 text-caption-1-regular leading-5 text-text-secondary">{item.reason}</p>
-                      <div className="mt-3 flex items-center gap-1.5 text-caption-1-regular text-status-ai-600 opacity-80 group-hover:opacity-100" style={{ fontWeight: 800 }}>
-                        <Sparkles className="h-3.5 w-3.5" />打开跟进建议
+                      <div className="mt-3 flex items-center gap-1.5 text-caption-1-semibold text-text-tertiary opacity-80 group-hover:text-text-secondary group-hover:opacity-100">
+                        <Sparkles className="h-3.5 w-3.5 text-status-ai-500" />打开跟进建议
                       </div>
                     </button>
                   ))}
@@ -727,7 +726,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
             )}
           </>
         )}
-      </div>
+      </MotionSwitch>
       <DialogPresence open={exportOpen}>
       {exportOpen && (
         <GradeExportModal

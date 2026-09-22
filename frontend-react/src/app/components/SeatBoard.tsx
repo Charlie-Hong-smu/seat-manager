@@ -1,8 +1,9 @@
-import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Lock, UserRoundPlus, Users } from "lucide-react";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
 import { resolveSeatLayout } from "../state/seatLayout";
+import { settleDurationFor } from "../state/seatPlanner";
 import { SeatLayoutSurface } from "./SeatLayoutSurface";
 
 interface Props {
@@ -43,6 +44,7 @@ interface DragVisualState {
   height: number;
   proximity: number;
   phase: "dragging" | "holding" | "settling";
+  settleMs: number;
 }
 
 const WAITING_CARD_WIDTH = 64;
@@ -226,6 +228,54 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   }, [seatedIds, studentById, students]);
   const previousWaitingCountRef = useRef(waitingStudents.length);
   const [pendingStudentId, setPendingStudentId] = useState<StudentId | null>(null);
+
+  // 简洁/详细切换：渲染阶段趁 DOM 仍是旧模式时快照卡片几何，提交后逐卡 FLIP，
+  // 行级错峰播放，避免整版网格逐帧 reflow 造成的锯齿感。
+  const renderedCardModeRef = useRef(cardMode);
+  const pendingFlipRef = useRef<Map<number, { left: number; top: number; height: number }> | null>(null);
+  if (cardMode !== renderedCardModeRef.current) {
+    renderedCardModeRef.current = cardMode;
+    const snapshot = new Map<number, { left: number; top: number; height: number }>();
+    boardRef.current?.querySelectorAll<HTMLElement>("[data-seat-index]").forEach(element => {
+      const rect = element.getBoundingClientRect();
+      snapshot.set(Number(element.dataset.seatIndex), { left: rect.left, top: rect.top, height: rect.height });
+    });
+    pendingFlipRef.current = snapshot;
+  }
+  useLayoutEffect(() => {
+    const snapshot = pendingFlipRef.current;
+    pendingFlipRef.current = null;
+    if (!snapshot || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const board = boardRef.current;
+    if (!board) return;
+    // 位移窗口内静音卡片内部过渡：top/opacity 等过渡会让 48 张卡逐帧
+    // 排布或重绘，直接落位即可——卡片位移本身足够遮盖内部形态切换。
+    board.dataset.seatSettling = "true";
+    const boardTop = board.getBoundingClientRect().top;
+    const animations: Animation[] = [];
+    board.querySelectorAll<HTMLElement>("[data-seat-index]").forEach(element => {
+      const previous = snapshot.get(Number(element.dataset.seatIndex));
+      if (!previous) return;
+      const now = element.getBoundingClientRect();
+      const dx = previous.left - now.left;
+      const dy = previous.top - now.top;
+      if (!dx && !dy && Math.abs(previous.height - now.height) < 1) return;
+      const rowDelay = Math.min(150, Math.max(0, Math.round((now.top - boardTop) / 56)) * 16);
+      // 只动画 transform（合成器属性）。height/clip-path 都会退回主线程
+      // 逐帧排布或光栅化 48 张卡，是掉帧的来源。
+      animations.push(element.animate([
+        { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+        { transform: "translate3d(0, 0, 0)" },
+      ], { duration: 340, delay: rowDelay, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "backwards" }));
+    });
+    if (animations.length) {
+      void Promise.allSettled(animations.map(animation => animation.finished))
+        .then(() => { delete board.dataset.seatSettling; });
+    } else {
+      delete board.dataset.seatSettling;
+    }
+  }, [cardMode]);
+
   useEffect(() => () => {
     dragCleanupRef.current?.();
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
@@ -312,14 +362,13 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
     return { x: dx / length * amount, y: dy / length * amount };
   }
 
-  function animateCompletedSwap(fromIndex: number, targetIndex: number, sourceStudentId: StudentId, targetStudentId: StudentId | null) {
+  // 占位交换：松手瞬间提交真实顺序，被挤开的学生从挤压预览位置平滑滑向空出的座位，
+  // 与拖拽浮层的吸附同时进行，避免"先停一下再瞬移"的割裂感。
+  function animateOccupiedSwap(fromIndex: number, targetIndex: number, sourceStudentId: StudentId, targetStudentId: StudentId | null) {
     const sourceRect = seatRectsRef.current.get(fromIndex);
     const targetRect = seatRectsRef.current.get(targetIndex);
     const targetPush = getTargetPush(fromIndex, targetIndex, 1);
-    setDragVisual(null);
-    setDraggingSeat(null);
     onMoveSeat(fromIndex, targetIndex);
-    // The overlay already snapped into an empty slot; a second fade would flash.
     if (!targetStudentId || !studentById.has(targetStudentId)) return;
     if (!sourceRect || !targetRect || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
@@ -329,21 +378,19 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
       sourceCard?.animate([
         { opacity: 0.35, transform: "scale(0.96)" },
         { opacity: 1, transform: "scale(1)" },
-      ], { duration: 680, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+      ], { duration: 460, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
 
-      if (targetStudentId) {
-        const targetCard = cards.find(card => card.dataset.studentId === targetStudentId);
-        const startX = targetRect.left + targetPush.x - sourceRect.left;
-        const startY = targetRect.top + targetPush.y - sourceRect.top;
-        const arcX = Math.abs(startY) > Math.abs(startX) ? 7 : 0;
-        const arcY = Math.abs(startX) >= Math.abs(startY) ? -6 : 0;
-        targetCard?.animate([
-          { offset: 0, opacity: 0.86, transform: `translate3d(${startX}px, ${startY}px, 0) scale(0.945)` },
-          { offset: 0.2, opacity: 1, transform: `translate3d(${startX * 0.92 + arcX * 0.35}px, ${startY * 0.92 + arcY * 0.35}px, 0) scale(0.965)` },
-          { offset: 0.72, opacity: 1, transform: `translate3d(${startX * 0.2 + arcX}px, ${startY * 0.2 + arcY}px, 0) scale(1.008)` },
-          { offset: 1, opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
-        ], { duration: 680, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
-      }
+      const targetCard = cards.find(card => card.dataset.studentId === targetStudentId);
+      const startX = targetRect.left + targetPush.x - sourceRect.left;
+      const startY = targetRect.top + targetPush.y - sourceRect.top;
+      const arcX = Math.abs(startY) > Math.abs(startX) ? 7 : 0;
+      const arcY = Math.abs(startX) >= Math.abs(startY) ? -6 : 0;
+      targetCard?.animate([
+        { offset: 0, opacity: 0.92, transform: `translate3d(${startX}px, ${startY}px, 0) scale(0.97)` },
+        { offset: 0.28, opacity: 1, transform: `translate3d(${startX * 0.72 + arcX * 0.4}px, ${startY * 0.72 + arcY * 0.4}px, 0) scale(0.985)` },
+        { offset: 0.78, opacity: 1, transform: `translate3d(${startX * 0.16 + arcX}px, ${startY * 0.16 + arcY}px, 0) scale(1)` },
+        { offset: 1, opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+      ], { duration: 460, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
     }));
   }
 
@@ -412,6 +459,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         height: waitingShape ? WAITING_CARD_HEIGHT : (targetRect?.height ?? sourceRect.height),
         proximity,
         phase: "dragging",
+        settleMs: DRAG_SETTLE_MS,
       });
     };
 
@@ -469,6 +517,12 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
             setDraggingSeat(null);
             return;
           }
+          const settleMs = settleDurationFor(
+            pointerEvent.clientX,
+            pointerEvent.clientY,
+            settledRect.left + settledRect.width * anchorX,
+            settledRect.top + settledRect.height * anchorY,
+          );
           setDragVisual(current => current?.studentId === source.studentId && current.phase === "holding" ? {
             ...current,
             phase: "settling",
@@ -476,17 +530,21 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
             pointerY: settledRect.top + settledRect.height * anchorY,
             width: settledRect.width,
             height: settledRect.height,
+            settleMs,
           } : current);
           settleTimerRef.current = window.setTimeout(() => {
             settleTimerRef.current = null;
             setDragVisual(null);
             setDraggingSeat(null);
-          }, reducedMotion ? 0 : DRAG_SETTLE_MS);
+          }, reducedMotion ? 0 : settleMs);
         }));
         return;
       }
 
       const destinationRect = targetRect ?? sourceRect;
+      const settleX = destinationRect.left + destinationRect.width * anchorX;
+      const settleY = destinationRect.top + destinationRect.height * anchorY;
+      const settleMs = settleDurationFor(pointerEvent.clientX, pointerEvent.clientY, settleX, settleY);
       setDragVisual(current => current ? {
         ...current,
         targetIndex,
@@ -494,18 +552,26 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         waitingTarget: false,
         proximity: targetIndex === null ? 0 : 1,
         phase: "settling",
-        pointerX: destinationRect.left + destinationRect.width * anchorX,
-        pointerY: destinationRect.top + destinationRect.height * anchorY,
+        pointerX: settleX,
+        pointerY: settleY,
         width: source.sourceType === "waiting" && !validSeatTarget ? WAITING_CARD_WIDTH : destinationRect.width,
         height: source.sourceType === "waiting" && !validSeatTarget ? WAITING_CARD_HEIGHT : destinationRect.height,
+        settleMs,
       } : current);
 
+      const occupiedSeatTarget = source.sourceType === "seat"
+        && source.fromIndex !== null
+        && targetIndex !== null
+        && targetOccupied;
       if (source.sourceType === "waiting" && validSeatTarget) {
         onAssignStudentToSeat(source.studentId, targetIndex);
         setPendingStudentId(null);
       } else if (emptySeatTarget && source.fromIndex !== null && targetIndex !== null) {
         // 空座落点在松手时就更新真实顺序，由 overlay 遮住目标卡直到吸附结束，避免旧座位回闪一帧。
         onMoveSeat(source.fromIndex, targetIndex);
+      } else if (occupiedSeatTarget && source.fromIndex !== null && targetIndex !== null) {
+        // 占位交换在松手时提交，被挤开的学生与拖拽浮层同时开始移动。
+        animateOccupiedSwap(source.fromIndex, targetIndex, source.studentId, seatOrder[targetIndex] || null);
       }
 
       settleTimerRef.current = window.setTimeout(() => {
@@ -518,19 +584,9 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
           }, 0);
           return;
         }
-        if (targetIndex === null) {
-          setDragVisual(null);
-          setDraggingSeat(null);
-          return;
-        }
-        if (emptySeatTarget) {
-          setDragVisual(null);
-          setDraggingSeat(null);
-          return;
-        }
-        if (source.fromIndex === null) return;
-        animateCompletedSwap(source.fromIndex, targetIndex, source.studentId, seatOrder[targetIndex] || null);
-      }, reducedMotion ? 0 : DRAG_SETTLE_MS);
+        setDragVisual(null);
+        setDraggingSeat(null);
+      }, reducedMotion ? 0 : settleMs);
     };
 
     const handlePointerUp = (pointerEvent: PointerEvent) => finishDrag(pointerEvent, false);
@@ -545,6 +601,8 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
     if (!dragVisual || dragVisual.sourceType !== "seat" || dragVisual.fromIndex === null || dragVisual.targetIndex === null || seatIndex === dragVisual.fromIndex) return undefined;
     // Empty slots stay fixed; only occupied-seat swaps preview displacement.
     if (!dragVisual.targetOccupied || !studentById.has(seatOrder[seatIndex] ?? "")) return undefined;
+    // 占位交换在松手时已提交，被拖学生的真实卡已在目标位，不再施加挤压偏移。
+    if (seatOrder[seatIndex] === dragVisual.studentId) return undefined;
     const proximity = dragVisual.phase === "settling" ? 1 : dragVisual.proximity;
     if (seatIndex === dragVisual.targetIndex) {
       const push = getTargetPush(dragVisual.fromIndex, dragVisual.targetIndex, proximity);
@@ -580,6 +638,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
         width: dragVisual.width,
         height: dragVisual.height,
         transform: `translate3d(${dragVisual.pointerX}px, ${dragVisual.pointerY}px, 0) translate(${-dragVisual.anchorX * 100}%, ${-dragVisual.anchorY * 100}%)`,
+        transitionDuration: dragVisual.phase === "settling" ? `${dragVisual.settleMs}ms` : undefined,
       }}
     >
       <div className="seat-student-morph__seat absolute inset-0 flex min-w-0 items-center gap-2 px-3">

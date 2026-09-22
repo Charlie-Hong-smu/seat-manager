@@ -234,7 +234,7 @@ export function DataWorkspace({
           {archivedStudents?.length ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{archivedStudents.map(student => <div key={student.id} className="flex items-center gap-3 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default p-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-background-tertiary-default text-body-semibold text-text-secondary">{student.name.slice(0,1)}</div><div className="min-w-0 flex-1"><div className="truncate text-body-semibold text-text-primary">{student.name}</div><div className="text-caption-1-regular text-text-tertiary">{student.archivedAt ? `移出于 ${student.archivedAt.slice(0,10)}` : "已移出当前班级"}</div></div><Button size="sm" variant="secondary" onClick={() => onRestoreStudent?.(student.id)}><ArchiveRestore className="h-4 w-4"/>恢复</Button><Button size="sm" variant="danger" onClick={() => void permanentlyDelete(student)} aria-label={`彻底删除 ${student.name}`}><Trash2 className="h-4 w-4"/></Button></div>)}</div> : <p className="text-body-regular text-[var(--app-text-muted)]">暂无归档学生。学生从班级移出后会保留在这里，可恢复或用于误导入时彻底删除。</p>}
         </Panel></div>
         <div className="surface-enter">
-        <Panel title="导入名单" action={<span className="rounded-full bg-accent-50 px-2.5 py-1 text-caption-1-regular text-accent-600" style={{ fontWeight: 800 }}>导入</span>}>
+        <Panel title="导入名单" action={<span className="rounded-full bg-accent-50 px-2.5 py-1 text-caption-1-semibold text-accent-600">导入</span>}>
           <div className="space-y-3">
             <label className="flex items-center gap-2 text-body-regular text-text-secondary"><input type="checkbox" checked={replaceExisting} onChange={event => setReplaceExisting(event.target.checked)} className="accent-accent-600" />覆盖现有名单</label>
             <label className="flex items-center gap-2 text-body-regular text-text-secondary"><input type="checkbox" checked={keepHistory} disabled={!replaceExisting} onChange={event => setKeepHistory(event.target.checked)} className="accent-accent-600 disabled:opacity-40" />覆盖时保留历史数据</label>
@@ -260,7 +260,7 @@ export function DataWorkspace({
         </div>
 
         <div className="surface-enter [animation-delay:60ms]">
-        <Panel title="导出" action={<span className="rounded-full bg-status-success-50 px-2.5 py-1 text-caption-1-regular text-status-success-600" style={{ fontWeight: 800 }}>导出</span>}>
+        <Panel title="导出" action={<span className="rounded-full bg-status-success-50 px-2.5 py-1 text-caption-1-semibold text-status-success-600">导出</span>}>
           <div className="space-y-3">
             <Button variant="secondary" onClick={() => exportSeatsCsv(students, seatOrder, seatLayout)} className="w-full flex items-center justify-center gap-2 rounded-2xl border border-border-button-default bg-background-secondary-default py-3">
               <FileDown className="h-4 w-4" />导出座位表 CSV
@@ -275,7 +275,7 @@ export function DataWorkspace({
         </div>
 
         <div className="surface-enter [animation-delay:120ms]">
-        <Panel title="恢复备份" action={<span className="rounded-full bg-status-warning-50 px-2.5 py-1 text-caption-1-regular text-status-warning-600" style={{ fontWeight: 800 }}>恢复</span>}>
+        <Panel title="恢复备份" action={<span className="rounded-full bg-status-warning-50 px-2.5 py-1 text-caption-1-semibold text-status-warning-600">恢复</span>}>
           <div className="space-y-3">
             <FileDropZone accept=".json" onChange={file => { if (file) void readBackup(file); }} className="min-h-32 justify-center">
               <FileUp className="h-4 w-4 text-text-tertiary" />
@@ -290,11 +290,11 @@ export function DataWorkspace({
       </div>
       <DialogPresence open={rosterMappingOpen && Boolean(rosterMapping)}>
       {rosterMappingOpen && rosterMapping && (
-        <div className="soft-backdrop-enter fixed inset-0 z-[70] flex items-center justify-center bg-text-primary/35 p-5">
-          <div ref={rosterMappingRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="名单列映射" className="modal-panel-enter flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-background-primary-default shadow-2xl outline-none">
+        <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
+          <div ref={rosterMappingRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="名单列映射" className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden outline-none">
             <div className="flex items-start justify-between gap-4 border-b border-separator-border px-5 py-4">
               <div>
-                <h3 className="text-title-3-regular text-text-primary" style={{ fontWeight: 900 }}>名单列映射</h3>
+                <h3 className="text-title-3-semibold text-text-primary">名单列映射</h3>
                 <p className="mt-1 text-body-regular text-text-secondary">确认姓名、学号、性别和座位行列后再导入。</p>
               </div>
               <button
@@ -311,7 +311,7 @@ export function DataWorkspace({
               <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-body-regular text-text-primary" style={{ fontWeight: 900 }}>表格预览</div>
+                    <div className="text-body-semibold text-text-primary">表格预览</div>
                     <div className="mt-0.5 text-caption-1-regular text-text-tertiary">{rosterFile?.name || "名单"} · 共 {Math.max(rosterRows.length - (rosterMapping.hasHeader ? 1 : 0), 0)} 行</div>
                   </div>
                   <span className="rounded-full bg-background-primary-default px-3 py-1 text-caption-1-regular text-text-secondary shadow-sm">显示前 10 行</span>
@@ -344,45 +344,37 @@ export function DataWorkspace({
 
               <div className="min-h-0 overflow-y-auto p-4">
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-status-ai-100 bg-status-ai-50 p-3">
+                  <div className="rounded-2xl border border-separator-border bg-background-secondary-default p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <div className="text-body-regular text-status-ai-900" style={{ fontWeight: 900 }}>AI 映射</div>
-                        <div className="mt-0.5 text-caption-1-regular leading-5 text-status-ai-600">让 AI 先判断列，再由你确认。</div>
+                        <div className="text-body-semibold text-text-primary">AI 映射</div>
+                        <div className="mt-0.5 text-caption-1-regular leading-5 text-text-tertiary">让 AI 先判断列，再由你确认。</div>
                       </div>
-                      <button
-                        type="button"
-                        disabled={aiRosterMappingBusy}
-                        onClick={() => void generateAiRosterMapping()}
-                        className="rounded-xl bg-status-ai-600 px-3 py-2 text-caption-1-regular text-text-white hover:bg-status-ai-700 disabled:opacity-60"
-                        style={{ fontWeight: 900 }}
-                      >
-                        {aiRosterMappingBusy ? "识别中" : "AI 识别"}
-                      </button>
+                      <Button variant="ai" size="sm" disabled={aiRosterMappingBusy} onClick={() => void generateAiRosterMapping()}>{aiRosterMappingBusy ? "识别中" : "AI 识别"}</Button>
                     </div>
                     {!hasAiRosterMappingAuth && (
                       <div className="mt-3 space-y-2">
                         <input
                           value={aiRosterMappingAccessCode}
                           onChange={event => setAiRosterMappingAccessCode(event.target.value)}
-                          className="w-full rounded-xl border border-status-ai-100 bg-background-primary-default px-3 py-2 text-body-regular outline-none focus:border-status-ai-300"
+                          className="w-full rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300"
                           placeholder="输入 AI 授权码"
                         />
-                        <label className="flex items-center gap-2 text-caption-1-regular text-status-ai-700">
+                        <label className="flex items-center gap-2 text-caption-1-regular text-text-secondary">
                           <input type="checkbox" checked={aiRosterMappingRemember} onChange={event => setAiRosterMappingRemember(event.target.checked)} />
                           记住授权码
                         </label>
                       </div>
                     )}
                     {aiRosterMappingSuggestion && (
-                      <div className="mt-3 rounded-xl bg-background-primary-default px-3 py-2 text-caption-1-regular leading-5 text-status-ai-700">
+                      <div className="mt-3 rounded-[var(--app-radius-sm)] border border-separator-border bg-background-primary-default px-3 py-2 text-caption-1-regular leading-5 text-text-secondary">
                         {aiRosterMappingSuggestion.note}
                       </div>
                     )}
                   </div>
 
                   <label className="flex items-center justify-between gap-3 rounded-2xl border border-separator-border bg-background-secondary-default px-3 py-2 text-body-regular text-text-secondary">
-                    <span style={{ fontWeight: 800 }}>首行是表头</span>
+                    <span className="text-body-medium">首行是表头</span>
                     <input
                       type="checkbox"
                       checked={rosterMapping.hasHeader}

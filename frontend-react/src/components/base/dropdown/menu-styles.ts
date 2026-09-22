@@ -8,9 +8,9 @@
 export const MENU_POPOVER_SURFACE = [
   "max-w-[calc(100vw-32px)] overflow-y-auto",
   "rounded-2xl border border-border-button-default bg-background-primary-default p-2.5 shadow-dropdown",
-  "transition duration-150 ease-out",
-  "data-[entering]:opacity-0 data-[entering]:scale-95 data-[entering]:blur-[2px]",
-  "data-[exiting]:opacity-0 data-[exiting]:scale-95 data-[exiting]:blur-[2px]",
+  "transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+  "data-[entering]:opacity-0 data-[entering]:-translate-y-1",
+  "data-[exiting]:opacity-0 data-[exiting]:-translate-y-1",
   "data-[placement=bottom]:origin-top-left data-[placement=top]:origin-bottom-left",
   "data-[placement=left]:origin-right data-[placement=right]:origin-left",
 ].join(" ");

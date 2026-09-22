@@ -4,7 +4,7 @@ import { buildGradePrintPreviewHtml, exportGradeWorkbook, getDefaultGradeExportO
 import type { AppStudent, GradeExam } from "../state/types";
 import type { GradeExportContentKey, GradeExportOptions } from "../state/gradeExport";
 import { matchesStudentSearch } from "../state/studentSearch";
-import { DatePicker } from "./ui";
+import { MotionCollapse, MotionSwitch, DatePicker } from "./ui";
 
 interface GradeExportModalProps {
   exams: GradeExam[];
@@ -135,8 +135,8 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
   }
 
   return (
-    <div className="soft-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-text-primary/30 px-4">
-      <div className="modal-panel-enter flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-xl">
+    <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden">
         <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
           <div className="flex items-center gap-2">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-accent-50 text-accent-600">
@@ -176,7 +176,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
                   个人成绩
                 </button>
               </div>
-              {options.object === "students" && (
+              <MotionCollapse open={options.object === "students"}>
                 <div className="mt-3 rounded-2xl border border-separator-border bg-background-secondary-default p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div className="relative min-w-0 flex-1">
@@ -212,7 +212,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
                   </div>
                   {!filteredStudents.length && <div className="py-6 text-center text-body-regular text-text-tertiary">没有匹配的学生</div>}
                 </div>
-              )}
+              </MotionCollapse>
             </section>
 
             <section>
@@ -234,6 +234,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
                 ))}
               </div>
 
+              <MotionSwitch transitionKey={options.range}>
               {options.range === "specific" && (
                 <div className="mt-3 grid max-h-44 grid-cols-2 gap-2 overflow-y-auto rounded-2xl border border-separator-border bg-background-secondary-default p-3">
                   {exams.map(exam => (
@@ -257,6 +258,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
                   </label>
                 </div>
               )}
+              </MotionSwitch>
             </section>
 
             <section>
@@ -297,8 +299,8 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
       </div>
 
       {printHtml && (
-        <div className="soft-backdrop-enter fixed inset-0 z-[60] flex items-center justify-center bg-text-primary/40 px-4">
-          <div className="modal-panel-enter flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-2xl">
+        <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[60] flex items-center justify-center px-4">
+          <div className="modal-panel-enter app-modal-panel flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-separator-border px-5 py-3">
               <h3 className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>PDF/打印预览</h3>
               <div className="flex items-center gap-2">

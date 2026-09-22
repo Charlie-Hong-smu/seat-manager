@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { BookOpen, ClipboardCheck, Globe2, GraduationCap, Lightbulb, Lock, LogIn, Medal, Monitor, NotebookPen, Presentation, ShieldCheck, Sprout } from "lucide-react";
+import { BookOpen, ClipboardCheck, Globe2, GraduationCap, Lightbulb, Lock, LogIn, Medal, Monitor, NotebookPen, Presentation, Sprout } from "lucide-react";
 
 import { APP_NAME } from "../config";
 import { authorizeProduct, enterLocalPreviewSession } from "../state/authStorage";
-import { Button } from "./ui";
+import { Button, Checkbox, Input } from "./ui";
 
 interface Props {
   onLogin: () => void;
@@ -85,77 +85,53 @@ export function LoginScreen({ onLogin }: Props) {
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--app-login-background)] p-4 sm:p-6">
       <EducationBackdrop />
-      <form onSubmit={handleSubmit} className="surface-enter relative z-10 w-full max-w-[31rem]">
-        <section className="overflow-hidden rounded-[var(--app-radius-lg)] border border-white/80 bg-background-primary-default/95 shadow-[var(--app-shadow-float)] backdrop-blur-sm">
-          <header className="px-6 pb-5 pt-7 sm:px-9 sm:pt-8">
-            <div className="flex items-center justify-center gap-4 sm:gap-5">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[var(--app-radius-md)] bg-[var(--app-primary)] text-text-white shadow-lg shadow-blue-600/20 sm:h-14 sm:w-14">
-                <BookOpen className="h-6 w-6 sm:h-7 sm:w-7" />
-              </span>
-              <h1 className="min-w-0 truncate text-title-2-regular font-black tracking-tight text-[var(--app-text)]">{APP_NAME}</h1>
-            </div>
+      <form onSubmit={handleSubmit} className="surface-enter relative z-10 w-full max-w-[26rem]">
+        <section className="rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default px-6 py-8 shadow-[var(--app-shadow-float)] sm:px-8">
+          <header className="text-center">
+            <span className="mx-auto grid size-11 place-items-center rounded-[var(--app-radius-md)] bg-accent-600 text-text-white">
+              <BookOpen className="size-5" />
+            </span>
+            <h1 className="mt-4 text-title-2-medium text-text-primary">{APP_NAME}</h1>
+            <p className="mt-1.5 text-body-regular text-text-secondary">输入产品授权码以继续使用</p>
           </header>
 
-          <div className="flex items-center gap-4 px-6 sm:px-9">
-            <span className="h-px flex-1 bg-[var(--app-border)]" />
-            <span className="grid h-8 w-8 place-items-center rounded-full border border-[var(--app-border)] bg-background-primary-default text-text-tertiary"><ShieldCheck className="h-4 w-4" /></span>
-            <span className="h-px flex-1 bg-[var(--app-border)]" />
+          <div className="mt-7">
+            <Input
+              name="secret"
+              type="password"
+              value={secret}
+              onChange={value => { setSecret(value); setError(""); }}
+              placeholder={placeholder}
+              aria-label="产品授权码"
+              autoComplete="one-time-code"
+              isInvalid={Boolean(error)}
+              leadingIcon={Lock}
+              hint={error || " "}
+            />
           </div>
 
-          <div className="px-6 pb-7 pt-6 sm:px-9 sm:pb-8">
-            <label className="block">
-              <span className="relative block">
-                <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-text-tertiary" />
-                <input
-                  name="secret"
-                  type="password"
-                  value={secret}
-                  onChange={event => { setSecret(event.target.value); setError(""); }}
-                  placeholder={placeholder}
-                  aria-label="产品授权码"
-                  autoComplete="one-time-code"
-                  aria-invalid={Boolean(error)}
-                  aria-describedby="license-login-message"
-                  className={`h-12 w-full rounded-[var(--app-radius-sm)] border bg-background-primary-default pl-12 pr-4 text-body-regular text-[var(--app-text)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-text-tertiary focus:ring-2 ${error ? "border-status-danger-300 focus:border-status-danger-400 focus:ring-status-danger-500/10" : "border-border-button-default focus:border-accent-400 focus:ring-accent-500/15"}`}
-                />
-              </span>
-            </label>
+          <div className="mt-5">
+            <Checkbox isSelected={remember} onChange={setRemember}>在这台设备记住授权 30 天</Checkbox>
+          </div>
 
-            <div id="license-login-message" aria-live="polite" className={`pt-2 ${error ? "min-h-8" : "h-4"}`}>
-              {error && <p className="text-caption-1-semibold leading-5 text-status-danger-600">{error}</p>}
-            </div>
+          <Button type="submit" disabled={loading} className="mt-6 w-full">
+            <LogIn className="h-4 w-4" />
+            {loading ? "正在验证…" : "进入工作台"}
+          </Button>
 
-            <label className="mb-5 flex cursor-pointer items-center gap-3 text-body-medium text-[var(--app-text)]">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={event => setRemember(event.target.checked)}
-                className="h-4 w-4 rounded border-border-button-hover accent-[var(--app-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25"
-              />
-              <span>在这台设备记住授权 30 天</span>
-            </label>
-
-            <Button type="submit" disabled={loading} className="w-full shadow-md shadow-blue-600/10">
-              <LogIn className="h-4 w-4" />
-              {loading ? "正在验证…" : "进入工作台"}
+          {canEnterLocalPreview && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-3 w-full"
+              onClick={() => {
+                if (enterLocalPreviewSession()) onLogin();
+              }}
+            >
+              <Monitor className="h-4 w-4" />
+              进入本地预览
             </Button>
-
-            {canEnterLocalPreview && (
-              <div className="mt-4">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => {
-                    if (enterLocalPreviewSession()) onLogin();
-                  }}
-                >
-                  <Monitor className="h-4 w-4" />
-                  进入本地预览
-                </Button>
-              </div>
-            )}
-          </div>
+          )}
         </section>
       </form>
     </main>

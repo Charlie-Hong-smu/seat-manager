@@ -1,8 +1,8 @@
 import { ArrowRight, Info, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useRef } from "react";
 
 import type { BusinessEntityPreviewModel } from "../state/types";
-import { Button, IconButton } from "./ui";
+import { MotionCollapse, MotionSwitch, Button, IconButton } from "./ui";
 
 const STATUS_TONE = {
   default: "bg-accent-50 text-accent-700",
@@ -20,38 +20,15 @@ export function ContextEntityPreview({ id, open, model, leavesWorkbench = false,
   onClose: () => void;
   onNavigate?: () => void;
 }) {
-  const [renderedModel, setRenderedModel] = useState<BusinessEntityPreviewModel | null>(model);
-  const [phase, setPhase] = useState<"closed" | "opening" | "open" | "closing">(open && model ? "open" : "closed");
-
-  useEffect(() => {
-    if (open && model) {
-      setRenderedModel(model);
-      setPhase(current => current === "closed" ? "opening" : "open");
-      return;
-    }
-    setPhase(current => current === "closed" ? "closed" : "closing");
-  }, [model, open]);
-
-  useEffect(() => {
-    if (phase !== "opening") return;
-    const frame = window.requestAnimationFrame(() => setPhase("open"));
-    return () => window.cancelAnimationFrame(frame);
-  }, [phase]);
-
-  if (!renderedModel || phase === "closed") return null;
+  const lastModel = useRef(model);
+  if (model) lastModel.current = model;
+  const renderedModel = model || lastModel.current;
+  if (!renderedModel) return null;
   const canNavigate = renderedModel.availability === "available" && Boolean(renderedModel.navigationLabel && onNavigate);
   return (
-    <section
-      id={id}
-      aria-label={`${renderedModel.title}事项速览`}
-      data-phase={phase}
-      onTransitionEnd={event => {
-        if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows" || phase !== "closing") return;
-        setPhase("closed");
-        setRenderedModel(null);
-      }}
-      className="student-context-preview-motion grid overflow-hidden rounded-[var(--app-radius-sm)] border border-accent-100 bg-accent-50/35"
-    >
+    <MotionCollapse open={open && Boolean(model)} animateOnMount>
+    <MotionSwitch transitionKey={renderedModel.title}>
+    <section id={id} aria-label={`${renderedModel.title}事项速览`} className="overflow-hidden rounded-[var(--app-radius-sm)] border border-accent-100 bg-accent-50/35">
       <div className="min-h-0 overflow-hidden">
       <div className="flex items-start justify-between gap-3 border-b border-accent-100/80 px-4 py-3">
         <div className="min-w-0">
@@ -72,5 +49,7 @@ export function ContextEntityPreview({ id, open, model, leavesWorkbench = false,
       </div>
       </div>
     </section>
+    </MotionSwitch>
+    </MotionCollapse>
   );
 }
