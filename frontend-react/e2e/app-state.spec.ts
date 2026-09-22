@@ -1394,7 +1394,10 @@ test("BoardUI narrow today page and weekly draft stay usable with reduced motion
   await login(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true }).click();
+  await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
+  const navigation = page.getByRole("dialog", { name: "切换工作区" });
+  await navigation.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true }).click();
+  await expect(navigation).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "今日班务" })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("button", { name: "本周复盘", exact: true }).click();

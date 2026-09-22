@@ -53,9 +53,14 @@ test("shared followup creates one task, edits every participant, survives reload
   await page.getByRole("status").filter({ hasText: "任务状态已更新" }).getByRole("button", { name: "撤销", exact: true }).click();
   await expect(cards.getByRole("button", { name: "完成任务", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "收起侧栏", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "主导航" })).toHaveCount(0);
+  await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
+  const navigation = page.getByRole("dialog", { name: "切换工作区" });
+  await expect(navigation.getByRole("button", { name: /^任务与作业/ })).toBeVisible();
+  await navigation.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(navigation).toHaveCount(0);
   const description = cards.getByText(/关联乙、关联丙/);
-  // Sample both elements in one frame while the sidebar width animates.
+  // Sample both elements in one frame after closing the compact navigation.
   await expect.poll(() => description.evaluate(label => {
     const labelBox = label.getBoundingClientRect();
     const actionBox = label.closest("article")?.querySelector('button[aria-label="编辑任务"]')?.getBoundingClientRect();
