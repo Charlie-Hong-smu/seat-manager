@@ -121,13 +121,13 @@ export function TopHeader({
 
   return (
     <>
-      <header className="relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--app-border)] bg-background-primary-default px-3 sm:px-4">
+      <header className="app-top-header relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--app-border)] bg-background-primary-default px-3 sm:px-4">
         <IconButton label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} onClick={onToggleSidebar}>
           {sidebarCollapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" /> : <PanelLeftClose className="h-[18px] w-[18px]" />}
         </IconButton>
 
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-accent-600 text-text-white">
+        <div className="app-header-identity flex min-w-0 items-center gap-2.5">
+          <div className="app-header-brand grid h-9 w-9 shrink-0 place-items-center rounded-[var(--app-radius-sm)] bg-accent-600 text-text-white">
             <BookOpen className="h-[18px] w-[18px]" />
           </div>
           <span className="hidden whitespace-nowrap text-body-semibold text-[var(--app-text)] min-[1180px]:block">{APP_NAME}</span>
@@ -146,18 +146,20 @@ export function TopHeader({
           </button>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <button type="button" onClick={saveStatus === "failed" || saveStatus === "quota" ? onRetrySave : undefined} className={`hidden rounded-full px-2.5 py-1 text-[11px] font-bold sm:block ${saveStatus === "failed" || saveStatus === "quota" ? "bg-status-danger-50 text-status-danger-600" : saveStatus === "saving" ? "bg-accent-50 text-accent-600" : "bg-status-success-50 text-status-success-600"}`} title={saveStatus === "quota" ? "本机空间不足，点击重试" : saveStatus === "failed" ? "保存失败，点击重试" : undefined}>{saveStatus === "saving" ? "保存中…" : saveStatus === "quota" ? "空间不足" : saveStatus === "failed" ? "保存失败 · 重试" : "已保存"}</button>
+        <div className="app-header-actions flex shrink-0 items-center gap-2">
+          <button type="button" onClick={saveStatus === "failed" || saveStatus === "quota" ? onRetrySave : undefined} className={`app-save-status hidden rounded-full px-2.5 py-1 text-[11px] font-bold sm:block ${saveStatus === "failed" || saveStatus === "quota" ? "bg-status-danger-50 text-status-danger-600" : saveStatus === "saving" ? "bg-accent-50 text-accent-600" : "bg-status-success-50 text-status-success-600"}`} title={saveStatus === "quota" ? "本机空间不足，点击重试" : saveStatus === "failed" ? "保存失败，点击重试" : undefined}>{saveStatus === "saving" ? "保存中…" : saveStatus === "quota" ? "空间不足" : saveStatus === "failed" ? "保存失败 · 重试" : "已保存"}</button>
           <IconButton label="搜索学生" className="min-[1100px]:hidden" onClick={openSearch}>
             <Search className="h-[18px] w-[18px]" />
           </IconButton>
-          <IconButton label="云同步" onClick={() => { onCloseAccount(); onOpenCloudSync(); }}>
+          <IconButton label="云同步" className="app-header-cloud hidden md:inline-flex" onClick={() => { onCloseAccount(); onOpenCloudSync(); }}>
             <Cloud className="h-[18px] w-[18px]" />
           </IconButton>
 
+          <span className="app-header-ai-slot h-11 w-11 shrink-0 md:hidden" aria-hidden="true" />
           <div className="relative">
             <button
               type="button"
+              aria-label="账户"
               onClick={onToggleAccount}
               aria-expanded={accountOpen}
               className="inline-flex h-10 items-center gap-2 rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-2.5 text-body-semibold text-text-secondary transition-colors hover:bg-background-secondary-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
@@ -170,6 +172,7 @@ export function TopHeader({
               open={accountOpen}
               className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-1.5 shadow-[var(--app-shadow-float)]"
             >
+                <button type="button" onClick={() => { onCloseAccount(); onOpenCloudSync(); }} className="app-mobile-cloud-action flex h-11 w-full items-center gap-2.5 rounded-[var(--app-radius-sm)] px-3 text-body-regular text-text-secondary md:hidden"><Cloud className="h-4 w-4" />云同步</button>
                 {accountItems.map(item => (
                   <button
                     key={item.key}

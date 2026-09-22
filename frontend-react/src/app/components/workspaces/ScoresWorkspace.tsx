@@ -1,3 +1,4 @@
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useEffect, useState } from "react";
 import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, Pencil, RotateCcw, Sparkles, Table, Trash2, X } from "lucide-react";
 
@@ -103,7 +104,8 @@ export function ScoresWorkspace({
   const [classAnalysis, setClassAnalysis] = useState<AiClassTrendResult | null>(null);
   const [classAnalysisStatus, setClassAnalysisStatus] = useState("");
   const [classAnalysisBusy, setClassAnalysisBusy] = useState(false);
-  const [managementOpen, setManagementOpen] = useState(true);
+  const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
+  const [managementOpen, setManagementOpen] = useState(() => !window.matchMedia("(max-width: 767px), (max-height: 500px) and (pointer: coarse)").matches);
   const [pendingDeleteExam, setPendingDeleteExam] = useState<GradeExam | null>(null);
   const [deleteExamError, setDeleteExamError] = useState("");
   const [scoreView, setScoreView] = useState<"overview" | "items">("overview");
@@ -394,6 +396,7 @@ export function ScoresWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-background-primary-default">
+      <div className="score-mobile-controls"><Button variant="secondary" onClick={() => setManagementOpen(open => !open)} aria-expanded={managementOpen}>{managementOpen ? "返回成绩分析" : "考试与导入"}</Button></div>
       <div className="score-workspace-grid relative grid min-h-0 flex-1 overflow-hidden p-4" data-management-open={managementOpen}>
         <IconButton
           label={managementOpen ? "收起成绩管理" : "展开成绩管理"}
@@ -536,7 +539,7 @@ export function ScoresWorkspace({
           </Panel>
         </aside>
 
-        <main className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
+        <main hidden={isMobile && managementOpen} className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
           <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-background-primary-default pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
           <MotionSwitch transitionKey={scoreView}>{scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}</MotionSwitch>
         </main>
@@ -544,7 +547,7 @@ export function ScoresWorkspace({
       <DialogPresence open={mappingModalOpen && Boolean(manualMapping)}>
       {mappingModalOpen && manualMapping && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
-          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden outline-none">
+          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="score-mapping-panel modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden outline-none">
             <div className="flex items-start justify-between gap-4 border-b border-separator-border px-5 py-4">
               <div>
                 <h3 className="text-title-3-semibold text-text-primary">成绩列映射</h3>
@@ -560,7 +563,7 @@ export function ScoresWorkspace({
               </button>
             </div>
 
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_25rem] gap-0 overflow-hidden">
+            <div className="score-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_25rem] gap-0 overflow-hidden">
               <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
@@ -601,7 +604,7 @@ export function ScoresWorkspace({
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <div className="text-body-semibold text-text-primary">AI 映射</div>
-                        <div className="mt-0.5 text-caption-1-regular leading-5 text-text-tertiary">先让 AI 填好右侧映射，再由你确认或继续改。</div>
+                        <div className="mt-0.5 text-caption-1-regular leading-5 text-text-tertiary">先让 AI 填好映射，再由你确认或继续改。</div>
                       </div>
                       <Button variant="ai" size="sm" disabled={aiMappingBusy} onClick={() => void generateAiMapping()}>{aiMappingBusy ? "识别中" : "AI 识别"}</Button>
                     </div>
@@ -796,22 +799,8 @@ export function ScoresWorkspace({
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-separator-border px-5 py-4">
-              <button
-                type="button"
-                onClick={() => setMappingModalOpen(false)}
-                className="rounded-xl border border-border-button-default bg-background-primary-default px-4 py-2 text-body-regular text-text-secondary hover:bg-background-secondary-default"
-                style={{ fontWeight: 800 }}
-              >
-                先不应用
-              </button>
-              <button
-                type="button"
-                onClick={applyManualMapping}
-                className="rounded-xl bg-accent-600 px-4 py-2 text-body-regular text-text-white hover:bg-accent-700"
-                style={{ fontWeight: 900 }}
-              >
-                应用映射
-              </button>
+              <Button variant="secondary" onClick={() => setMappingModalOpen(false)}>先不应用</Button>
+              <Button onClick={applyManualMapping}>应用映射</Button>
             </div>
           </div>
         </div>

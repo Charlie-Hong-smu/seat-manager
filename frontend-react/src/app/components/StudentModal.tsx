@@ -525,7 +525,7 @@ export function StudentModal({
 
   return (
     <div className={`soft-backdrop-enter app-modal-overlay fixed inset-0 ${layerClassName} flex items-center justify-center p-4`}>
-      <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} className="modal-panel-enter app-modal-panel flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden outline-none">
+      <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} className="student-detail-panel modal-panel-enter app-modal-panel flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden outline-none">
         {/* Header */}
         <div className="shrink-0 border-b border-separator-border p-5 pb-4">
           <div className="relative flex min-h-10 items-center justify-between">
@@ -561,7 +561,7 @@ export function StudentModal({
           </div>
         </div>
 
-        <div className="relative shrink-0 border-b border-separator-border pr-28">
+        <div className="student-detail-tabs relative shrink-0 border-b border-separator-border pr-28">
           <UnderlineTabs value={activeTab} options={STUDENT_DETAIL_TABS} onChange={changeActiveTab} ariaLabel="学生详情" className="border-b-0 px-6 pt-3" />
           {activeTab === "profile" && <div className="absolute bottom-2 right-6">{profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存</Button></div> : <Button size="sm" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}</div>}
         </div>

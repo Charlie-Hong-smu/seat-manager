@@ -84,6 +84,11 @@ export function IconButton({ label, size = "md", active = false, tone = "default
       tone === "danger" && "text-status-danger-600 bg-status-danger-50", className)}>{children}</BoardButton>;
 }
 
+/** Compact workspaces keep their business panes mounted while showing one at a time. */
+export function MobilePaneTabs<T extends string>({ value, onChange, label, options }: { value: T; onChange: (value: T) => void; label: string; options: Array<{ value: T; label: string }> }) {
+  return <div className="app-mobile-pane-tabs"><SegmentedControl value={value} onChange={onChange} ariaLabel={label} options={options} className="w-full" /></div>;
+}
+
 export function InlineStatus({ message, tone = "auto", className = "" }: {
   message: string;
   tone?: "auto" | "info" | "success" | "error" | "ai";
@@ -216,10 +221,10 @@ export function ModalShell({ open, title, description, children, footer, onClose
   const descriptionId = useId();
   const panelRef = useModalFocus(open, onClose);
   return createPortal(<DialogPresence open={open}><div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[90] grid place-items-center p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter app-modal-panel w-full overflow-hidden outline-none ${className}`}>
-      <header className="flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-title-3-semibold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
-      <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
-      {footer && <footer className="app-modal-footer flex flex-wrap justify-end gap-2 px-5 py-3.5">{footer}</footer>}
+    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter app-modal-panel app-modal-shell flex max-h-[calc(100dvh-32px)] w-full flex-col overflow-hidden outline-none ${className}`}>
+      <header className="shrink-0 flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-title-3-semibold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
+      <div className="min-h-0 max-h-[70dvh] overflow-y-auto p-5">{children}</div>
+      {footer && <footer className="app-modal-footer shrink-0 flex flex-wrap justify-end gap-2 px-5 py-3.5">{footer}</footer>}
     </div>
   </div></DialogPresence>, document.body);
 }

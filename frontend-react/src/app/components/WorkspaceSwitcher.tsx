@@ -366,23 +366,23 @@ export function WorkspaceSwitcher({ onChanged, onBeforeMutate }: Props) {
   }
 
   return (
-    <div className="relative">
+    <div className="app-workspace-switcher relative min-w-0">
       <button
         onClick={() => { setOpen(v => !v); setMode("menu"); }}
-        className="flex items-center gap-2 px-3 py-1.5 text-body-regular text-text-primary bg-background-secondary-default hover:bg-background-tertiary-default rounded-xl border border-border-button-default transition-colors"
+        className="app-workspace-trigger flex max-w-full items-center gap-2 px-3 py-1.5 text-body-regular text-text-primary bg-background-secondary-default hover:bg-background-tertiary-default rounded-xl border border-border-button-default transition-colors"
         style={{ fontWeight: 600 }}
       >
         <School className="w-3.5 h-3.5 text-accent-500" />
-        <span className="max-w-48 truncate">{currentName}</span>
-        <span className="text-text-tertiary">·</span>
-        <span className="text-text-secondary">{current.term.label}</span>
+        <span className="min-w-0 max-w-48 truncate">{currentName}</span>
+        <span className="app-workspace-term text-text-tertiary">·</span>
+        <span className="app-workspace-term whitespace-nowrap text-text-secondary">{current.term.label}</span>
         <ChevronDown className="w-3.5 h-3.5 text-text-tertiary" />
       </button>
 
       {open && <div className="fixed inset-0 z-10" onClick={closeAll} />}
       <AnimatedPopover
         open={open}
-        className="absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-lg"
+        className="app-workspace-menu absolute left-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-lg"
       >
             <MotionSwitch transitionKey={mode}>
             {mode === "menu" && (

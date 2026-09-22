@@ -1,3 +1,4 @@
+import { useMediaQuery } from "./hooks/useMediaQuery";
 import { captureSeatChange, restoreSeatChange, restoreSeatSnapshot, type SeatUndoEntry } from "./state/seatWorkflow";
 import { normalizeFollowupTypes } from "./state/followupTypes";
 import { getDutyGroups, readClassDuties, type ClassDutiesBinding } from "./state/classDuties";
@@ -115,6 +116,8 @@ export default function App() {
   const writeAccess = useWorkspaceWriteAccess(reloadState);
   const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
   const [workspaceStorage, setWorkspaceStorage] = useState(() => inspectWorkspaceStorage());
+  const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [sidebarTab, commitSidebarTab] = useState<AppTab>("today");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1199px)").matches);
   const [selectedStudentId, setSelectedStudentId] = useState<StudentId | null>(null);
@@ -263,6 +266,7 @@ export default function App() {
   }
 
   function setSidebarTab(tab: AppTab) {
+    setMobileNavigationOpen(false);
     if (tab === "comments" && sidebarTab !== "comments") {
       commentReturnTab.current = sidebarTab;
       commentReturnSidebarCollapsed.current = sidebarCollapsed;
@@ -1023,13 +1027,16 @@ export default function App() {
 
   return (
     <AppShell
+      isMobile={isMobile}
+      mobileNavigationOpen={mobileNavigationOpen}
+      onCloseMobileNavigation={() => setMobileNavigationOpen(false)}
       sidebarCollapsed={sidebarCollapsed}
       header={
         <TopHeader
           students={students}
-          sidebarCollapsed={sidebarCollapsed}
+          sidebarCollapsed={isMobile ? !mobileNavigationOpen : sidebarCollapsed}
           accountOpen={accountOpen}
-          onToggleSidebar={() => setSidebarCollapsed(v => !v)}
+          onToggleSidebar={() => isMobile ? setMobileNavigationOpen(v => !v) : setSidebarCollapsed(v => !v)}
           onToggleAccount={() => setAccountOpen(v => !v)}
           onCloseAccount={() => setAccountOpen(false)}
           onInstallApp={handleInstallApp}
@@ -1051,7 +1058,7 @@ export default function App() {
       sidebar={
         <Sidebar
           activeTab={sidebarTab}
-          collapsed={sidebarCollapsed}
+          collapsed={isMobile ? false : sidebarCollapsed}
           students={students}
           dormitories={dormitories}
           seatOrder={seatOrder}

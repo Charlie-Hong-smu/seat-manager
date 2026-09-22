@@ -478,10 +478,10 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
         </div>
       </div>
 
-      <MotionSwitch transitionKey={activeTab} contentClassName="p-6 flex flex-col gap-5">
+      <MotionSwitch transitionKey={activeTab} contentClassName="grade-content p-6 flex flex-col gap-5">
         {activeTab === "single" ? (
           <>
-            <div className="grid grid-cols-4 divide-x divide-separator-border overflow-hidden rounded-xl border border-separator-border bg-background-primary-default">
+            <div className="grade-stat-grid grid grid-cols-4 divide-x divide-separator-border overflow-hidden rounded-xl border border-separator-border bg-background-primary-default">
               {[
                 { label: "参考人数", value: `${rows.length} 人`, sub: `${subjects.length} 个科目` },
                 { label: metricKey === "total" ? "班级平均分" : `${metricLabel}平均分`, value: formatScore(avgMetric ?? avgTotal), sub: `满分 ${metricKey === "total" ? subjects.length * 100 : 100}` },

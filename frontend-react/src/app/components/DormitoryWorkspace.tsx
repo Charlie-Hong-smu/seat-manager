@@ -1,4 +1,5 @@
 import type { ClassDutiesBinding } from "../state/classDuties";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { isValidDateKey } from "../state/dateKey";
 import { useWorkspaceDraftState } from "../hooks/useWorkspaceDraftState";
 import { findMatchingFollowupTask } from "../state/dailyManagement";
@@ -33,7 +34,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { MotionCollapse, ConfirmDialog, DatePicker, DialogPresence, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { MobilePaneTabs, MotionCollapse, ConfirmDialog, DatePicker, DialogPresence, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-status-success-600" : value < 0 ? "text-status-danger-500" : "text-text-secondary";
@@ -101,6 +102,8 @@ export function DormitoryWorkspace({
   const appDialog = useAppDialog();
   const actionToast = useActionToast();
   const [selectedDormId, setSelectedDormId] = useState(dormitories[0]?.id || "");
+  const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
+  const [mobilePane, setMobilePane] = useState<"list" | "events" | "members">("list");
   const [newName, setNewName] = useWorkspaceDraftState("dormitory:new:newName", "");
   const [memberSearch, setMemberSearch] = useState("");
   const [editingEventId, setEditingEventId] = useState("");
@@ -207,6 +210,7 @@ export function DormitoryWorkspace({
   }
 
   function selectDorm(id: string) {
+    if (isMobile) setMobilePane("events");
     if (id !== selectedDormId) {
       runViewTransition(() => setSelectedDormId(id));
     }
@@ -472,7 +476,9 @@ export function DormitoryWorkspace({
                 actionToast.show({ message: "宿舍统计周期已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => onPeriodSettingsChange(previousSettings), duration: 6000 });
               }}
       />
-      <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr_220px] grid-rows-[minmax(0,1fr)] gap-4 overflow-hidden p-4">
+      <MobilePaneTabs value={mobilePane} onChange={setMobilePane} label="宿舍工作区" options={[{ value: "list", label: "宿舍" }, { value: "events", label: "奖罚记录" }, { value: "members", label: "成员" }]} />
+      <div className="dormitory-workspace-grid grid min-h-0 flex-1 grid-cols-[240px_1fr_220px] grid-rows-[minmax(0,1fr)] gap-4 overflow-hidden p-4">
+        <div hidden={isMobile && mobilePane !== "list"} className="dormitory-pane min-h-0 flex flex-col">
         <DormitoryListPanel
           newName={newName}
           setNewName={setNewName}
@@ -486,8 +492,9 @@ export function DormitoryWorkspace({
           periodScores={periodScores}
         />
 
+        </div>
         {/* 中间：事件账本 + 列表（带切换动画） */}
-        <main ref={mainRef} className="flex flex-col min-h-0 overflow-hidden gap-4">
+        <main hidden={isMobile && mobilePane !== "events"} ref={mainRef} className="flex flex-col min-h-0 overflow-hidden gap-4">
           {selectedDormitory ? (
             <div key={animKey} className="vt-dorm-detail flex flex-col min-h-0 flex-1 gap-4">
               {/* 标题区 + 统计 */}
@@ -870,6 +877,7 @@ export function DormitoryWorkspace({
           )}
         </main>
 
+        <div hidden={isMobile && mobilePane !== "members"} className="dormitory-pane min-h-0 flex flex-col">
         <DormitoryMembersPanel
           leaderStudentId={selectedDormitory ? classDuties?.value.dormitoryLeaders[selectedDormitory.id] : undefined}
           onLeaderChange={classDuties && selectedDormitory ? id => { classDuties.onChange(current => ({ ...current, dormitoryLeaders: { ...current.dormitoryLeaders, [selectedDormitory.id]: id } })); actionToast.show({ message: id ? "宿舍长已设置" : "已取消宿舍长" }); } : undefined}
@@ -883,6 +891,7 @@ export function DormitoryWorkspace({
           assignableStudents={assignableStudents}
           addMemberWithAnimation={addMemberWithAnimation}
         />
+        </div>
       </div>
 
       <DialogPresence open={presetManagerOpen}>

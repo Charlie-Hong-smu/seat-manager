@@ -1,3 +1,4 @@
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useScopedRequest } from "../hooks/useScopedRequest";
 import { getCurrentWorkspaceScope } from "../state/workspaces";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -40,7 +41,7 @@ import {
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
-import { MotionList, MotionCollapse, DialogPresence, AiGenerationPanel, Button, IconButton, MotionSwitch, SegmentedControl, useModalFocus, useAppDialog } from "./ui";
+import { MobilePaneTabs, MotionList, MotionCollapse, DialogPresence, AiGenerationPanel, Button, IconButton, MotionSwitch, SegmentedControl, useModalFocus, useAppDialog } from "./ui";
 import {
   addCommentCustomOption,
   COMMENT_LENGTH_MODES,
@@ -177,6 +178,8 @@ function downloadTextFile(filename: string, content: string, type: string): void
 
 export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) {
   const appDialog = useAppDialog();
+  const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
+  const [mobilePane, setMobilePane] = useState<"roster" | "editor" | "materials">("editor");
   const [initialBatchState] = useState(() => loadCommentBatchState(students));
   const initialRubric = useMemo(() => readCommentRubric(), []);
   const [storedComments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
@@ -639,6 +642,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   }
 
   function selectStudent(studentId: StudentId) {
+    if (isMobile && workbenchMode === "single") setMobilePane("editor");
     setSelectedId(studentId);
     setShowFollowupPanel(false);
   }
@@ -999,7 +1003,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         <div className="flex min-w-0 items-center gap-3">
           <IconButton label="返回上一页面" onClick={onClose}><ArrowLeft className="h-4 w-4" /></IconButton>
           <h2 className="shrink-0 text-headline-semibold text-text-primary">评语工作台</h2>
-          <span className="text-body-semibold text-text-tertiary">
+          <span className="comment-generated-count whitespace-nowrap text-body-semibold text-text-tertiary">
             <span className="text-status-success-600">{generatedCount}</span> / {students.length} 已生成
           </span>
           <div
@@ -1021,7 +1025,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button size="sm" variant="secondary" disabled={batchRunning || singleGenerationPhase !== "idle" || !unsavedComments.some(comment => comment.text.trim())} onClick={() => void saveUnsavedComments()}><Save className="h-4 w-4"/>保存待确认评语 {unsavedComments.filter(comment => comment.text.trim()).length || ""}</Button>
+          <Button className="comment-save-pending" size="sm" variant="secondary" disabled={batchRunning || singleGenerationPhase !== "idle" || !unsavedComments.some(comment => comment.text.trim())} onClick={() => void saveUnsavedComments()}><Save className="h-4 w-4"/>保存待确认评语 {unsavedComments.filter(comment => comment.text.trim()).length || ""}</Button>
           <button
             type="button"
             onClick={() => { setExportSelectedIds(new Set(generatedExportIds)); setShowExportModal(true); }}
@@ -1033,8 +1037,9 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         </div>
       </header>
 
+      <MobilePaneTabs value={mobilePane} onChange={setMobilePane} label="评语工作区" options={[{ value: "roster", label: "学生名单" }, { value: "editor", label: "写评语" }, { value: "materials", label: "素材与 AI" }]} />
       <div className="comment-workbench-columns grid min-h-0 flex-1 overflow-hidden">
-        <aside className="comment-workbench-pane comment-workbench-roster flex min-h-0 flex-col border-r border-[var(--app-border)] bg-background-primary-default">
+        <aside hidden={isMobile && mobilePane !== "roster"} data-mobile-pane="roster" className="comment-workbench-pane comment-workbench-roster flex min-h-0 flex-col border-r border-[var(--app-border)] bg-background-primary-default">
           <div className="space-y-3 border-b border-[var(--app-border)] p-3">
             <SegmentedControl value={workbenchMode} onChange={setWorkbenchMode} ariaLabel="评语处理模式" className="w-full" options={[{ value: "single", label: "逐人", icon: <UserRound className="h-3.5 w-3.5" /> }, { value: "batch", label: "批量", icon: <Users className="h-3.5 w-3.5" /> }]}/>
             <div className="relative">
@@ -1114,7 +1119,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           </div>
         </aside>
 
-        <main className="comment-workbench-pane comment-workbench-editor min-h-0 min-w-0 bg-background-primary-default">
+        <main hidden={isMobile && mobilePane !== "editor"} data-mobile-pane="editor" className="comment-workbench-pane comment-workbench-editor min-h-0 min-w-0 bg-background-primary-default">
           <MotionSwitch transitionKey={selectedId} contentIndex={selectedStudentIndex} fixed className="h-full">
           <section className="flex h-full min-h-0 flex-col bg-background-primary-default">
             <div className="shrink-0 overflow-hidden border-b border-[var(--app-border)] px-4 py-3.5 xl:px-5">
@@ -1242,7 +1247,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
           </MotionSwitch>
         </main>
 
-        <aside className="comment-workbench-pane comment-workbench-materials min-h-0 border-l border-[var(--app-border)] bg-background-primary-default">
+        <aside hidden={isMobile && mobilePane !== "materials"} data-mobile-pane="materials" className="comment-workbench-pane comment-workbench-materials min-h-0 border-l border-[var(--app-border)] bg-background-primary-default">
           <MotionSwitch transitionKey={selectedId} contentIndex={selectedStudentIndex} fixed className="h-full">
           <section className="flex h-full min-h-0 flex-col bg-background-primary-default">
             <div className="shrink-0 border-b border-[var(--app-border)] px-3.5 py-3">

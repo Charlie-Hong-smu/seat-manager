@@ -1,5 +1,7 @@
 import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import { Button } from "./ui";
 import { ChevronDown, Lock, UserRoundPlus, Users } from "lucide-react";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
 import { resolveSeatLayout } from "../state/seatLayout";
@@ -69,6 +71,7 @@ const SeatCard = memo(function SeatCard({
   isConcealed,
   isDropTarget,
   dragActive,
+  interactiveEmpty,
   visualTransform,
   positionLabel,
   cardMode,
@@ -84,6 +87,7 @@ const SeatCard = memo(function SeatCard({
   isConcealed: boolean;
   isDropTarget: boolean;
   dragActive: boolean;
+  interactiveEmpty: boolean;
   visualTransform?: string;
   positionLabel?: string;
   cardMode: "compact" | "detail";
@@ -109,6 +113,10 @@ const SeatCard = memo(function SeatCard({
   if (!studentId || !student) {
     return (
       <div
+        role={interactiveEmpty ? "button" : undefined}
+        tabIndex={interactiveEmpty ? 0 : undefined}
+        aria-label={interactiveEmpty ? `空座位 ${seatPositionLabel}` : undefined}
+        onKeyDown={event => { if (interactiveEmpty && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.currentTarget.click(); } }}
         data-seat-index={seatIndex}
         data-seat-locked={isLocked ? "true" : "false"}
         className={`relative h-full min-h-0 overflow-hidden rounded-xl border border-dashed text-caption-1-regular text-text-tertiary select-none transition-[background-color,border-color,box-shadow] duration-200 ${isLocked ? "border-status-warning-200 bg-status-warning-50/30" : "border-border-button-default/80 bg-transparent hover:border-accent-200 hover:bg-accent-50/30"} ${isDropTarget ? "border-accent-400 bg-accent-50/80 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : ""}`}
@@ -165,7 +173,7 @@ const SeatCard = memo(function SeatCard({
       <div className={`absolute left-2.5 right-2.5 flex min-w-0 items-center gap-1.5 transition-[top,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${cardMode === "compact" ? "top-1/2 -translate-y-1/2" : "top-2"}`}>
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${genderDot}`} title={student.gender || "未知"} />
         <span className="min-w-0 flex-1 truncate text-body-semibold text-text-primary">{student.name}</span>
-        <span className={`shrink-0 max-w-[3.5rem] truncate text-[10px] tabular-nums text-text-tertiary transition-[opacity,transform] duration-200 ${cardMode === "detail" ? "translate-x-0 opacity-100 delay-100" : "pointer-events-none translate-x-1 opacity-0 delay-0"}`}>{seatPositionLabel}</span>
+        <span data-seat-position-label className={`shrink-0 max-w-[3.5rem] truncate text-[10px] tabular-nums text-text-tertiary transition-[opacity,transform] duration-200 ${cardMode === "detail" ? "translate-x-0 opacity-100 delay-100" : "pointer-events-none translate-x-1 opacity-0 delay-0"}`}>{seatPositionLabel}</span>
       </div>
 
       {/* 次要信息在卡片接近展开后再淡入，避免高度动画中途反复裁切。 */}
@@ -195,6 +203,15 @@ const SeatCard = memo(function SeatCard({
 });
 
 export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelectStudent, onMoveSeat, onMoveStudentToWaiting, onAssignStudentToSeat, lockedSeats, onToggleLock }: Props) {
+  const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
+  const hasCoarsePointer = useMediaQuery("(any-pointer: coarse)");
+  const touchControls = isMobile || hasCoarsePointer;
+  const [touchMoveMode, setTouchMoveMode] = useState(false);
+  const [touchSourceId, setTouchSourceId] = useState<StudentId | null>(null);
+  const [touchStatus, setTouchStatus] = useState("");
+  const touchFlights = useRef<Animation[]>([]);
+  useEffect(() => () => touchFlights.current.forEach(animation => animation.cancel()), []);
+  const touchMoving = touchControls && touchMoveMode;
   const [draggingSeat, setDraggingSeat] = useState<number | null>(null);
   const [dragVisual, setDragVisual] = useState<DragVisualState | null>(null);
   const [waitingDockOpen, setWaitingDockOpen] = useState(false);
@@ -228,6 +245,29 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   }, [seatedIds, studentById, students]);
   const previousWaitingCountRef = useRef(waitingStudents.length);
   const [pendingStudentId, setPendingStudentId] = useState<StudentId | null>(null);
+
+  function chooseTouchSeat(index: number) {
+    if (lockedSeats.has(index)) { setTouchStatus("该座位已锁定，请先解锁。"); return; }
+    if (pendingStudentId) { assignWaitingStudentToSeat(pendingStudentId, index); setTouchSourceId(null); return; }
+    const from = touchSourceId ? seatOrder.indexOf(touchSourceId) : -1;
+    if (from < 0) {
+      setTouchSourceId(seatOrder[index] || null);
+      setTouchStatus(seatOrder[index] ? "再点目标座位；点原位可取消。" : "先点需要调整的学生。");
+      return;
+    }
+    if (from === index) { setTouchSourceId(null); setTouchStatus(""); return; }
+    if (lockedSeats.has(from)) { setTouchSourceId(null); setTouchStatus("原座位已锁定，请重新选择。"); return; }
+    const ids = [seatOrder[from], seatOrder[index]].filter((id): id is string => Boolean(id));
+    const cards = () => Array.from(boardRef.current?.querySelectorAll<HTMLElement>("[data-student-id]") || []).filter(node => ids.includes(node.dataset.studentId!));
+    const previous = new Map(cards().map(node => [node.dataset.studentId, node.getBoundingClientRect()]));
+    touchFlights.current.forEach(animation => animation.cancel());
+    flushSync(() => { onMoveSeat(from, index); setTouchSourceId(null); setTouchStatus("座位已调整，可在工具栏撤销。"); });
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    touchFlights.current = cards().flatMap(node => {
+      const before = previous.get(node.dataset.studentId), after = node.getBoundingClientRect();
+      return before ? [node.animate([{ transform: `translate(${before.x - after.x}px, ${before.y - after.y}px)` }, { transform: "translate(0, 0)" }], { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" })] : [];
+    });
+  }
 
   // 简洁/详细切换：渲染阶段趁 DOM 仍是旧模式时快照卡片几何，提交后逐卡 FLIP，
   // 行级错峰播放，避免整版网格逐帧 reflow 造成的锯齿感。
@@ -409,6 +449,7 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
     event: ReactPointerEvent<HTMLElement>,
     source: { sourceType: "seat" | "waiting"; studentId: StudentId; fromIndex: number | null },
   ) {
+    if (event.pointerType === "touch" && touchControls) return; // Touch scrolls the board; explicit tap-to-move avoids accidental rearrangement.
     if (event.button !== 0 || dragVisual && dragVisual.phase !== "dragging" || (source.fromIndex !== null && lockedSeats.has(source.fromIndex))) return;
     dragCleanupRef.current?.();
     if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
@@ -737,10 +778,14 @@ export function SeatBoard({ cardMode, students, seatOrder, seatSettings, onSelec
   );
 
   return <div className="flex h-full min-h-0 flex-col gap-3">
+      {touchControls && <div className="seat-touch-tools flex shrink-0 flex-wrap items-center gap-2">
+        <Button size="sm" variant={touchMoving ? "primary" : "secondary"} aria-pressed={touchMoving} onClick={() => { setTouchMoveMode(value => !value); setTouchSourceId(null); setTouchStatus(""); setPendingStudentId(null); }}>{touchMoving ? "完成调座" : "点选调座"}</Button>
+        {touchMoving && <span role="status" className="min-w-0 flex-1 text-caption-1-regular text-text-secondary">{touchStatus || "点选学生，再点目标座位。"}</span>}
+      </div>}
       <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
         <SeatLayoutSurface layout={layout} detail={cardMode === "detail"} renderSeat={(seat, seatIndex) =>
-          <div className="seat-card-enter h-full min-h-0" style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms` }} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) assignWaitingStudentToSeat(studentId, seatIndex); }} onClick={() => { if (pendingStudentId) assignWaitingStudentToSeat(pendingStudentId, seatIndex); }}>
-            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isConcealed={dragVisual?.phase === "settling" && dragVisual.studentId === seatOrder[seatIndex]} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} positionLabel={seat.label} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} />
+          <div className="seat-card-enter h-full min-h-0" data-touch-selected={touchMoving && touchSourceId === seatOrder[seatIndex] ? "true" : undefined} onClickCapture={event => { if (touchMoving && !(event.target as HTMLElement).closest("button")) { event.stopPropagation(); chooseTouchSeat(seatIndex); } }} onKeyDownCapture={event => { if (touchMoving && (event.key === "Enter" || event.key === " ") && !(event.target as HTMLElement).closest("button")) { event.preventDefault(); event.stopPropagation(); chooseTouchSeat(seatIndex); } }} style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms` }} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) assignWaitingStudentToSeat(studentId, seatIndex); }} onClick={() => { if (pendingStudentId) assignWaitingStudentToSeat(pendingStudentId, seatIndex); }}>
+            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isConcealed={dragVisual?.phase === "settling" && dragVisual.studentId === seatOrder[seatIndex]} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} interactiveEmpty={touchMoving || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} positionLabel={seat.label} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} />
           </div>
         } />
       </div>
