@@ -59,7 +59,7 @@ test("restoring a snapshot matches stable IDs and undo restores the previous lay
 test("per-student draft settings survive material edits and reload and bulk save requires confirmation", async ({ page }) => {
   await login(page); await nav(page, /^评语工作台/);
   await workbench(page).getByRole("button", { name: /生成设置/ }).click();
-  await workbench(page).getByRole("button", { name: "自定义", exact: true }).first().click();
+  await workbench(page).getByRole("button", { name: "自定义评语字数" }).click();
   const wordCount = workbench(page).getByRole("spinbutton", { name: "自定义字数" });
   await wordCount.fill("");
   await wordCount.pressSequentially("230");

@@ -66,7 +66,7 @@ test("quick-record undo preserves archived students", async ({ page }) => {
     await page.getByRole("button", { name: "添加到班级" }).click();
   }
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
-  await page.getByText("归档保留学生", { exact: true }).click();
+  await page.locator("[data-student-id]").filter({ hasText: "归档保留学生" }).click();
   const studentDialog = page.getByRole("dialog", { name: "归档保留学生学生详情" });
   await studentDialog.getByRole("button", { name: "移出当前班级" }).click();
   await page.getByRole("button", { name: "确认移出班级" }).click();
@@ -143,9 +143,11 @@ test("main seat editor supports animated range selection, isolated slots and a p
   })).toMatchObject({ template: "freeform", podium: expect.any(Object) });
 
   await page.getByRole("button", { name: "排座", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "排座" });
-  await expect(dialog.getByRole("button", { name: "布局设计" })).toHaveCount(0);
-  await dialog.getByRole("button", { name: "关闭排座设置" }).click();
+  await expect(page.getByText("排座规则", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "布局设计" })).toHaveCount(0);
+  await page.getByRole("button", { name: "返回座位" }).click();
+  await expect(page.locator(".seat-mode-toolbar")).toHaveAttribute("data-seat-flow", "view");
+  await expect(page.locator(".seat-mode-toolbar__shuffle")).toHaveAttribute("aria-hidden", "true");
 });
 
 test("custom classroom grid renders without overlapping seat cards", async ({ page }) => {
