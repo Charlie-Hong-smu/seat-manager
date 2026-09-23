@@ -12,7 +12,7 @@ const PRODUCT_AUTH_EXPIRES_KEY = "seat-manager-product-auth-expires";
 const PRODUCT_AUTH_SESSION_TOKEN_KEY = "seat-manager-product-session-token";
 const PRODUCT_AUTH_SESSION_EXPIRES_KEY = "seat-manager-product-session-expires";
 const PRODUCT_DEVICE_ID_KEY = "seat-manager-product-device-id";
-const PRODUCT_REMEMBER_DAYS = 30;
+export const PRODUCT_REMEMBER_DAYS = 90;
 
 interface ProductAuth {
   token: string;
@@ -28,7 +28,7 @@ function hasBrowserStorage(): boolean {
 // ── 统一入口:登录状态 / 退出 ─────────────────────────────────────────────
 
 export function isAuthenticated(): boolean {
-  return Boolean(getStoredProductAuth());
+  return Boolean(getProductAuth());
 }
 
 export function enterLocalPreviewSession(): boolean {
@@ -121,7 +121,7 @@ export function setAuthenticated(remember: boolean): void {
 
 // ── 产品授权码(商用版) ──────────────────────────────────────────────────
 
-function getStoredProductAuth(): ProductAuth | null {
+export function getProductAuth(): ProductAuth | null {
   if (!hasBrowserStorage()) {
     return null;
   }
@@ -178,7 +178,7 @@ function storeProductAuth(auth: ProductAuth, remember: boolean): void {
 }
 
 export function getProductAuthToken(): string {
-  return getStoredProductAuth()?.token || "";
+  return getProductAuth()?.token || "";
 }
 
 export async function unbindCurrentDevice(): Promise<void> {

@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleX, Pencil, RotateCcw } from "lucide-react";
+import { CheckCircle2, CircleX, ListChecks, Pencil, RotateCcw } from "lucide-react";
 import { followupStudentLabel, getFollowupStudentIds, type FollowupTaskGroup } from "../state/followupStudents";
 import { getTaskUrgency, todayKey } from "../state/dailyManagement";
 import type { AppStudent, BusinessEntityRef, FollowupTask } from "../state/types";
@@ -6,10 +6,11 @@ import type { FollowupTaskDraft } from "./FollowupTaskForm";
 import { ResolutionEditor, SourceLink } from "./LinkedWorkflow";
 import { IconButton, MotionCollapse } from "./ui";
 
-export function HomeworkFollowupGroupCard({ group, students, focusedTaskId, resolutionTaskId, onRequestTask, onTaskStatusChange, onSaveResolution, onSetResolutionTaskId, onOpenSource, sourceExists }: {
+export function FollowupTaskGroupCard({ group, students, focusedTaskId, resolutionTaskId, onRequestTask, onTaskStatusChange, onGroupStatusChange, onSaveResolution, onSetResolutionTaskId, onOpenSource, sourceExists }: {
   group: FollowupTaskGroup; students: AppStudent[]; focusedTaskId: string; resolutionTaskId: string;
   onRequestTask: (draft: FollowupTaskDraft) => void;
   onTaskStatusChange: (id: string, status: FollowupTask["status"]) => void;
+  onGroupStatusChange: (ids: string[], status: FollowupTask["status"]) => void;
   onSaveResolution: (id: string, note: string) => void;
   onSetResolutionTaskId: (id: string) => void;
   onOpenSource?: (ref: BusinessEntityRef) => void;
@@ -20,7 +21,7 @@ export function HomeworkFollowupGroupCard({ group, students, focusedTaskId, reso
   const members = [...group.members].sort((a, b) => followupStudentLabel(a, names).localeCompare(followupStudentLabel(b, names), "zh-CN"));
   const pending = members.filter(task => task.status === "pending");
   const urgency = pending.some(task => getTaskUrgency(task) === "overdue") ? "overdue" : pending.some(task => getTaskUrgency(task) === "today") ? "today" : "none";
-  const dot = urgency === "overdue" ? "bg-status-danger-500" : urgency === "today" ? "bg-status-warning-500" : pending.length ? "bg-accent-500" : "bg-status-success-500";
+  const dot = urgency === "overdue" ? "bg-status-danger-500" : urgency === "today" ? "bg-status-warning-500" : pending.length ? "bg-accent-500" : members.every(task => task.status === "completed") ? "bg-status-success-500" : "bg-background-primary-disabled";
   return <article className={`rounded-[var(--app-radius-sm)] border bg-background-primary-default p-4 ${members.some(task => task.id === focusedTaskId) ? "border-accent-300 ring-2 ring-accent-100" : "border-[var(--app-border)]"}`}>
     <div className="flex items-start gap-3"><span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${dot}`}/><div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2"><h3 className="text-body-semibold text-text-primary">{representative.title}</h3><span className="rounded-md bg-background-tertiary-default px-2 py-0.5 text-[10px] font-bold text-text-secondary">{representative.type}</span><SourceLink source={representative.source} sourceRef={representative.sourceRef} onOpen={onOpenSource} exists={!representative.sourceRef || sourceExists?.(representative.sourceRef) !== false}/></div>
@@ -37,6 +38,10 @@ export function HomeworkFollowupGroupCard({ group, students, focusedTaskId, reso
           </li>;
         })}
       </ul>
+      {pending.length > 1 && <div className="mt-3 flex flex-wrap gap-2">
+        <IconButton size="sm" label="全部完成" title={`全部完成（${pending.length} 人）`} onClick={() => onGroupStatusChange(pending.map(task => task.id), "completed")}><ListChecks className="size-4"/></IconButton>
+        <IconButton size="sm" label="全部取消" title={`全部取消（${pending.length} 人）`} onClick={() => onGroupStatusChange(pending.map(task => task.id), "cancelled")}><CircleX className="size-4"/></IconButton>
+      </div>}
     </div></div>
   </article>;
 }

@@ -12,7 +12,7 @@ import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, 
 import { MotionList, Button, Card, Chip, FileDropZone, IconButton, InlineStatus, MetricStrip, ToolDrawer } from "../ui";
 import { ResolutionEditor } from "../LinkedWorkflow";
 
-export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onSaveCommunication, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
+export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onSaveCommunication, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, onCompleteTasks, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
   students: AppStudent[];
   attendance: AttendanceRecord[];
   tasks: FollowupTask[];
@@ -30,6 +30,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   onOpenQuickRecord: () => void;
   onOpenEntity?: (ref: BusinessEntityRef) => void;
   onCompleteTask?: (taskId: string) => boolean | Promise<boolean>;
+  onCompleteTasks?: (taskIds: string[]) => boolean | Promise<boolean>;
   onSaveTaskResolution?: (taskId: string, note: string) => void;
   onContinueTask?: (taskId: string) => void;
   initialDraftId?: string;
@@ -77,12 +78,15 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
 
   // Commit through the shared command immediately; keyed rows handle visual removal.
   async function completeItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
-    if (!onCompleteTask || item.kind !== "task" || (item.taskIds?.length || 0) > 1 || completingIds.has(item.id)) return;
+    if (item.kind !== "task" || completingIds.has(item.id)) return;
+    const memberIds = item.taskIds?.length ? item.taskIds : [item.entityId];
+    if (memberIds.length > 1 ? !onCompleteTasks : !onCompleteTask) return;
     setCompletingIds(current => new Set(current).add(item.id));
     try {
-      if (await onCompleteTask(item.entityId)) {
+      const completed = memberIds.length > 1 ? await onCompleteTasks?.(memberIds) : await onCompleteTask?.(item.entityId);
+      if (completed) {
         setQueueOpen(false);
-        setResolutionTaskId(item.entityId);
+        if (memberIds.length === 1) setResolutionTaskId(item.entityId);
       }
     } finally {
       setCompletingIds(current => { const next = new Set(current); next.delete(item.id); return next; });
@@ -98,7 +102,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
           <span className="min-w-0 flex-1"><strong className="block truncate text-body-medium text-text-primary">{item.title}</strong><span className="mt-1 block text-caption-1-regular text-text-secondary">{item.detail.replace(/ · (今日截止|已逾期)$/, "")}</span></span>
           <Chip variant="caption" color={item.urgency === 0 ? "rose" : "soft"} className="hidden sm:inline-flex">{item.urgency === 0 ? "已逾期" : item.kind === "attendance" ? "需关注" : item.urgency === 3 ? "计划处理" : "今日截止"}</Chip>
         </button>
-        {item.kind === "task" && onCompleteTask && (item.taskIds?.length || 0) <= 1 ? <IconButton label={`完成跟进：${item.title}`} size="sm" disabled={completingIds.has(item.id)} onClick={() => void completeItem(item)}><CheckCircle2 className="size-4"/></IconButton> : <ArrowRight aria-hidden="true" className="mx-2 size-4 shrink-0 text-foreground-icon-tertiary"/>}
+        {item.kind === "task" && ((item.taskIds?.length || 0) > 1 ? onCompleteTasks : onCompleteTask) ? <IconButton label={`${(item.taskIds?.length || 0) > 1 ? "完成全部跟进" : "完成跟进"}：${item.title}`} size="sm" disabled={completingIds.has(item.id)} onClick={() => void completeItem(item)}><CheckCircle2 className="size-4"/></IconButton> : <ArrowRight aria-hidden="true" className="mx-2 size-4 shrink-0 text-foreground-icon-tertiary"/>}
       </div>
     </div>;
   }

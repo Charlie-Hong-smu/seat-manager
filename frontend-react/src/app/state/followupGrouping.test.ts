@@ -4,7 +4,7 @@ import { createActivityEvent } from "./activityEvents";
 import { changeFollowupTaskStatus, permanentlyDeleteStudent, syncCompletedFollowupHomework } from "./classManagementCommands";
 import { createFollowupTask, editFollowupTask, findMatchingFollowupTask, normalizeFollowupTasks, prepareFollowupTasks } from "./dailyManagement";
 import { buildTimeline, filterTimeline, inspectStateHealth } from "./dataInsights";
-import { getFollowupStudentIds, groupFollowupTasks } from "./followupStudents";
+import { followupGroupKey, getFollowupStudentIds, groupFollowupTasks } from "./followupStudents";
 import { createEmptySeatManagerState, createSeatManagerState } from "./legacyStateAdapter";
 import { saveLegacySnapshot } from "./legacyWriteAdapter";
 import { buildTodayWorkItems, buildWeeklyFacts } from "./teacherWorkbench";
@@ -13,6 +13,40 @@ import { ensureWorkspaceBook, readCurrentSliceData } from "./workspaces";
 
 const students = [createTestStudent("a", "同名学生"), createTestStudent("b", "同名学生"), createTestStudent("c", "学生丙")];
 const input = { studentId: "a", studentIds: ["a", "b"], title: "返校打扫", dueDate: "2026-08-31", plannedDate: "2026-08-31" };
+
+describe("individual followup display groups", () => {
+  it("shows one fund collection with independent student records and separates other collections", () => {
+    const draft = { ...input, studentMode: "individual" as const, source: "manual" as const, sourceRef: { domain: "fund" as const, entityId: "collection-1" } };
+    const first = prepareFollowupTasks(draft).created;
+    expect(first).toHaveLength(2);
+    expect(groupFollowupTasks(first)).toHaveLength(1);
+    const next = prepareFollowupTasks({ ...draft, studentIds: ["c"] }, first).created;
+    expect(groupFollowupTasks([...first, ...next])[0].members).toHaveLength(3);
+    const other = prepareFollowupTasks({ ...draft, sourceRef: { domain: "fund", entityId: "collection-2" }, studentIds: ["c"] }).created;
+    expect(groupFollowupTasks([...first, ...other])).toHaveLength(2);
+  });
+
+  it("separates different wording, dates, continuations and shared matters", () => {
+    const draft = { ...input, studentMode: "individual" as const, source: "manual" as const };
+    const pair = prepareFollowupTasks(draft).created;
+    const differentDate = createFollowupTask({ ...draft, studentId: "c", studentIds: ["c"], dueDate: "2026-09-01" });
+    const continued = createFollowupTask({ ...draft, studentId: "c", studentIds: ["c"], continuedFromTaskId: pair[0].id });
+    const shared = createFollowupTask(input);
+    expect(groupFollowupTasks([...pair, differentDate, continued, shared]).map(group => group.members.length)).toEqual([2, 1, 1, 1]);
+    expect(followupGroupKey(shared)).toBeNull();
+    expect(followupGroupKey(continued)).toBeNull();
+  });
+
+  it("keeps a complete group visible and counted once after one student finishes", () => {
+    const draft = { ...input, studentMode: "individual" as const, source: "manual" as const };
+    const pair = prepareFollowupTasks(draft).created;
+    const completed = changeFollowupTaskStatus(pair[0], "completed").task;
+    const groups = groupFollowupTasks([completed, pair[1]]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].members.map(task => task.status)).toEqual(["completed", "pending"]);
+    expect(buildTodayWorkItems({ date: input.dueDate, students, tasks: [completed, pair[1]], attendance: [], homework: [] })[0].taskIds).toEqual([pair[1].id]);
+  });
+});
 
 describe("shared matters and individual followups", () => {
   it("creates one shared matter for distinct IDs, including students with the same name", () => {
