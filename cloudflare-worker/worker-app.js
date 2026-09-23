@@ -1,4 +1,5 @@
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const PRODUCT_REMEMBER_MAX_DAYS = 90;
 const SESSION_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 20 * 1024;
 const ASSISTANT_MAX_BODY_BYTES = 96 * 1024;
@@ -96,7 +97,7 @@ async function handleLicenseAuth(request, env, corsHeaders) {
   }
 
   const rememberDays = Number(body.value.rememberDays);
-  const ttl = rememberDays > 0 ? Math.min(rememberDays, 30) * 24 * 60 * 60 * 1000 : SESSION_TOKEN_TTL_MS;
+  const ttl = rememberDays > 0 ? Math.min(rememberDays, PRODUCT_REMEMBER_MAX_DAYS) * 24 * 60 * 60 * 1000 : SESSION_TOKEN_TTL_MS;
   const expiresAt = Date.now() + ttl;
   const token = await signToken({
     exp: expiresAt,
