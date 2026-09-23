@@ -53,7 +53,7 @@ python3 -m http.server 4174 --directory license-admin
 
 ## 自动发布
 
-- `.github/workflows/pages.yml`：前端变化时检查并自动发布 Zhang 先行版。
+- `.github/workflows/pages.yml`：前端变化时并行运行静态/单元检查、Zhang 两份浏览器验收和 Commercial 浏览器验收；全部通过后，使用 Zhang 第一份验收时生成的构建产物自动发布 Zhang 先行版。
 - `.github/workflows/cloudflare-commercial.yml`：只按目录变化自动发布共享 Worker 或授权管理页，不再自动发布 Commercial 前端。
 - `.github/workflows/promote-commercial.yml`：用户明确说“上线商用版”后，由 Codex传入已在 Zhang 验证的完整 commit SHA；同一入口传入上一稳定 SHA 即为回滚。
 - `frontend-react/dist` 不进入 Git；根 `index.html` 只是线上入口说明，不是应用 bundle。
