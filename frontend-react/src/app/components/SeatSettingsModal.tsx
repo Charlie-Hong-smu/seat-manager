@@ -353,7 +353,7 @@ export function SeatSettingsModal({ open, inline = false, students, settings, ca
           {!inline && <button onClick={() => { onClose(); onRandomize(); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white hover:bg-accent-700">
             <Shuffle className="h-4 w-4" />生成方案
           </button>}
-          <button onClick={() => { onClose(); onOrderByList(); }} className="flex items-center justify-center gap-1.5 rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-semibold text-text-primary hover:bg-background-secondary-default">
+          <button onClick={() => { if (!inline) onClose(); onOrderByList(); }} className="flex items-center justify-center gap-1.5 rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-semibold text-text-primary hover:bg-background-secondary-default">
             <RotateCcw className="h-4 w-4" />{inline ? "按名单立即重排" : "名单顺序"}
           </button>
           <button onClick={onUndo} disabled={!canUndo} className="flex items-center justify-center gap-1.5 rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-semibold text-text-primary hover:bg-background-secondary-default disabled:text-text-tertiary">

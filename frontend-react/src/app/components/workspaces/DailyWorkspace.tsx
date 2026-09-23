@@ -3,6 +3,7 @@ import { Users } from "lucide-react";
 import type { ClassDutiesBinding } from "../../state/classDuties";
 import { RetryableLazy, preloadFeature } from "../RetryableLazy";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   ArrowLeft,
   ChevronDown,
@@ -97,7 +98,16 @@ export function DailyWorkspace({
   onOpenFollowups: () => void;
 }) {
   const [seatFlow, setSeatFlow] = useState<"view" | "rules" | "preview">("view");
+  const [evaluationOpen, setEvaluationOpen] = useState(false);
+  const [wideSeatPanel, setWideSeatPanel] = useState(false);
   const { editingLayout, transitioning, seatPanelRef, switchLayoutEditing } = useSeatModeTransition();
+  useEffect(() => {
+    const panel = seatPanelRef.current;
+    if (!panel) return;
+    const observer = new ResizeObserver(entries => setWideSeatPanel(entries[0].contentRect.width > 1400));
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [seatPanelRef]);
   const [designerToolbarHost, setDesignerToolbarHost] = useState<HTMLDivElement | null>(null);
   const [activeTool, setActiveTool] = useState<"student" | "draw" | "duties" | null>(null);
   const [cardMode, setCardMode] = useState<"compact" | "detail">("compact");
@@ -134,15 +144,122 @@ export function DailyWorkspace({
   const todayAttendance = getAttendanceForDate(attendanceRecords, todayKey()).filter(item => activeStudentIds.has(item.studentId));
   const abnormalAttendance = todayAttendance.filter(item => item.status !== "normal" || item.late || item.earlyLeave).length;
   const dueTasks = groupFollowupTasks(followupTasks.filter(item => item.status === "pending" && item.dueDate && item.dueDate <= todayKey())).length;
+  const evaluationVisible = seatFlow === "preview" && (wideSeatPanel || evaluationOpen);
+  const seatShuffleCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => seatShuffleCleanupRef.current?.(), []);
+
+  function transitionSeatBoard(update: () => void) {
+    seatShuffleCleanupRef.current?.();
+    seatShuffleCleanupRef.current = null;
+    const layer = seatPanelRef.current?.querySelector<HTMLElement>("[data-seat-board-layer]");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const previous = new Map<number, { studentId: string | null; rect: DOMRect; content: HTMLElement }>();
+    if (layer && !reducedMotion) {
+      layer.querySelectorAll<HTMLElement>("[data-seat-index]").forEach(card => {
+        previous.set(Number(card.dataset.seatIndex), {
+          studentId: card.dataset.studentId ?? null,
+          rect: card.getBoundingClientRect(),
+          content: card.cloneNode(true) as HTMLElement,
+        });
+      });
+    }
+    flushSync(update);
+    if (!layer || reducedMotion || !previous.size) return;
+
+    // Keep desks fixed. A row wave changes only the faces of seats whose
+    // occupants changed, so a full-class shuffle never becomes a tangle of cards.
+    const origin = layer.getBoundingClientRect();
+    const positions = [...previous.values()].map(item => item.rect);
+    const topMin = Math.min(...positions.map(rect => rect.top));
+    const topRange = Math.max(1, Math.max(...positions.map(rect => rect.top)) - topMin);
+    const leftMin = Math.min(...positions.map(rect => rect.left));
+    const leftRange = Math.max(1, Math.max(...positions.map(rect => rect.left)) - leftMin);
+    const overlay = document.createElement("div");
+    overlay.className = "seat-shuffle-morph-layer";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.inert = true;
+    const animations: Animation[] = [];
+    const changedCards: HTMLElement[] = [];
+    layer.querySelectorAll<HTMLElement>("[data-seat-index]").forEach(card => {
+      const index = Number(card.dataset.seatIndex);
+      const before = previous.get(index);
+      if (!before || before.studentId === (card.dataset.studentId ?? null)) return;
+      const delay = Math.round((before.rect.top - topMin) / topRange * 238 + (before.rect.left - leftMin) / leftRange * 35);
+      const wrapper = document.createElement("div");
+      wrapper.className = "seat-shuffle-morph-ghost";
+      wrapper.dataset.seatShuffleGhost = String(index);
+      Object.assign(wrapper.style, {
+        left: `${before.rect.left - origin.left}px`, top: `${before.rect.top - origin.top}px`,
+        width: `${before.rect.width}px`, height: `${before.rect.height}px`,
+      });
+      before.content.removeAttribute("data-seat-index");
+      before.content.removeAttribute("data-student-id");
+      before.content.removeAttribute("role");
+      before.content.removeAttribute("tabindex");
+      before.content.querySelectorAll("[id]").forEach(node => node.removeAttribute("id"));
+      before.content.style.transform = "none";
+      wrapper.append(before.content);
+      overlay.append(wrapper);
+      card.dataset.seatShuffleMorphing = "true";
+      changedCards.push(card);
+      animations.push(wrapper.animate([
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+        { opacity: 0, transform: "translateY(-8px) scale(0.985)" },
+      ], { duration: 250, delay, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" }));
+      animations.push(card.animate([
+        { opacity: 0, transform: "translateY(8px) scale(0.985)" },
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+      ], { duration: 390, delay: delay + 70, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" }));
+    });
+    if (!animations.length) return;
+    layer.append(overlay);
+    const clean = () => {
+      animations.forEach(animation => animation.cancel());
+      changedCards.forEach(card => delete card.dataset.seatShuffleMorphing);
+      overlay.remove();
+    };
+    seatShuffleCleanupRef.current = clean;
+    void Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
+      if (seatShuffleCleanupRef.current !== clean) return;
+      clean();
+      seatShuffleCleanupRef.current = null;
+    });
+  }
 
   function returnToSeats() {
-    onDiscardShufflePreview();
-    setSeatFlow("view");
+    transitionSeatBoard(() => { onDiscardShufflePreview(); setSeatFlow("view"); setEvaluationOpen(false); });
     requestAnimationFrame(() => document.getElementById("seat-shuffle-trigger")?.focus({ preventScroll: true }));
   }
 
   function generatePreview() {
-    if (onRandomizeSeats()) setSeatFlow("preview");
+    transitionSeatBoard(() => { if (onRandomizeSeats()) { setSeatFlow("preview"); setEvaluationOpen(false); } });
+    requestAnimationFrame(() => document.getElementById("seat-preview-title")?.focus({ preventScroll: true }));
+  }
+
+  function regeneratePreview() {
+    transitionSeatBoard(() => { onRandomizeSeats(); });
+  }
+
+  function backToRules() {
+    transitionSeatBoard(() => { setSeatFlow("rules"); setEvaluationOpen(false); });
+    requestAnimationFrame(() => document.getElementById("seat-generate-preview")?.focus({ preventScroll: true }));
+  }
+
+  function applyPreview() {
+    transitionSeatBoard(() => { onApplyShufflePreview(); setSeatFlow("view"); setEvaluationOpen(false); });
+    requestAnimationFrame(() => document.getElementById("seat-shuffle-trigger")?.focus({ preventScroll: true }));
+  }
+
+  function orderSeatsByList() {
+    transitionSeatBoard(() => { onOrderSeatsByList(); setSeatFlow("view"); setEvaluationOpen(false); });
+    requestAnimationFrame(() => document.getElementById("seat-shuffle-trigger")?.focus({ preventScroll: true }));
+  }
+
+  function movePreviewSeat(fromIndex: number, toIndex: number) {
+    if (!shufflePreview || lockedSeats.has(fromIndex) || lockedSeats.has(toIndex)) return;
+    const order = [...shufflePreview.order];
+    [order[fromIndex], order[toIndex]] = [order[toIndex], order[fromIndex]];
+    onShufflePreviewOrderChange(order);
   }
 
   function addStudent() {
@@ -216,24 +333,34 @@ export function DailyWorkspace({
 
         </div>
         <div ref={setDesignerToolbarHost} className="seat-mode-toolbar__editor flex flex-wrap items-center gap-3 px-4 py-3" aria-hidden={!editingLayout} inert={!editingLayout || transitioning ? true : undefined} />
-        <div className="seat-mode-toolbar__shuffle flex min-h-14 items-center gap-3 px-4 py-3" aria-hidden={seatFlow === "view"} inert={seatFlow === "view" || transitioning ? true : undefined}>
+        <div className="seat-mode-toolbar__shuffle flex min-h-14 flex-wrap items-center gap-2 px-4 py-3" aria-hidden={seatFlow === "view"} inert={seatFlow === "view" || transitioning ? true : undefined}>
           <Button size="sm" variant="ghost" onClick={returnToSeats}><ArrowLeft className="h-4 w-4" />返回座位</Button>
           <span className="h-5 w-px bg-separator-border" aria-hidden="true" />
-          <div className="min-w-0"><strong className="block text-body-semibold text-text-primary">{seatFlow === "preview" ? "方案预览" : "排座规则"}</strong><span className="block text-caption-1-regular text-text-tertiary">{seatFlow === "preview" ? "尚未采用，当前座位保持原样" : "调整规则后生成方案"}</span></div>
-          {seatFlow === "preview" && shufflePreview && <span className={`ml-auto rounded-[var(--app-radius-sm)] px-3 py-1.5 text-caption-1-semibold ${shufflePreview.evaluation.details.required.every(item => item.satisfied) ? "bg-status-success-50 text-status-success-700" : "bg-status-warning-50 text-status-warning-700"}`}>明确要求 {shufflePreview.evaluation.details.required.filter(item => item.satisfied).length}/{shufflePreview.evaluation.details.required.length}</span>}
+          <div className="min-w-0"><strong id="seat-preview-title" tabIndex={-1} className="block text-body-semibold text-text-primary outline-none">{seatFlow === "preview" ? "方案预览" : "排座规则"}</strong><span className="block text-caption-1-regular text-text-tertiary">{seatFlow === "preview" ? "在当前座位图调整，采用后才保存" : "调整规则后生成方案"}</span></div>
+          {seatFlow === "preview" && shufflePreview && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <span className={`rounded-[var(--app-radius-sm)] px-2.5 py-1.5 text-caption-1-semibold ${shufflePreview.evaluation.details.required.every(item => item.satisfied) ? "bg-status-success-50 text-status-success-700" : "bg-status-warning-50 text-status-warning-700"}`}>明确要求 {shufflePreview.evaluation.details.required.filter(item => item.satisfied).length}/{shufflePreview.evaluation.details.required.length}</span>
+            <Button size="sm" variant="ghost" onClick={backToRules}>返回规则</Button>
+            <Button id="seat-evaluation-trigger" size="sm" variant="ghost" aria-expanded={evaluationVisible} onClick={() => {
+              if (wideSeatPanel) { document.getElementById("seat-shuffle-evaluation")?.focus({ preventScroll: true }); return; }
+              setEvaluationOpen(value => !value);
+              if (!evaluationOpen) requestAnimationFrame(() => document.getElementById("seat-shuffle-evaluation")?.focus({ preventScroll: true }));
+            }}>评估详情</Button>
+            <Button size="sm" variant="ghost" onClick={regeneratePreview}>再随机一次</Button>
+            <Button size="sm" onClick={applyPreview}>采用方案</Button>
+          </div>}
         </div>
       </div>
 
       <div className="min-h-0 flex-1 p-4">
-        <div ref={seatPanelRef} data-seat-flow={seatFlow} className="seat-workflow-panel relative h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
-          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-4" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout || seatFlow !== "view"} inert={editingLayout || seatFlow !== "view" || transitioning ? true : undefined}>
-            <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onMoveStudentToWaiting={onMoveStudentToWaiting} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+        <div ref={seatPanelRef} data-seat-flow={seatFlow} data-evaluation-open={evaluationOpen ? "true" : "false"} className="seat-workflow-panel relative h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
+          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-4" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout || seatFlow === "rules"} inert={editingLayout || seatFlow === "rules" || transitioning ? true : undefined}>
+            <SeatBoard cardMode={cardMode} previewMode={seatFlow === "preview"} students={students} seatOrder={seatFlow === "preview" && shufflePreview ? shufflePreview.order : seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={seatFlow === "preview" ? movePreviewSeat : onMoveSeat} onMoveStudentToWaiting={seatFlow === "preview" ? () => {} : onMoveStudentToWaiting} onAssignStudentToSeat={seatFlow === "preview" ? () => {} : onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={seatFlow === "preview" ? () => {} : onToggleLock} />
           </div>}
           {!editingLayout && <div data-seat-rules-layer aria-hidden={seatFlow !== "rules"} inert={seatFlow !== "rules" ? true : undefined}>
-            <SeatSettingsModal inline open students={students} settings={seatSettings} canUndo={canUndoSeatOrder} onUpdate={onUpdateSeatSettings} onRandomize={generatePreview} onOrderByList={onOrderSeatsByList} onUndo={onUndoSeatOrder} onClose={returnToSeats} />
+            <SeatSettingsModal inline open students={students} settings={seatSettings} canUndo={canUndoSeatOrder} onUpdate={onUpdateSeatSettings} onRandomize={generatePreview} onOrderByList={orderSeatsByList} onUndo={() => transitionSeatBoard(onUndoSeatOrder)} onClose={returnToSeats} />
           </div>}
-          {shufflePreview && !editingLayout && <div data-seat-preview-layer aria-hidden={seatFlow !== "preview"} inert={seatFlow !== "preview" ? true : undefined}>
-            <RetryableLazy load={loadSeatShufflePreview} componentProps={{ inline: true, students, currentOrder: seatOrder, candidate: shufflePreview, seatSettings, onOrderChange: onShufflePreviewOrderChange, onRegenerate: onRandomizeSeats, onApply: () => { onApplyShufflePreview(); setSeatFlow("view"); requestAnimationFrame(() => document.getElementById("seat-shuffle-trigger")?.focus({ preventScroll: true })); }, onClose: returnToSeats, onBackToRules: () => { setSeatFlow("rules"); requestAnimationFrame(() => document.getElementById("seat-generate-preview")?.focus({ preventScroll: true })); }, onSelectStudent }} fallback={<div className="flex h-full items-center justify-center text-body-regular text-text-secondary">正在准备方案预览…</div>} />
+          {shufflePreview && !editingLayout && <div id="seat-shuffle-evaluation" tabIndex={-1} data-seat-preview-layer aria-hidden={!evaluationVisible} inert={!evaluationVisible ? true : undefined}>
+            <RetryableLazy load={loadSeatShufflePreview} componentProps={{ inline: true, students, currentOrder: seatOrder, candidate: shufflePreview, seatSettings, onOrderChange: onShufflePreviewOrderChange, onRegenerate: regeneratePreview, onApply: applyPreview, onClose: returnToSeats, onBackToRules: backToRules, onSelectStudent }} fallback={<div className="flex h-full items-center justify-center text-body-regular text-text-secondary">正在准备评估详情…</div>} />
           </div>}
           {(editingLayout || transitioning) && (
             <div data-seat-designer-layer className="absolute inset-0" style={{ visibility: editingLayout ? undefined : "hidden" }} aria-hidden={!editingLayout} inert={!editingLayout || transitioning ? true : undefined}>
