@@ -107,6 +107,7 @@ netlify deploy --prod
 多人事项回归：运行 `pnpm test:e2e:zhang followup-grouping.spec.ts` 与 `pnpm test:e2e:commercial followup-grouping.spec.ts`，两版顺序运行以免覆盖同一 `dist`。验证共同待办一次创建、增删关联、刷新、姓名搜索、完成/撤销与继续跟进；逐人催缴保留独立完成状态及每项动作记录；同源同内容作业跟进合成一个可见事项，逐人处理、刷新和来源同步仍独立。状态测试 `followupGrouping.test.ts` 覆盖来源去重、旧格式与保存读取、共享事项删除学生及今日关联。线上旧拆分数据需先备份并明确确认后处理，不能按标题直接去重。同类审计边界：出勤、学生奖惩/快捷记录按学生分别保存，作业保留一份布置记录与逐人交付状态；宿舍事件和班费流水各为一条共享业务记录，不能按关联人数重复扣分或累加金额。已有 `domainActions.test.ts` 继续保护共享班费金额只计一次。
 
 - 本地正常、线上旧：先看 GitHub Actions/Cloudflare deployment 是否成功，再检查 service worker 更新提示，不先重写业务逻辑。
+- 记住登录提前失效：核对浏览器/profile、协议/域名/端口是否一致，是否主动退出/解绑/清除站点数据，以及是否使用了仅 12 小时的本地预览。只检查凭证是否存在和到期时间，不输出 token/授权码。90 天调整须先发布共享 Worker，再发布前端；现存 30 天凭证不会自动续期。双版 `pnpm test:e2e:zhang auth-persistence.spec.ts` / `pnpm test:e2e:commercial auth-persistence.spec.ts` 覆盖关闭重开、期限边界、未勾选和主动退出；Worker 合同测试验证签名到期与 AI/同步复用。
 - Commercial 网络失败：检查构建中的 `VITE_WORKER_URL`、Netlify allowlist、代理响应编码头和 direct Worker。
 - 新 AI 接口 Worker 正常但商用 404/405：先运行路由契约测试并重新发布 Netlify 代理。
 - 浏览器显示 CORS 失败：查看 Worker 结构化日志；顶层异常应返回带 CORS 的 `{ "error": "internal_error" }`。

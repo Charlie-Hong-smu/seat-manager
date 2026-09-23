@@ -36,7 +36,7 @@ import { importRosterFile, type RosterImportOptions, type RosterImportResult } f
 import { useSeatManagerState } from "./state/store";
 import { useSeatManagerController } from "./state/seatManagerController";
 import { generateClassAiTrend, generateStudentAiTrend, readCachedStudentAiTrend, type AiClassTrendResult } from "./state/aiTrendService";
-import type { CommunicationDraft, ActivityEvent, AppStudent, BusinessEntityRef, GradeExam, GradeItemAnalysis, GradeQuestionDefinition, SavedGradeExamRecord, SeatHistorySnapshot, SeatLayoutV1, SeatSettings, StudentId } from "./state/types";
+import type { CommunicationDraft, ActivityEvent, AppStudent, BusinessEntityRef, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuestionDefinition, SavedGradeExamRecord, SeatHistorySnapshot, SeatLayoutV1, SeatSettings, StudentId } from "./state/types";
 import { useStudentActions } from "./hooks/useStudentActions";
 import { useDormitoryActions } from "./hooks/useDormitoryActions";
 import { useClassFundActions } from "./hooks/useClassFundActions";
@@ -260,6 +260,49 @@ export default function App() {
     if (status === "completed") return handleCompleteTodayTask(taskId);
     const undo = handleSetLinkedTaskStatus([taskId], status);
     actionToast.show({ message: status === "pending" ? "任务已恢复" : "任务已取消", actionLabel: "撤销", onAction: undo, duration: 6000 });
+    return true;
+  }
+
+  async function handleCompleteTasks(taskIds: string[]) {
+    const targets = taskIds.map(id => followupTasks.find(item => item.id === id)).filter((task): task is FollowupTask => Boolean(task && task.status === "pending"));
+    if (!targets.length) return false;
+    const previousHomework = homeworkAssignments;
+    const changes = targets.map(before => ({ before, ...changeFollowupTaskStatus(before, "completed") }));
+    setFollowupTasks(current => current.map(task => changes.find(change => change.task.id === task.id)?.task || task));
+    let syncedAssignments = homeworkAssignments;
+    const syncable = targets.flatMap(task => {
+      const sync = syncCompletedFollowupHomework(task, syncedAssignments);
+      if (!sync) return [];
+      syncedAssignments = sync.assignments;
+      return [{ task, sync }];
+    });
+    let homeworkChanged = false;
+    if (syncable.length) {
+      const assignmentTitle = homeworkAssignments.find(item => item.id === syncable[0].task.sourceRef?.entityId)?.title || "关联作业";
+      homeworkChanged = await appDialog.confirm({ title: "同步作业状态？", description: `已完成 ${targets.length} 项跟进。是否同时把“${assignmentTitle}”中这 ${syncable.length} 名学生的状态更新为“已交”？选择取消也不会影响任务完成。`, confirmLabel: "同步为已交" });
+      if (homeworkChanged) setHomeworkAssignments(syncedAssignments);
+    }
+    const removeActivities = recordActivities([...changes.map(change => change.event), ...(homeworkChanged ? syncable.map(item => item.sync.event) : [])]);
+    actionToast.show({
+      message: `任务状态已更新 · 已完成 ${targets.length} 项跟进：${targets[0].title}`,
+      actionLabel: "撤销",
+      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+      onAction: () => {
+        setFollowupTasks(current => current.map(task => { const change = changes.find(item => item.task.id === task.id); return change ? undoFollowupChange(task, change.before, change.task) : task; }));
+        if (homeworkChanged) setHomeworkAssignments(current => syncable.reduce((next, item) => undoFollowupHomework(next, previousHomework, item.sync.assignments, item.task), current));
+        removeActivities();
+      },
+      duration: 6000,
+    });
+    return true;
+  }
+
+  async function handleChangeTaskGroupStatus(taskIds: string[], status: "pending" | "completed" | "cancelled") {
+    if (status === "completed") return handleCompleteTasks(taskIds);
+    const targets = followupTasks.filter(task => taskIds.includes(task.id) && task.status === "pending");
+    if (!targets.length) return false;
+    const undo = handleSetLinkedTaskStatus(targets.map(task => task.id), status);
+    actionToast.show({ message: `已取消 ${targets.length} 项跟进`, actionLabel: "撤销", onAction: undo, duration: 6000 });
     return true;
   }
 
@@ -1236,7 +1279,7 @@ export default function App() {
             ? <CommentWorkbenchComponent students={students} onClose={closeCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />
             : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, onClose: closeCommentWorkbench, onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
         )}
-        {sidebarTab === "today" && <div className="h-full"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onSaveCommunication={saveCommunication} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
+        {sidebarTab === "today" && <div className="h-full"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onSaveCommunication={saveCommunication} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onCompleteTasks={handleCompleteTasks} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full">
             <DailyWorkspace
@@ -1304,7 +1347,7 @@ export default function App() {
 
         {sidebarTab === "attendance" && <div className="h-full"><AttendanceWorkspace students={students} records={attendanceRecords} tasks={followupTasks} onChange={setAttendanceRecords} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenTask={taskId => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId })} initialTarget={timelineTarget?.workspace === "attendance" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} /></div>}
 
-        {sidebarTab === "followups" && <div className="h-full"><FollowupWorkspace taskTypes={taskTypes} onTaskTypesChange={onTaskTypesChange} onCreateTask={confirmFollowupTask} onTaskStatusChange={handleChangeTaskStatus} onSaveResolution={handleSaveTodayTaskResolution} key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenSource={navigateToEntity} sourceExists={ref => businessEntityExists(appState, ref)} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} initialMode={followupMode} /></div>}
+        {sidebarTab === "followups" && <div className="h-full"><FollowupWorkspace taskTypes={taskTypes} onTaskTypesChange={onTaskTypesChange} onCreateTask={confirmFollowupTask} onTaskStatusChange={handleChangeTaskStatus} onTaskGroupStatusChange={handleChangeTaskGroupStatus} onSaveResolution={handleSaveTodayTaskResolution} key={followupMode} students={students} tasks={followupTasks} homeworkAssignments={homeworkAssignments} subjectCatalog={subjectCatalog} onChange={setFollowupTasks} onHomeworkChange={setHomeworkAssignments} onSubjectCatalogChange={subjects => setSettings(current => ({ ...current, subjectCatalog: subjects }))} onRequestTask={requestFollowupTask} onActivity={recordActivity} onOpenSource={navigateToEntity} sourceExists={ref => businessEntityExists(appState, ref)} initialTarget={timelineTarget?.workspace === "followups" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget} initialMode={followupMode} /></div>}
 
         {sidebarTab === "scores" && (
           <div className="h-full">

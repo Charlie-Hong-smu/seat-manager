@@ -1,11 +1,10 @@
-import { getProductAuthToken } from "./authStorage";
+import { getProductAuth } from "./authStorage";
 import { getDirectWorkerUrl, getWorkerBaseUrl } from "./workerEndpoint";
 
 const AI_AUTH_TOKEN_KEY = "seat-manager-ai-auth-token";
 const AI_AUTH_EXPIRES_KEY = "seat-manager-ai-auth-expires";
 const AI_AUTH_SESSION_TOKEN_KEY = "seat-manager-ai-session-token";
 const AI_AUTH_SESSION_EXPIRES_KEY = "seat-manager-ai-session-expires";
-const AI_REMEMBER_DAYS = 30;
 
 export interface AiAuth {
   token: string;
@@ -46,9 +45,9 @@ export async function fetchAiRoute(path: string, init: RequestInit): Promise<Res
 }
 
 export async function getAiAuth(_input?: AiAuthInput): Promise<AiAuth> {
-  const productToken = getProductAuthToken();
-  if (productToken) {
-    return { token: productToken, expiresAt: Date.now() + AI_REMEMBER_DAYS * 24 * 60 * 60 * 1000 };
+  const productAuth = getProductAuth();
+  if (productAuth) {
+    return { token: productAuth.token, expiresAt: productAuth.expiresAt };
   }
   throw new Error("ai_auth_required");
 }

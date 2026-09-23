@@ -2,7 +2,7 @@ import { useState } from "react";
 import { BookOpen, ClipboardCheck, Globe2, GraduationCap, Lightbulb, Lock, LogIn, Medal, Monitor, NotebookPen, Presentation, Sprout } from "lucide-react";
 
 import { APP_NAME } from "../config";
-import { authorizeProduct, enterLocalPreviewSession } from "../state/authStorage";
+import { authorizeProduct, enterLocalPreviewSession, PRODUCT_REMEMBER_DAYS } from "../state/authStorage";
 import { Button, Checkbox, Input } from "./ui";
 
 interface Props {
@@ -111,7 +111,7 @@ export function LoginScreen({ onLogin }: Props) {
           </div>
 
           <div className="mt-5">
-            <Checkbox isSelected={remember} onChange={setRemember}>在这台设备记住授权 30 天</Checkbox>
+            <Checkbox isSelected={remember} onChange={setRemember}>在此浏览器保持登录 {PRODUCT_REMEMBER_DAYS} 天</Checkbox>
           </div>
 
           <Button type="submit" disabled={loading} className="mt-6 w-full">

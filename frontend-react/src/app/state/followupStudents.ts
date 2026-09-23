@@ -25,14 +25,22 @@ export function followupStudentLabel(task: StudentSelection, names: ReadonlyMap<
 
 export interface FollowupTaskGroup { key: string; members: FollowupTask[] }
 
-/** Group only homework tasks with the same stable assignment and shared task details. */
+/** Group individual outcomes of the same matter for display, without merging stored tasks. */
+export function followupGroupKey(task: FollowupTask): string | null {
+  if (!isIndividualFollowup(task) || getFollowupStudentIds(task).length !== 1 || task.continuedFromTaskId) return null;
+  const domain = task.sourceRef?.domain;
+  if (domain === "ai" || (!task.sourceRef && task.studentMode !== "individual")) return null;
+  const source = task.sourceRef
+    ? [domain, task.sourceRef.entityId, task.sourceRef.subEntityId || ""]
+    : [task.source, "manual-individual"];
+  return JSON.stringify([...source, task.title, task.type, task.description, task.sourceRef ? "" : task.plannedDate, task.dueDate]);
+}
+
 export function groupFollowupTasks(tasks: FollowupTask[]): FollowupTaskGroup[] {
   const groups: FollowupTaskGroup[] = [];
   const byKey = new Map<string, FollowupTaskGroup>();
   tasks.forEach(task => {
-    const key = isIndividualFollowup(task) && task.sourceRef?.domain === "homework" && !task.continuedFromTaskId
-      ? JSON.stringify(["homework", task.sourceRef.entityId, task.sourceRef.subEntityId || "", task.title, task.type, task.description, task.dueDate])
-      : task.id;
+    const key = followupGroupKey(task) || task.id;
     const existing = byKey.get(key);
     if (existing) existing.members.push(task);
     else { const group = { key, members: [task] }; byKey.set(key, group); groups.push(group); }

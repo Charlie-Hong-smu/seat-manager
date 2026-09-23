@@ -7,7 +7,7 @@ const basePath = commercial ? "/" : "/seat-manager/";
 export default defineConfig({
   workers: process.env.CI ? undefined : 1,
   testDir: "./e2e",
-  testMatch: commercial ? ["commercial.spec.ts", "followup-grouping.spec.ts", "seat-rotation-history.spec.ts", "seat-mode-transition.spec.ts", "functional-state.spec.ts", "registration-settings.spec.ts", "workbench-safety.spec.ts", "class-duties.spec.ts", "app-motion.spec.ts", "mobile-usability.spec.ts"] : ["app-state.spec.ts", "pwa.spec.ts", "followup-grouping.spec.ts", "seat-rotation-history.spec.ts", "seat-mode-transition.spec.ts", "functional-state.spec.ts", "registration-settings.spec.ts", "workbench-safety.spec.ts", "class-duties.spec.ts", "app-motion.spec.ts", "mobile-usability.spec.ts"],
+  testMatch: commercial ? ["commercial.spec.ts", "auth-persistence.spec.ts", "followup-grouping.spec.ts", "seat-rotation-history.spec.ts", "seat-mode-transition.spec.ts", "functional-state.spec.ts", "registration-settings.spec.ts", "workbench-safety.spec.ts", "class-duties.spec.ts", "app-motion.spec.ts", "mobile-usability.spec.ts"] : ["app-state.spec.ts", "pwa.spec.ts", "auth-persistence.spec.ts", "followup-grouping.spec.ts", "seat-rotation-history.spec.ts", "seat-mode-transition.spec.ts", "functional-state.spec.ts", "registration-settings.spec.ts", "workbench-safety.spec.ts", "class-duties.spec.ts", "app-motion.spec.ts", "mobile-usability.spec.ts"],
   outputDir: "./test-results",
   reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   use: {
