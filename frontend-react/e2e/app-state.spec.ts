@@ -1251,6 +1251,12 @@ test("roster, exam, cloud sync and workspace switching keep data isolated", asyn
   await expect(page.getByRole("button", { name: /排名设置/ })).toContainText("自动补全");
   await page.getByRole("button", { name: "保存考试" }).click();
   await expect(page.getByText("E2E 期中测试", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "查看成绩表格" }).click();
+  await expect(page.getByRole("button", { name: "关闭考试表格" })).toBeVisible();
+  const sidebarTarget = await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: /^班费/ }).boundingBox();
+  await page.mouse.click(sidebarTarget!.x + sidebarTarget!.width / 2, sidebarTarget!.y + sidebarTarget!.height / 2);
+  await expect(page.getByRole("button", { name: "关闭考试表格" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭考试表格" }).click();
 
   await page.locator("tbody tr").filter({ hasText: "甲同学" }).first().click();
   await page.getByRole("tab", { name: "成绩", exact: true }).click();

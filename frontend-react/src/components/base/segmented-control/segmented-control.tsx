@@ -61,7 +61,7 @@ export function SegmentedControl({ className, children, variant = "solid", eleme
           width: selected.offsetWidth,
           height: selected.offsetHeight,
         });
-      }
+      } else setThumb(null);
     };
     measure();
     // Re-measure when selection flips (data-selected toggles) or size changes.

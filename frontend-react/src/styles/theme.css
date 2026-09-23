@@ -1564,6 +1564,27 @@
 }
 
 .comment-workbench-shell { container: comment-workbench / inline-size; min-width: 0; }
+.app-inline-morph {
+  display: grid;
+  flex: none;
+  min-width: 0;
+  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app-inline-morph-trigger,
+.app-inline-morph-editor {
+  grid-area: 1 / 1;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 180ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app-inline-morph-trigger { opacity: 1; transform: scale(1); }
+.app-inline-morph-editor { opacity: 0; transform: scale(0.94); pointer-events: none; }
+.app-inline-morph[data-active="true"] .app-inline-morph-trigger { opacity: 0; transform: scale(0.94); pointer-events: none; }
+.app-inline-morph[data-active="true"] .app-inline-morph-editor { opacity: 1; transform: scale(1); pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .app-inline-morph, .app-inline-morph-trigger, .app-inline-morph-editor { transition: none; }
+}
 .comment-workbench-columns { grid-template-columns: clamp(156px, 17cqw, 208px) minmax(0, 1fr) clamp(236px, 26cqw, 316px); }
 @container comment-workbench (max-width: 650px) {
   .comment-workbench-columns { grid-template-columns: 156px minmax(0, 1fr); grid-template-rows: minmax(360px, 1fr) auto; overflow: auto; }

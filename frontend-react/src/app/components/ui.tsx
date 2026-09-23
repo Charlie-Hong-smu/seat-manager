@@ -205,7 +205,8 @@ export function DialogPresence({ open, children }: { open: boolean; children: Re
     return () => window.clearTimeout(timer);
   }, [open]);
   if (!open && !present) return null;
-  return <PresenceMotion active={open} className="dialog-presence contents">{open ? children : lastContent.current}</PresenceMotion>;
+  const content = <PresenceMotion active={open} className="dialog-presence contents">{open ? children : lastContent.current}</PresenceMotion>;
+  return typeof document === "undefined" ? content : createPortal(content, document.body);
 }
 
 export function ModalShell({ open, title, description, children, footer, onClose, className = "max-w-lg" }: {

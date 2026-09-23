@@ -223,6 +223,9 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
 
   const [customMaterialCriterionId, setCustomMaterialCriterionId] = useState("");
   const [customMaterialLabel, setCustomMaterialLabel] = useState("");
+  const customLengthInputRef = useRef<HTMLInputElement>(null);
+  const customMaterialInputRef = useRef<HTMLInputElement>(null);
+  const customMaterialTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const [showExportModal, setShowExportModal] = useState(false);
   const exportPanelRef = useModalFocus(showExportModal, () => setShowExportModal(false));
   const [showFollowupPanel, setShowFollowupPanel] = useState(false);
@@ -736,6 +739,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     updateSelectedProfile(profile => addCommentCustomOption(profile, criterion, customMaterialLabel));
     setCustomMaterialLabel("");
     setCustomMaterialCriterionId("");
+    requestAnimationFrame(() => customMaterialTriggerRefs.current.get(criterion.id)?.focus());
   }
 
   function removeStudentCustomOption(criterionId: string, optionId: string) {
@@ -966,7 +970,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const selectedInitial = selectedStudent?.name.slice(0, 1) || "";
   const hasUnsavedTeacherNote = selectedProfile ? teacherNote !== selectedProfile.teacherNote : false;
   const selectedMaterialLabels = selectedSummary.criteriaSummary.flatMap(item => item.values);
-  const selectedLengthLabel = LENGTH_MODES.find(mode => mode.value === selectedComment?.lengthMode)?.label || "100～150";
+  const selectedLengthLabel = selectedComment?.lengthMode === "custom" ? String(Math.max(10, selectedComment.targetWordCount || 120)) : LENGTH_MODES.find(mode => mode.value === selectedComment?.lengthMode)?.label || "100～150";
   const selectedStyleLabel = STYLES.find(style => style.value === selectedComment?.style)?.label || "温和鼓励";
 
 
@@ -1274,8 +1278,13 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                   <div className="space-y-3 pt-3">
                     <div>
                       <div className="mb-1.5 text-caption-1-semibold text-text-secondary">字数目标</div>
-                      <SegmentedControl value={selectedComment.lengthMode} ariaLabel="评语字数目标" onChange={value => updateComment(selectedId, { lengthMode: value })} options={[...LENGTH_MODES]} className="flex w-full" />
-                      <MotionCollapse open={selectedComment.lengthMode === "custom"} contentClassName="pt-2"><input type="number" aria-label="自定义字数" value={selectedComment.targetWordCount || ""} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateComment(selectedId, { targetWordCount: Math.min(999, Math.max(0, Math.round(value))) }); }} onBlur={() => updateComment(selectedId, { targetWordCount: Math.max(10, selectedComment.targetWordCount || 120) })} min={10} max={999} placeholder="自定义字数" className="h-9 w-full rounded-[var(--app-radius-sm)] border border-border-button-default px-3 text-body-regular outline-none focus:border-accent-300" /></MotionCollapse>
+                      <SegmentedControl value={selectedComment.lengthMode} ariaLabel="评语字数预设" onChange={value => updateComment(selectedId, { lengthMode: value })} options={LENGTH_MODES.filter(mode => mode.value !== "custom")} className="flex w-full" />
+                      <div className="app-inline-morph mt-0.5 h-8 w-full rounded-md" data-active={selectedComment.lengthMode === "custom"}>
+                        <button type="button" aria-label="自定义评语字数" aria-pressed={selectedComment.lengthMode === "custom"} aria-hidden={selectedComment.lengthMode === "custom"} tabIndex={selectedComment.lengthMode === "custom" ? -1 : 0} onClick={() => { updateComment(selectedId, { lengthMode: "custom" }); requestAnimationFrame(() => customLengthInputRef.current?.focus()); }} className="app-inline-morph-trigger rounded-md bg-segmented-control-background text-body-regular text-text-secondary hover:bg-background-primary-default/70">自定义</button>
+                        <div className="app-inline-morph-editor" aria-hidden={selectedComment.lengthMode !== "custom"} inert={selectedComment.lengthMode !== "custom" ? true : undefined}>
+                          <input ref={customLengthInputRef} type="number" aria-label="自定义字数" value={selectedComment.targetWordCount || ""} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateComment(selectedId, { targetWordCount: Math.min(999, Math.max(0, Math.round(value))) }); }} onBlur={() => updateComment(selectedId, { targetWordCount: Math.max(10, selectedComment.targetWordCount || 120) })} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} min={10} max={999} placeholder="输入目标字数" className="h-full w-full rounded-md border border-accent-300 bg-background-primary-default px-3 text-body-regular outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring" />
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <div className="mb-1.5 text-caption-1-semibold text-text-secondary">评语风格</div>
@@ -1360,9 +1369,14 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                                     return <button key={option.id} type="button" aria-pressed={active} onClick={() => toggleCriterionOption(criterion, option.id)} className={`h-8 rounded-full border px-2.5 text-caption-1-semibold transition-[background-color,border-color,color,transform] active:scale-95 ${active ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-default bg-background-primary-default text-text-secondary hover:border-accent-200 hover:bg-accent-50"}`}>{option.label}</button>;
                                   })}
                                   {customOptions.map(option => <button key={option.id} type="button" onClick={() => removeStudentCustomOption(criterion.id, option.id)} title="点击移除自定义素材" className="h-8 rounded-full border border-status-success-100 bg-status-success-50 px-2.5 text-caption-1-semibold text-status-success-700">{option.label}</button>)}
-                                  <button type="button" onClick={() => { setCustomMaterialCriterionId(criterion.id); setCustomMaterialLabel(""); }} className="h-8 rounded-full border border-dashed border-border-button-hover bg-background-primary-default px-2.5 text-caption-1-semibold text-text-tertiary hover:bg-background-secondary-default"><Plus className="mr-1 inline h-3 w-3" />自定义</button>
+                                  <div className="app-inline-morph h-8 rounded-full" data-active={customMaterialCriterionId === criterion.id} style={{ width: customMaterialCriterionId === criterion.id ? "min(100%, 240px)" : "84px" }}>
+                                    <button ref={node => { if (node) customMaterialTriggerRefs.current.set(criterion.id, node); else customMaterialTriggerRefs.current.delete(criterion.id); }} type="button" aria-hidden={customMaterialCriterionId === criterion.id} tabIndex={customMaterialCriterionId === criterion.id ? -1 : 0} onClick={() => { setCustomMaterialCriterionId(criterion.id); setCustomMaterialLabel(""); requestAnimationFrame(() => customMaterialInputRef.current?.focus()); }} className="app-inline-morph-trigger rounded-full border border-dashed border-border-button-hover bg-background-primary-default text-caption-1-semibold text-text-tertiary hover:bg-background-secondary-default"><Plus className="mr-1 inline h-3 w-3" />自定义</button>
+                                    <div className="app-inline-morph-editor flex items-center overflow-hidden rounded-full border border-accent-300 bg-background-primary-default" aria-hidden={customMaterialCriterionId !== criterion.id} inert={customMaterialCriterionId !== criterion.id ? true : undefined}>
+                                      <input ref={customMaterialCriterionId === criterion.id ? customMaterialInputRef : undefined} value={customMaterialCriterionId === criterion.id ? customMaterialLabel : ""} onChange={event => setCustomMaterialLabel(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addStudentCustomOption(criterion); if (event.key === "Escape") { event.stopPropagation(); setCustomMaterialCriterionId(""); requestAnimationFrame(() => customMaterialTriggerRefs.current.get(criterion.id)?.focus()); } }} maxLength={30} aria-label={`补充${criterion.label}素材`} placeholder="输入素材" className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-caption-1-regular outline-none" />
+                                      <button type="button" aria-label={`添加${criterion.label}素材`} onClick={() => addStudentCustomOption(criterion)} disabled={!customMaterialLabel.trim()} className="mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent-600 text-text-white disabled:opacity-40"><Check className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                  </div>
                                 </div>
-                                {customMaterialCriterionId === criterion.id && <div className="mt-2 flex gap-2"><input autoFocus value={customMaterialLabel} onChange={event => setCustomMaterialLabel(event.target.value)} onKeyDown={event => { if (event.key === "Enter") addStudentCustomOption(criterion); if (event.key === "Escape") setCustomMaterialCriterionId(""); }} maxLength={30} placeholder={`补充${criterion.label}素材`} className="h-9 min-w-0 flex-1 rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 text-body-regular outline-none focus:border-accent-300"/><button type="button" onClick={() => addStudentCustomOption(criterion)} className="h-9 rounded-[var(--app-radius-sm)] bg-accent-600 px-3 text-body-semibold text-text-white hover:bg-accent-700">添加</button></div>}
                                 {criterionSelectedCount > 0 && <div className="mt-2 flex justify-end"><button type="button" onClick={() => clearCriterion(criterion.id)} className="text-caption-1-regular text-text-tertiary hover:text-status-danger-600">清空本组</button></div>}
                               </div>
                             </div>

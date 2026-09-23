@@ -1,5 +1,38 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("comment custom controls morph in place and keep their values", async ({ page }) => {
+  await setup(page);
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "评语工作台", exact: true }).click();
+  const workbench = page.getByRole("region", { name: "评语工作台" });
+  await workbench.getByRole("button", { name: /生成设置/ }).click();
+  const lengthMorph = workbench.locator('.app-inline-morph:has(button[aria-label="自定义评语字数"])');
+  const initialLengthBox = await lengthMorph.boundingBox();
+  await lengthMorph.getByRole("button", { name: "自定义评语字数" }).click();
+  await expect(lengthMorph).toHaveAttribute("data-active", "true");
+  const lengthInput = lengthMorph.getByRole("spinbutton", { name: "自定义字数" });
+  await expect(lengthInput).toBeFocused();
+  await lengthInput.fill("180");
+  await expect(lengthMorph.getByRole("spinbutton", { name: "自定义字数" })).toHaveValue("180");
+  const editedLengthBox = await lengthMorph.boundingBox();
+  expect(editedLengthBox?.width).toBe(initialLengthBox?.width);
+  expect(editedLengthBox?.height).toBe(initialLengthBox?.height);
+  await workbench.getByRole("group", { name: "评语字数预设" }).getByRole("button", { name: "80～100" }).click();
+  await expect(lengthMorph).toHaveAttribute("data-active", "false");
+
+  const classroom = workbench.getByRole("button", { name: /^课堂表现/ });
+  if (await classroom.getAttribute("aria-expanded") !== "true") await classroom.click();
+  const criterion = classroom.locator("xpath=ancestor::article[1]");
+  const materialMorph = criterion.locator(".app-inline-morph");
+  await materialMorph.getByRole("button", { name: "自定义", exact: true }).click();
+  await expect(materialMorph).toHaveAttribute("data-active", "true");
+  await expect(materialMorph.getByRole("textbox", { name: "补充课堂表现素材" })).toBeFocused();
+  await materialMorph.getByRole("textbox", { name: "补充课堂表现素材" }).fill("善于提问");
+  await materialMorph.getByRole("button", { name: "添加课堂表现素材" }).click();
+  await expect(materialMorph).toHaveAttribute("data-active", "false");
+  await expect(materialMorph.getByRole("button", { name: "自定义", exact: true })).toBeFocused();
+  await expect(criterion.getByRole("button", { name: "善于提问" })).toBeVisible();
+});
+
 // Motion tests gate lazy chunks directly; service-worker precaching would bypass page routes.
 test.use({ serviceWorkers: "block" });
 
