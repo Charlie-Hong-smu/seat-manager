@@ -856,7 +856,7 @@ test("AI followup actions use clear labels, center confirmation, and close stude
   await expect(page.getByRole("heading", { name: "创建跟进任务" })).toBeVisible();
 });
 
-test("weekly communication surfaces keep only AI polish and copy actions", async ({ page }) => {
+test("weekly communication surfaces expose editable drafts and AI polish", async ({ page }) => {
   await login(page);
   await page.getByRole("button", { name: /新增学生/ }).click();
   await page.getByPlaceholder("姓名", { exact: true }).fill("周沟通测试学生");
@@ -871,11 +871,11 @@ test("weekly communication surfaces keep only AI polish and copy actions", async
   await expect.poll(() => studentPolish.evaluate(button => ({
     gradient: getComputedStyle(button).backgroundImage.includes("linear-gradient"),
     aiTone: button.classList.contains("app-button-ai"),
-    alignment: getComputedStyle(button.parentElement!).justifyContent,
-  }))).toEqual({ gradient: false, aiTone: true, alignment: "center" });
+  }))).toEqual({ gradient: false, aiTone: true });
   await expect(page.getByRole("button", { name: "复制", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /保存沟通稿|标记已分享|创建后续家校沟通任务/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "分享渠道" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "保存沟通稿" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "标记已沟通" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "沟通渠道" })).toBeVisible();
   await page.getByRole("button", { name: "关闭学生详情" }).click();
 
   await page.getByRole("button", { name: "今日", exact: true }).click();
@@ -886,10 +886,9 @@ test("weekly communication surfaces keep only AI polish and copy actions", async
   await expect.poll(() => classPolish.evaluate(button => ({
     gradient: getComputedStyle(button).backgroundImage.includes("linear-gradient"),
     aiTone: button.classList.contains("app-button-ai"),
-    alignment: getComputedStyle(button.parentElement!).justifyContent,
-  }))).toEqual({ gradient: false, aiTone: true, alignment: "center" });
+  }))).toEqual({ gradient: false, aiTone: true });
   await expect(weeklyDrawer.getByRole("button", { name: "复制", exact: true })).toBeVisible();
-  await expect(weeklyDrawer.getByRole("button", { name: "保存草稿" })).toHaveCount(0);
+  await expect(weeklyDrawer.getByRole("button", { name: "保存沟通稿" })).toBeVisible();
 });
 
 test("selected comment text is refined only after teacher confirmation", async ({ page }) => {
@@ -1402,7 +1401,7 @@ test("BoardUI narrow today page and weekly draft stay usable with reduced motion
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("button", { name: "本周复盘", exact: true }).click();
   const drawer = page.getByRole("complementary", { name: "本周班级复盘" });
-  const draft = drawer.getByRole("textbox", { name: "复盘草稿" });
+  const draft = drawer.getByRole("textbox", { name: "沟通稿正文" });
   await draft.fill("教师自行整理的本周复盘");
   await expect(draft).toHaveValue("教师自行整理的本周复盘");
   await expect(drawer.getByRole("button", { name: "AI 润色", exact: true })).toBeInViewport({ ratio: 1 });
