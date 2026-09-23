@@ -49,6 +49,7 @@ test("task type editing is shared, persistent and keeps historical task types", 
   await drawer.getByRole("button", { name: "编辑类型", exact: true }).click();
   await drawer.getByRole("textbox", { name: "可选任务类型", exact: true }).fill("常规跟进\n阅读反馈");
   await drawer.getByRole("button", { name: "保存类型", exact: true }).click();
+  await expect.poll(async () => (await data(page)).settings?.followupTypes).toEqual(["常规跟进", "阅读反馈"]);
   await expect(drawer.getByRole("button", { name: /跟进类型/ })).toContainText("阅读跟进（原类型）");
   await drawer.getByRole("button", { name: "关闭工具面板" }).click();
   await page.getByRole("button", { name: "编辑类型", exact: true }).click();
