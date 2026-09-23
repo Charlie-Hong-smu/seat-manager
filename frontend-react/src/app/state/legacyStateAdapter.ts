@@ -340,6 +340,7 @@ export function createDefaultSeatSettings(): SeatSettings {
   return {
     pairByGender: false,
     keepLockedEmpty: true,
+    rotateWithHistory: true,
     complementRuleIds: [],
     groupBalanceMode: "off",
     constraints: {
@@ -365,6 +366,7 @@ function normalizeSeatSettings(settings: Record<string, unknown>, students: AppS
   return {
     pairByGender: Boolean(settings.pairByGender),
     keepLockedEmpty: settings.keepLockedEmpty === undefined ? true : Boolean(settings.keepLockedEmpty),
+    rotateWithHistory: settings.rotateWithHistory === undefined ? true : Boolean(settings.rotateWithHistory),
     complementRuleIds: complementIds,
     groupBalanceMode: settings.groupBalanceMode === "neighbor-and-group" ? "neighbor-and-group" : "off",
     layout: normalizeSeatLayout(settings.seatLayout),
@@ -405,6 +407,7 @@ function normalizeSeatHistory(value: unknown): SeatHistorySnapshot[] {
         id: toStringValue(item.id, `seat-history-${index}`),
         time: toStringValue(item.time) || toStringValue(item.savedAt) || new Date().toISOString(),
         note: toStringValue(item.note),
+        ...(item.source === "rotation" ? { source: "rotation" as const } : {}),
         rows,
         seats: normalizedSeats,
         ...(studentIds ? { studentIds: Array.from({ length: seatCount }, (_, i) => { const id = studentIds[i]; return typeof id === "string" && id ? id : null; }) } : {}),

@@ -271,6 +271,10 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
                 随机排座时保留锁定的空座
               </label>
               <label className="flex items-center gap-2 text-body-regular text-text-primary">
+                <input type="checkbox" checked={settings.rotateWithHistory} onChange={e => onUpdate(c => ({ ...c, rotateWithHistory: e.target.checked }))} className="accent-accent-600" />
+                轮换时尽量避开最近的座位和同桌
+              </label>
+              <label className="flex items-center gap-2 text-body-regular text-text-primary">
                 <input type="checkbox" checked={settings.groupBalanceMode === "neighbor-and-group"} onChange={e => onUpdate(current => ({ ...current, groupBalanceMode: e.target.checked ? "neighbor-and-group" : "off" }))} className="accent-accent-600" />
                 同时优化整组男女与互补构成
               </label>

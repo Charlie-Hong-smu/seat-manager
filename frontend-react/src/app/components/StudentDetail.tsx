@@ -1,3 +1,4 @@
+import type { SaveCommunication } from "./CommunicationEditor";
 import type { ClassDutiesBinding } from "../state/classDuties";
 import { useState } from "react";
 
@@ -34,6 +35,7 @@ interface StudentDetailProps {
   onActivity?: (event: ActivityEvent) => void | (() => void);
   homeworkAssignments?: HomeworkAssignment[];
   communicationDrafts?: CommunicationDraft[];
+  onSaveCommunication?: SaveCommunication;
   activityEvents?: ActivityEvent[];
   onOpenEntity?: (ref: BusinessEntityRef) => void;
   resolveEntityPreview: (ref: BusinessEntityRef, fallback?: BusinessEntityPreviewFallback) => BusinessEntityPreviewModel;
@@ -67,6 +69,7 @@ export function StudentDetail({
   onActivity,
   homeworkAssignments,
   communicationDrafts,
+  onSaveCommunication,
   activityEvents,
   onOpenEntity,
   resolveEntityPreview,
@@ -102,6 +105,7 @@ export function StudentDetail({
         onActivity={onActivity}
         homeworkAssignments={homeworkAssignments}
         communicationDrafts={communicationDrafts}
+        onSaveCommunication={onSaveCommunication}
         activityEvents={activityEvents}
         onOpenEntity={onOpenEntity}
         resolveEntityPreview={resolveEntityPreview}

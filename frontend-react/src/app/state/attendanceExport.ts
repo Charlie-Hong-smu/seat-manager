@@ -1,3 +1,4 @@
+import { getAttendanceForDate, getAttendanceRange } from "./attendancePeriods";
 import { buildCsvContent } from "./csv";
 import type { AppStudent, AttendanceRecord } from "./types";
 
@@ -14,7 +15,7 @@ function recordDetailRow(date: string, name: string, item?: AttendanceRecord): s
 const toCsv = buildCsvContent;
 
 export function buildAttendanceCsv(students: AppStudent[], records: AttendanceRecord[], date: string): string {
-  const recordsByStudent = new Map(records.filter(item => item.date === date).map(item => [item.studentId, item]));
+  const recordsByStudent = new Map(getAttendanceForDate(records, date).map(item => [item.studentId, item]));
   return toCsv([DETAIL_HEADER, ...students.map(student => recordDetailRow(date, student.name, recordsByStudent.get(student.id)))]);
 }
 
@@ -22,7 +23,7 @@ export function buildAttendanceCsv(students: AppStudent[], records: AttendanceRe
 export function buildAttendanceRangeCsv(students: AppStudent[], records: AttendanceRecord[], from: string, to: string): string {
   const start = from <= to ? from : to;
   const end = from <= to ? to : from;
-  const inRange = records.filter(item => item.date >= start && item.date <= end);
+  const inRange = getAttendanceRange(records, start, end);
   const studentById = new Map(students.map(student => [student.id, student]));
   const detailRows = [...inRange]
     .sort((a, b) => a.date.localeCompare(b.date) || (studentById.get(a.studentId)?.name || "").localeCompare(studentById.get(b.studentId)?.name || "", "zh-Hans-CN"))
@@ -46,7 +47,7 @@ export function buildAttendanceRangeCsv(students: AppStudent[], records: Attenda
     ...(detailRows.length ? detailRows : [["区间内没有出勤异常记录"]]),
     [],
     ["区间汇总（仅列出有记录的学生）"],
-    ["姓名", "请假次数", "缺勤次数", "迟到次数", "早退次数"],
+    ["姓名", "请假天数", "缺勤天数", "迟到次数", "早退次数"],
     ...summaryRows,
   ]);
 }

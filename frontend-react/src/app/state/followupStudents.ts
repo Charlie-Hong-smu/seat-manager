@@ -23,6 +23,23 @@ export function followupStudentLabel(task: StudentSelection, names: ReadonlyMap<
   return ids.length ? ids.map(id => names.get(id) || "未知学生").join("、") : "班级事项";
 }
 
+export interface FollowupTaskGroup { key: string; members: FollowupTask[] }
+
+/** Group only homework tasks with the same stable assignment and shared task details. */
+export function groupFollowupTasks(tasks: FollowupTask[]): FollowupTaskGroup[] {
+  const groups: FollowupTaskGroup[] = [];
+  const byKey = new Map<string, FollowupTaskGroup>();
+  tasks.forEach(task => {
+    const key = isIndividualFollowup(task) && task.sourceRef?.domain === "homework" && !task.continuedFromTaskId
+      ? JSON.stringify(["homework", task.sourceRef.entityId, task.sourceRef.subEntityId || "", task.title, task.type, task.description, task.dueDate])
+      : task.id;
+    const existing = byKey.get(key);
+    if (existing) existing.members.push(task);
+    else { const group = { key, members: [task] }; byKey.set(key, group); groups.push(group); }
+  });
+  return groups;
+}
+
 export function removeStudentFromFollowups(tasks: FollowupTask[], studentId: StudentId): FollowupTask[] {
   return tasks.flatMap(task => {
     const ids = getFollowupStudentIds(task);

@@ -1,4 +1,5 @@
 import { useMediaQuery } from "./hooks/useMediaQuery";
+import { readFundCollections, type FundCollection } from "./state/fundCollections";
 import { captureSeatChange, restoreSeatChange, restoreSeatSnapshot, type SeatUndoEntry } from "./state/seatWorkflow";
 import { normalizeFollowupTypes } from "./state/followupTypes";
 import { getDutyGroups, readClassDuties, type ClassDutiesBinding } from "./state/classDuties";
@@ -27,6 +28,7 @@ import {
   type SeatOrder,
 } from "./state/seatActions";
 import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } from "./state/seatPlanner";
+import { buildSeatRotationContext, createRotationSnapshot, evaluateSeatRotation } from "./state/seatRotation";
 import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
 import { USES_LICENSE_AUTH } from "./config";
 import { buildLegacySnapshot, deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamItemAnalysis, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
@@ -34,12 +36,12 @@ import { importRosterFile, type RosterImportOptions, type RosterImportResult } f
 import { useSeatManagerState } from "./state/store";
 import { useSeatManagerController } from "./state/seatManagerController";
 import { generateClassAiTrend, generateStudentAiTrend, readCachedStudentAiTrend, type AiClassTrendResult } from "./state/aiTrendService";
-import type { ActivityEvent, AppStudent, BusinessEntityRef, GradeExam, GradeItemAnalysis, GradeQuestionDefinition, SavedGradeExamRecord, SeatHistorySnapshot, SeatLayoutV1, SeatSettings, StudentId } from "./state/types";
+import type { CommunicationDraft, ActivityEvent, AppStudent, BusinessEntityRef, GradeExam, GradeItemAnalysis, GradeQuestionDefinition, SavedGradeExamRecord, SeatHistorySnapshot, SeatLayoutV1, SeatSettings, StudentId } from "./state/types";
 import { useStudentActions } from "./hooks/useStudentActions";
 import { useDormitoryActions } from "./hooks/useDormitoryActions";
 import { useClassFundActions } from "./hooks/useClassFundActions";
 import { editFollowupTask, findMatchingFollowupTask, getDueFollowupNotifications, getTaskUrgency, prepareFollowupTasks, todayKey } from "./state/dailyManagement";
-import { getFollowupStudentIds } from "./state/followupStudents";
+import { getFollowupStudentIds, groupFollowupTasks } from "./state/followupStudents";
 import { FollowupTaskDrawer, type FollowupTaskDraft } from "./components/FollowupTaskDrawer";
 import { buildTimeline, businessEntityExists, inspectStateHealth, targetFromBusinessRef, type TimelineTarget } from "./state/dataInsights";
 import { createActivityEvent } from "./state/activityEvents";
@@ -166,6 +168,28 @@ export default function App() {
     const ids = new Set(events.map(event => event.id));
     setActivityEvents(current => [...events, ...current].slice(0, 2000));
     return () => setActivityEvents(current => current.filter(item => !ids.has(item.id)));
+  }
+
+  function saveFundCollection(collection: FundCollection) {
+    const before = readFundCollections(appState.settings).find(item => item.id === collection.id);
+    const event = createActivityEvent({ action: before ? "updated" : "created", ref: { domain: "fund", entityId: collection.id }, studentIds: Object.keys(collection.targets), title: `${before ? "修改" : "创建"}收费事项：${collection.title}`, detail: `${Object.keys(collection.targets).length} 名学生` });
+    replaceState(current => ({ ...current, settings: { ...current.settings, fundCollections: [collection, ...readFundCollections(current.settings).filter(item => item.id !== collection.id)] }, activityEvents: [event, ...current.activityEvents].slice(0, 2000) }));
+    actionToast.show({ message: "收费事项已保存", actionLabel: "撤销", duration: 6000, onAction: () => replaceState(current => {
+      if (JSON.stringify(readFundCollections(current.settings).find(item => item.id === collection.id)) !== JSON.stringify(readFundCollections({ fundCollections: [collection] })[0]) || !before && current.fundTransactions.some(item => item.collectionId === collection.id)) return current;
+      return { ...current, settings: { ...current.settings, fundCollections: [...(before ? [before] : []), ...readFundCollections(current.settings).filter(item => item.id !== collection.id)] }, activityEvents: current.activityEvents.filter(item => item.id !== event.id) };
+    }) });
+  }
+
+  function saveCommunication(draft: CommunicationDraft): boolean {
+    const before = communicationDrafts.find(item => item.id === draft.id);
+    const event = createActivityEvent({ action: before ? "updated" : "created", ref: { domain: "communication", entityId: draft.id, studentId: draft.studentId }, studentIds: draft.studentId ? [draft.studentId] : [], title: `${draft.deliveryStatus === "shared" ? "记录沟通" : "保存沟通稿"}：${draft.scope === "class" ? "班级" : allStudents.find(student => student.id === draft.studentId)?.name || "学生"}`, detail: `${draft.startDate} 至 ${draft.endDate}` });
+    replaceState(current => ({ ...current, communicationDrafts: [draft, ...current.communicationDrafts.filter(item => item.id !== draft.id)], activityEvents: [event, ...current.activityEvents].slice(0, 2000) }));
+    if (!persistState()) { setSaveStatus("failed"); return false; }
+    actionToast.show({ message: draft.deliveryStatus === "shared" ? "已记录沟通" : "沟通稿已保存", actionLabel: "撤销", duration: 6000, onAction: () => replaceState(current => {
+      if (current.communicationDrafts.find(item => item.id === draft.id)?.updatedAt !== draft.updatedAt) return current;
+      return { ...current, communicationDrafts: [...(before ? [before] : []), ...current.communicationDrafts.filter(item => item.id !== draft.id)], activityEvents: current.activityEvents.filter(item => item.id !== event.id) };
+    }) });
+    return true;
   }
 
   function applyQuickRecord(input: QuickRecordInput) {
@@ -307,7 +331,7 @@ export default function App() {
     followupAfterSave.current = null;
     setFollowupDraft(null);
     actionToast.show({
-      message: wasEditing ? "跟进任务修改已保存" : !savedTasks.length ? "已关联现有跟进任务" : savedTasks.length > 1 ? `已创建 ${savedTasks.length} 项跟进任务` : "跟进任务已创建",
+      message: wasEditing ? "跟进任务修改已保存" : !savedTasks.length ? "已关联现有跟进任务" : draft.sourceRef?.domain === "homework" && savedTasks.length > 1 ? `已为 ${savedTasks.length} 人创建作业跟进` : savedTasks.length > 1 ? `已创建 ${savedTasks.length} 项跟进任务` : "跟进任务已创建",
       actionLabel: "撤销",
       actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
       onAction: () => {
@@ -396,7 +420,7 @@ export default function App() {
     if (!loggedIn || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     const due = getDueFollowupNotifications(followupTasks);
     if (!due.length) return;
-    new Notification("班级跟进提醒", { body: `今天有 ${due.length} 项待处理或已逾期任务。` });
+    new Notification("班级跟进提醒", { body: `今天有 ${groupFollowupTasks(due).length} 项待处理或已逾期任务。` });
     const now = new Date().toISOString();
     setFollowupTasks(current => current.map(task => due.some(item => item.id === task.id) ? { ...task, lastNotifiedAt: now } : task));
   }, [followupTasks, loggedIn, setFollowupTasks]);
@@ -429,7 +453,7 @@ export default function App() {
     });
   }
 
-  function commitSeating(patch: Partial<Pick<typeof appState, "seatOrder" | "seatSettings" | "lockedSeats">>) {
+  function commitSeating(patch: Partial<Pick<typeof appState, "seatOrder" | "seatSettings" | "lockedSeats">>, rotationNote?: string) {
     replaceState(current => {
       const next = {
         ...current,
@@ -438,8 +462,9 @@ export default function App() {
         lockedSeats: patch.lockedSeats ?? current.lockedSeats,
       };
       if (JSON.stringify([next.seatOrder, next.seatSettings.layout, next.lockedSeats]) === JSON.stringify([current.seatOrder, current.seatSettings.layout, current.lockedSeats])) return current;
-      setSeatHistory(previous => [captureSeatChange(current, next), ...previous].slice(0, 20));
-      return next;
+      const snapshot = rotationNote ? createRotationSnapshot(next, rotationNote) : null;
+      setSeatHistory(previous => [{ ...captureSeatChange(current, next), rotationSnapshotId: snapshot?.id }, ...previous].slice(0, 20));
+      return snapshot ? { ...next, seatHistory: [snapshot, ...current.seatHistory].slice(0, 20) } : next;
     });
   }
 
@@ -469,24 +494,22 @@ export default function App() {
   }
 
   function handleRandomizeSeats() {
-    const candidate = buildBestShuffleCandidate(students, seatOrder, lockedSeats, seatSettings);
+    const candidate = buildBestShuffleCandidate(students, seatOrder, lockedSeats, seatSettings, savedSeatHistory);
     if (candidate) {
       setShufflePreview(candidate);
     }
   }
 
   function handleShufflePreviewOrderChange(order: SeatOrder) {
-    setShufflePreview({
-      order,
-      evaluation: evaluateSeatOrder(students, order, seatSettings),
-    });
+    const context = seatSettings.rotateWithHistory ? buildSeatRotationContext(seatOrder, seatSettings.layout, savedSeatHistory, students) : null;
+    setShufflePreview({ order, evaluation: evaluateSeatOrder(students, order, seatSettings), rotation: context ? { ...evaluateSeatRotation(order, seatSettings.layout, context, lockedSeats), savedCount: context.savedCount } : undefined });
   }
 
   function handleApplyShufflePreview() {
     if (!shufflePreview) {
       return;
     }
-    commitSeatOrder(shufflePreview.order);
+    commitSeating({ seatOrder: shufflePreview.order }, "自动轮换");
     setShufflePreview(null);
   }
 
@@ -1064,7 +1087,7 @@ export default function App() {
           seatOrder={seatOrder}
           gradeExams={appState.gradeExams}
           savedSeatHistoryCount={savedSeatHistory.length}
-          pendingTaskCount={followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task))).length}
+          pendingTaskCount={groupFollowupTasks(followupTasks.filter(task => ["overdue", "today"].includes(getTaskUrgency(task)))).length}
           onTabChange={tab => tab === "comments" ? openCommentWorkbench() : setSidebarTab(tab)}
         />
       }
@@ -1142,6 +1165,7 @@ export default function App() {
               onActivity={recordActivity}
               homeworkAssignments={homeworkAssignments}
               communicationDrafts={communicationDrafts}
+              onSaveCommunication={saveCommunication}
               activityEvents={appState.activityEvents}
               resolveEntityPreview={(ref, fallback) => resolveBusinessEntityPreview(appState, ref, fallback)}
               onOpenEntity={ref => {
@@ -1212,7 +1236,7 @@ export default function App() {
             ? <CommentWorkbenchComponent students={students} onClose={closeCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />
             : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, onClose: closeCommentWorkbench, onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
         )}
-        {sidebarTab === "today" && <div className="h-full"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
+        {sidebarTab === "today" && <div className="h-full"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onSaveCommunication={saveCommunication} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full">
             <DailyWorkspace
@@ -1325,6 +1349,8 @@ export default function App() {
           <div className="h-full">
             <ClassFundWorkspace
               transactions={fundTransactions}
+              initialTarget={timelineTarget?.workspace === "funds" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget}
+              collections={readFundCollections(appState.settings)} tasks={followupTasks} onSaveCollection={saveFundCollection} onOpenTask={id => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: id })}
               students={students}
               onAdd={handleAddFundTransaction}
               onRemoveCreated={handleRemoveCreatedFundTransaction}

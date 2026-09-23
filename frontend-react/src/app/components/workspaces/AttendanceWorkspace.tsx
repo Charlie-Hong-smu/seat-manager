@@ -1,3 +1,5 @@
+import { LeavePeriodEditor } from "../LeavePeriodEditor";
+import { confirmLeaveReturn, getAttendanceForDate, isAwaitingReturn } from "../../state/attendancePeriods";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAttendanceUndo } from "../../hooks/useAttendanceUndo";
@@ -28,7 +30,7 @@ const QUICK_STATUS_OPTIONS: { value: AttendanceQuickStatus; label: string }[] = 
 
 function attendanceSummary(record?: AttendanceRecord) {
   const labels: string[] = [];
-  if (record?.status === "leave") labels.push("请假");
+  if (record?.status === "leave") labels.push(isAwaitingReturn(record, record.date) ? "请假 · 待确认返校" : "请假");
   else if (record?.status === "absent") labels.push("缺勤");
   if (record?.late) labels.push("迟到");
   if (record?.earlyLeave) labels.push("早退");
@@ -54,12 +56,6 @@ function downloadRangeCsv(students: AppStudent[], records: AttendanceRecord[], f
   downloadCsvFile(`出勤_${start}_${end}.csv`, buildAttendanceRangeCsv(students, records, start, end));
 }
 
-function AttendanceDateTimeFields({ value, label, onChange }: { value: string; label: string; onChange: (value: string) => void }) {
-  const [datePart = "", timePart = ""] = value.split("T");
-  const update = (nextDate: string, nextTime: string) => onChange(nextDate ? `${nextDate}T${nextTime || "00:00"}` : "");
-  return <fieldset className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2"><legend className="sr-only">{label}</legend><DatePicker value={datePart} onChange={next => update(next, timePart)} ariaLabel={`${label}日期`} className="w-full bg-background-primary-default"/><input type="time" aria-label={`${label}时间`} value={timePart} onChange={event => update(datePart || todayKey(), event.target.value)} className="h-10 rounded-xl border border-border-button-default bg-background-primary-default px-2 text-caption-1-regular"/></fieldset>;
-}
-
 export function AttendanceWorkspace({ students, records, tasks = [], onChange, onRequestTask, onActivity, onOpenTask, initialTarget, onInitialTargetConsumed }: { students: AppStudent[]; records: AttendanceRecord[]; tasks?: FollowupTask[]; onChange: (records: AttendanceRecord[]) => void; onRequestTask: (draft: FollowupTaskDraft) => void; onActivity?: (event: ActivityEvent) => void | (() => void); onOpenTask?: (taskId: string) => void; initialTarget?: TimelineTarget; onInitialTargetConsumed?: () => void }) {
   const appDialog = useAppDialog();
   const [date, setDate] = useState(todayKey()); const [search, setSearch] = useState(""); const [filter, setFilter] = useState("all");
@@ -73,6 +69,8 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
   const feedbackTimerRef = useRef<number | null>(null);
   const registration = useAttendanceUndo(records, onChange, date);
   const actionToast = useActionToast();
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
   useEffect(() => () => { if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current); }, []);
   const [focusedStudentId, setFocusedStudentId] = useState<StudentId | "">("");
   useInitialTargetEffect(initialTarget ? `${initialTarget.entityId || ""}|${initialTarget.studentId || ""}|${initialTarget.date || ""}` : undefined, () => {
@@ -85,7 +83,7 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
       window.setTimeout(() => document.querySelector(`[data-attendance-student-id="${CSS.escape(student.id)}"]`)?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }), 80);
     }
   }, onInitialTargetConsumed);
-  const byStudent = useMemo(() => new Map(records.filter(item => item.date === date).map(item => [item.studentId, item])), [date, records]);
+  const byStudent = useMemo(() => new Map(getAttendanceForDate(records, date).map(item => [item.studentId, item])), [date, records]);
   const rows = students.filter(student => {
     const record = byStudent.get(student.id);
     const matchesSearch = matchesStudentSearch(student, search);
@@ -98,13 +96,35 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
     const undo = registration.commit(next, action, undoActivity);
     if (undo) actionToast.show({ message: action ? "出勤已保存，6 秒内再次点击可恢复" : "出勤修改已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5"/>, onAction: () => { undo(); }, duration: 6000 });
   }
+  function commitPeriod(next: AttendanceRecord[], id: string, label: string) {
+    const before = records.find(item => item.id === id);
+    const after = next.find(item => item.id === id);
+    if (!after || before === after) return;
+    const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "attendance", entityId: id, studentId: after.studentId, date: after.date }, studentIds: [after.studentId], title: label, detail: `${after.leaveStart || after.date} 至 ${after.leaveEnd || after.date}` }));
+    recordsRef.current = next; onChange(next);
+    actionToast.show({ message: label, actionLabel: "撤销", duration: 6000, onAction: () => {
+      if (recordsRef.current.find(item => item.id === id)?.updatedAt !== after.updatedAt) return;
+      const restored = [...recordsRef.current.filter(item => item.id !== id), ...(before ? [before] : [])];
+      recordsRef.current = restored; onChange(restored); if (typeof undoActivity === "function") undoActivity();
+    } });
+  }
+  function savePeriod(studentId: string, start: string, end: string) {
+    const effective = byStudent.get(studentId);
+    const source = records.find(item => item.id === effective?.id);
+    const input = { studentId, date: source?.date || date, status: "leave" as const, late: false, earlyLeave: false, note: source?.note || "", leaveStart: start, leaveEnd: end, leaveTracking: true, leaveReturnedAt: undefined };
+    const next = upsertAttendance(records, input);
+    const after = next.find(item => item.studentId === studentId && item.date === input.date);
+    if (after) commitPeriod(next, after.id, "请假时段已保存");
+  }
+
   function patchStudent(studentId: string, patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave" | "note" | "leaveStart" | "leaveEnd">>, action?: string) {
     const statusAction = action ?? (patch.status ? `status:${patch.status}` : "late" in patch ? "late" : "earlyLeave" in patch ? "earlyLeave" : undefined);
     if (statusAction && registration.tryRevert(studentId, statusAction)) { actionToast.show("已恢复上次出勤状态"); return; }
     const current = byStudent.get(studentId);
     if (patch.status && (current?.status || "normal") === patch.status && Object.keys(patch).length === 1) return;
-    const normalized = patch.status ? normalizeAttendancePatch(current, patch.status) : null;
-    const next = upsertAttendance(records, { studentId, date, status: normalized?.status ?? current?.status ?? "normal", late: patch.late ?? normalized?.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? normalized?.earlyLeave ?? current?.earlyLeave ?? false, note: patch.note ?? current?.note ?? "", leaveStart: patch.status ? patch.leaveStart ?? normalized?.leaveStart : patch.leaveStart ?? current?.leaveStart, leaveEnd: patch.status ? patch.leaveEnd ?? normalized?.leaveEnd : patch.leaveEnd ?? current?.leaveEnd });
+    const local = records.find(item => item.studentId === studentId && item.date === date);
+    const normalized = patch.status ? normalizeAttendancePatch(local, patch.status) : null;
+    const next = upsertAttendance(records, { studentId, date, status: normalized?.status ?? current?.status ?? "normal", late: patch.late ?? normalized?.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? normalized?.earlyLeave ?? current?.earlyLeave ?? false, note: patch.note ?? current?.note ?? "", leaveStart: patch.status ? patch.leaveStart ?? normalized?.leaveStart : patch.leaveStart ?? local?.leaveStart, leaveEnd: patch.status ? patch.leaveEnd ?? normalized?.leaveEnd : patch.leaveEnd ?? local?.leaveEnd });
     const student = students.find(item => item.id === studentId);
     const undoActivity = statusAction ? onActivity?.(createActivityEvent({ action: "status_changed", ref: { domain: "attendance", entityId: current?.id || `${date}:${studentId}`, studentId, date }, studentIds: [studentId], title: `登记出勤：${student?.name || "学生"}`, detail: attendanceSummary(next.find(item => item.date === date && item.studentId === studentId)) })) : undefined;
     commit(next, statusAction, undoActivity);
@@ -120,7 +140,7 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
 
   // 全班全勤是最高频场景：一键清掉当日全部异常记录（正常不写记录），可经 toast 撤销。
   async function markAllNormal() {
-    const todaysRecords = records.filter(item => item.date === date);
+    const todaysRecords = getAttendanceForDate(records, date).filter(item => item.status !== "normal" || item.late || item.earlyLeave);
     if (!todaysRecords.length) return;
     const affectedIds = todaysRecords.map(item => item.studentId);
     const confirmed = await appDialog.confirm({
@@ -131,7 +151,7 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
     });
     if (!confirmed) return;
     const undoActivity = onActivity?.(createActivityEvent({ action: "status_changed", ref: { domain: "attendance", entityId: `${date}-all-normal`, date }, studentIds: affectedIds, title: "全班设为正常出勤", detail: `清除 ${todaysRecords.length} 条异常记录` }));
-    commit(records.filter(item => item.date !== date), undefined, undoActivity);
+    commit(batchUpsertAttendance(records, affectedIds, date, { status: "normal", late: false, earlyLeave: false, leaveStart: "", leaveEnd: "" }), undefined, undoActivity);
     setSelected(new Set());
   }
 
@@ -207,7 +227,8 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
         </button>;
       })}</MotionList> : <>
         <MotionCollapse open={selected.size > 0}><div className="mb-3 flex flex-wrap items-center gap-2 rounded-[var(--app-radius-sm)] border border-accent-100 bg-accent-50 p-2.5"><span className="mr-auto text-caption-1-semibold text-accent-700">已选 {selected.size} 人</span><Button size="sm" variant="secondary" onClick={() => batch(normalizeAttendancePatch(undefined,"normal"),"正常")}>正常</Button><Button size="sm" variant="secondary" onClick={() => batch(normalizeAttendancePatch(undefined,"leave"),"请假")}>请假</Button><Button size="sm" variant="danger" onClick={() => batch(normalizeAttendancePatch(undefined,"absent"),"缺勤")}>缺勤</Button><Button size="sm" variant="secondary" onClick={() => batch({late:true},"迟到")}>迟到</Button><Button size="sm" variant="secondary" onClick={() => batch({earlyLeave:true},"早退")}>早退</Button><Button size="sm" onClick={()=>onRequestTask({studentId:[...selected][0],studentIds:[...selected],title:"出勤异常跟进",type:"出勤关注",description:`${date} 出勤批量跟进`,plannedDate:date,dueDate:date,source:"attendance",sourceRef:{domain:"attendance",entityId:`${date}-batch`,date}})}><ListPlus className="h-3.5 w-3.5"/>创建任务</Button></div></MotionCollapse>
-        <MotionList className="space-y-2">{rows.map(student => { const record=byStudent.get(student.id); const status=record?.status||"normal"; const editing=editingId===student.id; return <div key={student.id} data-attendance-student-id={student.id} data-motion-surface={student.id} className={`registration-tile border px-4 py-3 ${focusedStudentId === student.id ? "entity-focus-highlight" : ""}`}><div className="grid grid-cols-[auto_minmax(7rem,1fr)_auto] items-center gap-3"><Checkbox isSelected={selected.has(student.id)} onChange={() => toggle(student.id)} aria-label={`选择 ${student.name}`} /><div><div className="font-bold text-text-primary">{student.name}</div><div className="text-caption-1-regular text-text-tertiary">{record?.note || attendanceSummary(record)}</div></div><div className="flex items-center gap-2"><AttendanceStatusControl compact value={status} late={record?.late||false} earlyLeave={record?.earlyLeave||false} onChange={patch => patchStudent(student.id, patch)}/><button onClick={() => setEditingId(editing ? "" : student.id)} className="rounded-lg bg-background-secondary-default p-2 text-text-secondary" aria-label={`编辑 ${student.name} 详情`}><Settings2 className="h-4 w-4"/></button></div></div><MotionCollapse open={editing}><div className="mt-3 grid gap-2 rounded-xl bg-background-secondary-default p-3 sm:grid-cols-3"><Input value={record?.note||""} onChange={value => patchStudent(student.id,{note:value})} placeholder="备注" /><AttendanceDateTimeFields label="请假开始" value={record?.leaveStart||""} onChange={value => patchStudent(student.id,{leaveStart:value})}/><AttendanceDateTimeFields label="请假结束" value={record?.leaveEnd||""} onChange={value => patchStudent(student.id,{leaveEnd:value})}/>{record && <button onClick={() => onRequestTask({studentId:student.id,title:`出勤跟进：${record.status==="leave"?"请假":record.status==="absent"?"缺勤":record.late?"迟到":"早退"}`,type:"出勤关注",description:`${date}${record.note?` · ${record.note}`:""}`,plannedDate:date,dueDate:date,source:"attendance",sourceRef:{domain:"attendance",entityId:record.id,studentId:student.id,date}})} className="sm:col-span-3 flex items-center justify-center gap-1 rounded-lg bg-accent-50 py-2 text-caption-1-semibold text-accent-700"><ListPlus className="h-3.5 w-3.5"/>创建跟进任务</button>}</div></MotionCollapse></div>})}</MotionList>
+        <MotionList className="space-y-2">{rows.map(student => { const record=byStudent.get(student.id); const status=record?.status||"normal"; const editing=editingId===student.id; return <div key={student.id} data-attendance-student-id={student.id} data-motion-surface={student.id} className={`registration-tile border px-4 py-3 ${focusedStudentId === student.id ? "entity-focus-highlight" : ""}`}><div className="grid grid-cols-[auto_minmax(7rem,1fr)_auto] items-center gap-3"><Checkbox isSelected={selected.has(student.id)} onChange={() => toggle(student.id)} aria-label={`选择 ${student.name}`} /><div><div className="font-bold text-text-primary">{student.name}</div><div className="text-caption-1-regular text-text-tertiary">{attendanceSummary(record)}{record?.note ? ` · ${record.note}` : ""}</div></div><div className="flex items-center gap-2"><AttendanceStatusControl compact value={status} late={record?.late||false} earlyLeave={record?.earlyLeave||false} onChange={patch => patchStudent(student.id, patch)}/><button onClick={() => setEditingId(editing ? "" : student.id)} className="rounded-lg bg-background-secondary-default p-2 text-text-secondary" aria-label={`编辑 ${student.name} 详情`}><Settings2 className="h-4 w-4"/></button></div></div><MotionCollapse open={editing}><div className="mt-3 grid gap-2 rounded-xl bg-background-secondary-default p-3 sm:grid-cols-3"><Input value={record?.note||""} onChange={value => patchStudent(student.id,{note:value})} placeholder="备注" /><LeavePeriodEditor studentId={student.id} date={date} source={records.find(item => item.id === record?.id)} onSave={(start, end) => savePeriod(student.id, start, end)} onReturn={() => { if (record) commitPeriod(confirmLeaveReturn(records, record.id, date), record.id, "已确认返校"); }}/>
+{record && <button onClick={() => onRequestTask({studentId:student.id,title:`出勤跟进：${record.status==="leave"?"请假":record.status==="absent"?"缺勤":record.late?"迟到":"早退"}`,type:"出勤关注",description:`${date}${record.note?` · ${record.note}`:""}`,plannedDate:date,dueDate:date,source:"attendance",sourceRef:{domain:"attendance",entityId:record.id,studentId:student.id,date}})} className="sm:col-span-3 flex items-center justify-center gap-1 rounded-lg bg-accent-50 py-2 text-caption-1-semibold text-accent-700"><ListPlus className="h-3.5 w-3.5"/>创建跟进任务</button>}</div></MotionCollapse></div>})}</MotionList>
       </>}</MotionSwitch>
       {!rows.length && <div className="py-12 text-center text-body-regular text-text-tertiary">没有符合条件的学生</div>}
     {actionToast.toast}

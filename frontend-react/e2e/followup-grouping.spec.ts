@@ -96,8 +96,22 @@ test("today entry shares one task, counts once and preserves all students when c
 test("collection followups retain separate students, statuses and history records", async ({ page }) => {
   await start(page);
   await page.getByRole("button", { name: "班费", exact: true }).click();
-  await page.getByRole("group", { name: "班费视图" }).getByRole("button", { name: "收缴情况", exact: true }).click();
-  await page.getByRole("button", { name: "为未交 3 人建跟进", exact: true }).click();
+  await page.getByRole("group", { name: "班费视图" }).getByRole("button", { name: "收费事项", exact: true }).click();
+  await page.getByRole("button", { name: "新建收费事项", exact: true }).click();
+  await page.getByRole("textbox", { name: "收费事项名称" }).fill("秋季班费");
+  await page.getByRole("textbox", { name: "每人应交金额" }).fill("50");
+  await page.getByRole("button", { name: "选择全班", exact: true }).click();
+  await page.getByRole("button", { name: "创建收费事项", exact: true }).click();
+  const payer = page.locator("[data-fund-collection-student-id]").filter({ hasText: "关联甲" });
+  await payer.getByRole("button", { name: "登记收款" }).click();
+  await page.getByRole("dialog", { name: "登记收款：关联甲" }).getByRole("textbox", { name: "金额（元）" }).fill("20");
+  await page.getByRole("dialog", { name: "登记收款：关联甲" }).getByRole("button", { name: "保存流水" }).click();
+  await expect(payer).toContainText("部分缴纳 · 应交 ¥50.00 · 实收 ¥20.00");
+  await payer.getByRole("button", { name: "退款" }).click();
+  await page.getByRole("dialog", { name: "登记退款：关联甲" }).getByRole("textbox", { name: "金额（元）" }).fill("5");
+  await page.getByRole("dialog", { name: "登记退款：关联甲" }).getByRole("button", { name: "保存流水" }).click();
+  await expect(payer).toContainText("部分缴纳 · 应交 ¥50.00 · 实收 ¥15.00");
+  await page.getByRole("button", { name: "为未交齐学生建跟进", exact: true }).click();
   const drawer = page.getByRole("complementary", { name: "创建跟进任务" });
   await expect(drawer.getByRole("button", { name: "分别创建 3 项", exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "分别创建 3 项", exact: true }).click();
@@ -118,4 +132,38 @@ test("collection followups retain separate students, statuses and history record
   });
   expect(history).toHaveLength(3);
   expect(new Set(history.map((event: { ref: { entityId: string } }) => event.ref.entityId)).size).toBe(3);
+});
+
+test("missing homework students appear under one matter with individual completion after reload", async ({ page }) => {
+  await start(page);
+  await expect.poll(() => page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "{}");
+    const slice = book.slices?.find((item: { id: string }) => item.id === book.activeSliceId) || book.slices?.[0];
+    return slice?.data.students?.length || 0;
+  })).toBe(3);
+  await page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "{}");
+    const slice = book.slices.find((item: { id: string }) => item.id === book.activeSliceId) || book.slices[0];
+    const ids = slice.data.students.map((student: { id: string }) => student.id);
+    slice.data.homeworkAssignments = [{ id: "e2e-homework-group", title: "数学试卷", subject: "数学", assignedDate: "2026-09-22", dueDate: "2026-09-23", note: "核对补交", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lifecycle: "active", participantStudentIds: ids, studentStates: Object.fromEntries(ids.map((id: string) => [id, { status: "pending", note: "", updatedAt: new Date().toISOString() }])) }];
+    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify(book));
+  });
+  await page.reload();
+  await page.getByRole("button", { name: /^任务与作业/ }).click();
+  await page.getByRole("tab", { name: "作业", exact: true }).click();
+  await page.getByRole("button", { name: "为未交 3 人建跟进", exact: true }).click();
+  await page.getByRole("tab", { name: "待办", exact: true }).click();
+  const matter = page.locator("article").filter({ hasText: "跟进作业：数学试卷" });
+  await expect(matter).toHaveCount(1);
+  await expect(matter.locator("[data-followup-task-id]")).toHaveCount(3);
+  await matter.getByRole("button", { name: "完成任务：关联甲", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "同步作业状态？" })).toBeVisible();
+  await page.getByRole("button", { name: "同步为已交" }).click();
+  await expect(matter.getByText("待处理 2 人")).toBeVisible();
+  await expect.poll(async () => (await storedTasks(page)).filter((task: { status: string }) => task.status === "completed").length).toBe(1);
+  await page.reload();
+  await page.getByRole("button", { name: /^任务与作业/ }).click();
+  await expect(matter).toHaveCount(1);
+  await expect(matter.getByRole("button", { name: "完成任务：关联乙", exact: true })).toBeVisible();
+  await expect(matter.getByRole("button", { name: "完成任务：关联丙", exact: true })).toBeVisible();
 });

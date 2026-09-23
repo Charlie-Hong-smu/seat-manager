@@ -5,7 +5,7 @@ import type { SeatHistorySnapshot, SeatManagerState, StudentId } from "./types";
 function seating(state: SeatManagerState) {
   return { order: [...state.seatOrder], layout: state.seatSettings.layout, locks: [...state.lockedSeats], groupLeaders: { ...readClassDuties(state).groupLeaders } };
 }
-export interface SeatUndoEntry { before: ReturnType<typeof seating>; after: ReturnType<typeof seating> }
+export interface SeatUndoEntry { before: ReturnType<typeof seating>; after: ReturnType<typeof seating>; rotationSnapshotId?: string }
 export function captureSeatChange(before: SeatManagerState, after: SeatManagerState): SeatUndoEntry {
   return { before: seating(before), after: seating(reconcileClassDuties(after)) };
 }
@@ -29,7 +29,7 @@ export function restoreSeatChange(current: SeatManagerState, entry: SeatUndoEntr
   Object.entries(entry.before.groupLeaders).forEach(([groupId, studentId]) => {
     if (!groupLeaders[groupId] && !entry.after.groupLeaders[groupId]) groupLeaders[groupId] = studentId;
   });
-  return reconcileClassDuties({ ...current, seatOrder, lockedSeats: [...locks].filter(index => index < seatOrder.length), seatSettings: { ...current.seatSettings, layout: entry.before.layout }, settings: { ...current.settings, classDuties: { ...duties, groupLeaders } } });
+  return reconcileClassDuties({ ...current, seatOrder, lockedSeats: [...locks].filter(index => index < seatOrder.length), seatSettings: { ...current.seatSettings, layout: entry.before.layout }, seatHistory: entry.rotationSnapshotId ? current.seatHistory.filter(item => item.id !== entry.rotationSnapshotId) : current.seatHistory, settings: { ...current.settings, classDuties: { ...duties, groupLeaders } } });
 }
 
 function normalizedName(name: string) { return name.trim().replace(/\u3000/g, " ").replace(/[()（）][^()（）]*[()（）]/g, "").replace(/(同学|学生)$/g, "").replace(/\s+/g, ""); }

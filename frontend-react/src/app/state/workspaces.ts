@@ -1,3 +1,4 @@
+import { resetFundCollectionsForNewTerm } from "./fundCollections";
 import { resetClassDutiesForNewTerm } from "./classDuties";
 // 文件柜(多班级 / 学期)管理。
 //
@@ -549,7 +550,7 @@ function copyRosterForNewTerm(data: Record<string, unknown>): Record<string, unk
     seatOrder: [],
     lockedSeats: [],
     seatSettings: isRecord(data.settings) ? data.settings : (data.seatSettings ?? {}),
-    settings: resetClassDutiesForNewTerm(isRecord(data.settings) ? data.settings : {}),
+    settings: resetFundCollectionsForNewTerm(resetClassDutiesForNewTerm(isRecord(data.settings) ? data.settings : {})),
     dormitories,
     seatHistory: [],
     savedExams: [],

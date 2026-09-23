@@ -28,7 +28,7 @@ interface Props {
   onSelectStudent?: (student: AppStudent) => void;
 }
 
-type DetailTab = "changed" | "required" | "gender" | "complement" | "front";
+type DetailTab = "changed" | "required" | "gender" | "complement" | "front" | "rotation";
 
 interface PreviewSeatRect {
   left: number;
@@ -356,6 +356,7 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
 
   const statCards: Array<[DetailTab, string, string]> = [
     ["changed", "变动座位", `${stats.changedCount} 个`],
+    ...(candidate.rotation ? [["rotation", "近期轮换", `${candidate.rotation.sameSeatStudents.length} 人重坐 · ${candidate.rotation.repeatedNeighborPairs.length} 对重搭`] as [DetailTab, string, string]] : []),
     ["required", "明确要求", stats.requiredTotal ? `${stats.requiredSatisfied}/${stats.requiredTotal} 条已满足` : "未设置"],
     ["gender", "男女搭配", `${stats.mixedGenderPairs}/${stats.occupiedPairs} 对`],
     ["complement", "互补关系", stats.complementEnabled ? `互补同桌 ${stats.complementMatchedCount} 对` : "未启用"],
@@ -443,6 +444,13 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
               {activeDetail === "gender" && renderGenderDetails(candidate.evaluation, seatSettings.pairByGender)}
               {activeDetail === "complement" && renderComplementDetails(candidate.evaluation)}
               {activeDetail === "front" && renderFrontDetails(candidate.evaluation)}
+              {activeDetail === "rotation" && candidate.rotation && <>
+                <DetailBlock title={`参考当前排位及 ${candidate.rotation.savedCount} 份近期快照`}>
+                  <DetailItem>{candidate.rotation.sameSeatStudents.length} 人回到近期坐过的座位，{candidate.rotation.repeatedNeighborPairs.length} 对学生再次相邻。锁定座位不计入重坐。</DetailItem>
+                </DetailBlock>
+                <DetailBlock title="重复座位">{candidate.rotation.sameSeatStudents.length ? candidate.rotation.sameSeatStudents.map(id => <DetailItem key={id} tone="warn">{studentById.get(id)?.name || "未知学生"}</DetailItem>) : <DetailItem tone="ok">没有重坐近期座位。</DetailItem>}</DetailBlock>
+                <DetailBlock title="重复相邻">{candidate.rotation.repeatedNeighborPairs.length ? candidate.rotation.repeatedNeighborPairs.map(([a, b]) => <DetailItem key={`${a}-${b}`} tone="warn">{studentById.get(a)?.name || "未知学生"}、{studentById.get(b)?.name || "未知学生"}</DetailItem>) : <DetailItem tone="ok">没有重复相邻搭配。</DetailItem>}</DetailBlock>
+              </>}
             </div>
           </aside>
         </div>

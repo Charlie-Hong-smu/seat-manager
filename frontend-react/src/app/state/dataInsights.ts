@@ -1,3 +1,4 @@
+import { readFundCollections } from "./fundCollections";
 import { followupStudentLabel, getFollowupStudentIds } from "./followupStudents";
 import type { ActivityEvent, BusinessEntityRef, FollowupTask, SeatManagerState, StudentId } from "./types";
 import { timestampToLocalDateKey, toLocalDateKey } from "./dateKey";
@@ -71,7 +72,7 @@ export function targetFromBusinessRef(ref: BusinessEntityRef): TimelineTarget {
   if (ref.domain === "homework" || ref.domain === "followup") return { kind: "workspace", workspace: "followups", entityId: ref.entityId, studentId: ref.studentId };
   if (ref.domain === "dormitory") return { kind: "workspace", workspace: "dormitories", entityId: ref.entityId, studentId: ref.studentId };
   if (ref.domain === "score") return { kind: "workspace", workspace: "scores", entityId: ref.entityId, subEntityId: ref.subEntityId, studentId: ref.studentId };
-  if (ref.domain === "communication") return ref.studentId ? { kind: "student", entityId: ref.studentId, studentId: ref.studentId, studentTab: "followup" } : { kind: "workspace", workspace: "today", entityId: ref.entityId };
+  if (ref.domain === "communication") return { kind: "workspace", workspace: "today", entityId: ref.entityId };
   if (ref.domain === "fund") return { kind: "workspace", workspace: "funds", entityId: ref.entityId, studentId: ref.studentId };
   return { kind: "workspace", workspace: "today", entityId: ref.entityId, disabledReason: ref.domain === "ai" ? "这条 AI 建议没有可返回的原始页面" : "当前对象暂不支持直接打开" };
 }
@@ -84,7 +85,7 @@ export function businessEntityExists(state: SeatManagerState, ref: BusinessEntit
   if (ref.domain === "dormitory") return state.dormitories.some(item => item.id === ref.entityId || [...item.events, ...item.history.flatMap(archive => archive.events)].some(event => event.id === ref.entityId));
   if (ref.domain === "score") { const exam = state.gradeExams.find(item => item.id === ref.entityId); return Boolean(exam && (!ref.subEntityId || exam.itemAnalysis?.questions.some(question => question.id === ref.subEntityId))); }
   if (ref.domain === "communication") return state.communicationDrafts.some(item => item.id === ref.entityId);
-  if (ref.domain === "fund") return state.fundTransactions.some(item => item.id === ref.entityId);
+  if (ref.domain === "fund") return state.fundTransactions.some(item => item.id === ref.entityId) || readFundCollections(state.settings).some(item => item.id === ref.entityId);
   if (ref.domain === "followup") return state.followupTasks.some(item => item.id === ref.entityId);
   return true;
 }

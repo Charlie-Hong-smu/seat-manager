@@ -1,5 +1,6 @@
 import { TAG_CATALOG } from "./tagCatalog";
-import type { AppStudent, ComplementRuleId, SeatSettings, StudentId } from "./types";
+import type { AppStudent, ComplementRuleId, SeatHistorySnapshot, SeatSettings, StudentId } from "./types";
+import { buildSeatRotationContext, evaluateSeatRotation, type SeatRotationResult } from "./seatRotation";
 import {
   areSeatIndicesInSameGroup,
   areSeatIndicesNeighbors,
@@ -85,6 +86,7 @@ export interface SeatPreviewStats {
 export interface ShuffleCandidate {
   order: SeatOrder;
   evaluation: SeatEvaluation;
+  rotation?: SeatRotationResult & { savedCount: number };
 }
 
 export const COMPLEMENT_RULES: Array<{
@@ -422,15 +424,19 @@ export function buildBestShuffleCandidate(
   seatOrder: SeatOrder,
   lockedSeats: Set<number>,
   settings: SeatSettings,
+  history: SeatHistorySnapshot[] = [],
 ): ShuffleCandidate | null {
   const retries = Math.max(50, settings.constraints.maxRetries || 200);
   const complementEnabled = getActiveComplementRules(settings).length > 0;
+  const rotationContext = settings.rotateWithHistory ? buildSeatRotationContext(seatOrder, settings.layout, history, students) : null;
   let bestOrder: SeatOrder | null = null;
   let bestEvaluation: SeatEvaluation | null = null;
+  let bestRotation: SeatRotationResult | null = null;
 
   for (let i = 0; i < retries; i += 1) {
     const order = generateCandidateOrderFromCurrent(seatOrder, lockedSeats, settings);
     const evaluation = evaluateSeatOrder(students, order, settings);
+    const rotation = rotationContext ? evaluateSeatRotation(order, settings.layout, rotationContext, lockedSeats) : null;
     if (
       !bestEvaluation ||
       evaluation.hardViolations < bestEvaluation.hardViolations ||
@@ -438,18 +444,25 @@ export function buildBestShuffleCandidate(
       (
         evaluation.hardViolations === bestEvaluation.hardViolations &&
         evaluation.softPenalty === bestEvaluation.softPenalty &&
+        (rotation?.penalty ?? 0) < (bestRotation?.penalty ?? 0)
+      ) ||
+      (
+        evaluation.hardViolations === bestEvaluation.hardViolations &&
+        evaluation.softPenalty === bestEvaluation.softPenalty &&
+        (rotation?.penalty ?? 0) === (bestRotation?.penalty ?? 0) &&
         evaluation.complementMatchedCount > bestEvaluation.complementMatchedCount
       )
     ) {
       bestOrder = order;
       bestEvaluation = evaluation;
+      bestRotation = rotation;
     }
-    if (!complementEnabled && evaluation.hardViolations === 0 && evaluation.softPenalty === 0) {
+    if (!complementEnabled && !rotationContext && evaluation.hardViolations === 0 && evaluation.softPenalty === 0) {
       break;
     }
   }
 
-  return bestOrder && bestEvaluation ? { order: bestOrder, evaluation: bestEvaluation } : null;
+  return bestOrder && bestEvaluation ? { order: bestOrder, evaluation: bestEvaluation, rotation: bestRotation && rotationContext ? { ...bestRotation, savedCount: rotationContext.savedCount } : undefined } : null;
 }
 
 export function getSeatPreviewStats(students: AppStudent[], currentOrder: SeatOrder, order: SeatOrder, evaluation: SeatEvaluation, settings: SeatSettings): SeatPreviewStats {

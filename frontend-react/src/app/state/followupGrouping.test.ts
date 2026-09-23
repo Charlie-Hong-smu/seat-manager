@@ -4,7 +4,7 @@ import { createActivityEvent } from "./activityEvents";
 import { changeFollowupTaskStatus, permanentlyDeleteStudent, syncCompletedFollowupHomework } from "./classManagementCommands";
 import { createFollowupTask, editFollowupTask, findMatchingFollowupTask, normalizeFollowupTasks, prepareFollowupTasks } from "./dailyManagement";
 import { buildTimeline, filterTimeline, inspectStateHealth } from "./dataInsights";
-import { getFollowupStudentIds } from "./followupStudents";
+import { getFollowupStudentIds, groupFollowupTasks } from "./followupStudents";
 import { createEmptySeatManagerState, createSeatManagerState } from "./legacyStateAdapter";
 import { saveLegacySnapshot } from "./legacyWriteAdapter";
 import { buildTodayWorkItems, buildWeeklyFacts } from "./teacherWorkbench";
@@ -101,5 +101,18 @@ describe("shared matters and individual followups", () => {
     expect(syncCompletedFollowupHomework({ ...task, studentIds: ["a", "b"] }, [assignment])).toBeNull();
     expect(syncCompletedFollowupHomework({ ...task, sourceRef: { domain: "homework", entityId: "h", studentId: "b" } }, [assignment])).toBeNull();
     expect(syncCompletedFollowupHomework(task, [{ ...assignment, studentStates: { b: assignment.studentStates.b } }])).toBeNull();
+  });
+
+  it("shows one homework matter with independent student outcomes after partial completion and reload", () => {
+    const draft = { ...input, source: "homework" as const, sourceRef: { domain: "homework" as const, entityId: "homework-1" } };
+    const created = prepareFollowupTasks(draft).created;
+    const completed = changeFollowupTaskStatus(created[0], "completed").task;
+    const tasks = normalizeFollowupTasks(JSON.parse(JSON.stringify([completed, created[1]])));
+    expect(groupFollowupTasks(tasks)).toHaveLength(1);
+    expect(groupFollowupTasks(tasks)[0].members.map(task => task.status)).toEqual(["completed", "pending"]);
+    expect(buildTodayWorkItems({ date: input.dueDate, students, tasks, attendance: [], homework: [] }).filter(item => item.kind === "task")).toMatchObject([{ taskIds: [created[1].id] }]);
+    expect(groupFollowupTasks([...tasks, ...prepareFollowupTasks({ ...draft, studentId: "c", studentIds: ["c"] }).created])[0].members).toHaveLength(3);
+    expect(groupFollowupTasks([...tasks, ...prepareFollowupTasks({ ...draft, sourceRef: { domain: "homework", entityId: "homework-2" } }).created])).toHaveLength(2);
+    expect(groupFollowupTasks([createFollowupTask({ ...input, studentMode: "individual" }), createFollowupTask({ ...input, studentMode: "individual" })])).toHaveLength(2);
   });
 });
