@@ -1579,6 +1579,7 @@
 /* 同构详情区切换（宿舍间切换、评语工作台切换学生等）：View Transition
    捕获旧帧与新帧交叉淡化——旧内容不先消失、新内容不带位移，读起来是
    内容原地"溶"成新内容。每屏各面片一个独立命名，互不冲突。 */
+.vt-ai-launcher { view-transition-name: vt-ai-launcher; }
 .vt-dorm-detail { view-transition-name: vt-dorm-detail; }
 .vt-dorm-members { view-transition-name: vt-dorm-members; }
 .vt-comment-editor { view-transition-name: vt-comment-editor; }
@@ -2829,6 +2830,10 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
 ::view-transition { pointer-events: none; }
 ::view-transition-group(root), ::view-transition-new(root) { animation: none; }
 ::view-transition-old(root) { display: none; }
+/* Keep the fixed AI entry above workspace snapshots throughout a native transition. */
+::view-transition-group(vt-ai-launcher) { z-index: 100; animation: none; }
+::view-transition-old(vt-ai-launcher) { display: none; }
+::view-transition-new(vt-ai-launcher) { animation: none; }
 ::view-transition-group(vt-dorm-detail),
 ::view-transition-group(vt-dorm-members),
 ::view-transition-group(vt-comment-editor),

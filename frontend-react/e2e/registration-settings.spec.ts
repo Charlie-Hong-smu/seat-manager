@@ -213,3 +213,61 @@ test("creating and deleting the final dormitory animate the list and detail in p
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormListAnimations?: string[] }).__dormListAnimations?.some(label => label.includes("102 室")))).toBe(true);
   await expect.poll(async () => (await data(page)).dormitories.length).toBe(1);
 });
+
+test("switching dormitories keeps the AI launcher above the transition", async ({ page }) => {
+  await login(page, true);
+  await page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "{}");
+    const slice = book.slices.find((item: { id: string }) => item.id === book.currentSliceId);
+    slice.data.dormitories.push({ ...slice.data.dormitories[0], id: "d2", name: "第二间宿舍" });
+    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify(book));
+  });
+  await page.reload(); await nav(page, /^宿舍/);
+  await page.locator(".dormitory-list-motion").getByRole("button", { name: /第二间宿舍/ }).click();
+  await expect(page.getByRole("heading", { name: "第二间宿舍" })).toBeVisible();
+  await page.evaluate(() => {
+    const state = window as typeof window & { __aiTransitionLayer?: { name: string; zIndex: string; animations: number } };
+    const start = document.startViewTransition.bind(document);
+    document.startViewTransition = ((update) => {
+      const transition = start(update);
+      void transition.ready.then(() => {
+        state.__aiTransitionLayer = {
+          name: getComputedStyle(document.getElementById("ai-assistant-launcher")!).viewTransitionName,
+          zIndex: getComputedStyle(document.documentElement, "::view-transition-group(vt-ai-launcher)").zIndex,
+          animations: document.getAnimations().filter(animation => (animation.effect as KeyframeEffect | null)?.pseudoElement?.includes("vt-dorm-detail")).length,
+        };
+      });
+      return transition;
+    }) as typeof document.startViewTransition;
+  });
+  await page.locator(".dormitory-list-motion").getByRole("button", { name: /最后一间宿舍/ }).click();
+  await expect(page.getByRole("heading", { name: "最后一间宿舍" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __aiTransitionLayer?: { name: string; zIndex: string; animations: number } }).__aiTransitionLayer?.name)).toBe("vt-ai-launcher");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __aiTransitionLayer?: { name: string; zIndex: string; animations: number } }).__aiTransitionLayer?.zIndex)).toBe("100");
+  expect(await page.evaluate(() => (window as typeof window & { __aiTransitionLayer?: { name: string; zIndex: string; animations: number } }).__aiTransitionLayer?.animations)).toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: "打开 AI 助手" })).toBeVisible();
+});
+
+test("dormitory names can be edited in place without replacing their data", async ({ page }) => {
+  await login(page, true); await nav(page, /^宿舍/);
+  const original = (await data(page)).dormitories[0];
+  await page.getByRole("button", { name: "重命名宿舍" }).click();
+  const name = page.getByRole("textbox", { name: "宿舍名称", exact: true });
+  await name.fill("101 室");
+  await page.getByRole("button", { name: "取消改名" }).click();
+  await expect(page.getByRole("heading", { name: "最后一间宿舍" })).toBeVisible();
+  await page.getByRole("button", { name: "重命名宿舍" }).click();
+  await name.fill("101 室");
+  await name.press("Enter");
+  await expect(page.getByRole("heading", { name: "101 室" })).toBeVisible();
+  await expect.poll(async () => { const dormitory = (await data(page)).dormitories[0]; return { id: dormitory.id, memberIds: dormitory.memberIds, events: dormitory.events, history: dormitory.history, name: dormitory.name }; }).toEqual({ id: original.id, memberIds: original.memberIds, events: original.events, history: original.history, name: "101 室" });
+  await page.reload(); await nav(page, /^宿舍/);
+  await expect(page.getByRole("heading", { name: "101 室" })).toBeVisible();
+  await page.getByPlaceholder("新宿舍名称").fill("102 室");
+  await page.getByRole("button", { name: "新增宿舍" }).click();
+  await page.getByRole("button", { name: "重命名宿舍" }).click();
+  await name.fill("101 室");
+  await page.getByRole("button", { name: "保存宿舍名称" }).click();
+  await expect(page.getByRole("alert").getByText("已有同名宿舍")).toBeVisible();
+  await expect.poll(async () => (await data(page)).dormitories.map((dormitory: { name: string }) => dormitory.name)).toEqual(["102 室", "101 室"]);
+});

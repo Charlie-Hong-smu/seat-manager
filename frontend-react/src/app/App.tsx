@@ -1061,6 +1061,7 @@ export default function App() {
   }
   const {
     handleCreateDormitory,
+    handleRenameDormitory,
     handleDeleteDormitory,
     handleAssignStudentDormitory,
     handleAddDormitoryEvent,
@@ -1307,6 +1308,7 @@ export default function App() {
               students={students}
               dormitories={dormitories}
               onCreateDormitory={handleCreateDormitory}
+              onRenameDormitory={handleRenameDormitory}
               onDeleteDormitory={id => {
                 const leader = classDuties.value.dormitoryLeaders[id];
                 const undo = handleDeleteDormitory(id);

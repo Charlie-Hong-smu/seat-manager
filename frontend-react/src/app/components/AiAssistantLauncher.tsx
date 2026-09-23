@@ -20,7 +20,7 @@ export function AiAssistantLauncher({ open, busy, onOpen }: {
       aria-hidden={open}
       tabIndex={open ? -1 : undefined}
       onClick={onOpen}
-      className={`ai-companion-launcher fixed bottom-3 right-3 z-[65] !h-12 !w-12 rounded-full border border-[var(--app-border)] bg-background-primary-default text-text-primary shadow-[var(--app-shadow-float)] sm:bottom-5 sm:right-5 ${open ? "pointer-events-none scale-90 opacity-0" : "scale-100 opacity-100"}`}
+      className={`ai-companion-launcher vt-ai-launcher fixed bottom-3 right-3 z-[65] !h-12 !w-12 rounded-full border border-[var(--app-border)] bg-background-primary-default text-text-primary shadow-[var(--app-shadow-float)] sm:bottom-5 sm:right-5 ${open ? "pointer-events-none scale-90 opacity-0" : "scale-100 opacity-100"}`}
     >
       <Sparkles className="h-5 w-5 text-status-ai-500" />
       {busy && <span aria-hidden="true" className="absolute right-2.5 top-2.5 size-2 rounded-full bg-status-ai-500 motion-safe:animate-pulse" />}

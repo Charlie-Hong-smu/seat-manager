@@ -34,7 +34,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { MobilePaneTabs, MotionCollapse, ConfirmDialog, DatePicker, DialogPresence, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { MobilePaneTabs, MotionCollapse, ConfirmDialog, DatePicker, DialogPresence, IconButton, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-status-success-600" : value < 0 ? "text-status-danger-500" : "text-text-secondary";
@@ -59,6 +59,7 @@ interface Props {
   students: AppStudent[];
   dormitories: Dormitory[];
   onCreateDormitory: (name: string, baseScore: number) => Dormitory;
+  onRenameDormitory: (dormitoryId: string, name: string) => void;
   onDeleteDormitory: (dormitoryId: string) => () => void;
   onAssignStudentDormitory: (studentId: StudentId, dormitoryId?: string) => void;
   onAddDormitoryEvent: (input: NewDormEventInput) => DormEvent | null;
@@ -82,6 +83,7 @@ export function DormitoryWorkspace({
   students,
   dormitories,
   onCreateDormitory,
+  onRenameDormitory,
   onDeleteDormitory,
   onAssignStudentDormitory,
   onAddDormitoryEvent,
@@ -102,6 +104,9 @@ export function DormitoryWorkspace({
   const appDialog = useAppDialog();
   const actionToast = useActionToast();
   const [selectedDormId, setSelectedDormId] = useState(dormitories[0]?.id || "");
+  const [renamingDormId, setRenamingDormId] = useState("");
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameError, setRenameError] = useState("");
   const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
   const [mobilePane, setMobilePane] = useState<"list" | "events" | "members">("list");
   const [newName, setNewName] = useWorkspaceDraftState("dormitory:new:newName", "");
@@ -195,6 +200,8 @@ export function DormitoryWorkspace({
   // 切换宿舍时重置编辑状态 + 触发主区域动画
   useEffect(() => {
     setEditingEventId("");
+    setRenamingDormId("");
+    setRenameError("");
     setAnimKey(k => k + 1);
   }, [selectedDormId]);
 
@@ -214,6 +221,24 @@ export function DormitoryWorkspace({
     if (id !== selectedDormId) {
       runViewTransition(() => setSelectedDormId(id));
     }
+  }
+
+  function saveDormitoryName() {
+    const name = renameDraft.trim();
+    if (!renamingDormId) return;
+    if (!name) { setRenameError("请输入宿舍名称"); return; }
+    if (dormitories.some(dormitory => dormitory.id !== renamingDormId && dormitory.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      setRenameError("已有同名宿舍");
+      return;
+    }
+    const previousName = dormitories.find(dormitory => dormitory.id === renamingDormId)?.name;
+    if (previousName && previousName !== name) {
+      onRenameDormitory(renamingDormId, name);
+      const dormitoryId = renamingDormId;
+      actionToast.show({ message: `已将宿舍改名为“${name}”`, actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => onRenameDormitory(dormitoryId, previousName), duration: 6000 });
+    }
+    setRenamingDormId("");
+    setRenameError("");
   }
 
   function createDormitory() {
@@ -506,16 +531,29 @@ export function DormitoryWorkspace({
               {/* 标题区 + 统计 */}
               <div className="flex items-start justify-between gap-4 shrink-0">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-title-2-semibold text-text-primary">{selectedDormitory.name}</h2>
-                    <button
-                      onClick={() => setPendingDeleteDormitory(selectedDormitory)}
-                      className="text-text-tertiary hover:text-status-danger-500 transition-colors"
-                      title="删除宿舍"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                  {renamingDormId === selectedDormitory.id ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <input
+                        autoFocus
+                        aria-label="宿舍名称"
+                        value={renameDraft}
+                        onChange={event => { setRenameDraft(event.target.value); setRenameError(""); }}
+                        onKeyDown={event => { if (event.key === "Enter") saveDormitoryName(); if (event.key === "Escape") { setRenamingDormId(""); setRenameError(""); } }}
+                        aria-invalid={Boolean(renameError)}
+                        aria-describedby={renameError ? "dormitory-rename-error" : undefined}
+                        className="h-9 min-w-0 max-w-48 rounded-lg border border-border-button-default bg-background-primary-default px-2.5 text-body-semibold text-text-primary outline-none focus:border-accent-300"
+                      />
+                      <IconButton label="保存宿舍名称" size="sm" onClick={saveDormitoryName}><Check className="h-4 w-4" /></IconButton>
+                      <IconButton label="取消改名" size="sm" onClick={() => { setRenamingDormId(""); setRenameError(""); }}><X className="h-4 w-4" /></IconButton>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="min-w-0 truncate text-title-2-semibold text-text-primary">{selectedDormitory.name}</h2>
+                      <IconButton label="重命名宿舍" size="sm" onClick={() => { setRenamingDormId(selectedDormitory.id); setRenameDraft(selectedDormitory.name); setRenameError(""); }}><Pencil className="h-4 w-4" /></IconButton>
+                      <IconButton label="删除宿舍" title="删除宿舍" size="sm" onClick={() => setPendingDeleteDormitory(selectedDormitory)}><Trash2 className="h-4 w-4" /></IconButton>
+                    </div>
+                  )}
+                  {renameError && <p id="dormitory-rename-error" role="alert" className="mt-1 text-caption-1-regular text-status-danger-500">{renameError}</p>}
                   <p className="mt-0.5 text-caption-1-regular text-text-tertiary">统计范围：{periodRange.start} 至 {periodRange.end}</p>
                 </div>
                 <div className="flex shrink-0 gap-4">

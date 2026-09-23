@@ -15,6 +15,10 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
     return dormitory;
   }, [setDormitories]);
 
+  const handleRenameDormitory = useCallback((dormitoryId: string, name: string) => {
+    setDormitories(current => current.map(dormitory => dormitory.id === dormitoryId ? { ...dormitory, name } : dormitory));
+  }, [setDormitories]);
+
   const handleDeleteDormitory = useCallback((dormitoryId: string) => {
     const previousIndex = dormitories.findIndex(dormitory => dormitory.id === dormitoryId);
     const previousDormitory = previousIndex >= 0 ? dormitories[previousIndex] : null;
@@ -105,5 +109,5 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
     };
   }, [dormitories, setDormitories, setStudents, students]);
 
-  return { handleCreateDormitory, handleDeleteDormitory, handleAssignStudentDormitory, handleAddDormitoryEvent, handleUpdateDormEvent, handleDeleteDormEvent };
+  return { handleCreateDormitory, handleRenameDormitory, handleDeleteDormitory, handleAssignStudentDormitory, handleAddDormitoryEvent, handleUpdateDormEvent, handleDeleteDormEvent };
 }
