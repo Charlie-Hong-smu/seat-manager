@@ -1,16 +1,18 @@
-import { useWorkspaceDraftState } from "../../hooks/useWorkspaceDraftState";
-import { ArrowRight, Clock3, Plus, BookOpenCheck, CalendarDays, CheckCircle2, Clipboard, ClipboardList, FileSpreadsheet, LayoutGrid, Sparkles, UserRoundCheck } from "lucide-react";
+import { getAttendanceForDate } from "../../state/attendancePeriods";
+import { getTaskUrgency } from "../../state/dailyManagement";
+import { groupFollowupTasks } from "../../state/followupStudents";
+import { CommunicationEditor, type SaveCommunication } from "../CommunicationEditor";
+import { ArrowRight, Clock3, Plus, BookOpenCheck, CalendarDays, CheckCircle2, ClipboardList, FileSpreadsheet, LayoutGrid, UserRoundCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
-import { generateAiWeeklyDraft } from "../../state/teacherAiService";
-import { buildLocalWeeklyDraft, buildTodayWorkItems, buildWeeklyFacts, getWeekRange, parseScheduleRows } from "../../state/teacherWorkbench";
+import { buildTodayWorkItems, buildWeeklyFacts, getWeekRange, parseScheduleRows } from "../../state/teacherWorkbench";
 import { readRowsFromFile } from "../../state/scoreImport";
 import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, CommunicationDraft, Dormitory, FollowupTask, GradeExam, HomeworkAssignment } from "../../state/types";
-import { AiGenerationPanel, MotionSwitch, MotionList, Button, Card, Chip, FileDropZone, IconButton, InlineStatus, MetricStrip, Textarea, ToolDrawer } from "../ui";
+import { MotionList, Button, Card, Chip, FileDropZone, IconButton, InlineStatus, MetricStrip, ToolDrawer } from "../ui";
 import { ResolutionEditor } from "../LinkedWorkflow";
 
-export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
+export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onSaveCommunication, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
   students: AppStudent[];
   attendance: AttendanceRecord[];
   tasks: FollowupTask[];
@@ -19,6 +21,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   gradeExams?: GradeExam[];
   schedule: ClassScheduleV1;
   drafts: CommunicationDraft[];
+  onSaveCommunication?: SaveCommunication;
   onScheduleChange: (schedule: ClassScheduleV1) => void;
   onOpenSeats: () => void;
   onOpenAttendance: () => void;
@@ -37,8 +40,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [status, setStatus] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-  const [weeklyStatus, setWeeklyStatus] = useState("");
+  const [weeklyDraftId, setWeeklyDraftId] = useState("");
   const [queueOpen, setQueueOpen] = useState(false);
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const [resolutionTaskId, setResolutionTaskId] = useState("");
@@ -50,22 +52,19 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   // 统计卡页脚的真实对比数据：昨日异常数、逾期任务数、今日到期作业的待登记/未交人数。
   const yesterdayKey = new Date(Date.now() - 86400000).toLocaleDateString("en-CA");
   const hadYesterdayRecords = attendance.some(item => item.date === yesterdayKey);
-  const yesterdayAbnormal = attendance.filter(item => item.date === yesterdayKey && (item.status !== "normal" || item.late || item.earlyLeave)).length;
+  const yesterdayAbnormal = getAttendanceForDate(attendance, yesterdayKey).filter(item => (item.status !== "normal" || item.late || item.earlyLeave)).length;
   const abnormalDelta = abnormalCount - yesterdayAbnormal;
-  const overdueTaskCount = tasks.filter(item => item.status === "pending" && item.dueDate < today).length;
+  const overdueTaskCount = groupFollowupTasks(tasks.filter(item => getTaskUrgency(item, today) === "overdue")).length;
   const homeworkPendingCount = homework
     .filter(item => (item.lifecycle || "active") === "active" && item.dueDate <= today)
     .reduce((sum, item) => sum + Object.values(item.studentStates).filter(state => state.status === "unrecorded" || state.status === "pending").length, 0);
   const range = getWeekRange();
   const facts = buildWeeklyFacts({ students, attendance, tasks, homework, dormitories, gradeExams, ...range });
-  const [weeklyContent, setWeeklyContent] = useWorkspaceDraftState(`weekly:class:${range.startDate}:${range.endDate}`, () => drafts.find(item => item.scope === "class" && item.startDate === range.startDate && item.endDate === range.endDate)?.content || buildLocalWeeklyDraft("班级", range.startDate, range.endDate, facts));
-
+  const openedDraft = drafts.find(item => item.id === weeklyDraftId);
+  const savedWeekly = openedDraft || drafts.find(item => item.scope === "class" && item.startDate === range.startDate && item.endDate === range.endDate);
   useInitialTargetEffect(initialDraftId, () => {
-    const draft = drafts.find(item => item.id === initialDraftId);
-    if (!draft) return;
-    setWeeklyContent(draft.content);
-    setWeeklyStatus("已从历史打开保存的周报草稿。");
-    setWeeklyOpen(true);
+    if (!drafts.some(item => item.id === initialDraftId)) return;
+    setWeeklyDraftId(initialDraftId || ""); setWeeklyOpen(true);
   }, onInitialDraftConsumed);
 
   function openItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
@@ -78,7 +77,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
 
   // Commit through the shared command immediately; keyed rows handle visual removal.
   async function completeItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
-    if (!onCompleteTask || item.kind !== "task" || completingIds.has(item.id)) return;
+    if (!onCompleteTask || item.kind !== "task" || (item.taskIds?.length || 0) > 1 || completingIds.has(item.id)) return;
     setCompletingIds(current => new Set(current).add(item.id));
     try {
       if (await onCompleteTask(item.entityId)) {
@@ -97,28 +96,14 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
         <button type="button" aria-label={`${item.title} ${item.detail}`} onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border-button-default bg-background-primary-default text-foreground-icon-secondary"><Icon className="size-4"/></span>
           <span className="min-w-0 flex-1"><strong className="block truncate text-body-medium text-text-primary">{item.title}</strong><span className="mt-1 block text-caption-1-regular text-text-secondary">{item.detail.replace(/ · (今日截止|已逾期)$/, "")}</span></span>
-          <Chip variant="caption" color={item.urgency === 0 ? "rose" : "soft"} className="hidden sm:inline-flex">{item.urgency === 0 ? "已逾期" : item.kind === "attendance" ? "需关注" : "今日截止"}</Chip>
+          <Chip variant="caption" color={item.urgency === 0 ? "rose" : "soft"} className="hidden sm:inline-flex">{item.urgency === 0 ? "已逾期" : item.kind === "attendance" ? "需关注" : item.urgency === 3 ? "计划处理" : "今日截止"}</Chip>
         </button>
-        {item.kind === "task" && onCompleteTask ? <IconButton label={`完成跟进：${item.title}`} size="sm" disabled={completingIds.has(item.id)} onClick={() => void completeItem(item)}><CheckCircle2 className="size-4"/></IconButton> : <ArrowRight aria-hidden="true" className="mx-2 size-4 shrink-0 text-foreground-icon-tertiary"/>}
+        {item.kind === "task" && onCompleteTask && (item.taskIds?.length || 0) <= 1 ? <IconButton label={`完成跟进：${item.title}`} size="sm" disabled={completingIds.has(item.id)} onClick={() => void completeItem(item)}><CheckCircle2 className="size-4"/></IconButton> : <ArrowRight aria-hidden="true" className="mx-2 size-4 shrink-0 text-foreground-icon-tertiary"/>}
       </div>
     </div>;
   }
 
-  function openWeekly() {
-    setWeeklyStatus("草稿已保留，可继续编辑或按需使用 AI 润色。");
-    setWeeklyOpen(true);
-  }
-
-  async function enhanceWeekly() {
-    setAiBusy(true); setWeeklyStatus("");
-    try {
-      const result = await generateAiWeeklyDraft({ scope: "class", subjectName: "班级", startDate: range.startDate, endDate: range.endDate, facts, localDraft: weeklyContent });
-      setWeeklyContent(result.content); setWeeklyStatus(result.disclaimer);
-    } catch { setWeeklyStatus("AI 暂时不可用，本地草稿仍可继续编辑或复制。"); }
-    finally { setAiBusy(false); }
-  }
-
-  async function copyWeekly() { await navigator.clipboard.writeText(weeklyContent); setWeeklyStatus("周报已复制，可粘贴到家长群或其他渠道。" ); }
+  function openWeekly() { setWeeklyDraftId(""); setWeeklyOpen(true); }
 
   async function importSchedule(file: File | null) {
     if (!file) return;
@@ -133,7 +118,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
         <div className="flex flex-col gap-1"><h1 className="text-title-2-medium text-text-primary">今日班务</h1><p className="text-body-regular text-text-secondary">{new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })} · {students.length} 位学生</p></div>
         <MetricStrip items={[
           { key: "attendance", label: "出勤异常", value: abnormalCount, dot: "bg-status-warning-500", caption: abnormalDelta !== 0 ? `较昨日 ${abnormalDelta > 0 ? "+" : ""}${abnormalDelta}` : hadYesterdayRecords ? "较昨日持平" : "今日", onOpen: onOpenAttendance },
-          { key: "tasks", label: "到期待办", value: dueTaskCount, dot: "bg-accent-500", caption: overdueTaskCount > 0 ? `含逾期 ${overdueTaskCount} 项` : "今日截止", onOpen: onOpenTasks },
+          { key: "tasks", label: "今日待办", value: dueTaskCount, dot: "bg-accent-500", caption: overdueTaskCount > 0 ? `含逾期 ${overdueTaskCount} 项` : "计划处理或到期", onOpen: onOpenTasks },
           { key: "homework", label: "到期作业", value: dueHomework, dot: "bg-status-cyan-500", caption: homeworkPendingCount > 0 ? `${homeworkPendingCount} 人待登记或未交` : "全部已登记", onOpen: onOpenHomework },
         ]} />
         <div className="ml-auto flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={openWeekly}><ClipboardList className="size-4"/>本周复盘</Button><Button onClick={onOpenQuickRecord}><Plus className="size-4"/>快捷记录</Button></div>
@@ -162,11 +147,8 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
         <div className="flex flex-col gap-2">{schedule.periods.map(period => <div key={period.id} className="rounded-xl bg-background-secondary-default p-3"><div className="text-body-medium text-text-primary">{period.label}</div><div className="mt-2 flex flex-wrap gap-1">{schedule.entries.filter(entry => entry.periodId === period.id).map(entry => <Chip key={entry.id} variant="caption" color="soft">周{["", "一", "二", "三", "四", "五", "六", "日"][entry.weekday]} {entry.subject}</Chip>)}</div></div>)}</div>
       </div>
     </ToolDrawer>
-    <ToolDrawer open={weeklyOpen} title="本周班级复盘" widthClassName="w-[520px]" onClose={() => setWeeklyOpen(false)} footer={<div className="flex flex-wrap justify-center gap-2"><Button variant="ai" disabled={aiBusy} onClick={() => void enhanceWeekly()}><Sparkles className="size-4"/>AI 润色</Button><Button variant="secondary" disabled={aiBusy || !weeklyContent.trim()} onClick={() => void copyWeekly()}><Clipboard className="size-4"/>复制</Button></div>}>
-      <div className="flex flex-col gap-5"><p className="text-body-regular text-text-secondary">{range.startDate} — {range.endDate}</p><div><h3 className="mb-3 text-body-medium text-text-primary">本周事实</h3><div className="flex flex-wrap gap-2">{facts.map(fact => <Chip key={fact} variant="caption" color="soft">{fact}</Chip>)}</div></div>
-        <MotionSwitch transitionKey={aiBusy ? "loading" : "draft"}>{aiBusy ? <AiGenerationPanel title="正在润色周报" steps={["读取本周事实", "整理表达", "生成可编辑草稿"]}/> : <Textarea label="复盘草稿" rows={14} value={weeklyContent} onChange={setWeeklyContent} hint="核对并编辑后，可复制到家长群或其他渠道。"/>}</MotionSwitch>
-        {weeklyStatus && <InlineStatus message={weeklyStatus}/>}
-      </div>
+    <ToolDrawer open={weeklyOpen} title={openedDraft?.scope === "student" ? "学生沟通记录" : "本周班级复盘"} widthClassName="w-[560px]" onClose={() => setWeeklyOpen(false)}>
+      <CommunicationEditor key={weeklyDraftId || range.startDate} scope={openedDraft?.scope || "class"} studentId={openedDraft?.studentId} subjectName={openedDraft?.studentId ? students.find(student => student.id === openedDraft.studentId)?.name || "学生" : "班级"} startDate={openedDraft?.startDate || range.startDate} endDate={openedDraft?.endDate || range.endDate} facts={openedDraft?.facts || facts} saved={savedWeekly} onSave={onSaveCommunication}/>
     </ToolDrawer>
     <ToolDrawer open={queueOpen} title={`全部待处理 · ${items.length}`} widthClassName="w-[520px]" onClose={() => setQueueOpen(false)}><MotionList className="divide-y divide-separator-border">{items.map(item => renderQueueItem(item, () => { setQueueOpen(false); openItem(item); }))}{!items.length && <p className="py-12 text-center text-body-regular text-text-secondary">今天没有待处理事项</p>}</MotionList></ToolDrawer>
     <ToolDrawer open={Boolean(resolutionTaskId)} title="补充处理结果" onClose={() => setResolutionTaskId("")}>{(() => { const task = tasks.find(item => item.id === resolutionTaskId); return task ? <ResolutionEditor task={task} onSave={note => { onSaveTaskResolution?.(task.id, note); setResolutionTaskId(""); }} onContinue={() => { onContinueTask?.(task.id); setResolutionTaskId(""); }}/> : null; })()}</ToolDrawer>

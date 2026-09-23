@@ -86,3 +86,20 @@ test("followup draft survives failed cache writes and cannot return after submis
   await open();
   await expect(title).toHaveValue("保留最新草稿");
 });
+
+test("a saved class communication draft reopens after reload with its delivery state", async ({ page }) => {
+  await login(page);
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true }).click();
+  await page.getByRole("button", { name: "本周复盘" }).click();
+  const drawer = page.getByRole("complementary", { name: "本周班级复盘" });
+  await drawer.getByRole("textbox", { name: "沟通稿正文" }).fill("本周班级沟通内容，已核对。 ");
+  await drawer.getByRole("button", { name: "保存沟通稿" }).click();
+  await expect.poll(async () => (await currentData(page))?.communicationDrafts?.[0]?.content).toBe("本周班级沟通内容，已核对。");
+  await drawer.getByRole("button", { name: "标记已沟通" }).click();
+  await expect.poll(async () => (await currentData(page))?.communicationDrafts?.[0]?.deliveryStatus).toBe("shared");
+  await page.reload();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true }).click();
+  await page.getByRole("button", { name: "本周复盘" }).click();
+  await expect(drawer.getByRole("textbox", { name: "沟通稿正文" })).toHaveValue("本周班级沟通内容，已核对。");
+  await expect(drawer.getByRole("button", { name: "恢复为草稿" })).toBeEnabled();
+});

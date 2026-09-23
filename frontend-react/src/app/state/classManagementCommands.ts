@@ -1,3 +1,4 @@
+import { readFundCollections } from "./fundCollections";
 import { getFollowupStudentIds, removeStudentFromFollowups } from "./followupStudents";
 import { createActivityEvent } from "./activityEvents";
 import { removeStudentFromSavedGradeExams } from "./gradeStudentIdentity";
@@ -100,6 +101,11 @@ export function permanentlyDeleteStudent(state: SeatManagerState, studentId: Stu
   const remove = (ids?: StudentId[]) => ids?.filter(id => id !== studentId);
   return {
     ...state,
+    settings: { ...state.settings, fundCollections: readFundCollections(state.settings).map(collection => {
+      const targets = { ...collection.targets }; const studentNames = { ...collection.studentNames }; const adjustmentNotes = { ...collection.adjustmentNotes };
+      delete targets[studentId]; delete studentNames[studentId]; delete adjustmentNotes[studentId];
+      return { ...collection, targets, studentNames, adjustmentNotes };
+    }) },
     students: state.students.filter(student => student.id !== studentId),
     seatOrder: state.seatOrder.map(id => id === studentId ? null : id),
     seatSettings: { ...state.seatSettings, constraints: { ...state.seatSettings.constraints, lockedDeskmatePairs: state.seatSettings.constraints.lockedDeskmatePairs.filter(pair => pair.a !== studentId && pair.b !== studentId), noDeskmatePairs: state.seatSettings.constraints.noDeskmatePairs.filter(pair => pair.a !== studentId && pair.b !== studentId), frontRowStudentIds: state.seatSettings.constraints.frontRowStudentIds.filter(id => id !== studentId) } },

@@ -1,10 +1,13 @@
+import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
+import type { TimelineTarget } from "../../state/dataInsights";
+import type { FundCollection } from "../../state/fundCollections";
+import type { FollowupTask } from "../../state/types";
 import { useWorkspaceDraftState } from "../../hooks/useWorkspaceDraftState";
-import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, ListPlus, Pencil, RotateCcw, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { lazy, Suspense, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, Pencil, RotateCcw, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 
 import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, summarizeStudentFundCollection, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
 import { buildCsvContent, downloadCsvFile } from "../../state/csv";
-import { todayKey } from "../../state/dailyManagement";
 import type { AppStudent, FundTransaction, FundTxType } from "../../state/types";
 import type { FollowupTaskDraft } from "../FollowupTaskDrawer";
 import { FundTransactionForm } from "../FundTransactionForm";
@@ -13,6 +16,8 @@ import { isValidDateKey, toLocalDateKey } from "../../state/dateKey";
 import { resolveReferencedStudentNames } from "../../state/studentReferences";
 import { createActivityEvent } from "../../state/activityEvents";
 import type { ActivityEvent } from "../../state/types";
+
+const FundCollectionsPanel = lazy(() => import("../FundCollectionsPanel").then(module => ({ default: module.FundCollectionsPanel })));
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -31,13 +36,19 @@ export function ClassFundWorkspace({
   onDelete,
   onClearAll,
   onRequestFollowupTask,
-  onActivity,
+  onActivity, collections = [], tasks = [], onSaveCollection, onOpenTask, initialTarget, onInitialTargetConsumed,
 }: {
   transactions: FundTransaction[];
+  initialTarget?: TimelineTarget;
+  onInitialTargetConsumed?: () => void;
+  collections?: FundCollection[];
+  tasks?: FollowupTask[];
+  onSaveCollection?: (collection: FundCollection) => void;
+  onOpenTask?: (id: string) => void;
   students: AppStudent[];
   onAdd: (input: NewFundTxInput) => FundTransaction;
   onRemoveCreated: (id: string) => void;
-  onUpdate: (id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds">>) => void;
+  onUpdate: (id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds" | "collectionId">>) => void;
   onDelete: (id: string) => () => void;
   onClearAll: () => () => void;
   onRequestFollowupTask?: (draft: FollowupTaskDraft) => void;
@@ -54,8 +65,12 @@ export function ClassFundWorkspace({
   const [periodAnchor, setPeriodAnchor] = useState(() => toLocalDateKey());
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [pendingVoidTransaction, setPendingVoidTransaction] = useState<FundTransaction | null>(null);
-  const [view, setView] = useState<"ledger" | "collection">("ledger");
+  const [view, setView] = useState<"ledger" | "collection" | "projects">("ledger");
   const [collectionCategory, setCollectionCategory] = useState("all");
+  const [focusedCollectionId, setFocusedCollectionId] = useState("");
+  useInitialTargetEffect(initialTarget?.entityId, () => {
+    if (collections.some(item => item.id === initialTarget?.entityId)) { setView("projects"); setFocusedCollectionId(initialTarget?.entityId || ""); }
+  }, onInitialTargetConsumed);
   const actionToast = useActionToast();
 
   const periodTransactions = filterFundTransactionsByPeriod(transactions, periodMode, periodAnchor);
@@ -87,21 +102,6 @@ export function ClassFundWorkspace({
       ...periodTransactions.map(tx => [tx.date, tx.type === "income" ? "收入" : "支出", tx.category || "", tx.amount.toFixed(2), tx.status === "void" ? "已作废" : "有效", transactionStudentLabel(tx, students), tx.note || ""]),
     ];
     downloadCsvFile(`班费流水_${periodLabel.replace(/\s/g, "")}.csv`, buildCsvContent(rows));
-  }
-
-  function createUnpaidFollowups() {
-    if (!onRequestFollowupTask || !unpaidStudents.length) return;
-    onRequestFollowupTask({
-      studentId: unpaidStudents[0].id,
-      studentIds: unpaidStudents.map(student => student.id),
-      studentMode: "individual",
-      title: `班费收缴提醒（${collectionCategoryLabel}）`,
-      type: "常规跟进",
-      description: `${periodLabel}内未登记「${collectionCategoryLabel}」，请确认是否已收取并补记流水。`,
-      plannedDate: todayKey(),
-      dueDate: todayKey(),
-      source: "manual",
-    });
   }
 
   function startEdit(tx: FundTransaction) {
@@ -163,7 +163,7 @@ export function ClassFundWorkspace({
           <Card className="surface-enter" bodyClassName="flex flex-wrap items-center gap-3 p-3">
             <SegmentedControl value={periodMode} onChange={setPeriodMode} ariaLabel="班费统计周期" options={[{ value: "all", label: "全部" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }]} />
             {periodMode !== "all" && <><IconButton size="sm" label="上一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, -1))}><ChevronLeft className="h-4 w-4" /></IconButton><DatePicker required value={periodAnchor} onChange={setPeriodAnchor} ariaLabel="班费统计日期" className="h-9 w-44 bg-background-primary-default"/><IconButton size="sm" label="下一个周期" onClick={() => setPeriodAnchor(current => shiftFundPeriod(periodMode, current, 1))}><ChevronRight className="h-4 w-4" /></IconButton><span className="text-caption-1-semibold text-[var(--app-text-muted)]">{periodRange?.label}</span></>}
-            <SegmentedControl className="ml-auto" value={view} onChange={value => setView(value as "ledger" | "collection")} ariaLabel="班费视图" options={[{ value: "ledger", label: "收支流水" }, { value: "collection", label: "收缴情况" }]} />
+            <SegmentedControl className="ml-auto" value={view} onChange={value => setView(value as "ledger" | "collection" | "projects")} ariaLabel="班费视图" options={[{ value: "ledger", label: "收支流水" }, { value: "projects", label: "收费事项" }, { value: "collection", label: "登记汇总" }]} />
           </Card>
           {/* 统计卡：左大余额 + 右两小卡 */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem_12rem]">
@@ -194,22 +194,28 @@ export function ClassFundWorkspace({
             </Card>
           </div>
 
-          <MotionSwitch transitionKey={view}>{view === "collection" && (
-            <Card className="surface-enter" title="收缴情况" action={
+          <MotionSwitch transitionKey={view}>{view === "projects" && onSaveCollection && <Suspense fallback={<div role="status" className="p-6 text-body-regular text-text-secondary">正在加载收费事项…</div>}><FundCollectionsPanel key={focusedCollectionId} initialId={focusedCollectionId} collections={collections} students={students} transactions={transactions} tasks={tasks} onSave={onSaveCollection} onAdd={addTransaction} onLink={(id, collectionId) => {
+            const before = transactions.find(item => item.id === id); if (!before) return;
+            onUpdate(id, { collectionId });
+            const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "fund", entityId: id }, studentIds: before.relatedStudentIds || [], title: "流水已关联收费事项", detail: before.category }));
+            actionToast.show({ message: "已关联原有流水，金额没有重复记账", actionLabel: "撤销", duration: 6000, onAction: () => { onUpdate(id, { collectionId: before.collectionId || "" }); if (typeof undoActivity === "function") undoActivity(); } });
+          }} onRequestTask={onRequestFollowupTask} onOpenTask={onOpenTask}/></Suspense>}
+          {view === "collection" && (
+            <Card className="surface-enter" title="收入登记汇总" action={
               <div className="flex items-center gap-2">
                 {incomeCategories.length > 1 && <SelectMenu value={collectionCategory} onChange={value => setCollectionCategory(String(value))} ariaLabel="收缴分类" options={[{ value: "all", label: "全部收入分类" }, ...incomeCategories.map(category => ({ value: category, label: category }))]} />}
-                <Button size="sm" variant="secondary" disabled={!unpaidStudents.length || !onRequestFollowupTask} onClick={createUnpaidFollowups}><ListPlus className="h-4 w-4" />为未交 {unpaidStudents.length} 人建跟进</Button>
+
               </div>
             }>
               {activeIncome.length === 0 ? (
                 <div className="py-10 text-center text-body-regular text-text-tertiary">
-                  {periodLabel}内还没有登记收入。在“收支流水”页记一笔收入并关联学生后，这里会按人统计已交与未交。
+                  {periodLabel}内还没有登记收入。在“收支流水”页记一笔收入并关联学生后，这里按人统计是否有收入登记；交齐与否请使用收费事项。
                 </div>
               ) : (
                 <>
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-caption-1-semibold">
-                    <span className="rounded-full bg-status-success-50 px-2.5 py-1 text-status-success-600">已交 {collectionRows.length - unpaidStudents.length} 人</span>
-                    <span className={`rounded-full px-2.5 py-1 ${unpaidStudents.length ? "bg-status-danger-50 text-status-danger-600" : "bg-background-tertiary-default text-text-secondary"}`}>未交 {unpaidStudents.length} 人</span>
+                    <span className="rounded-full bg-status-success-50 px-2.5 py-1 text-status-success-600">有登记 {collectionRows.length - unpaidStudents.length} 人</span>
+                    <span className={`rounded-full px-2.5 py-1 ${unpaidStudents.length ? "bg-status-danger-50 text-status-danger-600" : "bg-background-tertiary-default text-text-secondary"}`}>无登记 {unpaidStudents.length} 人</span>
                     <span className="text-[var(--app-text-muted)]">统计口径：{periodLabel} · {collectionCategoryLabel}</span>
                     <span className="text-[var(--app-text-muted)]">多人流水仅记笔数，金额不作均摊</span>
                   </div>
@@ -220,7 +226,7 @@ export function ClassFundWorkspace({
                     {collectionRows.map(row => (
                       <div key={row.student.id} className="grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] items-center gap-2 border-b border-separator-border px-4 py-2.5 text-body-regular last:border-0">
                         <span className="truncate font-bold text-text-primary">{row.student.name}</span>
-                        <span>{row.count ? <span className="rounded-md bg-status-success-50 px-1.5 py-0.5 text-[11px] font-bold text-status-success-600">已交</span> : <span className="rounded-md bg-status-danger-50 px-1.5 py-0.5 text-[11px] font-bold text-status-danger-500">未交</span>}</span>
+                        <span>{row.count ? <span className="rounded-md bg-status-success-50 px-1.5 py-0.5 text-[11px] font-bold text-status-success-600">有登记</span> : <span className="rounded-md bg-status-danger-50 px-1.5 py-0.5 text-[11px] font-bold text-status-danger-500">无登记</span>}</span>
                         <span className="text-right tabular-nums text-text-secondary">{row.count || "—"}</span>
                         <span className="text-right tabular-nums text-text-primary">{row.count
                           ? [

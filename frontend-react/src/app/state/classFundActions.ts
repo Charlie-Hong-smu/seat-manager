@@ -52,6 +52,7 @@ export function shiftFundPeriod(mode: FundPeriodMode, anchor: string, amount: nu
 }
 
 export interface NewFundTxInput {
+  collectionId?: string;
   type: FundTxType;
   amount: number;
   category: string;
@@ -143,6 +144,7 @@ export function createFundTransaction(input: NewFundTxInput, students: AppStuden
   const relatedNames = resolved.map(student => student.name);
   return {
     id: createId("fund-tx"),
+    collectionId: resolved.length === 1 ? input.collectionId : undefined,
     type: input.type,
     amount: Math.abs(amount),
     category: input.category.trim() || (input.type === "income" ? "其他收入" : "其他支出"),
@@ -176,6 +178,7 @@ export function normalizeFundTransactions(raw: unknown): FundTransaction[] {
       return {
         id: typeof record.id === "string" ? record.id : `fund-tx-${index}`,
         type,
+        collectionId: typeof record.collectionId === "string" ? record.collectionId : undefined,
         amount: Number.isFinite(amount) ? Math.abs(amount) : 0,
         category: typeof record.category === "string" ? record.category : "",
         note: typeof record.note === "string" ? record.note : "",

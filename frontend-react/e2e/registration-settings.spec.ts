@@ -79,6 +79,23 @@ test("attendance repeat clicks restore one student, expire at six seconds and wo
   await expect.poll(async () => (await data(page)).attendanceRecords.find((r: { studentId: string }) => r.studentId === "s1").status).toBe("leave");
 });
 
+test("cross-day leave remains visible until the teacher confirms return", async ({ page }) => {
+  await login(page); await nav(page, /^出勤/);
+  await page.getByRole("group", { name: "出勤登记视图", exact: true }).getByRole("button", { name: "详细", exact: true }).click();
+  const student = page.locator('[data-attendance-student-id="s1"]');
+  await student.getByRole("button", { name: "编辑 张三 详情" }).click();
+  await page.getByRole("button", { name: "预计返校日期" }).click();
+  await page.getByRole("dialog", { name: "预计返校日期" }).getByRole("button", { name: "2026-09-24" }).click();
+  await student.getByRole("button", { name: "保存请假时段" }).click();
+  await expect.poll(async () => (await data(page)).attendanceRecords.find((record: { studentId: string; date: string }) => record.studentId === "s1" && record.date === "2026-09-22")?.leaveEnd).toBe("2026-09-24T18:00");
+  await page.getByRole("button", { name: "出勤日期" }).click();
+  await page.getByRole("dialog", { name: "出勤日期" }).getByRole("button", { name: "2026-09-25" }).click();
+  await expect(student).toContainText("待确认返校");
+  await student.getByRole("button", { name: "确认 2026-09-25 已返校" }).click();
+  await expect(student).toContainText("正常");
+  await expect.poll(async () => (await data(page)).attendanceRecords.find((record: { studentId: string; date: string }) => record.studentId === "s1" && record.date === "2026-09-22")?.leaveReturnedAt).toBe("2026-09-25T00:00");
+});
+
 test("homework repeat clicks preserve other students and notes, explicit undo stays scoped", async ({ page }) => {
   await login(page); await nav(page, /^任务与作业/);
   await page.getByRole("tab", { name: "作业", exact: true }).click();

@@ -70,6 +70,7 @@ function mergeSeatSettings(baseSettings: unknown, seatSettings?: SeatSettings, n
     ...settings,
     pairByGender: seatSettings.pairByGender,
     keepLockedEmpty: seatSettings.keepLockedEmpty,
+    rotateWithHistory: seatSettings.rotateWithHistory,
     complementRuleIds: [...seatSettings.complementRuleIds],
     groupBalanceMode: seatSettings.groupBalanceMode,
     seatLayout: seatSettings.layout ? {

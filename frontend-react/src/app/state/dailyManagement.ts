@@ -1,3 +1,4 @@
+import { getAttendanceForDate, leaveCoversDate, leavePeriodError } from "./attendancePeriods";
 import type { AppStudent, AttendanceRecord, AttendanceStatus, BusinessDomain, DrawSession, FollowupTask, FollowupTaskSource, FollowupTaskStatus, StudentId } from "./types";
 import { isValidDateKey, timestampToLocalDateKey, toLocalDateKey } from "./dateKey";
 import { followupHasStudent, getFollowupStudentIds, isIndividualFollowup } from "./followupStudents";
@@ -29,6 +30,8 @@ export function normalizeAttendanceRecords(raw: unknown): AttendanceRecord[] {
       note: typeof item.note === "string" ? item.note : "",
       leaveStart: typeof item.leaveStart === "string" ? item.leaveStart : undefined,
       leaveEnd: typeof item.leaveEnd === "string" ? item.leaveEnd : undefined,
+      leaveTracking: item.leaveTracking === true || undefined,
+      leaveReturnedAt: typeof item.leaveReturnedAt === "string" ? item.leaveReturnedAt : undefined,
       createdAt,
       updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : createdAt,
     });
@@ -37,12 +40,13 @@ export function normalizeAttendanceRecords(raw: unknown): AttendanceRecord[] {
 }
 
 export function upsertAttendance(records: AttendanceRecord[], input: Omit<AttendanceRecord, "id" | "createdAt" | "updatedAt">): AttendanceRecord[] {
-  if (!input.studentId || !isValidDateKey(input.date)) return records;
+  if (!input.studentId || !isValidDateKey(input.date) || leavePeriodError(input.leaveStart, input.leaveEnd)) return records;
   const existing = records.find(item => item.studentId === input.studentId && item.date === input.date);
   const isDefault = input.status === "normal" && !input.late && !input.earlyLeave && !input.note.trim() && !input.leaveStart && !input.leaveEnd;
-  if (isDefault) return records.filter(item => item !== existing);
+  const overridesLeave = records.some(item => item !== existing && item.studentId === input.studentId && leaveCoversDate(item, input.date));
+  if (isDefault && !overridesLeave) return records.filter(item => item !== existing);
   const now = new Date().toISOString();
-  const next: AttendanceRecord = { ...input, note: input.note.trim(), id: existing?.id || id("attendance"), createdAt: existing?.createdAt || now, updatedAt: now };
+  const next: AttendanceRecord = { ...existing, ...input, leaveTracking: input.status === "leave" ? input.leaveTracking ?? existing?.leaveTracking : undefined, leaveReturnedAt: input.status === "leave" ? input.leaveReturnedAt : undefined, note: input.note.trim(), id: existing?.id || id("attendance"), createdAt: existing?.createdAt || now, updatedAt: now };
   return existing ? records.map(item => item === existing ? next : item) : [next, ...records];
 }
 
@@ -81,7 +85,7 @@ export interface FollowupTaskInput {
 export function createFollowupTask(input: FollowupTaskInput): FollowupTask {
   const now = new Date().toISOString();
   const studentIds = getFollowupStudentIds(input);
-  return { id: id("followup"), studentId: studentIds[0] || "", studentIds, studentMode: isIndividualFollowup(input) ? "individual" : "shared", title: input.title.trim(), type: input.type?.trim() || "常规跟进", description: input.description?.trim() || "", plannedDate: input.plannedDate || todayKey(), dueDate: input.dueDate || input.plannedDate || todayKey(), status: "pending", source: input.source || "manual", sourceRef: input.sourceRef, continuedFromTaskId: input.continuedFromTaskId, createdAt: now, updatedAt: now };
+  return { id: id("followup"), studentId: studentIds[0] || "", studentIds, studentMode: isIndividualFollowup(input) ? "individual" : "shared", title: input.title.trim(), type: input.type?.trim() || "常规跟进", description: input.description?.trim() || "", plannedDate: input.plannedDate ?? todayKey(), dueDate: input.dueDate ?? input.plannedDate ?? todayKey(), status: "pending", source: input.source || "manual", sourceRef: input.sourceRef, continuedFromTaskId: input.continuedFromTaskId, createdAt: now, updatedAt: now };
 }
 
 export function findOpenLinkedTask(tasks: FollowupTask[], studentId: StudentId, sourceRef: NonNullable<FollowupTask["sourceRef"]>): FollowupTask | undefined {
@@ -128,16 +132,23 @@ export function editFollowupTask(task: FollowupTask, input: FollowupTaskInput): 
 
 export function batchUpsertAttendance(records: AttendanceRecord[], studentIds: StudentId[], date: string, patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave" | "note" | "leaveStart" | "leaveEnd">>): AttendanceRecord[] {
   return studentIds.reduce((current, studentId) => {
-    const existing = current.find(item => item.studentId === studentId && item.date === date);
+    const existing = getAttendanceForDate(current, date).find(item => item.studentId === studentId);
     return upsertAttendance(current, { studentId, date, status: patch.status ?? existing?.status ?? "normal", late: patch.late ?? existing?.late ?? false, earlyLeave: patch.earlyLeave ?? existing?.earlyLeave ?? false, note: patch.note ?? existing?.note ?? "", leaveStart: "leaveStart" in patch ? patch.leaveStart : existing?.leaveStart, leaveEnd: "leaveEnd" in patch ? patch.leaveEnd : existing?.leaveEnd });
   }, records);
 }
 
 export function getTaskUrgency(task: FollowupTask, today = todayKey()): "overdue" | "today" | "upcoming" | "none" {
-  if (task.status !== "pending" || !task.dueDate) return "none";
+  if (task.status !== "pending" || !isValidDateKey(task.dueDate)) return "none";
   if (task.dueDate < today) return "overdue";
   if (task.dueDate === today) return "today";
   return "upcoming";
+}
+
+/** Planned work can appear before its deadline; only deadlines create overdue status. */
+export function isTaskReady(task: FollowupTask, date = todayKey()): boolean {
+  const urgency = getTaskUrgency(task, date);
+  return task.status === "pending" && (urgency === "overdue" || urgency === "today"
+    || (isValidDateKey(task.plannedDate) && task.plannedDate <= date));
 }
 
 export function getDueFollowupNotifications(tasks: FollowupTask[], today = todayKey()): FollowupTask[] {

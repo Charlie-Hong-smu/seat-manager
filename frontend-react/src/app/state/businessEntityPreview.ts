@@ -1,3 +1,4 @@
+import { readFundCollections, collectionBalance } from "./fundCollections";
 import { timestampToLocalDateKey } from "./dateKey";
 import { followupStudentLabel } from "./followupStudents";
 import { listDormitoryEvents } from "./dormitoryPeriods";
@@ -167,6 +168,11 @@ export function resolveBusinessEntityPreview(
   }
 
   if (ref.domain === "fund") {
+    const collection = readFundCollections(state.settings).find(item => item.id === ref.entityId);
+    if (collection) {
+      const balance = ref.studentId ? collectionBalance(collection, ref.studentId, state.fundTransactions) : null;
+      return { ref, domainLabel: DOMAIN_LABELS.fund, title: collection.title, subtitle: `截止 ${collection.dueDate || "未设置"}`, status: collection.closedAt ? "已结束" : balance?.status || "收缴中", statusTone: "default", facts: balance ? [{ label: "应交", value: `¥${balance.target.toFixed(2)}` }, { label: "实收", value: `¥${balance.paid.toFixed(2)}` }] : [{ label: "参与学生", value: `${Object.keys(collection.targets).length} 人` }], availability: "available", navigationLabel: NAVIGATION_LABELS.fund };
+    }
     const transaction = state.fundTransactions.find(item => item.id === ref.entityId);
     if (!transaction) return unavailable(ref, fallback);
     return { ref, domainLabel: DOMAIN_LABELS.fund, title: transaction.category, subtitle: transaction.date, status: transaction.status === "void" ? "已作废" : transaction.type === "income" ? "收入" : "支出", statusTone: transaction.status === "void" ? "muted" : transaction.type === "income" ? "success" : "default", facts: [{ label: "金额", value: `¥${transaction.amount.toFixed(2)}` }, { label: "类型", value: transaction.type === "income" ? "收入" : "支出" }], description: transaction.note, availability: "available", navigationLabel: NAVIGATION_LABELS.fund };

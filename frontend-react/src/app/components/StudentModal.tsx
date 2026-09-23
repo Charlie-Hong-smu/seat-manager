@@ -1,3 +1,5 @@
+import { getAttendanceForDate, getAttendanceRange } from "../state/attendancePeriods";
+import type { SaveCommunication } from "./CommunicationEditor";
 import { useAttendanceUndo } from "../hooks/useAttendanceUndo";
 import { StudentDutiesSection } from "./StudentDutiesSection";
 import type { ClassDutiesBinding } from "../state/classDuties";
@@ -91,6 +93,7 @@ interface Props {
   onActivity?: (event: ActivityEvent) => void | (() => void);
   homeworkAssignments?: HomeworkAssignment[];
   communicationDrafts?: CommunicationDraft[];
+  onSaveCommunication?: SaveCommunication;
   activityEvents?: ActivityEvent[];
   onOpenEntity?: (ref: BusinessEntityRef) => void;
   resolveEntityPreview: (ref: BusinessEntityRef, fallback?: BusinessEntityPreviewFallback) => BusinessEntityPreviewModel;
@@ -125,6 +128,7 @@ export function StudentModal({
   onActivity,
   homeworkAssignments = [],
   communicationDrafts = [],
+  onSaveCommunication,
   activityEvents = [],
   onOpenEntity,
   resolveEntityPreview,
@@ -300,7 +304,7 @@ export function StudentModal({
   function updateTodayAttendance(patch: Partial<Pick<AttendanceRecord, "status" | "late" | "earlyLeave">>) {
     if (!onAttendanceChange) return;
     const date = todayKey();
-    const current = attendanceRecords.find(item => item.studentId === student.id && item.date === date);
+    const current = getAttendanceForDate(attendanceRecords, date).find(item => item.studentId === student.id);
     const action = patch.status ? `status:${patch.status}` : "late" in patch ? "late" : "earlyLeave";
     if (attendanceUndo.tryRevert(student.id, action)) { actionToast.show("已恢复上次出勤状态"); return; }
     if (patch.status && (current?.status || "normal") === patch.status) return;
@@ -850,11 +854,11 @@ export function StudentModal({
               onSaveRecord={saveAiFollowupRecord}
               onAppendCommentMaterial={appendAiFollowupMaterial}
               onCreateTask={input => onCreateFollowupTask?.({ studentId: student.id, ...input })}
-            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} drafts={communicationDrafts} />}</MotionSwitch>
+            /> : <StudentCommunicationPanel student={student} students={students} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} drafts={communicationDrafts} onSave={onSaveCommunication} />}</MotionSwitch>
             </div>
           )}
 
-          {activeTab === "attendance" && (() => { const current = attendanceRecords.find(item => item.studentId === student.id && item.date === todayKey()); const month = todayKey().slice(0,7); const monthly = attendanceRecords.filter(item => item.studentId === student.id && item.date.startsWith(month)); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-background-secondary-default p-3 text-center"><div className="text-title-2-regular font-black text-text-primary">{item.value}</div><div className="text-caption-1-regular text-text-tertiary">本月{item.label}</div></div>)}</div><div className="rounded-2xl border border-separator-border bg-background-secondary-default p-4"><div className="mb-3 text-body-semibold text-text-primary">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-separator-border px-4 py-3"><span className="text-body-semibold text-text-primary">{item.date}</span><span className="text-body-regular text-text-secondary">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-body-regular text-text-tertiary">暂无出勤异常</p>}</div><div className="rounded-xl bg-accent-50 p-3 text-body-regular text-accent-700">当前跟进任务 {followupTasks.filter(task=>followupHasStudent(task, student.id)&&task.status==="pending").length} 项</div></div>; })()}
+          {activeTab === "attendance" && (() => { const current = getAttendanceForDate(attendanceRecords, todayKey()).find(item => item.studentId === student.id); const month = todayKey().slice(0,7); const monthly = getAttendanceRange(attendanceRecords, `${month}-01`, todayKey()).filter(item => item.studentId === student.id); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-background-secondary-default p-3 text-center"><div className="text-title-2-regular font-black text-text-primary">{item.value}</div><div className="text-caption-1-regular text-text-tertiary">本月{item.label}天数</div></div>)}</div><div className="rounded-2xl border border-separator-border bg-background-secondary-default p-4"><div className="mb-3 text-body-semibold text-text-primary">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-separator-border px-4 py-3"><span className="text-body-semibold text-text-primary">{item.date}</span><span className="text-body-regular text-text-secondary">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-body-regular text-text-tertiary">暂无出勤异常</p>}</div><div className="rounded-xl bg-accent-50 p-3 text-body-regular text-accent-700">当前跟进任务 {followupTasks.filter(task=>followupHasStudent(task, student.id)&&task.status==="pending").length} 项</div></div>; })()}
 
           {activeTab === "trend" && (
           <div className="space-y-5">

@@ -18,17 +18,16 @@ export function useClassFundActions({ students, fundTransactions, setFundTransac
     setFundTransactions((current) => current.filter((tx) => tx.id !== id));
   }, [setFundTransactions]);
 
-  const handleUpdateFundTransaction = useCallback((id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds">>) => {
+  const handleUpdateFundTransaction = useCallback((id: string, patch: Partial<Pick<FundTransaction, "type" | "amount" | "category" | "note" | "date" | "relatedStudentIds" | "collectionId">>) => {
     setFundTransactions((current) => current.map((tx) => {
       if (tx.id !== id) return tx;
       const nextAmount = patch.amount !== undefined && Number.isFinite(patch.amount) ? Math.abs(patch.amount) : tx.amount;
-      const nextRelatedIds = patch.relatedStudentIds !== undefined ? patch.relatedStudentIds : tx.relatedStudentIds;
-      const resolved = (nextRelatedIds ?? []).map((relatedId) => students.find((student) => student.id === relatedId)).filter((student): student is AppStudent => Boolean(student));
-      const relatedIds = resolved.map((student) => student.id);
-      const relatedNames = resolved.map((student) => student.name);
+      const relatedIds = patch.relatedStudentIds !== undefined ? patch.relatedStudentIds : tx.relatedStudentIds ?? (tx.relatedStudentId ? [tx.relatedStudentId] : []);
+      const relatedNames = relatedIds.map((relatedId) => students.find(student => student.id === relatedId)?.name || (relatedId === tx.relatedStudentId ? tx.relatedStudentName : tx.relatedStudentNames?.[tx.relatedStudentIds?.indexOf(relatedId) ?? -1]) || "已移出学生");
       return {
         ...tx,
         type: patch.type ?? tx.type,
+        collectionId: relatedIds.length === 1 ? patch.collectionId !== undefined ? patch.collectionId || undefined : tx.collectionId : undefined,
         amount: nextAmount,
         category: patch.category !== undefined ? patch.category : tx.category,
         note: patch.note !== undefined ? patch.note : tx.note,

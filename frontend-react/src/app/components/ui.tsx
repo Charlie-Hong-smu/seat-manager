@@ -287,17 +287,17 @@ type AppDialogRequest = AppDialogOptions & {
   resolve: (confirmed: boolean) => void;
 };
 
-type AppPromptOptions = AppDialogOptions & { defaultValue?: string; validate?: (value: string) => string | undefined };
+type AppPromptOptions = AppDialogOptions & { defaultValue?: string; inputLabel?: string; validate?: (value: string) => string | undefined };
 
-function PromptDialog({ open, title, description, defaultValue = "", confirmLabel = "保存", validate, onCancel, onConfirm }: {
-  open: boolean; title: string; description: string; defaultValue?: string; confirmLabel?: string; validate?: AppPromptOptions["validate"];
+function PromptDialog({ open, title, description, defaultValue = "", inputLabel = "名称", confirmLabel = "保存", validate, onCancel, onConfirm }: {
+  open: boolean; title: string; description: string; defaultValue?: string; inputLabel?: string; confirmLabel?: string; validate?: AppPromptOptions["validate"];
   onCancel: () => void; onConfirm: (value: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue);
   useEffect(() => { if (open) setValue(defaultValue); }, [defaultValue, open]);
   const error = validate?.(value);
   return <ModalShell open={open} title={title} description={description} onClose={onCancel} className="max-w-sm" footer={<><Button variant="ghost" onClick={onCancel}>取消</Button><Button disabled={Boolean(error)} onClick={() => onConfirm(value)}>{confirmLabel}</Button></>}>
-    <Input label="名称" autoFocus value={value} isInvalid={Boolean(error)} onChange={setValue} onKeyDown={event => {
+    <Input label={inputLabel} autoFocus value={value} isInvalid={Boolean(error)} onChange={setValue} onKeyDown={event => {
       if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
       // Prevent Enter from activating the trigger after focus is restored.
       event.preventDefault();
@@ -324,7 +324,7 @@ export function useAppDialog() {
     confirm: useCallback((options: AppDialogOptions) => open("confirm", options), [open]),
     notice: useCallback((options: AppDialogOptions) => open("notice", options).then(() => undefined), [open]),
     prompt: useCallback((options: AppPromptOptions) => new Promise<string | null>(resolve => setPromptRequest({ ...options, resolve })), []),
-    dialog: <><ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} /><PromptDialog open={Boolean(promptRequest)} title={promptRequest?.title || "请输入"} description={promptRequest?.description || ""} defaultValue={promptRequest?.defaultValue} confirmLabel={promptRequest?.confirmLabel} validate={promptRequest?.validate} onCancel={() => { promptRequest?.resolve(null); setPromptRequest(null); }} onConfirm={value => { promptRequest?.resolve(value); setPromptRequest(null); }} /></>,
+    dialog: <><ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} /><PromptDialog open={Boolean(promptRequest)} title={promptRequest?.title || "请输入"} description={promptRequest?.description || ""} defaultValue={promptRequest?.defaultValue} inputLabel={promptRequest?.inputLabel} confirmLabel={promptRequest?.confirmLabel} validate={promptRequest?.validate} onCancel={() => { promptRequest?.resolve(null); setPromptRequest(null); }} onConfirm={value => { promptRequest?.resolve(value); setPromptRequest(null); }} /></>,
   };
 }
 

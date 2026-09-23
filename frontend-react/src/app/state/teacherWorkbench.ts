@@ -1,7 +1,9 @@
+import { getAttendanceForDate, getAttendanceRange, isAwaitingReturn } from "./attendancePeriods";
+import { getTaskUrgency, isTaskReady } from "./dailyManagement";
 import { timestampToLocalDateKey } from "./dateKey";
 import { findStudentCandidates } from "./studentIdentity";
 import { isMissingScore, parseScoreNumber } from "./scoreValue";
-import { followupHasStudent, followupStudentLabel } from "./followupStudents";
+import { followupHasStudent, followupStudentLabel, groupFollowupTasks } from "./followupStudents";
 import type {
   AppStudent,
   AttendanceRecord,
@@ -168,14 +170,20 @@ export type TodayWorkItem = {
   urgency: 0 | 1 | 2 | 3;
   entityId: string;
   studentId?: StudentId;
+  taskIds?: string[];
 };
 
 export function buildTodayWorkItems(input: { date: string; students: AppStudent[]; attendance: AttendanceRecord[]; tasks: FollowupTask[]; homework: HomeworkAssignment[] }): TodayWorkItem[] {
   const activeStudents = input.students.filter(student => student.enrollmentStatus !== "archived");
   const activeIds = new Set(activeStudents.map(student => student.id));
   const names = new Map(input.students.map(student => [student.id, student.name]));
-  const tasks = input.tasks.filter(task => task.status === "pending" && task.dueDate && task.dueDate <= input.date).map(task => ({ id: `task:${task.id}`, kind: "task" as const, title: task.title, detail: `${followupStudentLabel(task, names)} · ${task.dueDate < input.date ? "已逾期" : "今日截止"}`, urgency: (task.dueDate < input.date ? 0 : 1) as 0 | 1, entityId: task.id, studentId: task.studentId || undefined }));
-  const attendance = input.attendance.filter(item => activeIds.has(item.studentId) && item.date === input.date && (item.status !== "normal" || item.late || item.earlyLeave)).map(item => ({ id: `attendance:${item.id}`, kind: "attendance" as const, title: `${names.get(item.studentId) || "未知学生"}出勤异常`, detail: [item.status === "leave" ? "请假" : item.status === "absent" ? "缺勤" : "", item.late ? "迟到" : "", item.earlyLeave ? "早退" : ""].filter(Boolean).join(" · "), urgency: 2 as const, entityId: item.id, studentId: item.studentId }));
+  const tasks = groupFollowupTasks(input.tasks.filter(task => isTaskReady(task, input.date))).map(group => {
+    const task = group.members[0];
+    const urgency = getTaskUrgency(task, input.date);
+    const people = group.members.length > 1 ? `${group.members.length} 人：${group.members.map(member => followupStudentLabel(member, names)).join("、")}` : followupStudentLabel(task, names);
+    return { id: `task:${task.id}`, kind: "task" as const, title: task.title, detail: `${people} · ${urgency === "overdue" ? "已逾期" : urgency === "today" ? "今日截止" : `计划处理${task.dueDate ? ` · 截止 ${task.dueDate}` : " · 未设截止日"}`}`, urgency: (urgency === "overdue" ? 0 : urgency === "today" ? 1 : 3) as 0 | 1 | 3, entityId: task.id, studentId: group.members.length === 1 ? task.studentId || undefined : undefined, taskIds: group.members.map(member => member.id) };
+  });
+  const attendance = getAttendanceForDate(input.attendance, input.date).filter(item => activeIds.has(item.studentId) && (item.status !== "normal" || item.late || item.earlyLeave)).map(item => ({ id: `attendance:${item.id}`, kind: "attendance" as const, title: `${names.get(item.studentId) || "未知学生"}出勤异常`, detail: [item.status === "leave" ? isAwaitingReturn(item, input.date) ? "请假 · 待确认返校" : "请假" : item.status === "absent" ? "缺勤" : "", item.late ? "迟到" : "", item.earlyLeave ? "早退" : ""].filter(Boolean).join(" · "), urgency: 2 as const, entityId: item.id, studentId: item.studentId }));
   const homework = input.homework.filter(item => (item.lifecycle || "active") === "active" && item.dueDate <= input.date).flatMap(item => {
     const participantIds = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates));
     const pendingIds = activeStudents.filter(student => participantIds.has(student.id) && item.studentStates[student.id]?.status === "pending").map(student => student.id);
@@ -199,9 +207,9 @@ export function getWeekRange(date = new Date()): { startDate: string; endDate: s
 export function buildWeeklyFacts(input: { students: AppStudent[]; attendance: AttendanceRecord[]; tasks: FollowupTask[]; homework: HomeworkAssignment[]; dormitories?: Dormitory[]; gradeExams?: GradeExam[]; startDate: string; endDate: string; studentId?: StudentId }): string[] {
   const inRange = (date: string) => date >= input.startDate && date <= input.endDate;
   const studentIds = input.studentId ? new Set([input.studentId]) : new Set(input.students.map(student => student.id));
-  const attendance = input.attendance.filter(item => studentIds.has(item.studentId) && inRange(item.date) && (item.status !== "normal" || item.late || item.earlyLeave));
+  const attendance = getAttendanceRange(input.attendance, input.startDate, input.endDate).filter(item => studentIds.has(item.studentId) && (item.status !== "normal" || item.late || item.earlyLeave));
   const completed = input.tasks.filter(item => (!input.studentId || followupHasStudent(item, input.studentId)) && item.status === "completed" && item.completedAt && inRange(timestampToLocalDateKey(item.completedAt))).length;
-  const pending = input.tasks.filter(item => (!input.studentId || followupHasStudent(item, input.studentId)) && item.status === "pending" && item.dueDate <= input.endDate).length;
+  const pending = input.tasks.filter(item => (!input.studentId || followupHasStudent(item, input.studentId)) && isTaskReady(item, input.endDate)).length;
   const records = input.students.filter(student => studentIds.has(student.id)).flatMap(student => student.records).filter(record => inRange(record.date));
   const assignments = input.homework.filter(item => (item.lifecycle || "active") !== "archived" && (inRange(item.assignedDate) || inRange(item.dueDate)));
   const pendingHomework = assignments.reduce((sum, item) => { const participants = new Set(item.participantStudentIds?.length ? item.participantStudentIds : Object.keys(item.studentStates)); return sum + [...studentIds].filter(id => participants.has(id) && item.studentStates[id]?.status === "pending").length; }, 0);
@@ -212,7 +220,7 @@ export function buildWeeklyFacts(input: { students: AppStudent[]; attendance: At
     ? input.students.find(student => student.id === input.studentId)?.exams.filter(exam => inRange(exam.date)).map(exam => `${exam.name}${exam.total !== undefined ? ` ${exam.total} 分` : ""}`) || []
     : (input.gradeExams || []).filter(exam => inRange(exam.date)).map(exam => exam.name);
   return [
-    `出勤异常 ${attendance.length} 次`,
+    `出勤异常 ${attendance.length} 人日`,
     `完成跟进 ${completed} 项，待处理 ${pending} 项`,
     `记录表扬 ${records.filter(item => item.type === "reward").length} 条、提醒 ${records.filter(item => item.type === "punish").length} 条`,
     `本周作业 ${assignments.length} 项，当前未交 ${pendingHomework} 人次、待登记 ${unrecordedHomework} 人次`,

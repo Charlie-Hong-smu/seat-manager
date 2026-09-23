@@ -192,6 +192,7 @@ export interface DormitoryPeriodSettings {
 export type FundTxType = "income" | "expense";
 
 export interface FundTransaction {
+  collectionId?: string;
   id: string;
   type: FundTxType;
   amount: number;
@@ -224,6 +225,8 @@ export interface AttendanceRecord {
   note: string;
   leaveStart?: string;
   leaveEnd?: string;
+  leaveTracking?: boolean;
+  leaveReturnedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -415,6 +418,7 @@ export type ComplementRuleId =
 export interface SeatSettings {
   pairByGender: boolean;
   keepLockedEmpty: boolean;
+  rotateWithHistory: boolean;
   complementRuleIds: ComplementRuleId[];
   /** 默认 off，保持旧版只评价邻座；开启后同时评价整组构成。 */
   groupBalanceMode: "off" | "neighbor-and-group";
@@ -427,6 +431,7 @@ export interface SeatHistorySnapshot {
   id: string;
   time: string;
   note: string;
+  source?: "rotation";
   rows: number;
   seats: string[];
   /** Stable identities alongside display names; older backups may omit these fields. */

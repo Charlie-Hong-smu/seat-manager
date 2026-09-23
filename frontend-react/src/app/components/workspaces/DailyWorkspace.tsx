@@ -1,3 +1,4 @@
+import { getAttendanceForDate } from "../../state/attendancePeriods";
 import { Users } from "lucide-react";
 import type { ClassDutiesBinding } from "../../state/classDuties";
 import { RetryableLazy } from "../RetryableLazy";
@@ -28,6 +29,7 @@ import { matchesStudentSearch } from "../../state/studentSearch";
 import { useSeatModeTransition } from "../useSeatModeTransition";
 import { SeatBoard } from "../SeatBoard";
 import { getDrawRound, retainDrawSessions, drawStudents, todayKey } from "../../state/dailyManagement";
+import { groupFollowupTasks } from "../../state/followupStudents";
 import type { AttendanceRecord, DrawSession, FollowupTask } from "../../state/types";
 
 const loadClassDutiesPanel = () => import("../ClassDutiesPanel");
@@ -115,9 +117,9 @@ export function DailyWorkspace({
     + seatSettings.complementRuleIds.length
     + (seatSettings.pairByGender ? 1 : 0);
   const activeStudentIds = new Set(students.filter(student => student.enrollmentStatus !== "archived").map(student => student.id));
-  const todayAttendance = attendanceRecords.filter(item => item.date === todayKey() && activeStudentIds.has(item.studentId));
+  const todayAttendance = getAttendanceForDate(attendanceRecords, todayKey()).filter(item => activeStudentIds.has(item.studentId));
   const abnormalAttendance = todayAttendance.filter(item => item.status !== "normal" || item.late || item.earlyLeave).length;
-  const dueTasks = followupTasks.filter(item => item.status === "pending" && item.dueDate && item.dueDate <= todayKey()).length;
+  const dueTasks = groupFollowupTasks(followupTasks.filter(item => item.status === "pending" && item.dueDate && item.dueDate <= todayKey())).length;
 
   function addStudent() {
     if (!name.trim()) return;
