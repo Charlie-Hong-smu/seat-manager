@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Banknote, BedDouble, BookOpenCheck, CalendarCheck2, Check, ClipboardList, GraduationCap, History, MessageSquareText, Pencil, RotateCcw, Save, Search, Trash2, UserRound, X } from "lucide-react";
 import type { AppStudent, SeatHistorySnapshot } from "../../state/types";
 import { filterTimeline, type TimelineItem, type TimelineTarget, type TimelineTone, type TimelineType } from "../../state/dataInsights";
 import { StudentPicker } from "../StudentPicker";
-import { MotionSwitch, MotionList, Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, useActionToast } from "../ui";
+import { MotionSwitch, MotionList, MotionCollapse, Button, Card, ConfirmDialog, DatePicker, IconButton, SegmentedControl, useActionToast } from "../ui";
 import { toLocalDateKey } from "../../state/dateKey";
 
 type HistoryView = "activity" | "seats";
@@ -73,6 +73,13 @@ export function HistoryWorkspace({ students, history, timeline = [], onSave, onR
   const [customEnd, setCustomEnd] = useState("");
   const actionToast = useActionToast();
 
+  useEffect(() => {
+    if (!renamingId) return;
+    const input = document.getElementById(`history-rename-${renamingId}`) as HTMLInputElement | null;
+    input?.focus();
+    input?.select();
+  }, [renamingId]);
+
   function changeView(next: HistoryView) {
     setView(next);
     try { localStorage.setItem(VIEW_STORAGE_KEY, next); } catch { /* UI preference failure is non-blocking. */ }
@@ -91,6 +98,7 @@ export function HistoryWorkspace({ students, history, timeline = [], onSave, onR
       duration: 6000,
     });
   }
+  function cancelRename() { setRenamingId(""); }
   function clearFilters() { setQuery(""); setStudentId(""); setType("全部"); setDateRange("30"); setCustomStart(""); setCustomEnd(""); }
 
   const dateFilter = dateRange === "7" ? { startDate: dateDaysAgo(6) } : dateRange === "30" ? { startDate: dateDaysAgo(29) } : dateRange === "custom" ? { startDate: customStart || undefined, endDate: customEnd || undefined } : {};
@@ -116,7 +124,7 @@ export function HistoryWorkspace({ students, history, timeline = [], onSave, onR
             <StudentPicker students={students} value={studentId} onChange={setStudentId} label="筛选学生" allowClear />
           </div>
           <div className="mt-3 space-y-3">
-            <div className="flex flex-wrap items-center gap-2"><span className="w-16 shrink-0 text-caption-1-semibold text-[var(--app-text-muted)]">时间范围</span><SegmentedControl value={dateRange} onChange={setDateRange} ariaLabel="时间范围" className="max-w-full overflow-x-auto" options={[{value:"7",label:"近 7 天"},{value:"30",label:"近 30 天"},{value:"term",label:"本学期"},{value:"custom",label:"自定义"}]} />{dateRange === "custom" && <div className="flex flex-wrap items-center gap-2"><DatePicker value={customStart} onChange={setCustomStart} ariaLabel="开始日期" className="w-40"/><span className="text-caption-1-regular text-text-tertiary">至</span><DatePicker value={customEnd} onChange={setCustomEnd} ariaLabel="结束日期" className="w-40" min={customStart}/></div>}</div>
+            <div className="flex flex-wrap items-center gap-2"><span className="w-16 shrink-0 text-caption-1-semibold text-[var(--app-text-muted)]">时间范围</span><SegmentedControl value={dateRange} onChange={setDateRange} ariaLabel="时间范围" className="max-w-full overflow-x-auto" options={[{value:"7",label:"近 7 天"},{value:"30",label:"近 30 天"},{value:"term",label:"本学期"},{value:"custom",label:"自定义"}]} /></div><MotionCollapse open={dateRange === "custom"} contentClassName="flex flex-wrap items-center gap-2 pt-2 pl-[4.5rem]"><DatePicker value={customStart} onChange={setCustomStart} ariaLabel="开始日期" className="w-40"/><span className="text-caption-1-regular text-text-tertiary">至</span><DatePicker value={customEnd} onChange={setCustomEnd} ariaLabel="结束日期" className="w-40" min={customStart}/></MotionCollapse>
             <div className="flex items-center gap-2"><span className="w-16 shrink-0 text-caption-1-semibold text-[var(--app-text-muted)]">事件类型</span><SegmentedControl value={type} onChange={setType} ariaLabel="事件类型" className="min-w-0 flex-1 overflow-x-auto" options={TIMELINE_TYPES.map(value => ({ value, label: value }))} /></div>
           </div>
         </Card>
@@ -126,7 +134,32 @@ export function HistoryWorkspace({ students, history, timeline = [], onSave, onR
         </Card>
       </div> : <div className="grid items-stretch gap-4 [&>section]:min-h-[22rem] lg:grid-cols-[22rem_minmax(0,1fr)]">
         <Card title="保存当前座位"><div className="space-y-3"><input value={note} onChange={event => setNote(event.target.value)} onKeyDown={event => { if (event.key === "Enter") save(); }} className="h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default px-3 text-body-regular outline-none focus:border-accent-300 focus:ring-2 focus:ring-accent-500/10" placeholder="记录名称，例如：期中后调整"/><Button onClick={save} disabled={!note.trim()} className="w-full"><Save className="h-4 w-4"/>保存座位</Button><p className="text-caption-1-regular leading-5 text-[var(--app-text-muted)]">保存后可随时查看或恢复，不影响当前班级其他数据。</p></div></Card>
-        <Card title={`座位快照 · ${history.length} 条`} bodyClassName="p-3 sm:p-5"><MotionList className="space-y-2">{history.map(snapshot => <article key={snapshot.id} className="rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1">{renamingId === snapshot.id ? <input autoFocus value={renameValue} onChange={event => setRenameValue(event.target.value)} onKeyDown={event => { if (event.key === "Enter") saveRename(snapshot.id); }} className="h-9 w-full rounded-[var(--app-radius-sm)] border border-accent-200 bg-background-primary-default px-3 text-body-regular outline-none ring-2 ring-accent-500/10"/> : <h3 className="truncate text-body-semibold text-[var(--app-text)]">{snapshot.note || "未命名座位"}</h3>}<p className="mt-1 text-caption-1-regular text-[var(--app-text-muted)]">{formatHistoryTime(snapshot.time)} · {snapshot.rows} 排</p></div><div className="flex flex-wrap items-center gap-2">{renamingId === snapshot.id ? <><Button size="sm" onClick={() => saveRename(snapshot.id)}><Check className="h-4 w-4"/>保存</Button><IconButton size="sm" label="取消重命名" onClick={() => setRenamingId("")}><X className="h-4 w-4"/></IconButton></> : <IconButton size="sm" label="重命名座位快照" onClick={() => { setRenamingId(snapshot.id); setRenameValue(snapshot.note); }}><Pencil className="h-4 w-4"/></IconButton>}<Button variant="ghost" size="sm" onClick={() => onView(snapshot)}>查看</Button><Button size="sm" onClick={() => onApply(snapshot)}><RotateCcw className="h-4 w-4"/>恢复</Button><IconButton size="sm" label="删除座位快照" onClick={() => { setDeleteError(""); setPendingDelete(snapshot); }} className="border-status-danger-100 bg-status-danger-50 text-status-danger-500 hover:bg-status-danger-100"><Trash2 className="h-4 w-4"/></IconButton></div></div></article>)}{!history.length && <div className="py-16 text-center"><History className="mx-auto h-9 w-9 text-text-tertiary"/><h3 className="mt-3 text-body-semibold text-text-primary">暂无座位快照</h3><p className="mt-1 text-caption-1-regular text-[var(--app-text-muted)]">在左侧填写名称并保存当前座位。</p></div>}</MotionList></Card>
+        <Card title={`座位快照 · ${history.length} 条`} bodyClassName="p-3 sm:p-5">
+          <MotionList className="space-y-2">
+            {history.map(snapshot => {
+              const editing = renamingId === snapshot.id;
+              return <article key={snapshot.id} className="rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1">
+                    <div className="app-inline-name-editor" data-editing={editing}>
+                      <h3 className="app-inline-name-heading truncate text-body-semibold text-[var(--app-text)]" aria-hidden={editing}>{snapshot.note || "未命名座位"}</h3>
+                      <input id={`history-rename-${snapshot.id}`} className="app-inline-name-field text-body-regular" value={editing ? renameValue : snapshot.note} onChange={event => setRenameValue(event.target.value)} onKeyDown={event => { if (event.key === "Enter") saveRename(snapshot.id); if (event.key === "Escape") cancelRename(); }} aria-label="座位快照名称" aria-hidden={!editing} inert={!editing ? true : undefined} tabIndex={editing ? 0 : -1} />
+                    </div>
+                    <p className="mt-1 text-caption-1-regular text-[var(--app-text-muted)]">{formatHistoryTime(snapshot.time)} · {snapshot.rows} 排</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="history-rename-actions" data-editing={editing}>
+                      <div className="history-rename-actions-view" aria-hidden={editing} inert={editing ? true : undefined}><IconButton size="sm" label="重命名座位快照" onClick={() => { setRenamingId(snapshot.id); setRenameValue(snapshot.note); }}><Pencil className="h-4 w-4"/></IconButton></div>
+                      <div className="history-rename-actions-edit" aria-hidden={!editing} inert={!editing ? true : undefined}><Button size="sm" onClick={() => saveRename(snapshot.id)}><Check className="h-4 w-4"/>保存</Button><IconButton size="sm" label="取消重命名" onClick={cancelRename}><X className="h-4 w-4"/></IconButton></div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => onView(snapshot)}>查看</Button><Button size="sm" onClick={() => onApply(snapshot)}><RotateCcw className="h-4 w-4"/>恢复</Button><IconButton size="sm" label="删除座位快照" onClick={() => { setDeleteError(""); setPendingDelete(snapshot); }} className="border-status-danger-100 bg-status-danger-50 text-status-danger-500 hover:bg-status-danger-100"><Trash2 className="h-4 w-4"/></IconButton>
+                  </div>
+                </div>
+              </article>;
+            })}
+            {!history.length && <div className="py-16 text-center"><History className="mx-auto h-9 w-9 text-text-tertiary"/><h3 className="mt-3 text-body-semibold text-text-primary">暂无座位快照</h3><p className="mt-1 text-caption-1-regular text-[var(--app-text-muted)]">在左侧填写名称并保存当前座位。</p></div>}
+          </MotionList>
+        </Card>
       </div>}</MotionSwitch>
       <ConfirmDialog open={Boolean(pendingDelete)} title="删除这份座位快照？" description={`“${pendingDelete?.note || "未命名座位"}”删除后无法恢复，当前座位不会受到影响。`} confirmLabel="确认删除" error={deleteError} onCancel={() => { setPendingDelete(null); setDeleteError(""); }} onConfirm={() => { if (!pendingDelete) return; if (onDelete(pendingDelete.id)) setPendingDelete(null); else setDeleteError("删除失败，请检查本机存储空间后重试。"); }} />
       {actionToast.toast}

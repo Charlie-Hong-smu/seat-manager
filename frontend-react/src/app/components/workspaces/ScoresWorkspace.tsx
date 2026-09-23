@@ -484,7 +484,8 @@ export function ScoresWorkspace({
           <Panel title="历史考试">
             <div className="divide-y divide-separator-border">
               {exams.map(exam => (
-                editingExamId === exam.id ? (
+                <MotionSwitch key={exam.id} transitionKey={editingExamId === exam.id ? "edit" : "view"} className="score-exam-edit-morph">
+                {editingExamId === exam.id ? (
                   <div key={exam.id} className="rounded-xl border border-separator-border p-3">
                     <div className="space-y-2">
                       <input value={editExamName} onChange={e => setEditExamName(e.target.value)} className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
@@ -513,7 +514,8 @@ export function ScoresWorkspace({
                     <IconButton size="sm" label="编辑考试" onClick={() => editExam(exam)}><Pencil className="h-4 w-4" /></IconButton>
                     <IconButton size="sm" label="删除考试" onClick={() => { setDeleteExamError(""); setPendingDeleteExam(exam); }}><Trash2 className="h-4 w-4" /></IconButton>
                   </div>
-                )
+                )}
+                </MotionSwitch>
               ))}
               {exams.length === 0 && <div className="py-6 text-center text-body-regular text-text-tertiary">暂无考试</div>}
             </div>

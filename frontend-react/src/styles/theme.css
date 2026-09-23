@@ -1580,6 +1580,52 @@
    捕获旧帧与新帧交叉淡化——旧内容不先消失、新内容不带位移，读起来是
    内容原地"溶"成新内容。每屏各面片一个独立命名，互不冲突。 */
 .vt-ai-launcher { view-transition-name: vt-ai-launcher; }
+/* Inline titles stay mounted while their own surface grows into an editor. */
+.app-inline-name-editor {
+  display: inline-grid;
+  grid-template-areas: "name";
+  align-items: center;
+  min-width: 0;
+  max-width: min(100%, 280px);
+  min-height: 36px;
+  padding-inline: 0;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  transition: padding 280ms var(--app-motion-ease), border-color 280ms var(--app-motion-ease), background-color 280ms var(--app-motion-ease);
+}
+.app-inline-name-editor[data-editing="true"] { padding-inline: 10px; border-color: var(--app-border); background: var(--app-surface); }
+.app-inline-name-heading, .app-inline-name-field { grid-area: name; min-width: 0; margin: 0; white-space: nowrap; }
+.app-inline-name-heading { overflow: hidden; text-overflow: ellipsis; transition: opacity 200ms ease, transform 280ms var(--app-motion-ease); }
+.app-inline-name-field {
+  width: 0;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: width 280ms var(--app-motion-ease), opacity 200ms ease, transform 280ms var(--app-motion-ease);
+}
+.app-inline-name-editor[data-editing="true"] .app-inline-name-heading { opacity: 0; transform: translateY(-4px); }
+.app-inline-name-editor[data-editing="true"] .app-inline-name-field { width: min(180px, 42vw); opacity: 1; transform: translateY(0); pointer-events: auto; }
+.app-inline-name-editor:focus-within { border-color: var(--app-primary); }
+.dorm-name-actions { position: relative; flex: none; width: 64px; height: 32px; }
+.dorm-name-actions-view, .dorm-name-actions-edit { position: absolute; inset: 0; display: flex; transition: opacity 180ms ease, transform 280ms var(--app-motion-ease); }
+.dorm-name-actions-edit { opacity: 0; transform: translateX(-6px); pointer-events: none; }
+.dorm-name-actions[data-editing="true"] .dorm-name-actions-view { opacity: 0; transform: translateX(-6px); pointer-events: none; }
+.dorm-name-actions[data-editing="true"] .dorm-name-actions-edit { opacity: 1; transform: translateX(0); pointer-events: auto; }
+.history-rename-actions { position: relative; flex: none; width: 32px; height: 32px; transition: width 280ms var(--app-motion-ease); }
+.history-rename-actions[data-editing="true"] { width: 110px; }
+.history-rename-actions-view, .history-rename-actions-edit { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; transition: opacity 180ms ease, transform 280ms var(--app-motion-ease); }
+.history-rename-actions-edit { opacity: 0; transform: translateX(-6px); pointer-events: none; }
+.history-rename-actions[data-editing="true"] .history-rename-actions-view { opacity: 0; transform: translateX(-6px); pointer-events: none; }
+.history-rename-actions[data-editing="true"] .history-rename-actions-edit { opacity: 1; transform: translateX(0); pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .app-inline-name-editor, .app-inline-name-heading, .app-inline-name-field, .dorm-name-actions-view, .dorm-name-actions-edit, .history-rename-actions, .history-rename-actions-view, .history-rename-actions-edit { transition: none; }
+}
 .vt-dorm-detail { view-transition-name: vt-dorm-detail; }
 .vt-dorm-members { view-transition-name: vt-dorm-members; }
 .vt-comment-editor { view-transition-name: vt-comment-editor; }

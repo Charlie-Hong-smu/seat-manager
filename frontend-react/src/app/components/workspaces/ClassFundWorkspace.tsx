@@ -277,6 +277,7 @@ export function ClassFundWorkspace({
                 <div className="space-y-1">
                   {periodTransactions.map(tx => (
                     <div key={tx.id} className="border-b border-separator-border last:border-b-0">
+                      <MotionSwitch transitionKey={editingId === tx.id ? "edit" : "view"} className="fund-transaction-edit-morph">
                       {editingId === tx.id ? (
                         /* 编辑态 */
                         <div className="space-y-2 bg-accent-50/40 px-3 py-3">
@@ -374,6 +375,7 @@ export function ClassFundWorkspace({
                           {/* 操作 */}
                           {tx.status !== "void" && <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                             <button
+                              aria-label={`编辑流水：${tx.category || "未分类"}`}
                               onClick={() => startEdit(tx)}
                               className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-background-tertiary-default hover:text-text-secondary"
                             >
@@ -389,6 +391,7 @@ export function ClassFundWorkspace({
                           </div>}
                         </div>
                       )}
+                      </MotionSwitch>
                     </div>
                   ))}
                 </div>

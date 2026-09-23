@@ -251,10 +251,18 @@ test("switching dormitories keeps the AI launcher above the transition", async (
 test("dormitory names can be edited in place without replacing their data", async ({ page }) => {
   await login(page, true); await nav(page, /^宿舍/);
   const original = (await data(page)).dormitories[0];
+  const shell = page.locator(".app-inline-name-editor");
+  const viewWidth = (await shell.boundingBox())!.width;
+  await shell.evaluate(element => { element.dataset.motionProbe = "same-element"; });
   await page.getByRole("button", { name: "重命名宿舍" }).click();
   const name = page.getByRole("textbox", { name: "宿舍名称", exact: true });
+  await expect(name).toBeFocused();
+  await expect(shell).toHaveAttribute("data-motion-probe", "same-element");
+  await expect.poll(async () => (await shell.boundingBox())!.width).toBeGreaterThan(viewWidth + 15);
   await name.fill("101 室");
   await page.getByRole("button", { name: "取消改名" }).click();
+  await expect(shell).toHaveAttribute("data-motion-probe", "same-element");
+  await expect.poll(async () => (await shell.boundingBox())!.width).toBeLessThan(viewWidth + 5);
   await expect(page.getByRole("heading", { name: "最后一间宿舍" })).toBeVisible();
   await page.getByRole("button", { name: "重命名宿舍" }).click();
   await name.fill("101 室");
@@ -270,4 +278,84 @@ test("dormitory names can be edited in place without replacing their data", asyn
   await page.getByRole("button", { name: "保存宿舍名称" }).click();
   await expect(page.getByRole("alert").getByText("已有同名宿舍")).toBeVisible();
   await expect.poll(async () => (await data(page)).dormitories.map((dormitory: { name: string }) => dormitory.name)).toEqual(["102 室", "101 室"]);
+});
+
+test("dormitory and fund editors morph in their original list rows", async ({ page }) => {
+  await login(page, true);
+  await page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "{}");
+    const slice = book.slices.find((item: { id: string }) => item.id === book.currentSliceId);
+    slice.data.dormitories[0].events = [{ id: "dorm-event-1", dormId: "d1", type: "reward", score: 2, reason: "卫生优秀", note: "", date: "2026-09-22", createdAt: "2026-09-22T00:00:00Z" }];
+    slice.data.fundTransactions = [{ id: "fund-1", type: "income", amount: 12, category: "活动费", note: "", date: "2026-09-22", createdAt: "2026-09-22T00:00:00Z", status: "active" }];
+    slice.data.savedExams = [{ id: "exam-1", name: "期中考试", date: "2026-09-22", savedAt: "2026-09-22T00:00:00Z", studentCount: 1, subjectCount: 1, subjects: ["数学"], entries: [{ studentId: "s1", name: "张三", scores: { 数学: { score: 90 } }, total: { score: 90 } }], importSource: { filename: "score.csv", rows: [["姓名", "数学"], ["张三", "90"]], mapping: { headers: ["姓名", "数学"], nameCol: 0, studentNoCol: -1, subjectMappings: [{ subject: "数学", scoreCol: 1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }], totalMapping: { scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }, warnings: [] } } }];
+    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify(book));
+  });
+  await page.reload(); await nav(page, /^宿舍/);
+  const dormRow = page.locator(".dorm-event-edit-morph:not(.app-motion-snapshot)");
+  await dormRow.evaluate(element => { element.dataset.motionProbe = "dorm"; });
+  await page.getByRole("button", { name: "编辑宿舍事件：卫生优秀" }).click();
+  await expect(dormRow).toHaveAttribute("data-motion-probe", "dorm");
+  await expect(dormRow).toHaveAttribute("data-moving", "true");
+  await page.getByRole("button", { name: "取消宿舍事件修改" }).click();
+  await expect(dormRow).toHaveAttribute("data-motion-probe", "dorm");
+  await expect(dormRow).toHaveAttribute("data-moving", "true");
+
+  await nav(page, /^班费/);
+  const fundRow = page.locator(".fund-transaction-edit-morph:not(.app-motion-snapshot)");
+  await fundRow.evaluate(element => { element.dataset.motionProbe = "fund"; });
+  await page.getByRole("button", { name: "编辑流水：活动费" }).click();
+  await expect(fundRow).toHaveAttribute("data-motion-probe", "fund");
+  await expect(fundRow).toHaveAttribute("data-moving", "true");
+  await fundRow.getByRole("button", { name: "取消" }).click();
+  await expect(fundRow).toHaveAttribute("data-motion-probe", "fund");
+  await expect(fundRow).toHaveAttribute("data-moving", "true");
+
+
+});
+
+test("student profile editor changes controls on the same surface", async ({ page }) => {
+  await login(page); await nav(page, /^座位/);
+  await page.locator('[data-student-id="s1"]').click();
+  const dialog = page.getByRole("dialog", { name: "张三学生详情" });
+  await dialog.getByRole("tab", { name: "档案" }).click();
+  const actions = dialog.locator(".student-profile-actions:not(.app-motion-snapshot)");
+  await actions.evaluate(element => { element.dataset.motionProbe = "profile"; });
+  await dialog.getByRole("button", { name: "编辑资料", exact: true }).click();
+  await expect(actions).toHaveAttribute("data-motion-probe", "profile");
+  await expect(actions).toHaveAttribute("data-moving", "true");
+  await expect(dialog.getByRole("textbox", { name: "姓名" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(actions).toHaveAttribute("data-motion-probe", "profile");
+  await expect(actions).toHaveAttribute("data-moving", "true");
+  await expect(dialog.getByRole("textbox", { name: "姓名" })).toBeDisabled();
+});
+
+
+test("seat snapshot rename morphs on the same title surface", async ({ page }) => {
+  await login(page); await nav(page, /^历史/);
+  await page.getByRole("button", { name: "座位快照" }).click();
+  await page.getByPlaceholder("记录名称，例如：期中后调整").fill("旧快照");
+  await page.getByRole("button", { name: "保存座位" }).click();
+  await page.getByRole("button", { name: "关闭历史座位详情" }).click();
+  const editor = page.locator(".app-inline-name-editor");
+  await expect(editor).toBeVisible();
+  await editor.evaluate(element => { element.dataset.motionProbe = "snapshot"; });
+  await page.getByRole("button", { name: "重命名座位快照" }).click();
+  await expect(editor).toHaveAttribute("data-motion-probe", "snapshot");
+  await expect(editor).toHaveAttribute("data-editing", "true");
+  await expect(editor.locator("input")).toBeFocused();
+  await editor.locator("input").fill("新快照");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(editor).toHaveAttribute("data-motion-probe", "snapshot");
+  await expect(editor).toHaveAttribute("data-editing", "false");
+  await expect(editor).toContainText("新快照");
+  await page.getByRole("button", { name: "重命名座位快照" }).click();
+  await editor.locator("input").fill("放弃的名称");
+  await page.getByRole("button", { name: "取消重命名" }).click();
+  await expect(editor).toContainText("新快照");
+  await page.getByRole("button", { name: "班级动态" }).click();
+  await page.getByRole("button", { name: "自定义" }).click();
+  await expect(page.getByRole("button", { name: "开始日期" })).toBeVisible();
+  await page.getByRole("button", { name: "近 30 天" }).click();
+  await expect(page.getByRole("button", { name: "开始日期" })).toBeHidden();
 });

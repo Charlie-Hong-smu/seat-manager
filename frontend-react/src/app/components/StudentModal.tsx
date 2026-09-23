@@ -567,7 +567,7 @@ export function StudentModal({
 
         <div className="student-detail-tabs relative shrink-0 border-b border-separator-border pr-28">
           <UnderlineTabs value={activeTab} options={STUDENT_DETAIL_TABS} onChange={changeActiveTab} ariaLabel="学生详情" className="border-b-0 px-6 pt-3" />
-          {activeTab === "profile" && <div className="absolute bottom-2 right-6">{profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存</Button></div> : <Button size="sm" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}</div>}
+          {activeTab === "profile" && <div className="absolute bottom-2 right-6"><MotionSwitch transitionKey={profileEditing ? "edit" : "view"} className="student-profile-actions">{profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存</Button></div> : <Button size="sm" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}</MotionSwitch></div>}
         </div>
 
         <MotionSwitch scrollable transitionKey={`${student.id}-${activeTab}`} contentClassName="space-y-5 p-6">
@@ -588,7 +588,7 @@ export function StudentModal({
                       setNameInput(e.target.value);
                       setProfileStatus("");
                     }}
-                    className="h-10 w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-secondary-default disabled:text-text-primary"
+                    className="h-10 w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-secondary-default disabled:text-text-primary"
                   />
                 </label>
                 <div className="flex flex-col gap-1.5">
@@ -606,7 +606,7 @@ export function StudentModal({
                     setProfileStatus("");
                   }}
                   placeholder="多个别名用顿号或逗号分隔"
-                  className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-secondary-default disabled:text-text-primary"
+                  className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-secondary-default disabled:text-text-primary"
                 />
               </label>
 
@@ -629,7 +629,7 @@ export function StudentModal({
                       }}
                       type="tel"
                       placeholder="例如：13800000000"
-                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
+                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
                     />
                   </label>
                   <label className="space-y-1.5">
@@ -642,7 +642,7 @@ export function StudentModal({
                         setProfileStatus("");
                       }}
                       placeholder="姓名 / 关系 / 电话"
-                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
+                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
                     />
                   </label>
                   <label className="space-y-1.5 sm:col-span-2">
@@ -655,7 +655,7 @@ export function StudentModal({
                         setProfileStatus("");
                       }}
                       placeholder="家庭住址（可选）"
-                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
+                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
                     />
                   </label>
                   <div className="space-y-1.5 sm:col-span-2">

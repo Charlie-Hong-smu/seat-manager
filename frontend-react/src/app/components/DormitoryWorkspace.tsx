@@ -34,7 +34,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { MobilePaneTabs, MotionCollapse, ConfirmDialog, DatePicker, DialogPresence, IconButton, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { MobilePaneTabs, MotionCollapse, MotionSwitch, ConfirmDialog, DatePicker, DialogPresence, IconButton, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-status-success-600" : value < 0 ? "text-status-danger-500" : "text-text-secondary";
@@ -155,6 +155,7 @@ export function DormitoryWorkspace({
   // 切换动画 key
   const [animKey, setAnimKey] = useState(0);
   const mainRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const memberListRef = useRef<HTMLDivElement>(null);
   const memberCandidatesRef = useRef<HTMLDivElement>(null);
   const responsibleSelectedRef = useRef<HTMLDivElement>(null);
@@ -204,6 +205,13 @@ export function DormitoryWorkspace({
     setRenameError("");
     setAnimKey(k => k + 1);
   }, [selectedDormId]);
+
+  useEffect(() => {
+    if (renamingDormId && renamingDormId === selectedDormitory?.id) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [renamingDormId, selectedDormitory?.id]);
 
   // 每个班级/学期从切片 settings 读取；旧全局键只作为首次迁移源，不再写入。
   useEffect(() => {
@@ -531,28 +539,34 @@ export function DormitoryWorkspace({
               {/* 标题区 + 统计 */}
               <div className="flex items-start justify-between gap-4 shrink-0">
                 <div className="min-w-0">
-                  {renamingDormId === selectedDormitory.id ? (
-                    <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex min-w-0 items-center gap-1.5" data-dorm-name-editing={renamingDormId === selectedDormitory.id}>
+                    <div className="app-inline-name-editor" data-editing={renamingDormId === selectedDormitory.id}>
+                      <h2 aria-hidden={renamingDormId === selectedDormitory.id} className="app-inline-name-heading text-title-2-semibold text-text-primary">{selectedDormitory.name}</h2>
                       <input
-                        autoFocus
+                        ref={renameInputRef}
                         aria-label="宿舍名称"
-                        value={renameDraft}
+                        aria-hidden={renamingDormId !== selectedDormitory.id}
+                        inert={renamingDormId !== selectedDormitory.id ? true : undefined}
+                        tabIndex={renamingDormId === selectedDormitory.id ? 0 : -1}
+                        value={renamingDormId === selectedDormitory.id ? renameDraft : selectedDormitory.name}
                         onChange={event => { setRenameDraft(event.target.value); setRenameError(""); }}
                         onKeyDown={event => { if (event.key === "Enter") saveDormitoryName(); if (event.key === "Escape") { setRenamingDormId(""); setRenameError(""); } }}
                         aria-invalid={Boolean(renameError)}
                         aria-describedby={renameError ? "dormitory-rename-error" : undefined}
-                        className="h-9 min-w-0 max-w-48 rounded-lg border border-border-button-default bg-background-primary-default px-2.5 text-body-semibold text-text-primary outline-none focus:border-accent-300"
+                        className="app-inline-name-field text-body-semibold text-text-primary"
                       />
-                      <IconButton label="保存宿舍名称" size="sm" onClick={saveDormitoryName}><Check className="h-4 w-4" /></IconButton>
-                      <IconButton label="取消改名" size="sm" onClick={() => { setRenamingDormId(""); setRenameError(""); }}><X className="h-4 w-4" /></IconButton>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <h2 className="min-w-0 truncate text-title-2-semibold text-text-primary">{selectedDormitory.name}</h2>
-                      <IconButton label="重命名宿舍" size="sm" onClick={() => { setRenamingDormId(selectedDormitory.id); setRenameDraft(selectedDormitory.name); setRenameError(""); }}><Pencil className="h-4 w-4" /></IconButton>
-                      <IconButton label="删除宿舍" title="删除宿舍" size="sm" onClick={() => setPendingDeleteDormitory(selectedDormitory)}><Trash2 className="h-4 w-4" /></IconButton>
+                    <div className="dorm-name-actions" data-editing={renamingDormId === selectedDormitory.id}>
+                      <div className="dorm-name-actions-view" aria-hidden={renamingDormId === selectedDormitory.id} inert={renamingDormId === selectedDormitory.id ? true : undefined}>
+                        <IconButton label="重命名宿舍" size="sm" onClick={() => { setRenamingDormId(selectedDormitory.id); setRenameDraft(selectedDormitory.name); setRenameError(""); }}><Pencil className="h-4 w-4" /></IconButton>
+                        <IconButton label="删除宿舍" size="sm" onClick={() => setPendingDeleteDormitory(selectedDormitory)}><Trash2 className="h-4 w-4" /></IconButton>
+                      </div>
+                      <div className="dorm-name-actions-edit" aria-hidden={renamingDormId !== selectedDormitory.id} inert={renamingDormId !== selectedDormitory.id ? true : undefined}>
+                        <IconButton label="保存宿舍名称" size="sm" onClick={saveDormitoryName}><Check className="h-4 w-4" /></IconButton>
+                        <IconButton label="取消改名" size="sm" onClick={() => { setRenamingDormId(""); setRenameError(""); }}><X className="h-4 w-4" /></IconButton>
+                      </div>
                     </div>
-                  )}
+                  </div>
                   {renameError && <p id="dormitory-rename-error" role="alert" className="mt-1 text-caption-1-regular text-status-danger-500">{renameError}</p>}
                   <p className="mt-0.5 text-caption-1-regular text-text-tertiary">统计范围：{periodRange.start} 至 {periodRange.end}</p>
                 </div>
@@ -795,8 +809,9 @@ export function DormitoryWorkspace({
                     </div>
                   ) : (
                     <div className="divide-y divide-separator-border">
-                      {selectedPeriodEvents.map(({ event }) =>
-                        editingEventId === event.id ? (
+                      {selectedPeriodEvents.map(({ event }) => (
+                        <MotionSwitch key={event.id} transitionKey={editingEventId === event.id ? "edit" : "view"} className="dorm-event-edit-morph">
+                        {editingEventId === event.id ? (
                           <div key={event.id} data-dormitory-event-id={event.id} className={`bg-accent-50/40 px-5 py-3 space-y-2 ${focusedEventId === event.id ? "entity-focus-highlight" : ""}`}>
                             <div className="flex gap-2">
                               <input
@@ -827,12 +842,14 @@ export function DormitoryWorkspace({
                                 placeholder="处罚措施（可选）"
                               />
                               <button
+                                aria-label="保存宿舍事件修改"
                                 onClick={saveEditEvent}
                                 className="rounded-lg bg-accent-600 px-3 py-1.5 text-caption-1-semibold text-text-white hover:bg-accent-700"
                               >
                                 <Check className="h-3.5 w-3.5" />
                               </button>
                               <button
+                                aria-label="取消宿舍事件修改"
                                 onClick={() => setEditingEventId("")}
                                 className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-semibold text-text-secondary hover:bg-background-secondary-default"
                               >
@@ -861,6 +878,7 @@ export function DormitoryWorkspace({
                                 </span>
                                 <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                   <button
+                                    aria-label={`编辑宿舍事件：${event.reason}`}
                                     onClick={() =>
                                       startEditEvent(event.id, event.reason, event.score, event.note, event.punishment || "", event.date)
                                     }
@@ -906,8 +924,9 @@ export function DormitoryWorkspace({
                               </div>
                             )}
                           </div>
-                        )
-                      )}
+                        )}
+                        </MotionSwitch>
+                      ))}
                     </div>
                   )}
                 </div>
