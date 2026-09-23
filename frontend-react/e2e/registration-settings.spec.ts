@@ -148,3 +148,68 @@ test("deleting the final dormitory returns safely to an empty workspace", async 
   await expect.poll(async () => (await data(page)).dormitories).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+
+test("creating and deleting the final dormitory animate the list and detail in place", async ({ page }) => {
+  await login(page); await nav(page, /^宿舍/);
+  await expect(page.locator('.app-motion-switch[data-moving]')).toHaveCount(0);
+  const list = page.locator(".dormitory-list-motion");
+  await expect(list.getByText("暂无宿舍")).toBeVisible();
+  await expect(page.locator(".vt-dorm-detail")).toHaveCount(1);
+  await page.evaluate(() => {
+    const state = window as typeof window & { __dormTransitions?: number; __dormListAnimations?: string[]; __dormDetailFlights?: number[] };
+    state.__dormTransitions = 0;
+    state.__dormListAnimations = [];
+    state.__dormDetailFlights = [];
+    const start = document.startViewTransition.bind(document);
+    document.startViewTransition = ((update) => {
+      state.__dormTransitions! += 1;
+      const transition = start(update);
+      void transition.ready.then(() => {
+        state.__dormDetailFlights!.push(document.getAnimations().filter(animation =>
+          (animation.effect as KeyframeEffect | null)?.pseudoElement?.includes("vt-dorm-detail"),
+        ).length);
+      });
+      return transition;
+    }) as typeof document.startViewTransition;
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (...args) {
+      if (this instanceof HTMLElement && this.closest(".dormitory-list-motion")) {
+        state.__dormListAnimations!.push(this.textContent?.trim() || "");
+      }
+      return animate.apply(this, args);
+    };
+  });
+  await page.getByPlaceholder("新宿舍名称").fill("101 室");
+  await expect(page.getByPlaceholder("新宿舍名称")).toHaveValue("101 室");
+  await expect(page.getByRole("button", { name: "新增宿舍" })).toBeEnabled();
+  await page.getByRole("button", { name: "新增宿舍" }).click();
+  await expect(page.getByRole("heading", { name: "101 室" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormTransitions?: number }).__dormTransitions)).toBe(1);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormDetailFlights?: number[] }).__dormDetailFlights?.[0])).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormListAnimations?: string[] }).__dormListAnimations?.some(label => label.includes("101 室")))).toBe(true);
+  await expect.poll(async () => (await data(page)).dormitories.length).toBe(1);
+
+  await page.getByTitle("删除宿舍", { exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "确认删除宿舍", exact: true }).click();
+  await expect(page.getByText("请先选择或创建一个宿舍", { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormTransitions?: number }).__dormTransitions)).toBe(2);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormListAnimations?: string[] }).__dormListAnimations?.some(label => label.includes("暂无宿舍")))).toBe(true);
+  await expect.poll(async () => (await data(page)).dormitories.length).toBe(0);
+
+  await page.getByRole("status").getByRole("button", { name: "撤销" }).click();
+  await expect(page.getByRole("heading", { name: "101 室" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormTransitions?: number }).__dormTransitions)).toBe(3);
+  await expect.poll(async () => (await data(page)).dormitories.length).toBe(1);
+
+  await page.getByPlaceholder("新宿舍名称").fill("102 室");
+  await page.getByRole("button", { name: "新增宿舍" }).click();
+  await expect(page.getByRole("heading", { name: "102 室" })).toBeVisible();
+  await page.evaluate(() => { (window as typeof window & { __dormListAnimations?: string[] }).__dormListAnimations = []; });
+  await page.getByTitle("删除宿舍", { exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "确认删除宿舍", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "101 室" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormTransitions?: number }).__dormTransitions)).toBe(5);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __dormListAnimations?: string[] }).__dormListAnimations?.some(label => label.includes("102 室")))).toBe(true);
+  await expect.poll(async () => (await data(page)).dormitories.length).toBe(1);
+});

@@ -217,15 +217,21 @@ export function DormitoryWorkspace({
   }
 
   function createDormitory() {
-    const dormitory = onCreateDormitory(newName, 0);
-    runViewTransition(() => setSelectedDormId(dormitory.id));
-    setNewName("");
-    actionToast.show({
-      message: "宿舍已创建",
-      actionLabel: "撤销",
-      actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
-      onAction: () => onDeleteDormitory(dormitory.id),
-      duration: 6000,
+    const previousSelectedId = selectedDormitory?.id || "";
+    runViewTransition(() => {
+      const dormitory = onCreateDormitory(newName, 0);
+      setSelectedDormId(dormitory.id);
+      setNewName("");
+      actionToast.show({
+        message: "宿舍已创建",
+        actionLabel: "撤销",
+        actionIcon: <RotateCcw className="h-3.5 w-3.5" />,
+        onAction: () => runViewTransition(() => {
+          onDeleteDormitory(dormitory.id);
+          setSelectedDormId(previousSelectedId);
+        }),
+        duration: 6000,
+      });
     });
   }
 
@@ -494,9 +500,9 @@ export function DormitoryWorkspace({
 
         </div>
         {/* 中间：事件账本 + 列表（带切换动画） */}
-        <main hidden={isMobile && mobilePane !== "events"} ref={mainRef} className="flex flex-col min-h-0 overflow-hidden gap-4">
+        <main hidden={isMobile && mobilePane !== "events"} ref={mainRef} className="vt-dorm-detail flex flex-col min-h-0 overflow-hidden gap-4">
           {selectedDormitory ? (
-            <div key={animKey} className="vt-dorm-detail flex flex-col min-h-0 flex-1 gap-4">
+            <div key={animKey} className="flex flex-col min-h-0 flex-1 gap-4">
               {/* 标题区 + 统计 */}
               <div className="flex items-start justify-between gap-4 shrink-0">
                 <div className="min-w-0">
@@ -877,7 +883,7 @@ export function DormitoryWorkspace({
           )}
         </main>
 
-        <div hidden={isMobile && mobilePane !== "members"} className="dormitory-pane min-h-0 flex flex-col">
+        <div hidden={isMobile && mobilePane !== "members"} className="vt-dorm-members dormitory-pane min-h-0 flex flex-col">
         <DormitoryMembersPanel
           leaderStudentId={selectedDormitory ? classDuties?.value.dormitoryLeaders[selectedDormitory.id] : undefined}
           onLeaderChange={classDuties && selectedDormitory ? id => { classDuties.onChange(current => ({ ...current, dormitoryLeaders: { ...current.dormitoryLeaders, [selectedDormitory.id]: id } })); actionToast.show({ message: id ? "宿舍长已设置" : "已取消宿舍长" }); } : undefined}
@@ -1008,9 +1014,14 @@ export function DormitoryWorkspace({
       <ConfirmDialog open={Boolean(pendingDeleteDormitory)} title="删除这个宿舍？" description={`将删除“${pendingDeleteDormitory?.name || "当前宿舍"}”及全部事件，${pendingDeleteDormitory?.memberIds.length || 0} 名成员会变为未分配宿舍；操作后可在 6 秒内撤销。`} confirmLabel="确认删除宿舍" onCancel={() => setPendingDeleteDormitory(null)} onConfirm={() => {
         if (!pendingDeleteDormitory) return;
         const deleted = pendingDeleteDormitory;
-        const undo = onDeleteDormitory(deleted.id);
-        setPendingDeleteDormitory(null);
-        actionToast.show({ message: `宿舍“${deleted.name}”已删除`, actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: undo, duration: 6000 });
+        const remaining = sortedDormitories.filter(dormitory => dormitory.id !== deleted.id);
+        const nextSelectedId = remaining[Math.min(activeDormIndex, remaining.length - 1)]?.id || "";
+        runViewTransition(() => {
+          const undo = onDeleteDormitory(deleted.id);
+          setSelectedDormId(nextSelectedId);
+          setPendingDeleteDormitory(null);
+          actionToast.show({ message: `宿舍“${deleted.name}”已删除`, actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => runViewTransition(() => { undo(); setSelectedDormId(deleted.id); }), duration: 6000 });
+        });
       }} />
       <ConfirmDialog open={Boolean(pendingDeleteEvent)} title="删除这条宿舍事件？" description={`将删除“${pendingDeleteEvent?.reason || "当前事件"}”。已完成的关联任务会保留；未完成任务可选择保留或同时取消。`} confirmLabel={(pendingDeleteEvent?.followupTaskIds || []).some(id => followupTasks.some(task => task.id === id && task.status === "pending")) ? "删除并取消未完成任务" : "确认删除事件"} alternateLabel={(pendingDeleteEvent?.followupTaskIds || []).some(id => followupTasks.some(task => task.id === id && task.status === "pending")) ? "删除但保留任务" : undefined} onCancel={() => setPendingDeleteEvent(null)} onAlternate={() => confirmDeleteEvent(false)} onConfirm={() => confirmDeleteEvent(true)} />
       <ConfirmDialog open={Boolean(pendingDeletePreset)} title="删除这个事件类型？" description={`将从预设中移除“${presetDrafts.find(item => item.originalLabel === pendingDeletePreset)?.label || "当前类型"}”，保存类型设置后生效。`} confirmLabel="确认删除类型" onCancel={() => setPendingDeletePreset("")} onConfirm={() => { setPresetDrafts(previous => previous.filter(item => item.originalLabel !== pendingDeletePreset)); setPendingDeletePreset(""); }} />

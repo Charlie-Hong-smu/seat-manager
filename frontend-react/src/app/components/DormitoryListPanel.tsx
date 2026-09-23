@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppStudent, Dormitory } from "../state/types";
+import { MotionList } from "./ui";
 
 const DORM_ITEM_HEIGHT = 48;
 const DORM_ITEM_GAP = 4;
@@ -39,6 +40,8 @@ export function DormitoryListPanel({
                 placeholder="新宿舍名称"
               />
               <button
+                type="button"
+                aria-label="新增宿舍"
                 onClick={createDormitory}
                 disabled={!newName.trim()}
                 className="shrink-0 rounded-lg bg-accent-600 px-2.5 py-1.5 text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-hover"
@@ -53,10 +56,10 @@ export function DormitoryListPanel({
           >
             {/* 选中指示条 */}
             <div
-              className="pointer-events-none absolute left-2 right-2 top-2 h-12 rounded-xl bg-text-primary shadow-sm transition-transform duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              className={`pointer-events-none absolute left-2 right-2 top-2 h-12 rounded-xl bg-text-primary shadow-sm transition-[transform,opacity] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedDormitory ? "opacity-100" : "opacity-0"}`}
               style={{ transform: "translateY(var(--dorm-active-y))" }}
             />
-            <div className="relative space-y-1">
+            <MotionList className="relative space-y-1 dormitory-list-motion">
               {sortedDormitories.map((dormitory, index) => {
                 const active = selectedDormitory?.id === dormitory.id;
                 return (
@@ -85,9 +88,9 @@ export function DormitoryListPanel({
                 );
               })}
               {dormitories.length === 0 && (
-                <div className="px-2 py-6 text-center text-caption-1-regular text-text-tertiary">暂无宿舍</div>
+                <div key="empty" className="px-2 py-6 text-center text-caption-1-regular text-text-tertiary">暂无宿舍</div>
               )}
-            </div>
+            </MotionList>
           </nav>
           <div className="border-t border-separator-border p-3">
             <div className="text-[10px] text-text-tertiary">

@@ -1580,11 +1580,14 @@
    捕获旧帧与新帧交叉淡化——旧内容不先消失、新内容不带位移，读起来是
    内容原地"溶"成新内容。每屏各面片一个独立命名，互不冲突。 */
 .vt-dorm-detail { view-transition-name: vt-dorm-detail; }
+.vt-dorm-members { view-transition-name: vt-dorm-members; }
 .vt-comment-editor { view-transition-name: vt-comment-editor; }
 .vt-comment-tools { view-transition-name: vt-comment-tools; }
 
 ::view-transition-old(vt-dorm-detail),
 ::view-transition-new(vt-dorm-detail),
+::view-transition-old(vt-dorm-members),
+::view-transition-new(vt-dorm-members),
 ::view-transition-old(vt-comment-editor),
 ::view-transition-new(vt-comment-editor),
 ::view-transition-old(vt-comment-tools),
@@ -2827,6 +2830,7 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
 ::view-transition-group(root), ::view-transition-new(root) { animation: none; }
 ::view-transition-old(root) { display: none; }
 ::view-transition-group(vt-dorm-detail),
+::view-transition-group(vt-dorm-members),
 ::view-transition-group(vt-comment-editor),
 ::view-transition-group(vt-comment-tools) { animation-duration: 320ms; animation-timing-function: var(--app-motion-ease); }
 
