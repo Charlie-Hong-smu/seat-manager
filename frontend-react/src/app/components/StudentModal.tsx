@@ -4,7 +4,7 @@ import { useAttendanceUndo } from "../hooks/useAttendanceUndo";
 import { StudentDutiesSection } from "./StudentDutiesSection";
 import type { ClassDutiesBinding } from "../state/classDuties";
 import { followupHasStudent } from "../state/followupStudents";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
 import { RetryableLazy } from "./RetryableLazy";
@@ -22,7 +22,7 @@ import { normalizeAttendancePatch } from "../state/classManagementCommands";
 import { createActivityEvent } from "../state/activityEvents";
 import { matchesStudentSearch } from "../state/studentSearch";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
-import { MotionSwitch, AiGenerationPanel, Button, ConfirmDialog, DialogPresence, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { MotionSwitch, MotionCollapse, AiGenerationPanel, Button, ConfirmDialog, DialogPresence, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import { StudentPicker } from "./StudentPicker";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
@@ -168,6 +168,7 @@ export function StudentModal({
   const [pendingRecordDelete, setPendingRecordDelete] = useState<StudentModalRecord | null>(null);
   const [profileStatus, setProfileStatus] = useState("");
   const [profileEditing, setProfileEditing] = useState(false);
+  const profileNameRef = useRef<HTMLInputElement>(null);
   const [dormStatus, setDormStatus] = useState("");
   const [activeTab, setActiveTab] = useState<StudentDetailTab>(initialActiveTab);
   const [tabDirection, setTabDirection] = useState<"left" | "right">("right");
@@ -219,6 +220,14 @@ export function StudentModal({
     setAiTrendAccessCode("");
     setHasAiTrendAuth(hasStoredAiTrendAuth());
   }, [student]);
+
+  useEffect(() => {
+    if (!profileEditing || activeTab !== "profile") return;
+    const input = profileNameRef.current;
+    const scrollParent = input?.closest<HTMLElement>(".app-motion-switch--scrollable");
+    if (scrollParent?.scrollTop) scrollParent.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    input?.focus({ preventScroll: true });
+  }, [profileEditing, activeTab]);
 
   const navigateStudent = useCallback((direction: -1 | 1) => {
     setTabDirection(direction < 0 ? "left" : "right");
@@ -572,166 +581,102 @@ export function StudentModal({
 
         <MotionSwitch scrollable transitionKey={`${student.id}-${activeTab}`} contentClassName="space-y-5 p-6">
           {activeTab === "profile" && (
-          <div className="rounded-2xl border border-separator-border">
-            <div className="flex items-center justify-between border-b border-separator-border bg-background-secondary-default px-4 py-3">
-              <span className="text-body-regular text-text-primary" style={{ fontWeight: 700 }}>学生信息</span>
-              <span className="text-caption-1-regular text-text-tertiary">{profileEditing ? "编辑中 · 保存后生效" : "查看模式"}</span>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
-                <label className="flex min-w-0 flex-col gap-1.5">
-                  <span className="block text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>姓名</span>
-                  <input
-                    disabled={!profileEditing}
-                    value={nameInput}
-                    onChange={e => {
-                      setNameInput(e.target.value);
-                      setProfileStatus("");
-                    }}
-                    className="h-10 w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-secondary-default disabled:text-text-primary"
-                  />
+          <div className="student-profile-sheet" data-editing={profileEditing}>
+            <section className="student-profile-section" aria-label="基本资料">
+              <div className="student-profile-section-heading"><h3>基本资料</h3><span>{profileEditing ? "编辑中 · 保存后生效" : "查看"}</span></div>
+              <div className="student-profile-grid student-profile-grid--identity">
+                <label className="student-profile-field student-profile-field--name">
+                  <span>姓名</span>
+                  <input ref={profileNameRef} disabled={!profileEditing} value={nameInput} onChange={event => { setNameInput(event.target.value); setProfileStatus(""); }} className="student-profile-input" />
                 </label>
-                <div className="flex flex-col gap-1.5">
-                  <span className="block text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>性别</span>
-                  <SegmentedControl value={genderInput} ariaLabel="学生性别" disabled={!profileEditing} onChange={value => { setGenderInput(value as Gender); setProfileStatus(""); }} options={[{ value: "男", label: "男" }, { value: "女", label: "女" }]} className="flex h-10 w-full" />
+                <div className="student-profile-field">
+                  <span>性别</span>
+                  <div className="student-profile-choice">
+                    <strong className="student-profile-choice-value" aria-hidden={profileEditing}>{genderInput === "男" || genderInput === "女" ? genderInput : "未记录"}</strong>
+                    <div className="student-profile-choice-control" aria-hidden={!profileEditing}>
+                      <SegmentedControl value={genderInput} ariaLabel="学生性别" disabled={!profileEditing} onChange={value => { setGenderInput(value as Gender); setProfileStatus(""); }} options={[{ value: "男", label: "男" }, { value: "女", label: "女" }]} className="flex h-10 w-full" />
+                    </div>
+                  </div>
                 </div>
+                <label className="student-profile-field student-profile-field--wide" data-empty={!aliasesInput}>
+                  <span>别名</span>
+                  <input disabled={!profileEditing} value={profileEditing ? aliasesInput : aliasesInput || "未填写"} onChange={event => { setAliasesInput(event.target.value); setProfileStatus(""); }} placeholder="多个别名用顿号或逗号分隔" className="student-profile-input" />
+                </label>
               </div>
-              <label className="space-y-1.5 block">
-                <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>别名</span>
-                <input
-                  disabled={!profileEditing}
-                  value={aliasesInput}
-                  onChange={e => {
-                    setAliasesInput(e.target.value);
-                    setProfileStatus("");
-                  }}
-                  placeholder="多个别名用顿号或逗号分隔"
-                  className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-secondary-default disabled:text-text-primary"
-                />
-              </label>
-
               {classDuties && <StudentDutiesSection key={student.id} binding={classDuties} studentId={student.id} />}
+            </section>
 
-              <div className="rounded-xl border border-accent-100 bg-accent-50/40 px-3 py-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="text-caption-1-semibold text-accent-700">联系与住宿信息</span>
-                  <span className="text-caption-1-regular text-accent-500/70">仅保存在本机 / 同步备份中</span>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="space-y-1.5">
-                    <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>家长电话</span>
-                    <input
-                      disabled={!profileEditing}
-                      value={parentPhoneInput}
-                      onChange={e => {
-                        setParentPhoneInput(e.target.value);
-                        setProfileStatus("");
-                      }}
-                      type="tel"
-                      placeholder="例如：13800000000"
-                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
-                    />
-                  </label>
-                  <label className="space-y-1.5">
-                    <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>紧急联系人</span>
-                    <input
-                      disabled={!profileEditing}
-                      value={emergencyContactInput}
-                      onChange={e => {
-                        setEmergencyContactInput(e.target.value);
-                        setProfileStatus("");
-                      }}
-                      placeholder="姓名 / 关系 / 电话"
-                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
-                    />
-                  </label>
-                  <label className="space-y-1.5 sm:col-span-2">
-                    <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>住址</span>
-                    <input
-                      disabled={!profileEditing}
-                      value={addressInput}
-                      onChange={e => {
-                        setAddressInput(e.target.value);
-                        setProfileStatus("");
-                      }}
-                      placeholder="家庭住址（可选）"
-                      className="w-full rounded-xl border border-accent-100 bg-background-primary-default px-3.5 py-2.5 text-body-regular outline-none transition-[background-color,border-color,color,opacity] duration-200 motion-reduce:transition-none focus:border-accent-300 disabled:cursor-default disabled:border-transparent disabled:bg-background-primary-default/60 disabled:text-text-primary disabled:placeholder:text-text-tertiary"
-                    />
-                  </label>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 600 }}>是否住宿</span>
-                    <SegmentedControl value={isBoardingInput ? "boarding" : "commuter"} ariaLabel="住宿状态" disabled={!profileEditing} onChange={value => { setIsBoardingInput(value === "boarding"); setProfileStatus(""); }} options={[{ value: "commuter", label: "走读" }, { value: "boarding", label: "住宿" }]} className="flex max-w-xs" />
+            <section className="student-profile-section" aria-label="联系与住宿">
+              <div className="student-profile-section-heading"><h3>联系与住宿</h3><span>保存在本机，可随备份同步</span></div>
+              <div className="student-profile-grid">
+                <label className="student-profile-field" data-empty={!parentPhoneInput}>
+                  <span>家长电话</span>
+                  <input disabled={!profileEditing} value={profileEditing ? parentPhoneInput : parentPhoneInput || "未填写"} onChange={event => { setParentPhoneInput(event.target.value); setProfileStatus(""); }} type="tel" placeholder="例如：13800000000" className="student-profile-input" />
+                </label>
+                <label className="student-profile-field" data-empty={!emergencyContactInput}>
+                  <span>紧急联系人</span>
+                  <input disabled={!profileEditing} value={profileEditing ? emergencyContactInput : emergencyContactInput || "未填写"} onChange={event => { setEmergencyContactInput(event.target.value); setProfileStatus(""); }} placeholder="姓名 / 关系 / 电话" className="student-profile-input" />
+                </label>
+                <label className="student-profile-field student-profile-field--wide" data-empty={!addressInput}>
+                  <span>住址</span>
+                  <input disabled={!profileEditing} value={profileEditing ? addressInput : addressInput || "未填写"} onChange={event => { setAddressInput(event.target.value); setProfileStatus(""); }} placeholder="家庭住址（可选）" className="student-profile-input" />
+                </label>
+                <div className="student-profile-field">
+                  <span>住宿状态</span>
+                  <div className="student-profile-choice">
+                    <strong className="student-profile-choice-value" aria-hidden={profileEditing}>{isBoardingInput ? "住宿" : "走读"}</strong>
+                    <div className="student-profile-choice-control" aria-hidden={!profileEditing}>
+                      <SegmentedControl value={isBoardingInput ? "boarding" : "commuter"} ariaLabel="住宿状态" disabled={!profileEditing} onChange={value => { setIsBoardingInput(value === "boarding"); setProfileStatus(""); }} options={[{ value: "commuter", label: "走读" }, { value: "boarding", label: "住宿" }]} className="flex max-w-xs" />
+                    </div>
                   </div>
                 </div>
               </div>
-
-              <div className="rounded-xl border border-separator-border bg-background-secondary-default px-3 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-caption-1-semibold text-text-tertiary">宿舍</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-body-regular">
-                      <span className="text-body-semibold text-text-primary">{currentDormitory?.name || "未分配"}</span>
-                      <span className="text-text-tertiary">成员 {currentDormitory?.memberIds.length ?? "—"}</span>
-                    </div>
-                    <div className="mt-1 truncate text-caption-1-regular text-text-tertiary">
-                      最近事件：{latestDormitoryEvent ? `${latestDormitoryEvent.reason} · ${latestDormitoryEvent.date}` : "暂无"}
-                    </div>
+              <div className="student-profile-dormitory">
+                <div className="min-w-0">
+                  <span className="student-profile-meta-label">所属宿舍</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-body-regular">
+                    <strong className="text-text-primary">{currentDormitory?.name || "未分配"}</strong>
+                    {currentDormitory && <span className="text-text-tertiary">成员 {currentDormitory.memberIds.length} 人</span>}
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button onClick={() => setDormAssignmentOpen(true)} className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-semibold text-text-secondary hover:bg-background-secondary-default">更换宿舍</button>
-                    <button onClick={() => setDormEventOpen(true)} disabled={!currentDormitory} className="rounded-lg bg-accent-600 px-3 py-1.5 text-caption-1-semibold text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary">记宿舍事件</button>
-                    <button onClick={onOpenDormitories} className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-semibold text-text-secondary hover:bg-background-secondary-default">管理</button>
-                  </div>
+                  {latestDormitoryEvent && <p className="mt-1 truncate text-caption-1-regular text-text-tertiary">最近事件：{latestDormitoryEvent.reason} · {latestDormitoryEvent.date}</p>}
                 </div>
-                {dormStatus && <p className="mt-2 text-caption-1-regular text-accent-600">{dormStatus}</p>}
+                <div className="student-profile-dormitory-actions">
+                  <Button variant="ghost" size="sm" onClick={() => setDormAssignmentOpen(true)}>更换宿舍</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setDormEventOpen(true)} disabled={!currentDormitory}>记宿舍事件</Button>
+                  <Button variant="ghost" size="sm" onClick={onOpenDormitories}>管理</Button>
+                </div>
+                {dormStatus && <p className="w-full text-caption-1-regular text-accent-600">{dormStatus}</p>}
               </div>
+            </section>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 700 }}>行为标签</span>
-                  <span className="text-caption-1-regular text-text-tertiary">写回旧版手动标签</span>
-                </div>
-                <div className="space-y-3">
-                  {BEHAVIOR_TAG_GROUPS.map(group => (
-                    <div key={group.id} className="grid grid-cols-[5rem_1fr] gap-3 items-start">
-                      <span className="text-caption-1-regular text-text-tertiary pt-1.5">{group.name}</span>
-                      <div className="flex flex-wrap gap-2">
+            <section className="student-profile-section" aria-label="行为与学科标签">
+              <div className="student-profile-section-heading"><h3>行为与学科</h3></div>
+              <div className="student-profile-tag-groups">
+                <span className="student-profile-meta-label">行为标签</span>
+                <MotionCollapse open={!profileEditing && selectedBehaviorTags.size === 0} contentClassName="pt-2"><p className="text-body-regular text-text-tertiary">暂无行为标签</p></MotionCollapse>
+                {BEHAVIOR_TAG_GROUPS.map(group => {
+                  const hasSelected = group.tags.some(tag => selectedBehaviorTags.has(tag.id));
+                  return <MotionCollapse key={group.id} open={profileEditing || hasSelected} contentClassName="pt-2">
+                    <div className="student-profile-tag-group">
+                      <span className="student-profile-meta-label">{group.name}</span>
+                      <div className="flex flex-wrap">
                         {group.tags.map(tag => {
                           const active = selectedBehaviorTags.has(tag.id);
-                          return (
-                            <button
-                              key={tag.id}
-                              disabled={!profileEditing}
-                              onClick={() => toggleBehaviorTag(tag.id)}
-                              className={`rounded-full border px-2.5 py-1.5 text-body-regular transition-colors disabled:cursor-default ${active ? "border-accent-200 bg-accent-50 text-accent-700" : `border-border-button-default bg-background-primary-default text-text-secondary ${profileEditing ? "hover:bg-background-secondary-default" : "opacity-70"}`}`}
-                              style={{ fontWeight: 600 }}
-                            >
-                              {tag.label}
-                            </button>
-                          );
+                          return <button key={tag.id} type="button" disabled={!profileEditing} data-active={active} aria-hidden={!profileEditing && !active} onClick={() => toggleBehaviorTag(tag.id)} className="student-profile-tag">{tag.label}</button>;
                         })}
                       </div>
                     </div>
-                  ))}
+                  </MotionCollapse>;
+                })}
+              </div>
+              <div className="student-profile-academic">
+                <span className="student-profile-meta-label">学科标签</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {student.academicTags.length ? student.academicTags.map(tag => <span key={tag} className={`rounded-full border px-2.5 py-1 text-caption-1-medium ${tag.endsWith("强") ? "border-status-success-100 bg-status-success-50 text-status-success-700" : "border-status-danger-100 bg-status-danger-50 text-status-danger-500"}`}>{tag}</span>) : <span className="text-body-regular text-text-tertiary">暂无学科标签</span>}
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <span className="text-caption-1-regular text-text-secondary" style={{ fontWeight: 700 }}>学科标签</span>
-                <div className="flex flex-wrap gap-2">
-                  {student.academicTags.length > 0 ? student.academicTags.map(tag => {
-                    const isStrong = tag.endsWith("强");
-                    return (
-                      <span key={tag} className={`px-2.5 py-1 rounded-full text-body-regular border ${isStrong ? "bg-status-success-50 text-status-success-700 border-status-success-100" : "bg-status-danger-50 text-status-danger-500 border-status-danger-100"}`} style={{ fontWeight: 600 }}>
-                        {tag}
-                      </span>
-                    );
-                  }) : <span className="text-body-regular text-text-tertiary">暂无自动学科标签</span>}
-                </div>
-              </div>
-
-              {profileStatus && <p className="text-caption-1-regular text-accent-600">{profileStatus}</p>}
-            </div>
+              {profileStatus && <p role="status" className="mt-3 text-caption-1-regular text-accent-600">{profileStatus}</p>}
+            </section>
           </div>
           )}
 

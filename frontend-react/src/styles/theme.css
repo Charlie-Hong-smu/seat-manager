@@ -2845,6 +2845,54 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
 
 
 
+/* Student profile: the same text fields become controls in place. */
+.student-profile-sheet { overflow: hidden; border: 1px solid var(--app-border); border-radius: var(--app-radius-lg); background: var(--app-surface); }
+.student-profile-section { padding: 18px 22px; }
+.student-profile-section + .student-profile-section { border-top: 1px solid var(--app-border); }
+.student-profile-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.student-profile-section-heading h3 { margin: 0; color: var(--app-text); font-size: 15px; font-weight: 700; }
+.student-profile-section-heading > span { color: var(--app-text-muted); font-size: 12px; }
+.student-profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; row-gap: 14px; }
+.student-profile-grid--identity { grid-template-columns: minmax(0, 2fr) minmax(9rem, 1fr); }
+.student-profile-field { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.student-profile-field--wide { grid-column: 1 / -1; }
+.student-profile-field > span, .student-profile-meta-label { color: var(--app-text-muted); font-size: 12px; font-weight: 600; }
+.student-profile-input { width: 100%; min-width: 0; min-height: 38px; padding: 0; border: 1px solid transparent; border-radius: var(--app-radius-sm); outline: none; background: transparent; color: var(--app-text); font-size: 14px; font-weight: 600; text-overflow: ellipsis; opacity: 1; -webkit-text-fill-color: var(--app-text); transition: padding 280ms var(--app-motion-ease), border-color 280ms var(--app-motion-ease), background-color 280ms var(--app-motion-ease), box-shadow 280ms var(--app-motion-ease), font-size 280ms var(--app-motion-ease); }
+.student-profile-input:disabled { cursor: default; }
+.student-profile-field[data-empty="true"] .student-profile-input:disabled { color: var(--app-text-muted); -webkit-text-fill-color: var(--app-text-muted); font-weight: 400; }
+.student-profile-field--name .student-profile-input { font-size: 19px; }
+.student-profile-sheet[data-editing="true"] .student-profile-input { padding-inline: 12px; border-color: var(--app-border); background: var(--app-surface); font-weight: 500; }
+.student-profile-sheet[data-editing="true"] .student-profile-field--name .student-profile-input { font-size: 15px; }
+.student-profile-sheet[data-editing="true"] .student-profile-input:focus { border-color: var(--app-primary); box-shadow: 0 0 0 3px var(--color-accent-50); }
+.student-profile-choice { display: grid; min-height: 38px; align-items: center; }
+.student-profile-choice-value, .student-profile-choice-control { grid-area: 1 / 1; transition: opacity 200ms ease, transform 280ms var(--app-motion-ease); }
+.student-profile-choice-value { color: var(--app-text); font-size: 14px; transform: translateY(0); }
+.student-profile-choice-control { opacity: 0; transform: translateY(4px); pointer-events: none; }
+.student-profile-sheet[data-editing="true"] .student-profile-choice-value { opacity: 0; transform: translateY(-4px); }
+.student-profile-sheet[data-editing="true"] .student-profile-choice-control { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.student-profile-duties { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--app-border); }
+.student-profile-duties > div:first-child h3 { color: var(--app-text-muted); font-size: 12px; font-weight: 600; }
+.student-profile-duties > div:nth-child(2) { margin-top: 6px; }
+.student-profile-dormitory { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--app-border); }
+.student-profile-dormitory-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.student-profile-tag-groups { min-width: 0; }
+.student-profile-tag-group { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); align-items: start; gap: 10px; }
+.student-profile-tag-group > div { display: flex; flex-wrap: wrap; }
+.student-profile-tag { overflow: hidden; max-width: 12rem; margin: 0 8px 8px 0; padding: 5px 10px; border: 1px solid var(--app-border); border-radius: 999px; background: var(--app-surface); color: var(--app-text-muted); font-size: 13px; font-weight: 600; white-space: nowrap; transition: max-width 280ms var(--app-motion-ease), padding 280ms var(--app-motion-ease), margin 280ms var(--app-motion-ease), border-width 280ms var(--app-motion-ease), opacity 200ms ease, background-color 200ms ease, color 200ms ease; }
+.student-profile-tag[data-active="true"] { border-color: var(--color-accent-200); background: var(--color-accent-50); color: var(--color-accent-700); }
+.student-profile-sheet[data-editing="true"] .student-profile-tag:not(:disabled):hover { background: var(--app-surface-muted); }
+.student-profile-sheet[data-editing="false"] .student-profile-tag[data-active="false"] { max-width: 0; margin: 0; padding-inline: 0; border-width: 0; opacity: 0; pointer-events: none; }
+.student-profile-academic { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--app-border); }
+@media (max-width: 640px) {
+  .student-profile-section { padding: 15px; }
+  .student-profile-grid, .student-profile-grid--identity { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .student-profile-field--wide { grid-column: auto; }
+  .student-profile-tag-group { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .student-profile-input, .student-profile-choice-value, .student-profile-choice-control, .student-profile-tag { transition: none; }
+}
+
 /* Continuous content replacement and intrinsic-height disclosures. */
 .app-motion-list { position: relative; }
 .app-motion-switch { position: relative; min-width: 0; }

@@ -313,23 +313,50 @@ test("dormitory and fund editors morph in their original list rows", async ({ pa
 
 });
 
-test("student profile editor changes controls on the same surface", async ({ page }) => {
+test("student profile fields morph in place and retain save and cancel semantics", async ({ page }) => {
   await login(page); await nav(page, /^座位/);
   await page.locator('[data-student-id="s1"]').click();
   const dialog = page.getByRole("dialog", { name: "张三学生详情" });
   await dialog.getByRole("tab", { name: "档案" }).click();
-  const actions = dialog.locator(".student-profile-actions:not(.app-motion-snapshot)");
-  await actions.evaluate(element => { element.dataset.motionProbe = "profile"; });
-  await dialog.getByRole("button", { name: "编辑资料", exact: true }).click();
-  await expect(actions).toHaveAttribute("data-motion-probe", "profile");
-  await expect(actions).toHaveAttribute("data-moving", "true");
-  await expect(dialog.getByRole("textbox", { name: "姓名" })).toBeEnabled();
+  const profile = dialog.locator(".student-profile-sheet");
+  const name = dialog.getByRole("textbox", { name: "姓名" });
+  const phone = dialog.getByRole("textbox", { name: "家长电话" });
+  await expect(profile).toHaveAttribute("data-editing", "false");
+  await expect(dialog.getByRole("region", { name: "基本资料" })).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "联系与住宿" })).toBeVisible();
+  await expect(name).toBeDisabled();
+  await name.evaluate(element => { element.dataset.motionProbe = "same-field"; });
+  const animated = await dialog.getByRole("button", { name: "编辑资料", exact: true }).evaluate(button => new Promise<boolean>(resolve => {
+    (button as HTMLButtonElement).click();
+    requestAnimationFrame(() => resolve(Boolean(document.querySelector('.student-profile-input')?.getAnimations().some(animation => animation.playState === "running"))));
+  }));
+  expect(animated).toBe(true);
+  await expect(profile).toHaveAttribute("data-editing", "true");
+  await expect(name).toHaveAttribute("data-motion-probe", "same-field");
+  await expect(name).toBeFocused();
+  await name.fill("尚未保存的姓名");
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
-  await expect(actions).toHaveAttribute("data-motion-probe", "profile");
-  await expect(actions).toHaveAttribute("data-moving", "true");
-  await expect(dialog.getByRole("textbox", { name: "姓名" })).toBeDisabled();
+  await expect(profile).toHaveAttribute("data-editing", "false");
+  await expect(name).toHaveValue("张三");
+  await expect(name).toBeDisabled();
+  await dialog.getByRole("button", { name: "编辑资料", exact: true }).click();
+  await phone.fill("13800000000");
+  await dialog.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(profile).toHaveAttribute("data-editing", "false");
+  await expect(phone).toHaveValue("13800000000");
+  await expect.poll(async () => (await data(page)).students.find((item: { id: string }) => item.id === "s1")?.parentPhone).toBe("13800000000");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await dialog.getByRole("button", { name: "编辑资料", exact: true }).click();
+  await expect(name).toBeEnabled();
+  expect(await name.evaluate(element => parseFloat(getComputedStyle(element).transitionDuration))).toBeLessThan(0.001);
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog.getByRole("button", { name: "编辑资料", exact: true })).toBeVisible();
+  const bounds = await profile.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
 });
-
 
 test("seat snapshot rename morphs on the same title surface", async ({ page }) => {
   await login(page); await nav(page, /^历史/);

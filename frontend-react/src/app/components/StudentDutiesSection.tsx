@@ -14,7 +14,7 @@ export function StudentDutiesSection({ binding, studentId }: { binding: ClassDut
     // Keep focus and the saved summary visible when the long checklist collapses.
     sectionRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
   }
-  return <section ref={sectionRef} className="rounded-xl border border-separator-border p-3" aria-label="学生职务">
+  return <section ref={sectionRef} className="student-profile-duties" aria-label="学生职务">
     <div className="flex items-center justify-between gap-3"><h3 className="text-body-semibold text-text-primary">班级职务</h3><Button size="sm" variant="ghost" onClick={() => setEditing(value => !value)} aria-expanded={editing}>{editing ? "收起" : "调整职务"}</Button></div>
     <div className="mt-2 flex flex-wrap gap-2">{labels.length ? labels.map(label => <span key={label} className="rounded-md bg-background-secondary-default px-2 py-1 text-caption-1-medium text-text-secondary">{label}</span>) : <span className="text-caption-1-regular text-text-tertiary">暂未任职</span>}</div>
     <MotionCollapse open={editing} contentClassName="space-y-3 pt-3">
