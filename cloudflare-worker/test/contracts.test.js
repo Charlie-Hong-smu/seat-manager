@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import worker from "../deepseek-ai-worker.js";
+import { verifyToken } from "../worker-auth.js";
 
 async function sha256(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -55,6 +56,52 @@ test("license auth rejects expiry and enforces sequential device limits", async 
   const expired = await worker.fetch(post("/license/auth", { productCode: "PRODUCT-CODE", deviceId: "device-1" }), env);
   assert.equal(expired.status, 403);
   assert.equal((await expired.json()).error, "license_expired");
+});
+
+test("product sessions honor 90 days, legacy 30 days, the maximum, and the unremembered session", async t => {
+  const start = Date.UTC(2026, 8, 22);
+  t.mock.method(Date, "now", () => start);
+  const key = `seat-manager:license:${await sha256("REMEMBER-CODE")}`;
+  const env = {
+    SEAT_MANAGER_KV: createKv({ [key]: { licenseId: "remember-teacher", status: "active", allowedEditions: ["zhang", "commercial"], maxDevices: 3, devices: [] } }),
+    PRODUCT_TOKEN_SECRET: "product-secret",
+  };
+  for (const edition of ["zhang", "commercial"]) {
+    for (const [rememberDays, ttl] of [[0, 12 * 60 * 60 * 1000], [30, 30 * 86400000], [90, 90 * 86400000], [365, 90 * 86400000]]) {
+      const response = await worker.fetch(post("/license/auth", { productCode: "REMEMBER-CODE", deviceId: "remember-device", edition, rememberDays }), env);
+      assert.equal(response.status, 200);
+      const auth = await response.json();
+      assert.equal(auth.expiresAt, start + ttl);
+      const signed = await verifyToken(auth.token, env.PRODUCT_TOKEN_SECRET);
+      assert.equal(signed.exp, auth.expiresAt);
+      assert.equal(signed.edition, edition);
+    }
+  }
+});
+
+test("90-day product tokens authorize AI and cloud sync after day 30 and expire together", async t => {
+  const start = Date.UTC(2026, 8, 22);
+  let now = start;
+  t.mock.method(Date, "now", () => now);
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ comment: "测试评语" }) } }] }), { status: 200 }));
+  const key = `seat-manager:license:${await sha256("LONG-SESSION-CODE")}`;
+  const env = {
+    SEAT_MANAGER_KV: createKv({ [key]: { licenseId: "long-session", status: "active", maxDevices: 3, aiEnabled: true, aiDailyLimit: 10, devices: [] } }),
+    PRODUCT_TOKEN_SECRET: "product-secret", DEEPSEEK_API_KEY: "test-key",
+  };
+  const login = await worker.fetch(post("/license/auth", { productCode: "LONG-SESSION-CODE", deviceId: "long-session-device", rememberDays: 90 }), env);
+  const auth = await login.json();
+  const sync = () => worker.fetch(new Request("https://worker.example/sync/status", { headers: { Authorization: `Bearer ${auth.token}` } }), env);
+  const ai = () => worker.fetch(post("/generate-comment", {
+    studentId: "1", style: "warm", length: "standard",
+    context: { student: { name: "学生A" }, tags: [], strengths: [], weaknesses: [], teacherNote: "认真完成课堂练习" },
+  }, auth.token), env);
+  now = start + 89 * 86400000;
+  assert.equal((await sync()).status, 200);
+  assert.equal((await ai()).status, 200);
+  now = auth.expiresAt;
+  assert.equal((await sync()).status, 401);
+  assert.equal((await ai()).status, 401);
 });
 
 test("license auth enforces edition scopes while preserving legacy commercial records", async () => {
