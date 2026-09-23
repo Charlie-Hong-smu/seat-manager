@@ -1,9 +1,10 @@
 import { getAttendanceForDate } from "../../state/attendancePeriods";
 import { Users } from "lucide-react";
 import type { ClassDutiesBinding } from "../../state/classDuties";
-import { RetryableLazy } from "../RetryableLazy";
-import { useMemo, useState } from "react";
+import { RetryableLazy, preloadFeature } from "../RetryableLazy";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   ChevronDown,
   Dices,
   LayoutGrid,
@@ -18,7 +19,7 @@ import {
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
 import { SeatLayoutDesigner } from "../SeatLayoutDesigner";
-import { MotionCollapse, MotionSwitch, Checkbox, Button, DialogPresence, MetricStrip, SegmentedControl, SelectMenu, ToolDrawer, Input, useAppDialog } from "../ui";
+import { MotionCollapse, MotionSwitch, Checkbox, Button, MetricStrip, SegmentedControl, SelectMenu, ToolDrawer, Input, useAppDialog } from "../ui";
 import type {
   AppStudent,
   Gender,
@@ -30,9 +31,11 @@ import { useSeatModeTransition } from "../useSeatModeTransition";
 import { SeatBoard } from "../SeatBoard";
 import { getDrawRound, retainDrawSessions, drawStudents, todayKey } from "../../state/dailyManagement";
 import { groupFollowupTasks } from "../../state/followupStudents";
+import type { ShuffleCandidate } from "../../state/seatPlanner";
 import type { AttendanceRecord, DrawSession, FollowupTask } from "../../state/types";
 
 const loadClassDutiesPanel = () => import("../ClassDutiesPanel");
+const loadSeatShufflePreview = () => import("../SeatShufflePreview").then(module => ({ default: module.SeatShufflePreview }));
 
 export function DailyWorkspace({
   classDuties,
@@ -41,7 +44,11 @@ export function DailyWorkspace({
   lockedSeats,
   seatSettings,
   canUndoSeatOrder,
+  shufflePreview,
   onRandomizeSeats,
+  onShufflePreviewOrderChange,
+  onApplyShufflePreview,
+  onDiscardShufflePreview,
   onOrderSeatsByList,
   onUndoSeatOrder,
   onUpdateSeatSettings,
@@ -66,7 +73,11 @@ export function DailyWorkspace({
   lockedSeats: Set<number>;
   seatSettings: SeatSettings;
   canUndoSeatOrder: boolean;
-  onRandomizeSeats: () => void;
+  shufflePreview: ShuffleCandidate | null;
+  onRandomizeSeats: () => boolean;
+  onShufflePreviewOrderChange: (order: Array<StudentId | null>) => void;
+  onApplyShufflePreview: () => void;
+  onDiscardShufflePreview: () => void;
   onOrderSeatsByList: () => void;
   onUndoSeatOrder: () => void;
   onUpdateSeatSettings: (updater: (current: SeatSettings) => SeatSettings) => void;
@@ -85,7 +96,7 @@ export function DailyWorkspace({
   onOpenAttendance: () => void;
   onOpenFollowups: () => void;
 }) {
-  const [showSeatSettings, setShowSeatSettings] = useState(false);
+  const [seatFlow, setSeatFlow] = useState<"view" | "rules" | "preview">("view");
   const { editingLayout, transitioning, seatPanelRef, switchLayoutEditing } = useSeatModeTransition();
   const [designerToolbarHost, setDesignerToolbarHost] = useState<HTMLDivElement | null>(null);
   const [activeTool, setActiveTool] = useState<"student" | "draw" | "duties" | null>(null);
@@ -97,6 +108,9 @@ export function DailyWorkspace({
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
   const appDialog = useAppDialog();
+  const discardShuffleRef = useRef(onDiscardShufflePreview);
+  discardShuffleRef.current = onDiscardShufflePreview;
+  useEffect(() => () => discardShuffleRef.current(), []);
   const [drawBusy, setDrawBusy] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -120,6 +134,16 @@ export function DailyWorkspace({
   const todayAttendance = getAttendanceForDate(attendanceRecords, todayKey()).filter(item => activeStudentIds.has(item.studentId));
   const abnormalAttendance = todayAttendance.filter(item => item.status !== "normal" || item.late || item.earlyLeave).length;
   const dueTasks = groupFollowupTasks(followupTasks.filter(item => item.status === "pending" && item.dueDate && item.dueDate <= todayKey())).length;
+
+  function returnToSeats() {
+    onDiscardShufflePreview();
+    setSeatFlow("view");
+    requestAnimationFrame(() => document.getElementById("seat-shuffle-trigger")?.focus({ preventScroll: true }));
+  }
+
+  function generatePreview() {
+    if (onRandomizeSeats()) setSeatFlow("preview");
+  }
 
   function addStudent() {
     if (!name.trim()) return;
@@ -148,8 +172,8 @@ export function DailyWorkspace({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-background-primary-default">
-      <div className="daily-toolbar seat-mode-toolbar shrink-0 border-b border-[var(--app-border)] bg-background-primary-default" data-editing={editingLayout ? "true" : "false"}>
-        <div className="seat-mode-toolbar__board flex flex-wrap items-center gap-3 px-4 py-3" aria-hidden={editingLayout} inert={editingLayout || transitioning ? true : undefined}>
+      <div className="daily-toolbar seat-mode-toolbar shrink-0 border-b border-[var(--app-border)] bg-background-primary-default" data-editing={editingLayout ? "true" : "false"} data-seat-flow={seatFlow}>
+        <div className="seat-mode-toolbar__board flex flex-wrap items-center gap-3 px-4 py-3" aria-hidden={editingLayout || seatFlow !== "view"} inert={editingLayout || seatFlow !== "view" || transitioning ? true : undefined}>
         <div className="daily-toolbar-primary flex flex-1 items-center gap-3">
           <MetricStrip size="sm" items={[
             { key: "students", label: "学生", value: students.length },
@@ -184,7 +208,7 @@ export function DailyWorkspace({
           <Button id="daily-draw-tool-trigger" size="sm" variant={activeTool === "draw" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
             <Dices className="h-4 w-4" />抽签
           </Button>
-          <Button size="sm" onClick={() => setShowSeatSettings(true)}>
+          <Button id="seat-shuffle-trigger" size="sm" onClick={() => { setActiveTool(null); onDiscardShufflePreview(); void preloadFeature(loadSeatShufflePreview).catch(() => {}); setSeatFlow("rules"); requestAnimationFrame(() => document.getElementById("seat-rules-intro")?.focus({ preventScroll: true })); }}>
             <Shuffle className="h-4 w-4" />排座
             {activeConstraintCount > 0 && <span className="text-[11px] font-medium text-accent-100">· {activeConstraintCount} 条规则</span>}
           </Button>
@@ -192,12 +216,24 @@ export function DailyWorkspace({
 
         </div>
         <div ref={setDesignerToolbarHost} className="seat-mode-toolbar__editor flex flex-wrap items-center gap-3 px-4 py-3" aria-hidden={!editingLayout} inert={!editingLayout || transitioning ? true : undefined} />
+        <div className="seat-mode-toolbar__shuffle flex min-h-14 items-center gap-3 px-4 py-3" aria-hidden={seatFlow === "view"} inert={seatFlow === "view" || transitioning ? true : undefined}>
+          <Button size="sm" variant="ghost" onClick={returnToSeats}><ArrowLeft className="h-4 w-4" />返回座位</Button>
+          <span className="h-5 w-px bg-separator-border" aria-hidden="true" />
+          <div className="min-w-0"><strong className="block text-body-semibold text-text-primary">{seatFlow === "preview" ? "方案预览" : "排座规则"}</strong><span className="block text-caption-1-regular text-text-tertiary">{seatFlow === "preview" ? "尚未采用，当前座位保持原样" : "调整规则后生成方案"}</span></div>
+          {seatFlow === "preview" && shufflePreview && <span className={`ml-auto rounded-[var(--app-radius-sm)] px-3 py-1.5 text-caption-1-semibold ${shufflePreview.evaluation.details.required.every(item => item.satisfied) ? "bg-status-success-50 text-status-success-700" : "bg-status-warning-50 text-status-warning-700"}`}>明确要求 {shufflePreview.evaluation.details.required.filter(item => item.satisfied).length}/{shufflePreview.evaluation.details.required.length}</span>}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 p-4">
-        <div ref={seatPanelRef} className="relative h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
-          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-4" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout} inert={editingLayout || transitioning ? true : undefined}>
+        <div ref={seatPanelRef} data-seat-flow={seatFlow} className="seat-workflow-panel relative h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
+          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-4" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout || seatFlow !== "view"} inert={editingLayout || seatFlow !== "view" || transitioning ? true : undefined}>
             <SeatBoard cardMode={cardMode} students={students} seatOrder={seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={onMoveSeat} onMoveStudentToWaiting={onMoveStudentToWaiting} onAssignStudentToSeat={onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={onToggleLock} />
+          </div>}
+          {!editingLayout && <div data-seat-rules-layer aria-hidden={seatFlow !== "rules"} inert={seatFlow !== "rules" ? true : undefined}>
+            <SeatSettingsModal inline open students={students} settings={seatSettings} canUndo={canUndoSeatOrder} onUpdate={onUpdateSeatSettings} onRandomize={generatePreview} onOrderByList={onOrderSeatsByList} onUndo={onUndoSeatOrder} onClose={returnToSeats} />
+          </div>}
+          {shufflePreview && !editingLayout && <div data-seat-preview-layer aria-hidden={seatFlow !== "preview"} inert={seatFlow !== "preview" ? true : undefined}>
+            <RetryableLazy load={loadSeatShufflePreview} componentProps={{ inline: true, students, currentOrder: seatOrder, candidate: shufflePreview, seatSettings, onOrderChange: onShufflePreviewOrderChange, onRegenerate: onRandomizeSeats, onApply: () => { onApplyShufflePreview(); setSeatFlow("view"); requestAnimationFrame(() => document.getElementById("seat-shuffle-trigger")?.focus({ preventScroll: true })); }, onClose: returnToSeats, onBackToRules: () => { setSeatFlow("rules"); requestAnimationFrame(() => document.getElementById("seat-generate-preview")?.focus({ preventScroll: true })); }, onSelectStudent }} fallback={<div className="flex h-full items-center justify-center text-body-regular text-text-secondary">正在准备方案预览…</div>} />
           </div>}
           {(editingLayout || transitioning) && (
             <div data-seat-designer-layer className="absolute inset-0" style={{ visibility: editingLayout ? undefined : "hidden" }} aria-hidden={!editingLayout} inert={!editingLayout || transitioning ? true : undefined}>
@@ -272,19 +308,6 @@ export function DailyWorkspace({
         </div>
       </ToolDrawer>
 
-      <DialogPresence open={showSeatSettings}>
-        <SeatSettingsModal
-          open={showSeatSettings}
-          students={students}
-          settings={seatSettings}
-          canUndo={canUndoSeatOrder}
-          onUpdate={onUpdateSeatSettings}
-          onRandomize={onRandomizeSeats}
-          onOrderByList={onOrderSeatsByList}
-          onUndo={onUndoSeatOrder}
-          onClose={() => setShowSeatSettings(false)}
-        />
-      </DialogPresence>
       {appDialog.dialog}
     </div>
   );

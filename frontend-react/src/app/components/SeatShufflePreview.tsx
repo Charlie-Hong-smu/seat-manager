@@ -1,6 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { RefreshCw, X } from "lucide-react";
+import { ArrowLeft, RefreshCw, X } from "lucide-react";
 
 import {
   getChangedSeatIndices,
@@ -17,6 +17,7 @@ import { useModalFocus } from "./ui";
 const COLS = 8;
 
 interface Props {
+  inline?: boolean;
   students: AppStudent[];
   currentOrder: Array<StudentId | null>;
   candidate: ShuffleCandidate;
@@ -25,6 +26,7 @@ interface Props {
   onRegenerate: () => void;
   onApply: () => void;
   onClose: () => void;
+  onBackToRules?: () => void;
   onSelectStudent?: (student: AppStudent) => void;
 }
 
@@ -89,18 +91,19 @@ function DetailBlock({ title, children }: { title: string; children: React.React
 function renderRequiredDetails(evaluation: SeatEvaluation) {
   const satisfied = evaluation.details.required.filter(item => item.satisfied);
   const unmet = evaluation.details.required.filter(item => !item.satisfied);
+  if (!satisfied.length && !unmet.length) return <DetailItem>当前没有设置必须满足的排座要求。</DetailItem>;
   return (
     <>
-      <DetailBlock title="已满足的明确要求">
-        {satisfied.length ? satisfied.map(item => (
+      {satisfied.length > 0 && <DetailBlock title="已满足的明确要求">
+        {satisfied.map(item => (
           <DetailItem key={`${item.type}-${item.label}`} tone="ok">{item.label}（{item.seats.join("、")}）</DetailItem>
-        )) : <DetailItem>暂无明确要求。</DetailItem>}
-      </DetailBlock>
-      <DetailBlock title="未满足的明确要求">
-        {unmet.length ? unmet.map(item => (
+        ))}
+      </DetailBlock>}
+      {unmet.length > 0 && <DetailBlock title="未满足的明确要求">
+        {unmet.map(item => (
           <DetailItem key={`${item.type}-${item.label}`} tone="warn">{item.label}（当前：{item.seats.join("、")}）</DetailItem>
-        )) : <DetailItem tone="ok">明确要求都已满足。</DetailItem>}
-      </DetailBlock>
+        ))}
+      </DetailBlock>}
     </>
   );
 }
@@ -171,8 +174,8 @@ function renderFrontDetails(evaluation: SeatEvaluation) {
   );
 }
 
-export function SeatShufflePreview({ students, currentOrder, candidate, seatSettings, onOrderChange, onRegenerate, onApply, onClose, onSelectStudent }: Props) {
-  const modalRef = useModalFocus(true, onClose);
+export function SeatShufflePreview({ inline = false, students, currentOrder, candidate, seatSettings, onOrderChange, onRegenerate, onApply, onClose, onBackToRules, onSelectStudent }: Props) {
+  const modalRef = useModalFocus(!inline, onClose);
   const [activeDetail, setActiveDetail] = useState<DetailTab>("required");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragVisual, setDragVisual] = useState<PreviewDragVisual | null>(null);
@@ -185,6 +188,11 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
   const layout = useMemo(() => resolveSeatLayout(seatSettings.layout, candidate.order.length), [candidate.order.length, seatSettings.layout]);
   const rows = Math.ceil(candidate.order.length / COLS);
   const changedSet = new Set(getChangedSeatIndices(currentOrder, candidate.order));
+  const showChangedOutlines = changedSet.size <= 8;
+
+  useEffect(() => {
+    if (inline) modalRef.current?.focus({ preventScroll: true });
+  }, [inline, modalRef]);
 
   useEffect(() => () => {
     dragCleanupRef.current?.();
@@ -364,9 +372,9 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
   ];
 
   return (
-    <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="随机排座预览" className="modal-panel-enter app-modal-panel flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden outline-none">
-        <div className="flex items-start justify-between px-6 py-5 border-b border-separator-border">
+    <div className={inline ? "flex h-full min-h-0 flex-col" : "soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"}>
+      <div ref={modalRef} tabIndex={-1} role={inline ? undefined : "dialog"} aria-modal={inline ? undefined : true} aria-label={inline ? undefined : "随机排座预览"} className={inline ? "flex h-full min-h-0 w-full flex-col overflow-hidden outline-none" : "modal-panel-enter app-modal-panel flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden outline-none"}>
+        {!inline && <div className="flex items-start justify-between px-6 py-5 border-b border-separator-border">
           <div>
             <div className="text-caption-1-regular text-accent-500 mb-1" style={{ fontWeight: 800 }}>座位调整</div>
             <h3 className="text-text-primary" style={{ fontSize: "1.25rem", fontWeight: 800 }}>随机排座预览</h3>
@@ -375,14 +383,15 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
           <button onClick={onClose} className="p-2 text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default rounded-xl transition-colors" aria-label="关闭预览">
             <X className="w-5 h-5" />
           </button>
-        </div>
+        </div>}
 
-        <div className="grid grid-cols-[1fr_19rem] gap-4 p-5 overflow-auto bg-background-secondary-default">
-          <div ref={boardRef} className={`bg-background-primary-default rounded-2xl border border-separator-border shadow-sm p-4 overflow-x-auto ${dragVisual ? "select-none" : ""}`}>
-{seatSettings.layout ? <SeatLayoutSurface layout={layout} renderSeat={(seat, index) => { const studentId = candidate.order[index] ?? null; const student = studentId ? studentById.get(studentId) : null; const genderColor = student?.gender === "男" ? "bg-accent-400" : student?.gender === "女" ? "bg-status-pink-400" : "bg-background-primary-disabled"; return <button key={seat.id} type="button" data-preview-seat-index={index} data-preview-student-id={student?.id} onPointerDown={event => beginPointerDrag(event, index)} onClick={() => student && onSelectStudent?.(student)} className={`h-full w-full rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-300 ${student ? "border-border-button-default bg-background-primary-default" : "border-dashed border-border-button-default bg-background-secondary-default text-text-tertiary"} ${changedSet.has(index) ? "ring-2 ring-accent-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-accent-400 bg-accent-50" : ""}`} style={{ transform: seatVisualTransform(index), transitionProperty: student ? undefined : "background-color, border-color, box-shadow" }} title={getSeatPositionLabel(index, seatSettings, candidate.order.length)}><span className="flex min-w-0 items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${genderColor}`}/><span className="truncate text-body-semibold text-text-primary">{student?.name || "空"}</span></span><span className="mt-0.5 block text-[10px] text-text-tertiary">{seat.label}</span></button>; }} /> :
-            <div className="grid gap-2 min-w-[760px]" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}>
+        <div className={inline ? "seat-shuffle-content grid min-h-0 flex-1 gap-4 overflow-auto bg-background-secondary-default p-4" : "grid grid-cols-[1fr_19rem] gap-4 overflow-auto bg-background-secondary-default p-5"}>
+          <div ref={boardRef} className={`min-h-0 min-w-0 overflow-auto rounded-[var(--app-radius-md)] border border-separator-border bg-background-primary-default ${inline ? "p-2" : "p-4"} ${dragVisual ? "select-none" : ""}`}>
+            {inline && <p className="seat-shuffle-scroll-hint mb-2 text-caption-1-regular text-text-tertiary">左右滑动查看全部座位</p>}
+{seatSettings.layout ? <SeatLayoutSurface layout={layout} renderSeat={(seat, index) => { const studentId = candidate.order[index] ?? null; const student = studentId ? studentById.get(studentId) : null; const genderColor = student?.gender === "男" ? "bg-accent-400" : student?.gender === "女" ? "bg-status-pink-400" : "bg-background-primary-disabled"; return <button key={seat.id} type="button" data-preview-seat-index={index} data-preview-student-id={student?.id} onPointerDown={event => beginPointerDrag(event, index)} onClick={() => student && onSelectStudent?.(student)} className={`h-full w-full rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-300 ${student ? "border-border-button-default bg-background-primary-default" : "border-dashed border-border-button-default bg-background-secondary-default text-text-tertiary"} ${showChangedOutlines && changedSet.has(index) ? "ring-2 ring-accent-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-accent-400 bg-accent-50" : ""}`} style={{ transform: seatVisualTransform(index), transitionProperty: student ? undefined : "background-color, border-color, box-shadow" }} title={getSeatPositionLabel(index, seatSettings, candidate.order.length)}><span className="flex min-w-0 items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${genderColor}`}/><span className="truncate text-body-semibold text-text-primary">{student?.name || "空"}</span></span><span className="mt-0.5 block text-[10px] text-text-tertiary">{seat.label}</span></button>; }} /> :
+            <div className={`grid min-w-[760px] ${inline ? "gap-1" : "gap-2"}`} style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}>
               {Array.from({ length: rows }).map((_, row) => (
-                <div key={`row-${row}`} className="col-span-8 grid gap-2 items-center" style={{ gridTemplateColumns: `3.25rem repeat(${COLS}, minmax(0, 1fr))` }}>
+                <div key={`row-${row}`} className={`col-span-8 grid items-center ${inline ? "gap-1" : "gap-2"}`} style={{ gridTemplateColumns: `3.25rem repeat(${COLS}, minmax(0, 1fr))` }}>
                   <div className="text-caption-1-regular text-text-tertiary text-right pr-1" style={{ fontWeight: 700 }}>第{row + 1}排</div>
                   {Array.from({ length: COLS }).map((__, col) => {
                     const index = row * COLS + col;
@@ -405,9 +414,9 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
                             onSelectStudent(student);
                           }
                         }}
-                        className={`h-12 rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                        className={`${inline ? "h-10" : "h-12"} rounded-xl border px-2 text-left transition-[background-color,border-color,box-shadow,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
                           student ? "bg-background-primary-default border-border-button-default hover:border-accent-200" : "bg-background-secondary-default border-dashed border-border-button-default text-text-tertiary"
-                        } ${changedSet.has(index) ? "ring-2 ring-accent-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-accent-400 bg-accent-50/90 shadow-[0_0_0_4px_rgba(59,130,246,0.16),0_12px_28px_rgba(37,99,235,0.14)]" : ""}`}
+                        } ${showChangedOutlines && changedSet.has(index) ? "ring-2 ring-accent-100" : ""} ${dragIndex === index ? "opacity-25" : ""} ${dragVisual?.targetIndex === index ? "border-accent-400 bg-accent-50/90 shadow-[0_0_0_4px_rgba(59,130,246,0.16),0_12px_28px_rgba(37,99,235,0.14)]" : ""}`}
                         style={{ transform: seatVisualTransform(index), touchAction: "manipulation", transitionProperty: student ? undefined : "background-color, border-color, box-shadow" }}
                         title={getSeatPositionLabel(index, seatSettings, candidate.order.length)}
                       >
@@ -424,13 +433,18 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
             </div>}
           </div>
 
-          <aside className="space-y-3">
-            <div className="grid grid-cols-1 gap-2">
-              {statCards.map(([key, label, value]) => (
+          <aside className={inline ? "seat-shuffle-aside min-h-0 space-y-3 overflow-y-auto" : "space-y-3"}>
+            {inline && <button type="button" onClick={() => setActiveDetail("required")} className={`w-full rounded-[var(--app-radius-md)] border p-4 text-left ${stats.requiredTotal > stats.requiredSatisfied ? "border-status-warning-200 bg-status-warning-50" : "border-status-success-100 bg-status-success-50"}`}>
+              <span className="block text-caption-1-regular text-text-secondary">明确要求</span>
+              <strong className="mt-1 block text-body-semibold text-text-primary">{stats.requiredTotal ? `${stats.requiredSatisfied}/${stats.requiredTotal} 条已满足` : "未设置"}</strong>
+              {stats.requiredTotal > stats.requiredSatisfied && <span className="mt-1 block text-caption-1-regular text-status-warning-700">查看未满足的要求</span>}
+            </button>}
+            <div className={inline ? "grid grid-cols-2 gap-2" : "grid grid-cols-1 gap-2"}>
+              {statCards.filter(([key]) => !inline || key !== "required").map(([key, label, value]) => (
                 <PreviewStat key={key} active={activeDetail === key} label={label} value={value} onClick={() => setActiveDetail(key)} />
               ))}
             </div>
-            <div className="bg-background-primary-default rounded-2xl border border-separator-border shadow-sm p-4 space-y-4 max-h-[23rem] overflow-y-auto">
+            <div className={`space-y-4 overflow-y-auto rounded-[var(--app-radius-md)] border border-separator-border bg-background-primary-default p-4 ${inline ? "" : "max-h-[23rem]"}`}>
               {activeDetail === "changed" && (
                 <DetailBlock title="发生变化的座位">
                   {stats.changedCount ? getChangedSeatIndices(currentOrder, candidate.order).map(index => {
@@ -455,7 +469,8 @@ export function SeatShufflePreview({ students, currentOrder, candidate, seatSett
           </aside>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-separator-border bg-background-primary-default">
+        <div className={`flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-separator-border bg-background-primary-default px-4 py-3 ${inline ? "seat-inline-preview-footer pr-16" : ""}`}>
+          {inline && onBackToRules && <button onClick={onBackToRules} className="mr-auto flex items-center gap-1.5 rounded-xl px-3 py-2 text-body-regular text-text-secondary hover:bg-background-secondary-default"><ArrowLeft className="h-4 w-4" />返回规则</button>}
           <button onClick={onRegenerate} className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border-button-default text-text-secondary hover:bg-background-secondary-default text-body-regular" style={{ fontWeight: 700 }}>
             <RefreshCw className="w-3.5 h-3.5" />再随机一次
           </button>

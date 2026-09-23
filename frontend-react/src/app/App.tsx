@@ -18,7 +18,6 @@ import { TopHeader } from "./components/TopHeader";
 import { CloudSyncModal } from "./components/CloudSyncModal";
 import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
-import { SeatShufflePreview } from "./components/SeatShufflePreview";
 import { HistorySeatModal } from "./components/HistorySeatModal";
 import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ClassFundWorkspace, AttendanceWorkspace, FollowupWorkspace } from "./components/workspaces";
 import { preloadFeature, RetryableLazy } from "./components/RetryableLazy";
@@ -536,11 +535,13 @@ export default function App() {
     commitSeatOrder(next);
   }
 
-  function handleRandomizeSeats() {
+  function handleRandomizeSeats(): boolean {
     const candidate = buildBestShuffleCandidate(students, seatOrder, lockedSeats, seatSettings, savedSeatHistory);
     if (candidate) {
       setShufflePreview(candidate);
+      return true;
     }
+    return false;
   }
 
   function handleShufflePreviewOrderChange(order: SeatOrder) {
@@ -1220,22 +1221,6 @@ export default function App() {
           )}
           </DialogPresence>
 
-          <DialogPresence open={Boolean(shufflePreview)}>
-          {shufflePreview && (
-            <SeatShufflePreview
-              students={students}
-              currentOrder={seatOrder}
-              candidate={shufflePreview}
-              seatSettings={seatSettings}
-              onOrderChange={handleShufflePreviewOrderChange}
-              onRegenerate={handleRandomizeSeats}
-              onApply={handleApplyShufflePreview}
-              onClose={() => setShufflePreview(null)}
-              onSelectStudent={student => openStudentDetail(student)}
-            />
-          )}
-          </DialogPresence>
-
           <DialogPresence open={Boolean(selectedHistorySnapshot)}>
           {selectedHistorySnapshot && (
             <HistorySeatModal
@@ -1289,7 +1274,11 @@ export default function App() {
               lockedSeats={lockedSeats}
               seatSettings={seatSettings}
               canUndoSeatOrder={seatHistory.length > 0}
+              shufflePreview={shufflePreview}
               onRandomizeSeats={handleRandomizeSeats}
+              onShufflePreviewOrderChange={handleShufflePreviewOrderChange}
+              onApplyShufflePreview={handleApplyShufflePreview}
+              onDiscardShufflePreview={() => setShufflePreview(null)}
               onOrderSeatsByList={handleOrderSeatsByList}
               onUndoSeatOrder={handleUndoSeatOrder}
               onUpdateSeatSettings={updateSeatSettings}

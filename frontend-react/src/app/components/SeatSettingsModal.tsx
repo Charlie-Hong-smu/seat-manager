@@ -10,6 +10,7 @@ import { AnimatedPopover, SelectMenu, useModalFocus } from "./ui";
 
 interface SeatSettingsModalProps {
   open: boolean;
+  inline?: boolean;
   students: AppStudent[];
   settings: SeatSettings;
   canUndo: boolean;
@@ -134,7 +135,7 @@ function StudentPicker({ students, value, onChange, placeholder, excludeIds, but
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="surface-enter rounded-xl border border-separator-border bg-background-secondary-default p-4">
+    <section className="border-b border-separator-border pb-4 last:border-0 last:pb-0">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-body-semibold text-text-primary">{title}</h3>
         {hint && <span className="rounded-full bg-background-primary-default px-2.5 py-1 text-caption-1-regular text-text-tertiary">{hint}</span>}
@@ -144,8 +145,8 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   );
 }
 
-export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate, onRandomize, onOrderByList, onUndo, onClose }: SeatSettingsModalProps) {
-  const modalRef = useModalFocus(open, onClose);
+export function SeatSettingsModal({ open, inline = false, students, settings, canUndo, onUpdate, onRandomize, onOrderByList, onUndo, onClose }: SeatSettingsModalProps) {
+  const modalRef = useModalFocus(open && !inline, onClose);
   const [pairA, setPairA] = useState("");
   const [pairB, setPairB] = useState("");
   const [noPairA, setNoPairA] = useState("");
@@ -250,16 +251,14 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
   }
 
   return (
-    <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="seat-settings-title" className="modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-lg flex-col outline-none">
-        <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
-          <div>
-            <h2 id="seat-settings-title" className="text-headline-semibold text-text-primary">排座</h2>
-          </div>
+    <div className={inline ? "flex h-full min-h-0 flex-col bg-background-primary-default" : "soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-4"}>
+      <div ref={modalRef} tabIndex={-1} role={inline ? undefined : "dialog"} aria-modal={inline ? undefined : true} aria-labelledby={inline ? undefined : "seat-settings-title"} className={inline ? "flex h-full min-h-0 w-full flex-col outline-none" : "modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-lg flex-col outline-none"}>
+        {inline ? <p id="seat-rules-intro" tabIndex={-1} className="border-b border-separator-border px-5 py-3 text-caption-1-regular text-text-secondary outline-none">规则自动保存；随机方案仅在采用后更新当前座位。</p> : <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
+          <h2 id="seat-settings-title" className="text-headline-semibold text-text-primary">排座规则</h2>
           <button type="button" aria-label="关闭排座设置" onClick={onClose} className="rounded-lg p-1 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary"><X className="h-4 w-4" /></button>
-        </div>
+        </div>}
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+        <div className={`min-h-0 flex-1 space-y-4 overflow-y-auto p-5 ${inline ? "mx-auto w-full max-w-[64rem]" : ""}`}>
           <Section title="基础规则">
             <div className="space-y-2.5">
               <label className="flex items-center gap-2 text-body-regular text-text-primary">
@@ -350,16 +349,17 @@ export function SeatSettingsModal({ open, students, settings, canUndo, onUpdate,
           </Section>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-separator-border px-5 py-3">
-          <button onClick={() => { onClose(); onRandomize(); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white hover:bg-accent-700">
-            <Shuffle className="h-4 w-4" />随机排座
-          </button>
+        <div className={`flex flex-wrap items-center gap-2 border-t border-separator-border px-5 py-3 ${inline ? "seat-inline-rules-footer pr-16" : ""}`}>
+          {!inline && <button onClick={() => { onClose(); onRandomize(); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white hover:bg-accent-700">
+            <Shuffle className="h-4 w-4" />生成方案
+          </button>}
           <button onClick={() => { onClose(); onOrderByList(); }} className="flex items-center justify-center gap-1.5 rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-semibold text-text-primary hover:bg-background-secondary-default">
-            <RotateCcw className="h-4 w-4" />名单顺序
+            <RotateCcw className="h-4 w-4" />{inline ? "按名单立即重排" : "名单顺序"}
           </button>
           <button onClick={onUndo} disabled={!canUndo} className="flex items-center justify-center gap-1.5 rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-semibold text-text-primary hover:bg-background-secondary-default disabled:text-text-tertiary">
             <Undo2 className="h-4 w-4" />撤销
           </button>
+          {inline && <button id="seat-generate-preview" onClick={onRandomize} className="ml-auto flex items-center justify-center gap-1.5 rounded-xl bg-accent-600 px-5 py-2.5 text-body-semibold text-text-white hover:bg-accent-700"><Shuffle className="h-4 w-4" />生成方案</button>}
         </div>
       </div>
     </div>
