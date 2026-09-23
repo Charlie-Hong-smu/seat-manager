@@ -262,6 +262,22 @@ export function DailyWorkspace({
     onShufflePreviewOrderChange(order);
   }
 
+  function movePreviewStudentToWaiting(fromIndex: number) {
+    if (!shufflePreview || lockedSeats.has(fromIndex) || !shufflePreview.order[fromIndex]) return;
+    const order = [...shufflePreview.order];
+    order[fromIndex] = null;
+    onShufflePreviewOrderChange(order);
+  }
+
+  function assignPreviewStudentToSeat(studentId: StudentId, seatIndex: number) {
+    if (!shufflePreview || !students.some(student => student.id === studentId)
+      || seatIndex < 0 || seatIndex >= shufflePreview.order.length
+      || lockedSeats.has(seatIndex) || lockedSeats.has(shufflePreview.order.indexOf(studentId))) return;
+    const order = shufflePreview.order.map(id => id === studentId ? null : id);
+    order[seatIndex] = studentId;
+    onShufflePreviewOrderChange(order);
+  }
+
   function addStudent() {
     if (!name.trim()) return;
     onAddStudent(name, gender, alias);
@@ -354,7 +370,7 @@ export function DailyWorkspace({
       <div className="min-h-0 flex-1 p-4">
         <div ref={seatPanelRef} data-seat-flow={seatFlow} data-evaluation-open={evaluationOpen ? "true" : "false"} className="seat-workflow-panel relative h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
           {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-4" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout || seatFlow === "rules"} inert={editingLayout || seatFlow === "rules" || transitioning ? true : undefined}>
-            <SeatBoard cardMode={cardMode} previewMode={seatFlow === "preview"} students={students} seatOrder={seatFlow === "preview" && shufflePreview ? shufflePreview.order : seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={seatFlow === "preview" ? movePreviewSeat : onMoveSeat} onMoveStudentToWaiting={seatFlow === "preview" ? () => {} : onMoveStudentToWaiting} onAssignStudentToSeat={seatFlow === "preview" ? () => {} : onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={seatFlow === "preview" ? () => {} : onToggleLock} />
+            <SeatBoard cardMode={cardMode} previewMode={seatFlow === "preview"} students={students} seatOrder={seatFlow === "preview" && shufflePreview ? shufflePreview.order : seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={seatFlow === "preview" ? movePreviewSeat : onMoveSeat} onMoveStudentToWaiting={seatFlow === "preview" ? movePreviewStudentToWaiting : onMoveStudentToWaiting} onAssignStudentToSeat={seatFlow === "preview" ? assignPreviewStudentToSeat : onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={seatFlow === "preview" ? () => {} : onToggleLock} />
           </div>}
           {!editingLayout && <div data-seat-rules-layer aria-hidden={seatFlow !== "rules"} inert={seatFlow !== "rules" ? true : undefined}>
             <SeatSettingsModal inline open students={students} settings={seatSettings} canUndo={canUndoSeatOrder} onUpdate={onUpdateSeatSettings} onRandomize={generatePreview} onOrderByList={orderSeatsByList} onUndo={() => transitionSeatBoard(onUndoSeatOrder)} onClose={returnToSeats} />

@@ -712,7 +712,6 @@ export function SeatBoard({ cardMode, previewMode = false, students, seatOrder, 
   const pendingStudent = pendingStudentId ? studentById.get(pendingStudentId) : null;
 
   function assignWaitingStudentToSeat(studentId: StudentId, seatIndex: number) {
-    if (previewMode) return;
     onAssignStudentToSeat(studentId, seatIndex);
     setPendingStudentId(null);
     if (waitingStudents.length <= 1 && waitingStudents.some(student => student.id === studentId)) {
@@ -724,8 +723,6 @@ export function SeatBoard({ cardMode, previewMode = false, students, seatOrder, 
   const waitingSection = (
     <section
       aria-label="待排学生"
-      aria-hidden={previewMode}
-      inert={previewMode ? true : undefined}
       className="seat-waiting-dock shrink-0 self-start"
       data-expanded={waitingDockExpanded ? "true" : "false"}
       data-drop-active={dragVisual?.waitingTarget ? "true" : "false"}
@@ -795,6 +792,14 @@ export function SeatBoard({ cardMode, previewMode = false, students, seatOrder, 
   return <div className="flex h-full min-h-0 flex-col gap-3">
       {touchControls && <div className="seat-touch-tools flex shrink-0 flex-wrap items-center gap-2">
         <Button size="sm" variant={touchMoving ? "primary" : "secondary"} aria-pressed={touchMoving} onClick={() => { setTouchMoveMode(value => !value); setTouchSourceId(null); setTouchStatus(""); setPendingStudentId(null); }}>{touchMoving ? "完成调座" : "点选调座"}</Button>
+        {touchMoving && touchSourceId && <Button size="sm" variant="secondary" onClick={() => {
+          const fromIndex = seatOrder.indexOf(touchSourceId);
+          if (fromIndex < 0 || lockedSeats.has(fromIndex)) return;
+          onMoveStudentToWaiting(fromIndex);
+          setTouchSourceId(null);
+          setTouchStatus(previewMode ? "已移入候选等待区，采用前不会改当前座位。" : "已移入等待区，可在工具栏撤销。");
+          setWaitingDockOpen(true);
+        }}>移入等待区</Button>}
         {touchMoving && <span role="status" className="min-w-0 flex-1 text-caption-1-regular text-text-secondary">{touchStatus || "点选学生，再点目标座位。"}</span>}
       </div>}
       <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>

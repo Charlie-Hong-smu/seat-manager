@@ -123,6 +123,17 @@ test("phone shuffle rules keep generate action above the persistent board", asyn
   await page.getByRole("button", { name: "生成方案", exact: true }).click();
   await expect(page.locator(".seat-workflow-panel")).toHaveAttribute("data-seat-flow", "preview");
   await expect(page.locator("[data-seat-board-layer] .seat-waiting-dock")).toBeVisible();
+  const mobileDock = page.locator("[data-seat-board-layer] .seat-waiting-dock");
+  await page.getByRole("button", { name: "点选调座" }).click();
+  const mobileSource = page.locator("[data-seat-board-layer] [data-seat-index][data-student-id]").first();
+  const mobileStudentId = await mobileSource.getAttribute("data-student-id");
+  if (!mobileStudentId) throw new Error("Missing mobile seat student");
+  await mobileSource.click();
+  await page.getByRole("button", { name: "移入等待区" }).click();
+  await expect(mobileDock.locator(".seat-waiting-dock__count")).toHaveText("1");
+  await mobileDock.locator(`[data-waiting-student-id="${mobileStudentId}"]`).click();
+  await page.locator('[data-seat-board-layer] [role="button"][data-seat-index]:not([data-student-id])').first().click();
+  await expect(mobileDock.locator(".seat-waiting-dock__count")).toHaveText("0");
   const metrics = await page.evaluate(() => {
     const button = Array.from(document.querySelectorAll("button")).find(item => item.textContent?.trim() === "采用方案");
     const rect = button?.getBoundingClientRect();
@@ -133,4 +144,63 @@ test("phone shuffle rules keep generate action above the persistent board", asyn
   expect(metrics.buttonRight).toBeLessThanOrEqual(390);
   await page.getByRole("button", { name: "返回座位" }).click();
   await expect(page.getByRole("button", { name: "排座", exact: true })).toBeVisible();
+});
+
+test("shuffle preview waiting dock edits only the candidate until adoption", async ({ page }) => {
+  await page.addInitScript(() => {
+    const createdAt = "2026-09-22T00:00:00Z";
+    const students = Array.from({ length: 4 }, (_, index) => ({ id: `s${index}`, name: `候选学生${index}`, gender: index % 2 ? "女" : "男", manualTags: [], autoTags: [], records: [], exams: [] }));
+    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify({ version: 1, currentSliceId: "waiting-preview", slices: [{ id: "waiting-preview", classId: "waiting-preview-class", className: "候选等待区班", term: { id: "term", year: 2026, season: "autumn", label: "2026 秋", createdAt }, createdAt, updatedAt: createdAt, data: { students, seatOrder: ["s0", "s1", "s2", ...Array(61).fill(null)] } }] }));
+  });
+  await page.route("**/license/auth", route => route.fulfill({ json: { token: "waiting-preview", expiresAt: Date.now() + 600_000, licenseId: "waiting-preview", edition: process.env.E2E_EDITION === "commercial" ? "commercial" : "zhang" } }));
+  await page.goto("./");
+  await page.getByPlaceholder("请输入授权码").fill("TEST-WAITING-PREVIEW");
+  await page.getByRole("button", { name: /^进入/ }).click();
+  await page.getByRole("button", { name: "座位", exact: true }).click();
+  const persistedOrder = () => page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "{}");
+    return book.slices[0].data.seatOrder as Array<string | null>;
+  });
+  const initialOrder = await persistedOrder();
+  const dock = page.locator("[data-seat-board-layer] .seat-waiting-dock");
+  await page.getByRole("button", { name: "排座", exact: true }).click();
+  await page.getByRole("button", { name: "生成方案", exact: true }).click();
+  async function dragSeatToWaiting(studentId: string) {
+    const source = page.locator(`[data-seat-board-layer] [data-seat-index][data-student-id="${studentId}"]`);
+    await source.scrollIntoViewIfNeeded();
+    const sourceRect = await source.boundingBox();
+    const dockRect = await dock.locator(".seat-waiting-dock__bar").boundingBox();
+    if (!sourceRect || !dockRect) throw new Error("Missing seat or waiting dock geometry");
+    await page.mouse.move(sourceRect.x + sourceRect.width / 2, sourceRect.y + sourceRect.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(sourceRect.x + sourceRect.width / 2, sourceRect.y + sourceRect.height / 2 + 12);
+    await page.mouse.move(dockRect.x + dockRect.width / 2, dockRect.y + dockRect.height / 2, { steps: 8 });
+    await page.mouse.up();
+  }
+  await expect(dock.locator(".seat-waiting-dock__count")).toHaveText("0");
+  await dragSeatToWaiting("s3");
+  await expect(dock.locator(".seat-waiting-dock__count")).toHaveText("1");
+  await dock.getByRole("button", { name: /等待学生 候选学生3/ }).click();
+  await page.locator('[data-seat-board-layer] [data-seat-index][data-student-id="s0"]').click();
+  await expect(dock.locator('[data-waiting-student-id="s0"]')).toHaveCount(1);
+  await expect(page.locator('[data-seat-board-layer] [data-seat-index][data-student-id="s3"]')).toHaveCount(1);
+  expect(await persistedOrder()).toEqual(initialOrder);
+
+  await dragSeatToWaiting("s1");
+  await expect(dock.locator(".seat-waiting-dock__count")).toHaveText("2");
+  await expect(dock.locator('[data-waiting-student-id="s1"]')).toHaveCount(1);
+  expect(await persistedOrder()).toEqual(initialOrder);
+
+  await page.getByRole("button", { name: "返回座位" }).click();
+  await expect(dock.locator(".seat-waiting-dock__count")).toHaveText("0");
+  expect(await persistedOrder()).toEqual(initialOrder);
+
+  await page.getByRole("button", { name: "排座", exact: true }).click();
+  await page.getByRole("button", { name: "生成方案", exact: true }).click();
+  await dragSeatToWaiting("s0");
+  await expect(dock.locator(".seat-waiting-dock__count")).toHaveText("1");
+  await page.getByRole("button", { name: "采用方案" }).click();
+  await expect.poll(async () => !(await persistedOrder()).includes("s0")).toBe(true);
+  expect(await persistedOrder()).toContain("s3");
+  await expect(dock.locator('[data-waiting-student-id="s0"]')).toHaveCount(1);
 });
