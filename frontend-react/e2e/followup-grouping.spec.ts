@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openSeatTool } from "./seatTools";
 
 const commercial = process.env.E2E_EDITION === "commercial";
 
@@ -8,7 +9,7 @@ async function start(page: Page) {
   await page.getByPlaceholder("请输入授权码").fill("TEST-ONLY-GROUPING");
   await page.getByRole("button", { name: /^进入/ }).click();
   await page.getByRole("button", { name: "座位", exact: true }).click();
-  await page.getByRole("button", { name: "新增学生", exact: true }).click();
+  await openSeatTool(page, "新增学生");
   for (const name of ["关联甲", "关联乙", "关联丙"]) {
     await page.getByRole("textbox", { name: "姓名", exact: true }).fill(name);
     await page.getByRole("button", { name: "添加到班级", exact: true }).click();

@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Locator } from "@playwright/test";
+import { openSeatTool } from "./seatTools";
 
 const edition = process.env.E2E_EDITION === "commercial" ? "commercial" : "zhang";
 test.use({ isMobile: true, hasTouch: true, serviceWorkers: "block" });
@@ -147,7 +148,7 @@ test("phone seat panning does not rearrange, tap move respects locks and undo", 
   await page.getByRole("button", { name: "撤销", exact: true }).tap();
   await expect.poll(async () => (await data(page)).seatOrder).toEqual(before);
   await page.getByRole("button", { name: "完成调座", exact: true }).tap();
-  await page.getByRole("button", { name: "编辑布局", exact: true }).tap();
+  await openSeatTool(page, "编辑布局");
   await page.getByRole("button", { name: "取消", exact: true }).tap();
   expect((await data(page)).seatOrder).toEqual(before);
 });

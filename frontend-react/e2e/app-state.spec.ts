@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 
 import { seedContextPreviewRecords } from "./contextPreviewFixture";
+import { openSeatTool } from "./seatTools";
 
 async function login(page: import("@playwright/test").Page) {
   await page.route("**/license/auth", async route => {
@@ -18,7 +19,7 @@ async function login(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "进入" }).click();
   await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "座位", exact: true }).click();
-  await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "管理", exact: true })).toBeVisible();
 }
 
 async function groupContoursAreDisjoint(page: import("@playwright/test").Page) {
@@ -46,7 +47,7 @@ async function groupContoursAreDisjoint(page: import("@playwright/test").Page) {
 test("license login and student edits survive a reload", async ({ page }) => {
   await login(page);
 
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("测试学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await expect(page.getByRole("button", { name: /测试学生/ }).last()).toBeVisible();
@@ -60,7 +61,7 @@ test("license login and student edits survive a reload", async ({ page }) => {
 
 test("quick-record undo preserves archived students", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   for (const name of ["快捷记录学生", "归档保留学生"]) {
     await page.getByPlaceholder("姓名", { exact: true }).fill(name);
     await page.getByRole("button", { name: "添加到班级" }).click();
@@ -91,12 +92,12 @@ test("quick-record undo preserves archived students", async ({ page }) => {
 test("main seat editor supports animated range selection, isolated slots and a podium", async ({ page }) => {
   await login(page);
 
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("布局预览学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   await expect(editor).toBeVisible();
   await expect(page.getByRole("dialog", { name: "排座" })).toBeHidden();
@@ -153,14 +154,14 @@ test("main seat editor supports animated range selection, isolated slots and a p
 test("custom classroom grid renders without overlapping seat cards", async ({ page }) => {
   await login(page);
 
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   for (const name of ["拖动学生甲", "拖动学生乙"]) {
     await page.getByPlaceholder("姓名", { exact: true }).fill(name);
     await page.getByRole("button", { name: "添加到班级" }).click();
   }
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
 
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   await page.getByRole("button", { name: "批量框选" }).click();
   await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
@@ -217,7 +218,7 @@ test("layout editor cancel preserves data and reduced motion keeps slot editing 
   await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
 
   const before = await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"));
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   const isolated = editor.locator('[data-seat-layout-slot="8:7"]');
   await isolated.locator(".seat-layout-slot__face").click();
@@ -238,7 +239,7 @@ test("layout editor cancel preserves data and reduced motion keeps slot editing 
 
 test("axis controls stay subtle and only the individual hovered or keyboard-focused control grows", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   const controls = editor.locator(".seat-grid-axis button");
   await page.mouse.move(50, 100);
@@ -279,13 +280,13 @@ test("axis controls stay subtle and only the individual hovered or keyboard-focu
 
 test("row and column insertion preserves seats and occupied deletion requires confirmation in selection modes", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("行列验收学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
   await expect(page.getByRole("button", { name: "已保存", exact: true })).toBeVisible();
   const original = await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"));
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   const enabled = editor.locator('[data-seat-layout-slot][data-active="true"]');
   const firstId = await editor.locator('[data-seat-layout-slot="0:0"]').getAttribute("data-seat-grid-seat");
@@ -334,7 +335,7 @@ test("row and column insertion preserves seats and occupied deletion requires co
 
 test("inserting between rows and columns keeps existing blue nodes opaque without replaying enable pulses", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   await page.getByRole("button", { name: "批量框选", exact: true }).click();
   await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
@@ -367,11 +368,11 @@ test("inserting between rows and columns keeps existing blue nodes opaque withou
 
 test("existing group edges resize, podiums stay outside and overlapping selection requires explicit confirmation", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("缩放验收学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   const grid = editor.locator("[data-seat-layout-slot-grid]");
   await page.getByRole("button", { name: "批量框选", exact: true }).click();
@@ -451,7 +452,7 @@ test("existing group edges resize, podiums stay outside and overlapping selectio
 test("legacy 66-seat layout fits with disjoint trimmed contours, automatic split groups and hover ungroup", async ({ page }) => {
   await page.setViewportSize({ width: 1310, height: 690 });
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("旧布局验收");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
@@ -482,7 +483,7 @@ test("legacy 66-seat layout fits with disjoint trimmed contours, automatic split
   await page.screenshot({ path: "../output/seat-layout-acceptance/legacy-66-main.png", animations: "disabled" });
   const before = await nodes.evaluateAll(els => els.map(el => ({ id: el.getAttribute("data-seat-layout-node"), cell: el.getAttribute("data-seat-grid-cell") })));
 
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   await expect(editor.locator('[data-seat-layout-slot="0:7"]')).toHaveAttribute("data-active", "true");
   await expect(editor.locator('[data-seat-layout-slot="0:8"]')).toHaveCount(0);
@@ -527,11 +528,11 @@ test("legacy 66-seat layout fits with disjoint trimmed contours, automatic split
 
 test("group names and ungroup actions work in both selection modes and persist only after apply", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("分组验收学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   const editor = page.locator("[data-seat-layout-editor]");
   await page.getByRole("button", { name: "批量框选", exact: true }).click();
   await editor.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
@@ -591,7 +592,7 @@ test("group names and ungroup actions work in both selection modes and persist o
   await expect(page.locator("[data-seat-layout-node]")).toHaveCount(64);
   await expect(page.locator("[data-seat-layout-group-boundary]")).toHaveCount(2);
 
-  await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+  await openSeatTool(page, "编辑布局");
   await group(1).locator(".seat-group-label").hover();
   await group(1).getByRole("button", { name: /^编辑/ }).click();
   await name.fill("9");
@@ -602,7 +603,7 @@ test("group names and ungroup actions work in both selection modes and persist o
 
 test("moves a seated student into the bottom waiting dock and back to an empty seat", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("等待拖放学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
@@ -625,7 +626,7 @@ test("moves a seated student into the bottom waiting dock and back to an empty s
   expect(waitingBox).not.toBeNull();
   expect(Math.round(waitingBox!.width)).toBe(64);
   expect(Math.round(waitingBox!.height)).toBe(36);
-  const emptySeat = page.locator("[data-seat-index]").filter({ has: page.getByText("空", { exact: true }) }).first();
+  const emptySeat = page.locator("[data-seat-empty]").first();
   const emptyBox = await emptySeat.boundingBox();
   expect(emptyBox).not.toBeNull();
   await page.mouse.move(waitingBox!.x + waitingBox!.width / 2, waitingBox!.y + waitingBox!.height / 2);
@@ -654,14 +655,14 @@ test("corrupt local workspace stays untouched until an explicit recovery", async
   await page.getByRole("button", { name: "确认恢复" }).click();
   await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "座位", exact: true }).click();
-  await expect(page.getByRole("button", { name: /新增学生/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "管理", exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).not.toBe(corruptRaw);
 });
 
 test("preloads the comment workbench and keeps it inside the shared main surface", async ({ page }) => {
   await login(page);
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((entry) => entry.name.includes("CommentWorkbench-")))).toBe(true);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("动效测试学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
@@ -696,7 +697,7 @@ test("preloads the comment workbench and keeps it inside the shared main surface
 
 test("opens student detail from the current comment avatar without a separate detail button", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("头像详情学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByPlaceholder("姓名", { exact: true }).fill("详情下一位学生");
@@ -756,7 +757,7 @@ test("opens student detail from the current comment avatar without a separate de
 test("previews attention and timeline records inline without interrupting comment work", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("上下文预览学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
@@ -831,7 +832,7 @@ test("AI followup actions use clear labels, center confirmation, and close stude
   }));
   await login(page);
 
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("跟进测试学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
@@ -860,7 +861,7 @@ test("AI followup actions use clear labels, center confirmation, and close stude
 
 test("weekly communication surfaces expose editable drafts and AI polish", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("周沟通测试学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
@@ -907,7 +908,7 @@ test("selected comment text is refined only after teacher confirmation", async (
     });
   });
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("选区测试学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
@@ -1092,7 +1093,7 @@ test("dormitory periods, custom settings and event dates work together", async (
 
 test("attendance quick registration keeps student order and detailed tools", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   for (const name of ["出勤学生甲", "出勤学生乙", "出勤学生丙"]) {
     await page.getByPlaceholder("姓名", { exact: true }).fill(name);
     await page.getByRole("button", { name: "添加到班级" }).click();
@@ -1161,7 +1162,7 @@ test("today completion uses the shared result workflow", async ({ page }) => {
 
 test("today workspace routes into homework and persists the teacher ledger", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   for (const name of ["作业学生甲", "作业学生乙"]) {
     await page.getByPlaceholder("姓名", { exact: true }).fill(name);
     await page.getByRole("button", { name: "添加到班级" }).click();
@@ -1349,7 +1350,7 @@ test("BoardUI AI waiting and reduced motion preserve usable results", async ({ p
 test("compact legacy seat rows and podium fit the desktop viewport", async ({ page }) => {
   await page.setViewportSize({ width: 1310, height: 690 });
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
+  await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("布局验收学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
@@ -1372,8 +1373,8 @@ test("compact legacy seat rows and podium fit the desktop viewport", async ({ pa
 
 test("BoardUI select preserves empty choices and keyboard dismissal inside a drawer", async ({ page }) => {
   await login(page);
-  await page.getByRole("button", { name: /新增学生/ }).click();
-  const drawer = page.getByRole("complementary", { name: "学生工具" });
+  await openSeatTool(page, "新增学生");
+  const drawer = page.getByRole("dialog", { name: "新增学生" });
   await page.getByPlaceholder("姓名", { exact: true }).fill("控件验收学生");
   const gender = page.getByRole("button", { name: /学生性别/ });
   await gender.click();

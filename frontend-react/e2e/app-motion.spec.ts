@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openSeatTool } from "./seatTools";
 
 test("comment custom controls morph in place and keep their values", async ({ page }) => {
   await setup(page);
@@ -43,7 +44,7 @@ async function setup(page: Page) {
   await page.getByPlaceholder("请输入授权码").fill("TEST-MOTION");
   await page.getByRole("button", { name: "进入工作台", exact: true }).click();
   await page.getByRole("button", { name: "座位", exact: true }).click();
-  await page.getByRole("button", { name: "新增学生", exact: true }).click();
+  await openSeatTool(page, "新增学生");
   for (const name of ["连续切换甲", "连续切换乙"]) {
     await page.getByPlaceholder("姓名", { exact: true }).fill(name);
     await page.getByRole("button", { name: "添加到班级", exact: true }).click();
@@ -513,7 +514,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await expect(workspace).toHaveAttribute("data-navigation-key", "daily");
     await expect(workspace).not.toHaveAttribute("data-moving");
     await expect(workspace.locator('.app-motion-snapshot')).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "新增学生", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "管理", exact: true })).toBeEnabled();
     // Hold a real lazy module: the old page remains visually opaque until its replacement is ready.
     await nav.getByRole("button", { name: /^成绩/ }).click();
     if (reducedMotion === "no-preference") {

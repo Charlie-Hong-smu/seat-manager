@@ -14,7 +14,7 @@ import { Button as BoardButton } from "@/components/base/buttons/button";
 import { SegmentedControl as BoardSegments, SegmentedControlItem } from "@/components/base/segmented-control/segmented-control";
 import { cx } from "@/utils/cx";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Search, TriangleAlert, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, Search, TriangleAlert, X } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 
 let activeViewTransition: ViewTransition | null = null;
@@ -45,7 +45,8 @@ export function runViewTransition(commit: () => void) {
  *  - ai: 石墨灰 AI 主按钮（显式智能操作）
  *  - secondary: 灰色次要按钮（取消/返回）
  *  - danger: 红色危险按钮（删除）
- *  - ghost: 透明边框按钮（轻操作）
+ *  - ghost: 浅蓝色调按钮（弹窗与面板内的轻操作）
+ *  - quiet: 无底色按钮（工具栏中与唯一主操作并列的次级入口）
  */
 export function Button({
   variant = "primary",
@@ -55,7 +56,7 @@ export function Button({
   children,
   ...props
 }: {
-  variant?: "primary" | "ai" | "secondary" | "danger" | "ghost";
+  variant?: "primary" | "ai" | "secondary" | "danger" | "ghost" | "quiet";
   size?: "sm" | "md" | "lg";
   disabled?: boolean;
   className?: string;
@@ -73,7 +74,7 @@ export function IconButton({ label, size = "md", active = false, tone = "default
   size?: "xs" | "sm" | "md" | "lg";
   active?: boolean;
   tone?: "default" | "success" | "danger";
-  variant?: "secondary" | "ghost";
+  variant?: "secondary" | "ghost" | "quiet";
   className?: string;
   children: ReactNode;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
@@ -548,6 +549,203 @@ export function AnimatedPopover({
       {children}
     </div>
   );
+}
+
+/** AnimatedPopover becomes visible one frame after `open`; focusing earlier would hit a hidden node. */
+function afterPopoverVisible(callback: () => void) {
+  let inner = 0;
+  const outer = window.requestAnimationFrame(() => { inner = window.requestAnimationFrame(callback); });
+  return () => { window.cancelAnimationFrame(outer); window.cancelAnimationFrame(inner); };
+}
+
+/** Fixed-position anchor for toolbar-attached layers; flips above when there is no room below. */
+function useAnchoredLayer(open: boolean, getAnchor: () => HTMLElement | null, panelRef: React.RefObject<HTMLElement>, align: "start" | "end") {
+  const [position, setPosition] = useState<{ left: number; top: number; origin: string }>({ left: 0, top: 0, origin: "top right" });
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const rect = getAnchor()?.getBoundingClientRect();
+      const panel = panelRef.current;
+      if (!rect || !panel) return;
+      const width = panel.offsetWidth;
+      const height = panel.offsetHeight;
+      const left = Math.min(Math.max(8, align === "end" ? rect.right - width : rect.left), window.innerWidth - width - 8);
+      const opensUp = window.innerHeight - rect.bottom - 12 < height && rect.top > window.innerHeight - rect.bottom;
+      setPosition({ left, top: opensUp ? Math.max(8, rect.top - height - 6) : rect.bottom + 6, origin: `${opensUp ? "bottom" : "top"} ${align === "end" ? "right" : "left"}` });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    if (panelRef.current) observer.observe(panelRef.current);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => { observer.disconnect(); window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
+  }, [align, getAnchor, open, panelRef]);
+  return position;
+}
+
+// Clicks inside other floating layers (select lists, date pickers, dialogs) belong to the open tool.
+const NESTED_LAYER_SELECTOR = "[role='listbox'], [role='dialog'], [role='alertdialog'], .app-popover-motion";
+
+export type ActionMenuItem = { key: string; label: string; icon?: ReactNode; onSelect: () => void; disabled?: boolean };
+
+/**
+ * 工具栏"更多操作"菜单：收纳低频入口，保持唯一主操作醒目。
+ * 方向键在项目间移动，Esc / Tab / 点击外部关闭并把焦点还给触发器。
+ */
+export function ActionMenu({ label, icon, items, triggerId, align = "end", className = "" }: {
+  label: string;
+  icon?: ReactNode;
+  items: ActionMenuItem[];
+  triggerId?: string;
+  align?: "start" | "end";
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const getAnchor = useCallback(() => triggerRef.current, []);
+  const position = useAnchoredLayer(open, getAnchor, panelRef, align);
+  const enabledItems = () => [...(panelRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']:not(:disabled)") || [])];
+
+  useEffect(() => {
+    if (!open) return;
+    const cancelFocus = afterPopoverVisible(() => enabledItems()[0]?.focus({ preventScroll: true }));
+    const close = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => { cancelFocus(); document.removeEventListener("mousedown", close); };
+  }, [open]);
+
+  function handleMenuKeyDown(event: React.KeyboardEvent) {
+    const list = enabledItems();
+    const index = list.indexOf(document.activeElement as HTMLButtonElement);
+    const move = (next: number) => { event.preventDefault(); list[(next + list.length) % list.length]?.focus(); };
+    if (event.key === "ArrowDown") move(index + 1);
+    else if (event.key === "ArrowUp") move(index - 1);
+    else if (event.key === "Home") move(0);
+    else if (event.key === "End") move(list.length - 1);
+    else if (event.key === "Escape") { event.preventDefault(); setOpen(false); triggerRef.current?.focus(); }
+    else if (event.key === "Tab") setOpen(false);
+  }
+
+  return <>
+    <BoardButton ref={triggerRef} id={triggerId} size="small" variant="quiet" className={cx("app-button", className)} aria-haspopup="menu" aria-expanded={open} aria-controls={menuId}
+      onClick={() => setOpen(value => !value)}
+      onKeyDown={event => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); setOpen(true); } }}>
+      {icon}{label}<ChevronDown aria-hidden className={cx("h-3.5 w-3.5 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none", open && "rotate-180")} />
+    </BoardButton>
+    {typeof document !== "undefined" && createPortal(<AnimatedPopover open={open} className={cx(MENU_POPOVER_SURFACE, "fixed z-[125] min-w-[12rem] p-1.5")} style={{ left: position.left, top: position.top, transformOrigin: position.origin }}>
+      <div ref={panelRef} id={menuId} role="menu" aria-label={label} onKeyDown={handleMenuKeyDown} className="flex flex-col gap-0.5">
+        {items.map((item, index) => <button key={item.key} type="button" role="menuitem" tabIndex={-1} disabled={item.disabled} data-menu-key={item.key}
+          style={{ "--menu-item-index": index } as CSSProperties}
+          onClick={() => { setOpen(false); triggerRef.current?.focus({ preventScroll: true }); item.onSelect(); }}
+          className={cx(MENU_ITEM, "action-menu-item h-9 text-body-medium hover:bg-dropdown-item-hover-background focus-visible:bg-dropdown-item-hover-background disabled:cursor-not-allowed disabled:opacity-40")}>
+          {item.icon && <span aria-hidden className="grid size-5 shrink-0 place-items-center text-text-tertiary">{item.icon}</span>}
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        </button>)}
+      </div>
+    </AnimatedPopover>, document.body)}
+  </>;
+}
+
+/**
+ * 挂在触发按钮下方的轻量工具面板：用于一两个字段即可完成的短操作（抽签、快速新增）。
+ * 不加遮罩、不锁定页面，老师仍能看到操作结果落在座位图上；Esc 或点击外部关闭并还原焦点。
+ * 需要多段内容或长表单时继续使用 `ToolDrawer`。
+ */
+export function ToolPopover({ open, title, anchorId, onClose, children, footer, widthClassName = "w-[20rem]", align = "end" }: {
+  open: boolean;
+  title: string;
+  anchorId: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+  widthClassName?: string;
+  align?: "start" | "end";
+}) {
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const getAnchor = useCallback(() => document.getElementById(anchorId), [anchorId]);
+  const position = useAnchoredLayer(open, getAnchor, panelRef, align);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  // Like ToolDrawer, closed tools leave the DOM after the exit motion; callers own any draft state.
+  const [present, setPresent] = useState(open);
+  useEffect(() => {
+    if (open) { setPresent(true); return; }
+    const timer = window.setTimeout(() => setPresent(false), window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 220);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    const cancelFocus = afterPopoverVisible(() => {
+      if (panel?.contains(document.activeElement)) return;
+      (panel?.querySelector<HTMLElement>("[data-popover-autofocus]") || panel?.querySelector<HTMLElement>("[data-tool-popover-body] :is(input, textarea, button):not(:disabled)") || panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR))?.focus({ preventScroll: true });
+    });
+    const handlePointer = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (panel?.contains(target) || getAnchor()?.contains(target)) return;
+      if (target.closest?.(NESTED_LAYER_SELECTOR)) return;
+      onCloseRef.current();
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "Escape") return;
+      event.preventDefault();
+      onCloseRef.current();
+    };
+    document.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      cancelFocus();
+      document.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleKey);
+      const active = document.activeElement;
+      if (!active || active === document.body || panel?.contains(active)) getAnchor()?.focus({ preventScroll: true });
+    };
+  }, [getAnchor, open]);
+
+  return typeof document === "undefined" ? null : createPortal(<AnimatedPopover open={open} className={cx("tool-popover fixed z-[80] max-w-[calc(100vw-16px)]", widthClassName)} style={{ left: position.left, top: position.top, transformOrigin: position.origin }}>
+    <div ref={panelRef} role="dialog" aria-modal="false" aria-labelledby={titleId} className="flex max-h-[min(34rem,calc(100dvh-5rem))] flex-col overflow-hidden rounded-[var(--app-radius-md)] border border-border-button-default bg-background-primary-default shadow-[var(--app-shadow-float)]">
+      <div className="flex h-11 shrink-0 items-center justify-between gap-3 pl-4 pr-2">
+        <h2 id={titleId} className="text-body-semibold text-text-primary">{title}</h2>
+        <IconButton label="关闭工具面板" size="sm" variant="quiet" onClick={onClose}><X className="h-4 w-4" /></IconButton>
+      </div>
+      <div data-tool-popover-body className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{(open || present) && children}</div>
+      {footer && (open || present) && <div className="shrink-0 border-t border-separator-border px-4 py-3">{footer}</div>}
+    </div>
+  </AnimatedPopover>, document.body);
+}
+
+/** 小范围整数输入：− / + 按钮与可直接键入的数字框，失焦时收敛到合法范围。 */
+export function NumberStepper({ value, onChange, min = 0, max = 99, ariaLabel, className = "" }: {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const clamp = (next: number) => Math.min(max, Math.max(min, Math.round(next)));
+  const commit = (raw: string) => { const parsed = Number(raw); const next = Number.isFinite(parsed) && raw.trim() ? clamp(parsed) : value; setDraft(String(next)); if (next !== value) onChange(next); };
+  const stepClass = "grid h-full w-8 shrink-0 place-items-center text-text-secondary transition-colors duration-150 hover:bg-background-secondary-default hover:text-text-primary disabled:cursor-not-allowed disabled:text-text-tertiary disabled:hover:bg-transparent focus-visible:outline-none focus-visible:bg-background-secondary-default";
+  return <div role="group" aria-label={ariaLabel} className={cx("number-stepper inline-flex h-8 items-stretch overflow-hidden rounded-lg border border-border-button-default bg-background-primary-default shadow-xs focus-within:border-accent-300", className)}>
+    <button type="button" aria-label={`减少${ariaLabel}`} disabled={value <= min} onClick={() => onChange(clamp(value - 1))} className={stepClass}><Minus className="h-3.5 w-3.5" /></button>
+    <input aria-label={ariaLabel} inputMode="numeric" value={draft} onChange={event => setDraft(event.target.value.replace(/[^\d]/g, ""))} onBlur={event => commit(event.target.value)}
+      onKeyDown={event => {
+        if (event.key === "Enter") commit(event.currentTarget.value);
+        else if (event.key === "ArrowUp") { event.preventDefault(); onChange(clamp(value + 1)); }
+        else if (event.key === "ArrowDown") { event.preventDefault(); onChange(clamp(value - 1)); }
+      }}
+      className="w-9 min-w-0 border-x border-separator-border bg-transparent text-center text-body-semibold tabular-nums text-text-primary outline-none" />
+    <button type="button" aria-label={`增加${ariaLabel}`} disabled={value >= max} onClick={() => onChange(clamp(value + 1))} className={stepClass}><Plus className="h-3.5 w-3.5" /></button>
+  </div>;
 }
 
 type SelectMenuProps = {

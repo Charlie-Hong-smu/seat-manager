@@ -34,7 +34,7 @@ export function useSeatModeTransition() {
     busyRef.current = Boolean(animate);
     setTransitioning(Boolean(animate));
     setEditingLayout(next);
-    if (!animate && !next) requestAnimationFrame(() => document.getElementById("seat-layout-editor-trigger")?.focus({ preventScroll: true }));
+    if (!animate && !next) requestAnimationFrame(() => document.getElementById("seat-manage-trigger")?.focus({ preventScroll: true }));
   }
 
   useLayoutEffect(() => {
@@ -107,7 +107,7 @@ export function useSeatModeTransition() {
       setTransitioning(false);
       const focusTarget = editingLayout
         ? document.querySelector<HTMLElement>(".seat-mode-toolbar__editor button")
-        : document.getElementById("seat-layout-editor-trigger");
+        : document.getElementById("seat-manage-trigger");
       focusTarget?.focus({ preventScroll: true });
     });
     return clean;

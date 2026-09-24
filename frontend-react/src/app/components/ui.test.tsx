@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConfirmDialog, IconButton, InlineStatus, ModalShell, SegmentedControl, ToolDrawer, useAppDialog } from "./ui";
+import { ActionMenu, ConfirmDialog, IconButton, InlineStatus, ModalShell, NumberStepper, SegmentedControl, ToolDrawer, ToolPopover, useAppDialog } from "./ui";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -162,5 +162,95 @@ describe("registration segment presses", () => {
     fireEvent.click(screen.getByRole("button", { name: "正常" }));
     expect(press.mock.calls).toEqual([["leave"], ["normal"]]);
     expect(change).not.toHaveBeenCalled();
+  });
+});
+
+describe("toolbar action menu", () => {
+  beforeEach(() => vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} }));
+  it("opens from the trigger, moves with arrow keys and runs the chosen action after returning focus", async () => {
+    const onLayout = vi.fn();
+    const onStudent = vi.fn();
+    render(<ActionMenu label="管理" triggerId="manage" items={[
+      { key: "student", label: "新增学生", onSelect: onStudent },
+      { key: "layout", label: "编辑布局", onSelect: onLayout },
+    ]} />);
+    const trigger = screen.getByRole("button", { name: "管理" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const menu = screen.getByRole("menu", { name: "管理" });
+    fireEvent.keyDown(menu, { key: "End" });
+    expect(screen.getByRole("menuitem", { name: "编辑布局" })).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "新增学生" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("menuitem", { name: "编辑布局" }));
+    expect(onLayout).toHaveBeenCalledOnce();
+    expect(onStudent).not.toHaveBeenCalled();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
+  });
+
+  it("closes on Escape without running an action", () => {
+    const onSelect = vi.fn();
+    render(<ActionMenu label="管理" items={[{ key: "a", label: "新增学生", onSelect }]} />);
+    const trigger = screen.getByRole("button", { name: "管理" });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole("menu", { name: "管理" }), { key: "Escape" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe("ToolPopover", () => {
+  beforeEach(() => vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} }));
+  it("stays non-modal, ignores nested floating layers and closes on outside press or Escape", () => {
+    const onClose = vi.fn();
+    render(<>
+      <button id="draw-anchor" type="button">抽签</button>
+      <p>座位图</p>
+      <div role="listbox" aria-label="嵌套下拉"><span>选项</span></div>
+      <ToolPopover open title="课堂抽签" anchorId="draw-anchor" onClose={onClose}><button type="button">开始抽签</button></ToolPopover>
+    </>);
+    const dialog = screen.getByRole("dialog", { name: "课堂抽签" });
+    expect(dialog).toHaveAttribute("aria-modal", "false");
+    expect(screen.getByText("座位图")).toBeVisible();
+    fireEvent.mouseDown(screen.getByRole("button", { name: "开始抽签" }));
+    fireEvent.mouseDown(screen.getByRole("button", { name: "抽签" }));
+    fireEvent.mouseDown(screen.getByText("选项"));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.mouseDown(screen.getByText("座位图"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "关闭工具面板" }));
+    expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps closed content inert and out of the accessibility tree", () => {
+    render(<><button id="anchor" type="button">锚点</button><ToolPopover open={false} title="新增学生" anchorId="anchor" onClose={() => {}}><input aria-label="姓名" /></ToolPopover></>);
+    expect(screen.queryByRole("dialog", { name: "新增学生" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "姓名" })).toBeNull();
+  });
+});
+
+describe("NumberStepper", () => {
+  it("steps within bounds and clamps typed values on commit", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<NumberStepper value={1} min={1} max={3} ariaLabel="抽取人数" onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "减少抽取人数" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "增加抽取人数" }));
+    expect(onChange).toHaveBeenLastCalledWith(2);
+    const input = screen.getByRole("textbox", { name: "抽取人数" });
+    fireEvent.change(input, { target: { value: "9" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenLastCalledWith(3);
+    rerender(<NumberStepper value={3} min={1} max={3} ariaLabel="抽取人数" onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "增加抽取人数" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+    expect(input).toHaveValue("3");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(onChange).toHaveBeenLastCalledWith(2);
   });
 });

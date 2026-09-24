@@ -2,17 +2,18 @@ import { getAttendanceForDate } from "../../state/attendancePeriods";
 import { Users } from "lucide-react";
 import type { ClassDutiesBinding } from "../../state/classDuties";
 import { RetryableLazy, preloadFeature } from "../RetryableLazy";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   ArrowLeft,
   ChevronDown,
+  ChevronRight,
   Dices,
   LayoutGrid,
   Maximize2,
   Minimize2,
   Plus,
-  Search,
+  Settings2,
   Shuffle,
   Undo2,
   UserPlus,
@@ -20,14 +21,13 @@ import {
 
 import { SeatSettingsModal } from "../SeatSettingsModal";
 import { SeatLayoutDesigner } from "../SeatLayoutDesigner";
-import { MotionCollapse, MotionSwitch, Checkbox, Button, MetricStrip, SegmentedControl, SelectMenu, ToolDrawer, Input, useAppDialog } from "../ui";
+import { ActionMenu, MotionCollapse, Checkbox, Button, IconButton, MetricStrip, NumberStepper, SegmentedControl, SelectMenu, ToolDrawer, ToolPopover, Input, useAppDialog } from "../ui";
 import type {
   AppStudent,
   Gender,
   SeatSettings,
   StudentId,
 } from "../../state/types";
-import { matchesStudentSearch } from "../../state/studentSearch";
 import { useSeatModeTransition } from "../useSeatModeTransition";
 import { SeatBoard } from "../SeatBoard";
 import { getDrawRound, retainDrawSessions, drawStudents, todayKey } from "../../state/dailyManagement";
@@ -36,6 +36,7 @@ import type { ShuffleCandidate } from "../../state/seatPlanner";
 import type { AttendanceRecord, DrawSession, FollowupTask } from "../../state/types";
 
 const loadClassDutiesPanel = () => import("../ClassDutiesPanel");
+const SEAT_MANAGE_TRIGGER_ID = "seat-manage-trigger";
 const loadSeatShufflePreview = () => import("../SeatShufflePreview").then(module => ({ default: module.SeatShufflePreview }));
 
 export function DailyWorkspace({
@@ -114,7 +115,7 @@ export function DailyWorkspace({
   const [name, setName] = useState("");
   const [gender, setGender] = useState<Gender>("");
   const [alias, setAlias] = useState("");
-  const [drawerSearch, setDrawerSearch] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [drawCount, setDrawCount] = useState(1);
   const [noRepeat, setNoRepeat] = useState(false);
   const appDialog = useAppDialog();
@@ -123,6 +124,7 @@ export function DailyWorkspace({
   useEffect(() => () => discardShuffleRef.current(), []);
   const [drawBusy, setDrawBusy] = useState(false);
   const [drawResult, setDrawResult] = useState<string[]>([]);
+  const [drawRound, setDrawRound] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   // 抽签历史直接读持久化的 drawSessions，切页或刷新后仍然可见。
   const drawHistory = useMemo(() => {
@@ -133,7 +135,6 @@ export function DailyWorkspace({
       names: session.studentIds.map(id => studentById.get(id)?.name || "已移出学生"),
     }));
   }, [drawSessions, students]);
-  const drawerStudents = students.filter(student => matchesStudentSearch(student, drawerSearch)).slice(0, 8);
   const constraints = seatSettings.constraints;
   const activeConstraintCount = constraints.lockedDeskmatePairs.length
     + constraints.noDeskmatePairs.length
@@ -284,6 +285,7 @@ export function DailyWorkspace({
     setName("");
     setGender("");
     setAlias("");
+    nameInputRef.current?.focus();
   }
 
   async function draw() {
@@ -300,6 +302,7 @@ export function DailyWorkspace({
       }
       if (selected.length) onDrawSessionsChange(retainDrawSessions([{ id: `draw-${crypto.randomUUID()}`, roundId, date: todayKey(), studentIds: selected.map(student => student.id), createdAt: new Date().toISOString() }, ...drawSessions]));
       setDrawResult(selected.map(student => student.name));
+      setDrawRound(round => round + 1);
     } finally { setDrawBusy(false); }
   }
 
@@ -316,61 +319,60 @@ export function DailyWorkspace({
           ]} />
         </div>
 
-        <div
-          className="daily-toolbar-actions ml-auto flex shrink-0 items-center justify-end gap-2 whitespace-nowrap"
-        >
-          <SegmentedControl
-            value={cardMode}
-            ariaLabel="座位卡显示方式"
-            onChange={value => setCardMode(value as "compact" | "detail")}
-            options={[
-              { value: "compact", label: "简洁", icon: <Minimize2 className="h-3.5 w-3.5" /> },
-              { value: "detail", label: "详细", icon: <Maximize2 className="h-3.5 w-3.5" /> },
-            ]}
-          />
-          <Button id="seat-layout-editor-trigger" size="sm" variant="ghost" onClick={() => { setActiveTool(null); switchLayoutEditing(true); }}>
-            <LayoutGrid className="h-4 w-4" />编辑布局
-          </Button>
-          <Button size="sm" variant="ghost" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}>
-            <Undo2 className="h-4 w-4" />撤销
-          </Button>
-          {classDuties && <Button id="daily-duties-trigger" size="sm" variant={activeTool === "duties" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "duties" ? null : "duties")}><Users className="h-4 w-4" />班级职务</Button>}
-          <Button id="daily-student-tool-trigger" size="sm" variant={activeTool === "student" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "student" ? null : "student")}>
-            <UserPlus className="h-4 w-4" />新增学生
-          </Button>
-          <Button id="daily-draw-tool-trigger" size="sm" variant={activeTool === "draw" ? "secondary" : "ghost"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
+        <div className="daily-toolbar-actions ml-auto flex shrink-0 items-center justify-end gap-1 whitespace-nowrap">
+          <Button id="daily-draw-tool-trigger" size="sm" variant="quiet" aria-haspopup="dialog" aria-expanded={activeTool === "draw"} onClick={() => setActiveTool(activeTool === "draw" ? null : "draw")}>
             <Dices className="h-4 w-4" />抽签
           </Button>
-          <Button id="seat-shuffle-trigger" size="sm" onClick={() => { setActiveTool(null); onDiscardShufflePreview(); void preloadFeature(loadSeatShufflePreview).catch(() => {}); setSeatFlow("rules"); requestAnimationFrame(() => document.getElementById("seat-rules-intro")?.focus({ preventScroll: true })); }}>
+          <ActionMenu label="管理" triggerId={SEAT_MANAGE_TRIGGER_ID} icon={<Settings2 className="h-4 w-4" />} items={[
+            { key: "student", label: "新增学生", icon: <UserPlus className="h-4 w-4" />, onSelect: () => setActiveTool("student") },
+            ...(classDuties ? [{ key: "duties", label: "班级职务", icon: <Users className="h-4 w-4" />, onSelect: () => setActiveTool("duties") }] : []),
+            { key: "layout", label: "编辑布局", icon: <LayoutGrid className="h-4 w-4" />, onSelect: () => { setActiveTool(null); switchLayoutEditing(true); } },
+          ]} />
+          <span className="mx-1.5 h-5 w-px bg-separator-border" aria-hidden="true" />
+          <span className="seat-undo-slot" data-visible={canUndoSeatOrder ? "true" : "false"} aria-hidden={!canUndoSeatOrder || undefined} inert={!canUndoSeatOrder ? true : undefined}>
+            <IconButton label="撤销" size="sm" variant="quiet" disabled={!canUndoSeatOrder} onClick={onUndoSeatOrder}><Undo2 className="h-4 w-4" /></IconButton>
+          </span>
+          <Button id="seat-shuffle-trigger" size="sm" title={activeConstraintCount > 0 ? `${activeConstraintCount} 条排座规则生效` : undefined} onClick={() => { setActiveTool(null); onDiscardShufflePreview(); void preloadFeature(loadSeatShufflePreview).catch(() => {}); setSeatFlow("rules"); requestAnimationFrame(() => document.getElementById("seat-rules-intro")?.focus({ preventScroll: true })); }}>
             <Shuffle className="h-4 w-4" />排座
-            {activeConstraintCount > 0 && <span className="text-[11px] font-medium text-accent-100">· {activeConstraintCount} 条规则</span>}
+            {activeConstraintCount > 0 && <span key={activeConstraintCount} aria-hidden="true" className="seat-rule-count">{activeConstraintCount}</span>}
           </Button>
         </div>
 
         </div>
         <div ref={setDesignerToolbarHost} className="seat-mode-toolbar__editor flex flex-wrap items-center gap-3 px-4 py-3" aria-hidden={!editingLayout} inert={!editingLayout || transitioning ? true : undefined} />
         <div className="seat-mode-toolbar__shuffle flex min-h-14 flex-wrap items-center gap-2 px-4 py-3" aria-hidden={seatFlow === "view"} inert={seatFlow === "view" || transitioning ? true : undefined}>
-          <Button size="sm" variant="ghost" onClick={returnToSeats}><ArrowLeft className="h-4 w-4" />返回座位</Button>
-          <span className="h-5 w-px bg-separator-border" aria-hidden="true" />
-          <div className="min-w-0"><strong id="seat-preview-title" tabIndex={-1} className="block text-body-semibold text-text-primary outline-none">{seatFlow === "preview" ? "方案预览" : "排座规则"}</strong><span className="block text-caption-1-regular text-text-tertiary">{seatFlow === "preview" ? "在当前座位图调整，采用后才保存" : "调整规则后生成方案"}</span></div>
-          {seatFlow === "preview" && shufflePreview && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            <span className={`rounded-[var(--app-radius-sm)] px-2.5 py-1.5 text-caption-1-semibold ${shufflePreview.evaluation.details.required.every(item => item.satisfied) ? "bg-status-success-50 text-status-success-700" : "bg-status-warning-50 text-status-warning-700"}`}>明确要求 {shufflePreview.evaluation.details.required.filter(item => item.satisfied).length}/{shufflePreview.evaluation.details.required.length}</span>
-            <Button size="sm" variant="ghost" onClick={backToRules}>返回规则</Button>
-            <Button id="seat-evaluation-trigger" size="sm" variant="ghost" aria-expanded={evaluationVisible} onClick={() => {
+          <nav aria-label="排座流程" className="flex min-w-0 items-center gap-1">
+            <Button size="sm" variant="quiet" aria-label="返回座位" onClick={returnToSeats}><ArrowLeft className="h-4 w-4" />座位</Button>
+            <ChevronRight className="h-4 w-4 shrink-0 text-text-tertiary" aria-hidden="true" />
+            <strong id="seat-preview-title" tabIndex={-1} className="block min-w-0 truncate text-body-semibold text-text-primary outline-none"><span key={seatFlow} className="seat-flow-title-enter inline-block">{seatFlow === "preview" ? "方案预览" : "排座"}</span></strong>
+          </nav>
+          {seatFlow === "preview" && <span className="seat-flow-title-enter text-caption-1-regular text-text-tertiary">采用后才会保存</span>}
+          {seatFlow === "preview" && shufflePreview && <div className="seat-flow-actions-enter ml-auto flex flex-wrap items-center justify-end gap-1">
+            <span className={`mr-1 rounded-[var(--app-radius-sm)] px-2.5 py-1.5 text-caption-1-semibold ${shufflePreview.evaluation.details.required.every(item => item.satisfied) ? "bg-status-success-50 text-status-success-700" : "bg-status-warning-50 text-status-warning-700"}`}>明确要求 {shufflePreview.evaluation.details.required.filter(item => item.satisfied).length}/{shufflePreview.evaluation.details.required.length}</span>
+            <Button size="sm" variant="quiet" onClick={backToRules}>返回规则</Button>
+            <Button id="seat-evaluation-trigger" size="sm" variant="quiet" aria-expanded={evaluationVisible} onClick={() => {
               if (wideSeatPanel) { document.getElementById("seat-shuffle-evaluation")?.focus({ preventScroll: true }); return; }
               setEvaluationOpen(value => !value);
               if (!evaluationOpen) requestAnimationFrame(() => document.getElementById("seat-shuffle-evaluation")?.focus({ preventScroll: true }));
             }}>评估详情</Button>
-            <Button size="sm" variant="ghost" onClick={regeneratePreview}>再随机一次</Button>
+            <Button size="sm" variant="secondary" onClick={regeneratePreview}><Shuffle className="h-4 w-4" />再随机一次</Button>
             <Button size="sm" onClick={applyPreview}>采用方案</Button>
           </div>}
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 p-4">
-        <div ref={seatPanelRef} data-seat-flow={seatFlow} data-evaluation-open={evaluationOpen ? "true" : "false"} className="seat-workflow-panel relative h-full min-h-0 overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]">
-          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-4" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout || seatFlow === "rules"} inert={editingLayout || seatFlow === "rules" || transitioning ? true : undefined}>
-            <SeatBoard cardMode={cardMode} previewMode={seatFlow === "preview"} students={students} seatOrder={seatFlow === "preview" && shufflePreview ? shufflePreview.order : seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={seatFlow === "preview" ? movePreviewSeat : onMoveSeat} onMoveStudentToWaiting={seatFlow === "preview" ? movePreviewStudentToWaiting : onMoveStudentToWaiting} onAssignStudentToSeat={seatFlow === "preview" ? assignPreviewStudentToSeat : onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={seatFlow === "preview" ? () => {} : onToggleLock} />
+      <div className="min-h-0 flex-1 p-3">
+        <div ref={seatPanelRef} data-seat-flow={seatFlow} data-evaluation-open={evaluationOpen ? "true" : "false"} className="seat-workflow-panel relative h-full min-h-0 overflow-hidden bg-background-primary-default">
+          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-2" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout || seatFlow === "rules"} inert={editingLayout || seatFlow === "rules" || transitioning ? true : undefined}>
+            <SeatBoard footerAccessory={<SegmentedControl
+              value={cardMode}
+              ariaLabel="座位卡显示方式"
+              onChange={value => setCardMode(value as "compact" | "detail")}
+              options={[
+                { value: "compact", label: "简洁", icon: <Minimize2 className="h-3.5 w-3.5" /> },
+                { value: "detail", label: "详细", icon: <Maximize2 className="h-3.5 w-3.5" /> },
+              ]}
+            />} cardMode={cardMode} previewMode={seatFlow === "preview"} students={students} seatOrder={seatFlow === "preview" && shufflePreview ? shufflePreview.order : seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={seatFlow === "preview" ? movePreviewSeat : onMoveSeat} onMoveStudentToWaiting={seatFlow === "preview" ? movePreviewStudentToWaiting : onMoveStudentToWaiting} onAssignStudentToSeat={seatFlow === "preview" ? assignPreviewStudentToSeat : onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={seatFlow === "preview" ? () => {} : onToggleLock} />
           </div>}
           {!editingLayout && <div data-seat-rules-layer aria-hidden={seatFlow !== "rules"} inert={seatFlow !== "rules" ? true : undefined}>
             <SeatSettingsModal inline open students={students} settings={seatSettings} canUndo={canUndoSeatOrder} onUpdate={onUpdateSeatSettings} onRandomize={generatePreview} onOrderByList={orderSeatsByList} onUndo={() => transitionSeatBoard(onUndoSeatOrder)} onClose={returnToSeats} />
@@ -386,70 +388,43 @@ export function DailyWorkspace({
         </div>
       </div>
 
-      {classDuties && <ToolDrawer open={activeTool === "duties"} title="班级职务" returnFocusId="daily-duties-trigger" onClose={() => setActiveTool(null)}>{activeTool === "duties" && <RetryableLazy load={loadClassDutiesPanel} componentProps={{ binding: classDuties }} />}</ToolDrawer>}
+      {classDuties && <ToolDrawer open={activeTool === "duties"} title="班级职务" returnFocusId={SEAT_MANAGE_TRIGGER_ID} onClose={() => setActiveTool(null)}>{activeTool === "duties" && <RetryableLazy load={loadClassDutiesPanel} componentProps={{ binding: classDuties }} />}</ToolDrawer>}
 
-      <ToolDrawer open={activeTool === "student"} title="学生工具" returnFocusId="daily-student-tool-trigger" onClose={() => setActiveTool(null)}>
-        <div className="space-y-5">
-          <div>
-            <h3 className="text-body-semibold text-text-primary">新增学生</h3>
-            <p className="mt-1 text-caption-1-regular leading-5 text-text-tertiary">新学生会自动安排到第一个空座位。</p>
+      <ToolPopover open={activeTool === "student"} title="新增学生" anchorId={SEAT_MANAGE_TRIGGER_ID} onClose={() => setActiveTool(null)}>
+        <form className="space-y-3" onSubmit={event => { event.preventDefault(); addStudent(); }}>
+          <Input value={name} onChange={setName} placeholder="姓名" elementRef={nameInputRef} />
+          <div className="grid grid-cols-[1fr_6rem] gap-2">
+            <Input value={alias} onChange={setAlias} placeholder="别名 / 拼音（可选）" className="min-w-0" />
+            <SelectMenu value={gender} onChange={value => setGender(value as Gender)} ariaLabel="学生性别" options={[{ value: "", label: "未知" }, { value: "男", label: "男" }, { value: "女", label: "女" }]} />
           </div>
-          <div className="space-y-3">
-            <Input value={name} onChange={setName} placeholder="姓名"   />
-            <div className="grid grid-cols-[1fr_6rem] gap-2">
-              <Input value={alias} onChange={setAlias} placeholder="别名 / 拼音（可选）"  className="min-w-0" />
-              <SelectMenu value={gender} onChange={value => setGender(value as Gender)} ariaLabel="学生性别" options={[{ value: "", label: "未知" }, { value: "男", label: "男" }, { value: "女", label: "女" }]} />
-            </div>
-            <Button className="w-full" disabled={!name.trim()} onClick={addStudent}><Plus className="h-4 w-4" />添加到班级</Button>
-          </div>
+          <Button type="submit" className="w-full" disabled={!name.trim()}><Plus className="h-4 w-4" />添加到班级</Button>
+        </form>
+      </ToolPopover>
 
-          <div>
-            <h3 className="mb-2 text-body-semibold text-text-primary">查找已有学生</h3>
-            <Input value={drawerSearch} onChange={setDrawerSearch} leadingIcon={Search} placeholder="姓名或别名" className="" />
-            {drawerSearch && (
-              <div className="mt-2 divide-y divide-separator-border overflow-hidden rounded-[var(--app-radius-sm)] border border-[var(--app-border)]">
-                {drawerStudents.map(student => (
-                  <button key={student.id} type="button" onClick={() => onSelectStudent(student)} className="flex w-full items-center justify-between px-3 py-2.5 text-body-regular hover:bg-accent-50">
-                    <span className="font-semibold text-text-primary">{student.name}</span><span className="text-caption-1-regular text-text-tertiary">{student.gender || "未知"}</span>
-                  </button>
-                ))}
-                {drawerStudents.length === 0 && <div className="px-3 py-5 text-center text-body-regular text-text-tertiary">无匹配结果</div>}
-              </div>
-            )}
-          </div>
-        </div>
-      </ToolDrawer>
-
-      <ToolDrawer open={activeTool === "draw"} title="课堂抽签" returnFocusId="daily-draw-tool-trigger" onClose={() => setActiveTool(null)}>
+      <ToolPopover open={activeTool === "draw"} title="课堂抽签" anchorId="daily-draw-tool-trigger" onClose={() => setActiveTool(null)} widthClassName="w-[22rem]">
         <div className="space-y-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-body-regular text-text-secondary">
-                人数
-                <input type="number" min={1} max={Math.max(1, students.length)} value={drawCount} onChange={event => setDrawCount(Number(event.target.value) || 1)} className="h-9 w-16 rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-2 text-center outline-none focus:border-accent-300" />
-              </label>
-              <Checkbox isSelected={noRepeat} onChange={setNoRepeat} className="ml-auto">去重</Checkbox>
-            </div>
-            <Button className="mt-4 w-full" disabled={drawBusy} onClick={() => void draw()}><Dices className="h-4 w-4" />开始抽签</Button>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-body-regular text-text-secondary">人数<NumberStepper value={drawCount} onChange={setDrawCount} min={1} max={Math.max(1, students.length)} ariaLabel="抽取人数" /></div>
+            <Checkbox isSelected={noRepeat} onChange={setNoRepeat}>本轮不重复</Checkbox>
           </div>
+          <Button data-popover-autofocus className="w-full" disabled={drawBusy} onClick={() => void draw()}><Dices className="h-4 w-4" />{drawResult.length ? "再抽一次" : "开始抽签"}</Button>
           <MotionCollapse open={drawResult.length > 0} className="!mt-0" contentClassName="pt-4">
-            <div className=" rounded-[var(--app-radius-md)] border border-accent-100 bg-accent-50 p-4">
-              <div className="mb-2 text-caption-1-semibold text-accent-500">本次结果</div>
-              <MotionSwitch transitionKey={drawResult.join("|")} contentClassName="flex flex-wrap gap-2" className="[--motion-surface:var(--color-accent-50)]">{drawResult.map((resultName, index) => <span key={index} className="rounded-full bg-accent-600 px-3 py-1.5 text-body-semibold text-text-white">{resultName}</span>)}</MotionSwitch>
+            <div aria-live="polite" className="draw-result-stage grid min-h-24 place-items-center rounded-[var(--app-radius-md)] bg-background-secondary-default px-4 py-5">
+              <div key={drawRound} className="flex flex-wrap justify-center gap-x-5 gap-y-2">{drawResult.map((resultName, index) => <span key={`${drawRound}-${index}`} className="draw-result-name text-title-2-semibold text-text-primary" style={{ "--draw-index": index } as CSSProperties}>{resultName}</span>)}</div>
             </div>
           </MotionCollapse>
           {drawHistory.length > 0 && (
-            <div className="overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default">
-              <button type="button" onClick={() => setHistoryOpen(value => !value)} className="flex h-11 w-full items-center justify-between px-3 text-body-semibold text-text-secondary hover:bg-background-secondary-default">
-                最近 {drawHistory.length} 次<ChevronDown className={`h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
+            <div className="border-t border-separator-border pt-2">
+              <button type="button" aria-expanded={historyOpen} onClick={() => setHistoryOpen(value => !value)} className="flex h-9 w-full items-center justify-between rounded-lg px-1 text-caption-1-semibold text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
+                最近 {drawHistory.length} 次<ChevronDown className={`h-4 w-4 transition-transform duration-200 motion-reduce:transition-none ${historyOpen ? "rotate-180" : ""}`} />
               </button>
-              <MotionCollapse open={historyOpen}><div className="divide-y divide-separator-border border-t border-[var(--app-border)]">{drawHistory.map(item => (
-                <div key={item.id} className="px-3 py-3"><div className="text-caption-1-regular text-text-tertiary">{item.time}</div><div className="mt-1.5 flex flex-wrap gap-1.5">{item.names.map(resultName => <span key={`${item.id}-${resultName}`} className="rounded-full bg-background-tertiary-default px-2 py-0.5 text-caption-1-regular text-text-primary">{resultName}</span>)}</div></div>
+              <MotionCollapse open={historyOpen}><div className="max-h-52 divide-y divide-separator-border overflow-y-auto">{drawHistory.map(item => (
+                <div key={item.id} className="flex items-baseline gap-3 px-1 py-2"><span className="shrink-0 text-caption-1-regular tabular-nums text-text-tertiary">{item.time}</span><span className="min-w-0 flex-1 text-caption-1-medium text-text-primary">{item.names.join("、")}</span></div>
               ))}</div></MotionCollapse>
             </div>
           )}
         </div>
-      </ToolDrawer>
+      </ToolPopover>
 
       {appDialog.dialog}
     </div>

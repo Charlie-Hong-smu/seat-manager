@@ -30,7 +30,7 @@ const select = (page: Page, name: string) => workbench(page).locator('aside').fi
 test("roster reordering respects locks and saved snapshots retain student IDs", async ({ page }) => {
   await login(page); await nav(page, /^座位/);
   await page.getByRole("button", { name: /^排座/ }).click();
-  await page.getByRole("button", { name: "按名单立即重排", exact: true }).click();
+  await page.getByRole("button", { name: "按名单重排", exact: true }).click();
   await expect.poll(async () => (await data(page)).seatOrder.slice(0, 3)).toEqual(["s3", "s1", "s2"]);
   await page.getByRole("button", { name: "撤销", exact: true }).click();
   await expect.poll(async () => (await data(page)).seatOrder.slice(0, 3)).toEqual(["s3", "s2", "s1"]);

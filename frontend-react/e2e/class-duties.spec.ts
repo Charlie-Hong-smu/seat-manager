@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openSeatTool } from "./seatTools";
 
 const edition = process.env.E2E_EDITION === "commercial" ? "commercial" : "zhang";
 async function login(page: Page) {
@@ -23,7 +24,7 @@ async function duties(page: Page) {
 }
 async function openDuties(page: Page) {
   await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: /^座位/ }).click();
-  await page.getByRole("button", { name: "班级职务", exact: true }).click();
+  await openSeatTool(page, "班级职务");
   return page.getByRole("complementary", { name: "班级职务" });
 }
 async function choose(page: Page, label: string, name: string) {
@@ -37,7 +38,7 @@ test("custom roles support shared holders, persistent drafts, rename and confirm
   const drawer = await openDuties(page);
   await drawer.getByRole("textbox", { name: "新增职务名称" }).fill("图书管理员");
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "班级职务", exact: true }).click();
+  await openSeatTool(page, "班级职务");
   await expect(drawer.getByRole("textbox", { name: "新增职务名称" })).toHaveValue("图书管理员");
   await drawer.getByRole("button", { name: "添加", exact: true }).click();
   await choose(page, "添加图书管理员人选", "张三");

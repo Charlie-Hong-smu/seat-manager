@@ -44,7 +44,7 @@ import { cx, sortCx } from "@/utils/cx";
  * `variant` to avoid the clash.
  */
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "quiet" | "danger";
 type ButtonSize = "medium" | "small" | "xs";
 
 type IconComponent = ComponentType<{
@@ -138,6 +138,13 @@ const styles = sortCx({
       "hover:bg-button-ghost-hover active:bg-button-ghost-active",
       "disabled:bg-button-ghost-disabled disabled:text-button-ghost-disabled-foreground disabled:shadow-none",
       "aria-disabled:bg-button-ghost-disabled aria-disabled:text-button-ghost-disabled-foreground aria-disabled:shadow-none",
+    ].join(" "),
+    // Toolbar-level secondary actions: no resting fill, so the single primary action stays dominant.
+    quiet: [
+      "bg-transparent text-text-secondary transition-colors duration-150",
+      "hover:bg-background-secondary-default hover:text-text-primary active:bg-background-tertiary-default",
+      "aria-expanded:bg-background-secondary-default aria-expanded:text-text-primary",
+      "disabled:bg-transparent disabled:text-text-tertiary aria-disabled:text-text-tertiary",
     ].join(" "),
   },
 });

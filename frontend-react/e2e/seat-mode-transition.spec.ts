@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openSeatTool } from "./seatTools";
 
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
   test(`seat mode preserves geometry and data (${reducedMotion})`, async ({ page }) => {
@@ -11,11 +12,11 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.getByRole("button", { name: "进入工作台", exact: true }).click();
     await page.getByRole("button", { name: "座位", exact: true }).click();
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.getByRole("button", { name: "新增学生", exact: true }).click();
+    await openSeatTool(page, "新增学生");
     await page.getByPlaceholder("姓名", { exact: true }).fill("过渡测试学生");
     await page.getByRole("button", { name: "添加到班级", exact: true }).click();
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+    await openSeatTool(page, "编辑布局");
     await page.getByRole("button", { name: "批量框选", exact: true }).click();
     await page.locator('[data-seat-layout-slot="7:7"] .seat-layout-slot__face').click();
     for (const cell of ["8:2", "8:3"]) await page.locator(`[data-seat-layout-slot="${cell}"] .seat-layout-slot__face`).click();
@@ -34,8 +35,10 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       await page.getByRole("button", { name: mode, exact: true }).click();
       await page.waitForTimeout(550);
       const source = await page.locator("[data-seat-layout-node]").first().boundingBox();
+      await page.getByRole("button", { name: "管理", exact: true }).click();
+      await expect(page.getByRole("menuitem", { name: "编辑布局", exact: true })).toBeVisible();
       await page.evaluate(() => {
-        document.getElementById("seat-layout-editor-trigger")!.click();
+        document.querySelector<HTMLElement>("[role='menuitem'][data-menu-key='layout']")!.click();
         requestAnimationFrame(() => document.getAnimations().forEach(animation => {
           if (animation.effect instanceof KeyframeEffect && animation.effect.target?.closest("[data-seat-mode-transition]")) {
             animation.pause(); animation.currentTime = 0;
@@ -81,13 +84,14 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       await page.getByRole("button", { name: "取消", exact: true }).click();
       await expect(page.locator("[data-seat-layout-editor]")).toHaveCount(0);
       await expect(page.locator(".seat-mode-flight")).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "编辑布局", exact: true })).toBeFocused();
+      await expect(page.getByRole("button", { name: "管理", exact: true })).toBeFocused();
       const returned = page.locator("[data-seat-board-layer] .seat-card-enter").first();
       expect(await returned.evaluate(element => element.getAnimations().filter(animation => animation.playState === "running").length)).toBe(0);
       expect(await returned.evaluate(element => getComputedStyle(element).opacity)).toBe("1");
       expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).toBe(before);
     }
-    await page.getByRole("button", { name: "编辑布局", exact: true }).click();
+    await openSeatTool(page, "编辑布局");
+    await expect(page.locator("[data-seat-mode-transition]")).toHaveCount(0);
     await page.getByRole("button", { name: "应用布局", exact: true }).click();
     await expect(page.locator("[data-seat-layout-editor]")).toHaveCount(0);
     await expect(page.locator(".seat-mode-flight")).toHaveCount(0);
