@@ -7,7 +7,7 @@ import { followupHasStudent } from "../state/followupStudents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { X, Trash2, Plus, MoreHorizontal, ClipboardList, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
-import { RetryableLazy } from "./RetryableLazy";
+import { RetryableLazy, preloadFeature } from "./RetryableLazy";
 import { type NewDormEventInput } from "../state/dormitoryActions";
 import { DormEventForm } from "./DormEventForm";
 import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
@@ -207,6 +207,10 @@ export function StudentModal({
     setActiveTab(initialActiveTab);
     setContextPreview(null);
   }, [initialActiveTab, student]);
+
+  // Warm the AI comment chunk while the teacher reads the other tabs, so the
+  // comment tab resolves synchronously and the panel grows in one transition.
+  useEffect(() => { void preloadFeature(loadAiCommentPanel).catch(() => {}); }, []);
 
   useEffect(() => {
     const cached = readCachedStudentAiTrend(student);
@@ -713,7 +717,7 @@ export function StudentModal({
           </div>
           )}
 
-          {activeTab === "comment" && <RetryableLazy key={student.id} load={loadAiCommentPanel} componentProps={{ student }} fallback={<div className="py-12 text-center text-body-regular text-text-secondary">正在准备 AI 评语…</div>} />}
+          {activeTab === "comment" && <RetryableLazy key={student.id} load={loadAiCommentPanel} componentProps={{ student }} fallback={<div className="grid min-h-96 place-items-center text-body-regular text-text-secondary">正在准备 AI 评语…</div>} />}
 
           {activeTab === "followup" && (
             <div className="space-y-4">
