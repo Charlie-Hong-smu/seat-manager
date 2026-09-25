@@ -485,12 +485,12 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           <>
             <div className="grade-stat-grid grid grid-cols-4 divide-x divide-separator-border overflow-hidden rounded-xl border border-separator-border bg-background-primary-default">
               {[
-                { label: "参考人数", value: `${rows.length} 人`, sub: `${subjects.length} 个科目` },
-                { label: metricKey === "total" ? "班级平均分" : `${metricLabel}平均分`, value: formatScore(avgMetric ?? avgTotal), sub: `满分 ${metricKey === "total" ? subjects.length * 100 : 100}` },
-                { label: "最高 / 最低分", value: `${formatScore(maxMetric ?? maxTotal)} / ${formatScore(minMetric ?? minTotal)}`, sub: `${metricLabel}区间` },
-                { label: "优秀率", value: `${rows.length ? Math.round((excellentCount / rows.length) * 100) : 0}%`, sub: `及格率 ${rows.length ? Math.round((passCount / rows.length) * 100) : 0}%` },
+                { id: "count", label: "参考人数", value: `${rows.length} 人`, sub: `${subjects.length} 个科目` },
+                { id: "avg", label: metricKey === "total" ? "班级平均分" : `${metricLabel}平均分`, value: formatScore(avgMetric ?? avgTotal), sub: `满分 ${metricKey === "total" ? subjects.length * 100 : 100}` },
+                { id: "range", label: "最高 / 最低分", value: `${formatScore(maxMetric ?? maxTotal)} / ${formatScore(minMetric ?? minTotal)}`, sub: `${metricLabel}区间` },
+                { id: "rate", label: "优秀率", value: `${rows.length ? Math.round((excellentCount / rows.length) * 100) : 0}%`, sub: `及格率 ${rows.length ? Math.round((passCount / rows.length) * 100) : 0}%` },
               ].map(stat => (
-                <div key={stat.label} className="min-w-0 px-4 py-3">
+                <div key={stat.id} className="min-w-0 px-4 py-3">
                   <div className="truncate text-caption-1-regular text-text-tertiary">{stat.label}</div>
                   <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
                     <RollingText value={stat.value} className="text-headline-semibold tabular-nums text-text-primary" />
