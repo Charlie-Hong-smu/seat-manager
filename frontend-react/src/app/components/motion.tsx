@@ -138,6 +138,12 @@ export class MotionSwitch extends Component<SwitchProps> {
       this.animateNavigation(_previous, before);
       return;
     }
+    // Measure destination rects before the slide/opacity flights begin — once
+    // content has a transform, getBoundingClientRect returns the animated
+    // position and the surface frame would land a slide-distance away.
+    const surfaceTargets = before.surfaces.length
+      ? new Map(surfaces(content).map(node => [node.dataset.motionSurface!, { node, rect: node.getBoundingClientRect() }]))
+      : null;
     const distance = this.props.direction ? (this.props.direction === "left" ? -12 : 12) : 0;
     const orderedContent = this.props.contentIndex !== undefined;
     const options: KeyframeAnimationOptions = { duration: orderedContent ? 400 : DURATION, easing: orderedContent ? "cubic-bezier(0.3, 0, 0.2, 1)" : EASING, fill: "both" };
@@ -158,13 +164,13 @@ export class MotionSwitch extends Component<SwitchProps> {
         before.image.animate([{ opacity: 1, transform: "translateX(0)" }, { opacity: 0, transform: `translateX(${-distance}px)` }], options),
       ];
     }
-    if (before.surfaces.length) {
+    if (surfaceTargets?.size) {
       const origin = root.getBoundingClientRect();
-      const next = new Map(surfaces(content).map(node => [node.dataset.motionSurface!, node]));
       before.surfaces.forEach(old => {
-        const node = next.get(old.key);
-        if (!node) return;
-        const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
+        const target = surfaceTargets.get(old.key);
+        if (!target) return;
+        const node = target.node;
+        const rect = target.rect, style = getComputedStyle(node);
         const wasVisible = old.rect.bottom + origin.top > 0 && old.rect.top + origin.top < window.innerHeight;
         if (!wasVisible && (rect.bottom <= 0 || rect.top >= window.innerHeight)) return;
         const frame = document.createElement("div");
