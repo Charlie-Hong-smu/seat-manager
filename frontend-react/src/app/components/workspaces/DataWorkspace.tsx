@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArchiveRestore, FileDown, FileUp, Trash2, X } from "lucide-react";
+import { ArchiveRestore, FileDown, FileUp, Trash2 } from "lucide-react";
 
 import {
   exportBackupJson,
@@ -17,7 +17,7 @@ import { prefetchXlsxAsset, readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, parseRosterRows, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
 import type { AppStudent, SeatLayoutV1, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
-import { Button, DialogPresence, FileDropZone, InlineStatus, SelectMenu, useAppDialog, useModalFocus } from "../ui";
+import { Button, DialogPresence, FileDropZone, InlineStatus, ModalHeader, SelectMenu, useAppDialog, useModalFocus } from "../ui";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 
 export function DataWorkspace({
@@ -292,20 +292,7 @@ export function DataWorkspace({
       {rosterMappingOpen && rosterMapping && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
           <div ref={rosterMappingRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="名单列映射" className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden outline-none">
-            <div className="flex items-start justify-between gap-4 border-b border-separator-border px-5 py-4">
-              <div>
-                <h3 className="text-title-3-semibold text-text-primary">名单列映射</h3>
-                <p className="mt-1 text-body-regular text-text-secondary">确认姓名、学号、性别和座位行列后再导入。</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRosterMappingOpen(false)}
-                className="rounded-xl p-2 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-primary"
-                aria-label="关闭"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+            <ModalHeader title="名单列映射" description="确认姓名、学号、性别和座位行列后再导入。" onClose={() => setRosterMappingOpen(false)} />
 
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem] overflow-hidden">
               <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">

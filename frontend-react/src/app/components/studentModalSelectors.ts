@@ -77,7 +77,8 @@ export function buildWeekOptions(records: StudentModalRecord[], now = new Date()
   return [...weekKeys].sort((a, b) => b.localeCompare(a)).map((key) => {
     const start = parseLocalDate(key) || currentWeekStart;
     const end = addDays(start, 6);
-    return { key, start, end, label: `${key} - ${toLocalDateKey(end)}${key === currentWeekKey ? "（本周）" : ""}` };
+    const yearPrefix = start.getFullYear() === now.getFullYear() ? "" : `${start.getFullYear()} 年 `;
+    return { key, start, end, label: `${yearPrefix}${start.getMonth() + 1}月${start.getDate()}日 – ${end.getMonth() + 1}月${end.getDate()}日${key === currentWeekKey ? " · 本周" : ""}` };
   });
 }
 

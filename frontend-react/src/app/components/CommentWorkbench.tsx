@@ -41,7 +41,7 @@ import {
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
-import { MobilePaneTabs, MotionList, MotionCollapse, DialogPresence, AiGenerationPanel, Button, IconButton, MotionSwitch, SegmentedControl, useModalFocus, useAppDialog } from "./ui";
+import { Checkbox, MobilePaneTabs, ModalHeader, MotionList, MotionCollapse, DialogPresence, AiGenerationPanel, Button, IconButton, MotionSwitch, SegmentedControl, useModalFocus, useAppDialog } from "./ui";
 import {
   addCommentCustomOption,
   COMMENT_LENGTH_MODES,
@@ -1404,96 +1404,42 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
             className="modal-panel-enter app-modal-panel flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex shrink-0 items-center justify-between border-b border-separator-border px-5 py-3.5">
-              <h3 className="text-headline-semibold text-text-primary">导出评语</h3>
-              <button
-                aria-label="关闭导出评语"
-                onClick={() => setShowExportModal(false)}
-                className="grid h-8 w-8 place-items-center rounded-xl text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary"
-              >
-                <X className="h-5 w-5" />
-              </button>
+            <ModalHeader title="导出评语" description={`已选 ${exportSelectedIds.size} / ${students.length} 人`} closeLabel="关闭导出评语" onClose={() => setShowExportModal(false)} />
+
+            <div className="flex shrink-0 items-center gap-5 border-b border-separator-border px-5 py-3">
+              <Checkbox isSelected={exportSelectedIds.size === students.length && students.length > 0} isIndeterminate={exportSelectedIds.size > 0 && exportSelectedIds.size < students.length}
+                onChange={() => setExportSelectedIds(prev => (prev.size === students.length ? new Set() : new Set(students.map(s => s.id))))}>全选</Checkbox>
+              <Checkbox isSelected={allGeneratedExportSelected} isDisabled={generatedExportIds.size === 0}
+                onChange={() => setExportSelectedIds(prev => {
+                  const next = new Set(prev);
+                  if (allGeneratedExportSelected) generatedExportIds.forEach(id => next.delete(id));
+                  else generatedExportIds.forEach(id => next.add(id));
+                  return next;
+                })}>已生成</Checkbox>
             </div>
 
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-separator-border px-5 py-3">
-              <div className="flex min-w-0 items-center gap-4">
-                <button
-                  onClick={() => setExportSelectedIds(prev => (prev.size === students.length ? new Set() : new Set(students.map(s => s.id))))}
-                  className="flex shrink-0 items-center gap-2 text-body-semibold text-text-primary"
-                >
-                  <span className={`grid h-4 w-4 place-items-center rounded border ${exportSelectedIds.size === students.length ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-hover"}`}>
-                    {exportSelectedIds.size === students.length && <Check className="h-3 w-3" />}
-                  </span>
-                  全选
-                </button>
-                <button
-                  onClick={() => setExportSelectedIds(prev => {
-                    const next = new Set(prev);
-                    if (allGeneratedExportSelected) generatedExportIds.forEach(id => next.delete(id));
-                    else generatedExportIds.forEach(id => next.add(id));
-                    return next;
-                  })}
-                  disabled={generatedExportIds.size === 0}
-                  className="flex shrink-0 items-center gap-2 text-body-semibold text-text-primary disabled:text-text-tertiary"
-                >
-                  <span className={`grid h-4 w-4 place-items-center rounded border ${
-                    allGeneratedExportSelected ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-hover"
-                  }`}>
-                    {allGeneratedExportSelected && <Check className="h-3 w-3" />}
-                  </span>
-                  已生成
-                </button>
-              </div>
-              <span className="text-caption-1-regular text-text-tertiary">已选 {exportSelectedIds.size} / {students.length} 人</span>
-            </div>
-
-            <div className="max-h-80 flex-1 overflow-y-auto border-b border-separator-border px-2 py-1">
+            <div className="max-h-80 flex-1 overflow-y-auto px-2 py-1.5">
               {students.map(student => {
                 const state = comments.find(c => c.studentId === student.id);
-                const checked = exportSelectedIds.has(student.id);
                 return (
-                  <button
-                    key={student.id}
-                    onClick={() => setExportSelectedIds(prev => {
+                  <div key={student.id} className="flex items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2 transition-colors hover:bg-background-secondary-default">
+                    <Checkbox className="min-w-0 flex-1" isSelected={exportSelectedIds.has(student.id)} onChange={() => setExportSelectedIds(prev => {
                       const next = new Set(prev);
                       if (next.has(student.id)) next.delete(student.id);
                       else next.add(student.id);
                       return next;
-                    })}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-background-secondary-default"
-                  >
-                    <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${checked ? "border-accent-600 bg-accent-600 text-text-white" : "border-border-button-hover"}`}>
-                      {checked && <Check className="h-3 w-3" />}
-                    </span>
-                    <span className="flex-1 text-body-regular text-text-primary">{student.name}</span>
-                    <span className="text-caption-1-regular text-text-tertiary">{state?.generated ? `${state.text.length} 字` : "未生成"}</span>
-                  </button>
+                    })}>{student.name}</Checkbox>
+                    <span className="shrink-0 text-caption-1-regular tabular-nums text-text-tertiary">{state?.generated ? `${state.text.length} 字` : "未生成"}</span>
+                  </div>
                 );
               })}
             </div>
 
-            <div className="flex shrink-0 items-center gap-3 px-5 py-3.5">
-              <div className="flex rounded-xl border border-border-button-default p-0.5">
-                <button
-                  onClick={() => setExportFormat("csv")}
-                  className={`rounded-lg px-3 py-1.5 text-caption-1-semibold transition-colors ${exportFormat === "csv" ? "bg-accent-600 text-text-white" : "text-text-secondary"}`}
-                >
-                  CSV
-                </button>
-                <button
-                  onClick={() => setExportFormat("txt")}
-                  className={`rounded-lg px-3 py-1.5 text-caption-1-semibold transition-colors ${exportFormat === "txt" ? "bg-accent-600 text-text-white" : "text-text-secondary"}`}
-                >
-                  纯文本
-                </button>
-              </div>
-              <button
-                onClick={() => exportSelectedComments(exportFormat)}
-                disabled={exportSelectedIds.size === 0}
-                className="flex-1 rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white transition-colors hover:bg-accent-700 disabled:bg-background-tertiary-default disabled:text-text-tertiary"
-              >
+            <div className="app-modal-footer flex shrink-0 items-center gap-3 px-5 py-3.5">
+              <SegmentedControl value={exportFormat} ariaLabel="导出格式" onChange={value => setExportFormat(value as typeof exportFormat)} options={[{ value: "csv", label: "CSV" }, { value: "txt", label: "纯文本" }]} />
+              <Button className="flex-1" onClick={() => exportSelectedComments(exportFormat)} disabled={exportSelectedIds.size === 0}>
                 {exportSelectedIds.size > 0 ? `导出 ${exportSelectedIds.size} 人` : "导出"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -407,7 +407,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
         requestAnimationFrame(tick);
       });
     });
-    expect([...new Set(opening.map(frame => `${frame.outer} ${frame.blur}`))]).toEqual(['1 blur(1px)']);
+    expect([...new Set(opening.map(frame => `${frame.outer} ${frame.blur}`))]).toEqual(['1 blur(2px) saturate(0.9)']);
     expect(opening.at(-1)!.panel).toBe(1);
     expect(opening.at(-1)!.scrim).toBe(1);
     if (reducedMotion === 'no-preference') {

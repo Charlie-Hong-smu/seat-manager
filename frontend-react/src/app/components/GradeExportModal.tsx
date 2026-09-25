@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from "react";
-import { FileSpreadsheet, Printer, Search, X } from "lucide-react";
+import { useId, useMemo, useRef, useState } from "react";
+import { FileSpreadsheet, Printer, Search } from "lucide-react";
 import { buildGradePrintPreviewHtml, exportGradeWorkbook, getDefaultGradeExportOptions } from "../state/gradeExport";
 import type { AppStudent, GradeExam } from "../state/types";
 import type { GradeExportContentKey, GradeExportOptions } from "../state/gradeExport";
 import { matchesStudentSearch } from "../state/studentSearch";
-import { MotionCollapse, MotionSwitch, DatePicker } from "./ui";
+import { Button, Checkbox, DatePicker, Input, ModalHeader, MotionCollapse, MotionSwitch, SegmentedControl, useModalFocus } from "./ui";
 
 interface GradeExportModalProps {
   exams: GradeExam[];
@@ -30,6 +30,9 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
   const [exporting, setExporting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(exams.length ? "" : "暂无考试数据");
   const printFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const titleId = useId();
+  const panelRef = useModalFocus(true, onClose);
+  const previewRef = useModalFocus(Boolean(printHtml), () => setPrintHtml(""));
 
   const filteredStudents = useMemo(() => {
     return students.filter(student => matchesStudentSearch(student, studentSearch));
@@ -136,78 +139,32 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
 
   return (
     <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div className="modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b border-separator-border px-5 py-4">
-          <div className="flex items-center gap-2">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-accent-50 text-accent-600">
-              <FileSpreadsheet className="h-4 w-4" />
-            </div>
-            <h3 className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>成绩导出设置</h3>
-          </div>
-          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className="modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden outline-none">
+        <ModalHeader icon={<FileSpreadsheet className="h-4 w-4" />} title="成绩导出设置" titleId={titleId} closeLabel="关闭成绩导出" onClose={onClose} />
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <div className="space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div className="space-y-6">
             <section>
-              <h4 className="mb-2 text-body-regular text-text-primary" style={{ fontWeight: 900 }}>导出对象</h4>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => update({ object: "class" })}
-                  className={`rounded-xl border px-3 py-3 text-left text-body-regular ${options.object === "class" ? "border-accent-200 bg-accent-50 text-accent-700" : "border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}
-                  style={{ fontWeight: 800 }}
-                >
-                  全班汇总
-                </button>
-                <button
-                  onClick={() => {
-                    clearPreview();
-                    setOptions(current => ({
-                      ...current,
-                      object: "students",
-                      selectedStudentIds: current.selectedStudentIds.length ? current.selectedStudentIds : students.map(student => student.id),
-                    }));
-                  }}
-                  className={`rounded-xl border px-3 py-3 text-left text-body-regular ${options.object === "students" ? "border-accent-200 bg-accent-50 text-accent-700" : "border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}
-                  style={{ fontWeight: 800 }}
-                >
-                  个人成绩
-                </button>
-              </div>
+              <h4 className="mb-2 text-body-semibold text-text-primary">导出对象</h4>
+              <SegmentedControl value={options.object} ariaLabel="导出对象" className="flex w-full" options={[{ value: "class", label: "全班汇总" }, { value: "students", label: "个人成绩" }]} onChange={value => {
+                if (value === "class") { update({ object: "class" }); return; }
+                clearPreview();
+                setOptions(current => ({ ...current, object: "students", selectedStudentIds: current.selectedStudentIds.length ? current.selectedStudentIds : students.map(student => student.id) }));
+              }} />
               <MotionCollapse open={options.object === "students"}>
-                <div className="mt-3 rounded-2xl border border-separator-border bg-background-secondary-default p-3">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="relative min-w-0 flex-1">
-                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
-                      <input
-                        value={studentSearch}
-                        onChange={event => setStudentSearch(event.target.value)}
-                        placeholder="搜索学生姓名"
-                        className="h-9 w-full rounded-xl border border-border-button-default bg-background-primary-default pl-8 pr-3 text-body-regular outline-none focus:border-accent-300"
-                      />
-                    </div>
-                    <button onClick={toggleAllStudents} className="h-9 rounded-xl bg-background-primary-default px-3 text-caption-1-regular text-accent-600 hover:bg-accent-50" style={{ fontWeight: 800 }}>
-                      {selectedStudentCount === students.length ? "取消全选" : "全选"}
-                    </button>
+                <div className="mt-3 rounded-[var(--app-radius-md)] border border-separator-border p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Input value={studentSearch} onChange={setStudentSearch} leadingIcon={Search} placeholder="搜索学生姓名" className="min-w-0 flex-1" />
+                    <Button size="sm" variant="quiet" onClick={toggleAllStudents}>{selectedStudentCount === students.length ? "取消全选" : "全选"}</Button>
                   </div>
-                  <div className={`mb-2 text-caption-1-regular ${needsStudentSelection ? "text-status-danger-500" : "text-text-tertiary"}`}>
-                    已选择 {selectedStudentCount} 人
-                    {needsStudentSelection && <span className="ml-2" style={{ fontWeight: 800 }}>请至少勾选 1 名学生</span>}
+                  <div className={`mb-2 text-caption-1-regular ${needsStudentSelection ? "text-status-danger-600" : "text-text-tertiary"}`}>
+                    已选择 {selectedStudentCount} 人{needsStudentSelection && <span className="ml-2 font-semibold">请至少勾选 1 名学生</span>}
                   </div>
-                  <div className="grid max-h-48 grid-cols-2 gap-2 overflow-y-auto">
+                  <div className="grid max-h-48 grid-cols-2 gap-x-3 gap-y-2 overflow-y-auto px-1 py-0.5">
                     {filteredStudents.map(student => (
-                      <label key={student.id} className="flex items-center gap-2 rounded-xl bg-background-primary-default px-3 py-2 text-body-regular text-text-secondary">
-                        <input
-                          type="checkbox"
-                          checked={options.selectedStudentIds.includes(student.id)}
-                          onChange={() => toggleStudent(student.id)}
-                          className="accent-accent-600"
-                        />
-                        <span className="truncate">{student.name}</span>
-                        {student.gender && <span className="ml-auto text-caption-1-regular text-text-tertiary">{student.gender}</span>}
-                      </label>
+                      <Checkbox key={student.id} isSelected={options.selectedStudentIds.includes(student.id)} onChange={() => toggleStudent(student.id)}>
+                        {student.name}{student.gender && <span className="ml-1.5 text-caption-1-regular text-text-tertiary">{student.gender}</span>}
+                      </Checkbox>
                     ))}
                   </div>
                   {!filteredStudents.length && <div className="py-6 text-center text-body-regular text-text-tertiary">没有匹配的学生</div>}
@@ -216,43 +173,27 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
             </section>
 
             <section>
-              <h4 className="mb-2 text-body-regular text-text-primary" style={{ fontWeight: 900 }}>考试范围</h4>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  ["all", "全部考试"],
-                  ["specific", "指定考试"],
-                  ["date", "指定时间段"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    onClick={() => update({ range: value as GradeExportOptions["range"] })}
-                    className={`h-9 rounded-xl border px-3 text-body-regular ${options.range === value ? "border-accent-200 bg-accent-50 text-accent-700" : "border-border-button-default bg-background-primary-default text-text-secondary hover:bg-background-secondary-default"}`}
-                    style={{ fontWeight: 800 }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <h4 className="mb-2 text-body-semibold text-text-primary">考试范围</h4>
+              <SegmentedControl value={options.range} ariaLabel="考试范围" className="flex w-full" options={[{ value: "all", label: "全部考试" }, { value: "specific", label: "指定考试" }, { value: "date", label: "指定时间段" }]} onChange={value => update({ range: value as GradeExportOptions["range"] })} />
 
               <MotionSwitch transitionKey={options.range}>
               {options.range === "specific" && (
-                <div className="mt-3 grid max-h-44 grid-cols-2 gap-2 overflow-y-auto rounded-2xl border border-separator-border bg-background-secondary-default p-3">
+                <div className="mt-3 grid max-h-44 grid-cols-2 gap-x-3 gap-y-2 overflow-y-auto rounded-[var(--app-radius-md)] border border-separator-border p-3">
                   {exams.map(exam => (
-                    <label key={exam.id} className="flex items-center gap-2 rounded-xl bg-background-primary-default px-3 py-2 text-body-regular text-text-secondary">
-                      <input type="checkbox" checked={options.selectedExamIds.includes(exam.id)} onChange={() => toggleExam(exam.id)} className="accent-accent-600" />
+                    <Checkbox key={exam.id} isSelected={options.selectedExamIds.includes(exam.id)} onChange={() => toggleExam(exam.id)}>
                       <span className="truncate">{exam.name} · {exam.date || "未填写日期"}</span>
-                    </label>
+                    </Checkbox>
                   ))}
                 </div>
               )}
 
               {options.range === "date" && (
-                <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-separator-border bg-background-secondary-default p-3">
-                  <label className="flex items-center gap-2 text-body-regular text-text-secondary">
+                <div className="mt-3 grid grid-cols-1 gap-3 rounded-[var(--app-radius-md)] border border-separator-border p-3 sm:grid-cols-2">
+                  <label className="flex flex-col gap-1.5 text-caption-1-medium text-text-secondary">
                     开始日期
                     <DatePicker value={options.startDate} onChange={startDate => update({ startDate })} ariaLabel="导出开始日期" className="w-full" />
                   </label>
-                  <label className="flex items-center gap-2 text-body-regular text-text-secondary">
+                  <label className="flex flex-col gap-1.5 text-caption-1-medium text-text-secondary">
                     结束日期
                     <DatePicker value={options.endDate} onChange={endDate => update({ endDate })} ariaLabel="导出结束日期" className="w-full" min={options.startDate} />
                   </label>
@@ -262,57 +203,31 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
             </section>
 
             <section>
-              <h4 className="mb-2 text-body-regular text-text-primary" style={{ fontWeight: 900 }}>导出内容</h4>
-              <div className="grid grid-cols-2 gap-2">
+              <h4 className="mb-2 text-body-semibold text-text-primary">导出内容</h4>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 rounded-[var(--app-radius-md)] border border-separator-border p-3 sm:grid-cols-3">
                 {CONTENT_OPTIONS.map(item => (
-                  <label key={item.key} className="flex items-center gap-2 rounded-xl border border-separator-border bg-background-secondary-default px-3 py-2 text-body-regular text-text-secondary">
-                    <input type="checkbox" checked={options.contents[item.key]} onChange={event => updateContent(item.key, event.target.checked)} className="accent-accent-600" />
-                    {item.label}
-                  </label>
+                  <Checkbox key={item.key} isSelected={options.contents[item.key]} onChange={checked => updateContent(item.key, checked)}>{item.label}</Checkbox>
                 ))}
               </div>
             </section>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-separator-border bg-background-secondary-default px-5 py-4">
-          {errorMessage && <p className="mr-auto text-caption-1-regular text-status-danger-500">{errorMessage}</p>}
-          <button
-            onClick={handleExport}
-            disabled={exporting || !exams.length || needsStudentSelection}
-            className="flex h-10 items-center gap-2 rounded-xl border border-border-button-default bg-background-primary-default px-4 text-body-regular text-text-primary hover:bg-background-secondary-default disabled:opacity-60"
-            style={{ fontWeight: 800 }}
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            {exporting ? "导出中" : "Excel 工作簿"}
-          </button>
-          <button
-            onClick={handlePrintPreview}
-            disabled={!exams.length || needsStudentSelection}
-            className="flex h-10 items-center gap-2 rounded-xl bg-accent-600 px-4 text-body-regular text-text-white hover:bg-accent-700 disabled:opacity-60"
-            style={{ fontWeight: 800 }}
-          >
-            <Printer className="h-4 w-4" />
-            PDF/打印预览
-          </button>
+        <div className="app-modal-footer flex items-center justify-end gap-2 px-5 py-3.5">
+          {errorMessage && <p role="alert" className="mr-auto text-caption-1-regular text-status-danger-600">{errorMessage}</p>}
+          <Button variant="secondary" onClick={() => void handleExport()} disabled={exporting || !exams.length || needsStudentSelection}>
+            <FileSpreadsheet className="h-4 w-4" />{exporting ? "导出中" : "Excel 工作簿"}
+          </Button>
+          <Button onClick={handlePrintPreview} disabled={!exams.length || needsStudentSelection}>
+            <Printer className="h-4 w-4" />PDF/打印预览
+          </Button>
         </div>
       </div>
 
       {printHtml && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[60] flex items-center justify-center px-4">
-          <div className="modal-panel-enter app-modal-panel flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-b border-separator-border px-5 py-3">
-              <h3 className="text-headline-regular text-text-primary" style={{ fontWeight: 900 }}>PDF/打印预览</h3>
-              <div className="flex items-center gap-2">
-                <button onClick={printPreview} className="flex h-9 items-center gap-2 rounded-xl bg-accent-600 px-4 text-body-regular text-text-white hover:bg-accent-700" style={{ fontWeight: 800 }}>
-                  <Printer className="h-4 w-4" />
-                  打印 / 另存为 PDF
-                </button>
-                <button onClick={() => setPrintHtml("")} className="grid h-9 w-9 place-items-center rounded-xl text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
+          <div ref={previewRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="PDF/打印预览" className="outline-none modal-panel-enter app-modal-panel flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden">
+            <ModalHeader title="PDF/打印预览" closeLabel="关闭打印预览" onClose={() => setPrintHtml("")} actions={<Button size="sm" onClick={printPreview}><Printer className="h-4 w-4" />打印 / 另存为 PDF</Button>} />
             <iframe
               ref={printFrameRef}
               title="成绩打印预览"

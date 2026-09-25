@@ -1,6 +1,6 @@
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useEffect, useState } from "react";
-import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, Pencil, RotateCcw, Sparkles, Table, Trash2, X } from "lucide-react";
+import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, Pencil, RotateCcw, Sparkles, Table, Trash2 } from "lucide-react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 
@@ -23,7 +23,7 @@ import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuest
 import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
+import { AiGenerationPanel, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalHeader, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 import { toLocalDateKey } from "../../state/dateKey";
@@ -550,20 +550,7 @@ export function ScoresWorkspace({
       {mappingModalOpen && manualMapping && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
           <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="score-mapping-panel modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden outline-none">
-            <div className="flex items-start justify-between gap-4 border-b border-separator-border px-5 py-4">
-              <div>
-                <h3 className="text-title-3-semibold text-text-primary">成绩列映射</h3>
-                <p className="mt-1 text-body-regular text-text-secondary">AI 会读取表头和最多 80 行样例，生成后仍可手动调整。</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMappingModalOpen(false)}
-                className="rounded-xl p-2 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-primary"
-                aria-label="关闭"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+            <ModalHeader title="成绩列映射" description="AI 会读取表头和最多 80 行样例，生成后仍可手动调整。" onClose={() => setMappingModalOpen(false)} />
 
             <div className="score-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_25rem] gap-0 overflow-hidden">
               <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">

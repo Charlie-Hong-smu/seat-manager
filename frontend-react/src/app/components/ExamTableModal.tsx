@@ -1,5 +1,6 @@
-import { Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
+import { useId, useMemo, useState } from "react";
+import { Input, ModalHeader, useModalFocus } from "./ui";
 
 import type { GradeExam, GradeRow, GradeScoreCell } from "../state/types";
 
@@ -33,6 +34,8 @@ function ScoreValue({ cell }: { cell: GradeScoreCell }) {
 
 export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
   const [query, setQuery] = useState("");
+  const titleId = useId();
+  const panelRef = useModalFocus(true, onClose);
   const rows = useMemo(() => {
     const keyword = query.trim();
     if (!keyword) {
@@ -43,34 +46,11 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
 
   return (
     <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-6">
-      <div className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden">
-        <div className="shrink-0 px-6 py-4 border-b border-separator-border flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-caption-1-regular text-text-tertiary mb-1">考试表格</div>
-            <h2 className="truncate text-title-2-semibold text-text-primary">{exam.name}</h2>
-            <div className="mt-1 text-caption-1-regular text-text-tertiary">
-              {exam.date || "未填写日期"} · {exam.rows.length} 名学生 · {exam.subjects.length} 个科目
-            </div>
-          </div>
-          <button onClick={onClose} className="shrink-0 p-2 rounded-full hover:bg-background-tertiary-default text-text-tertiary transition-colors" aria-label="关闭考试表格">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="shrink-0 px-6 py-3 border-b border-separator-border flex items-center justify-between gap-3">
-          <div className="text-caption-1-regular text-text-tertiary">
-            每个科目包含成绩、班排、校排；同时存在赋分与原始分时，主值显示赋分。
-          </div>
-          <div className="relative w-64">
-            <Search className="w-3.5 h-3.5 text-text-tertiary absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              className="w-full h-9 pl-8 pr-3 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
-              placeholder="搜索学生姓名"
-            />
-          </div>
-        </div>
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden outline-none">
+        <ModalHeader eyebrow="考试表格" title={exam.name} titleId={titleId}
+          description={`${exam.date || "未填写日期"} · ${exam.rows.length} 名学生 · ${exam.subjects.length} 个科目 · 同时存在赋分与原始分时，主值显示赋分`}
+          closeLabel="关闭考试表格" onClose={onClose}
+          actions={<Input value={query} onChange={setQuery} leadingIcon={Search} placeholder="搜索学生姓名" aria-label="搜索学生姓名" className="mr-1 w-56" />} />
 
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="min-w-full text-body-regular">
@@ -110,7 +90,7 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
               {rows.map((row, index) => (
                 <tr key={row.id} className="odd:bg-background-primary-default even:bg-background-secondary-default/35 hover:bg-accent-50/40 transition-colors">
                   <td className="px-4 py-3 text-text-tertiary">{index + 1}</td>
-                  <td className="px-4 py-3 text-text-primary whitespace-nowrap" style={{ fontWeight: 700 }}>{row.name}</td>
+                  <td className="whitespace-nowrap px-4 py-3 font-semibold text-text-primary">{row.name}</td>
                   {exam.subjects.map(subject => {
                     const cell = getCell(row, subject);
                     return (

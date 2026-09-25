@@ -168,6 +168,10 @@ export function useModalFocus(open: boolean, onEscape: () => void) {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented) return;
       if (event.key === "Escape") {
+        // Only the top-most open dialog answers Escape; stacked dialogs close one layer at a time.
+        const openOverlays = [...document.querySelectorAll(".app-modal-overlay")].filter(overlay => !overlay.closest(".dialog-presence[data-phase='closing']"));
+        const top = openOverlays[openOverlays.length - 1];
+        if (panel && top && !top.contains(panel)) return;
         event.preventDefault();
         escapeRef.current();
         return;
@@ -210,6 +214,55 @@ export function DialogPresence({ open, children }: { open: boolean; children: Re
   return typeof document === "undefined" ? content : createPortal(content, document.body);
 }
 
+/**
+ * 弹窗统一头部：浅色身份区，承载可选图标、眉题、标题、说明、操作与关闭。
+ * 页签等附属导航作为 children 放在同一区域底部，避免头部与页签之间再切一刀。
+ */
+export function ModalHeader({ title, titleId, eyebrow, description, descriptionId, icon, actions, onClose, closeLabel = "关闭", children, className = "" }: {
+  title: ReactNode;
+  titleId?: string;
+  eyebrow?: ReactNode;
+  description?: ReactNode;
+  descriptionId?: string;
+  icon?: ReactNode;
+  actions?: ReactNode;
+  onClose?: () => void;
+  closeLabel?: string;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return <header className={cx("app-modal-header", className)}>
+    <div className="flex items-start gap-3">
+      {icon && <span aria-hidden className="app-modal-header__icon">{icon}</span>}
+      <div className="min-w-0 flex-1 self-center">
+        {eyebrow && <div className="mb-0.5 text-caption-1-medium text-text-tertiary">{eyebrow}</div>}
+        <h2 id={titleId} className="truncate text-title-3-semibold text-text-primary">{title}</h2>
+        {description && <p id={descriptionId} className="mt-0.5 text-caption-1-regular leading-5 text-text-secondary">{description}</p>}
+      </div>
+      {(actions || onClose) && <div className="flex shrink-0 items-center gap-1">{actions}{onClose && <IconButton label={closeLabel} size="sm" variant="quiet" onClick={onClose}><X className="h-4 w-4" /></IconButton>}</div>}
+    </div>
+    {children}
+  </header>;
+}
+
+/** 弹窗与面板内的分组：单层边框、无灰色标题条，标题行可带说明与右侧操作。 */
+export function PanelSection({ title, meta, action, children, className = "", bodyClassName = "" }: {
+  title: ReactNode;
+  meta?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
+}) {
+  return <section className={cx("panel-section", className)}>
+    <div className="panel-section__head">
+      <div className="min-w-0"><h3 className="text-body-semibold text-text-primary">{title}</h3>{meta && <p className="mt-0.5 text-caption-1-regular text-text-tertiary">{meta}</p>}</div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+    <div className={cx("panel-section__body", bodyClassName)}>{children}</div>
+  </section>;
+}
+
 export function ModalShell({ open, title, description, children, footer, onClose, className = "max-w-lg" }: {
   open: boolean;
   title: string;
@@ -224,7 +277,7 @@ export function ModalShell({ open, title, description, children, footer, onClose
   const panelRef = useModalFocus(open, onClose);
   return createPortal(<DialogPresence open={open}><div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[90] grid place-items-center p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className={`modal-panel-enter app-modal-panel app-modal-shell flex max-h-[calc(100dvh-32px)] w-full flex-col overflow-hidden outline-none ${className}`}>
-      <header className="shrink-0 flex items-start justify-between gap-4 border-b border-[var(--app-border)] p-5"><div><h2 id={titleId} className="text-title-3-semibold text-[var(--app-text)]">{title}</h2>{description && <p id={descriptionId} className="mt-1 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>}</div><IconButton label="关闭" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton></header>
+      <ModalHeader title={title} titleId={titleId} description={description} descriptionId={descriptionId} onClose={onClose} />
       <div className="min-h-0 max-h-[70dvh] overflow-y-auto p-5">{children}</div>
       {footer && <footer className="app-modal-footer shrink-0 flex flex-wrap justify-end gap-2 px-5 py-3.5">{footer}</footer>}
     </div>

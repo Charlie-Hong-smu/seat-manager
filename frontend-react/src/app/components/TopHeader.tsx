@@ -226,7 +226,7 @@ export function TopHeader({
                 className="h-14 min-w-0 flex-1 bg-transparent text-headline-regular text-text-primary outline-none placeholder:text-text-tertiary"
                 placeholder="输入学生姓名或别名"
               />
-              <button type="button" onClick={closeSearch} className="rounded-lg px-2 py-1 text-caption-1-regular text-text-tertiary hover:bg-background-tertiary-default">ESC</button>
+              <button type="button" onClick={closeSearch} aria-label="关闭搜索" className="shrink-0 rounded-md border border-separator-border bg-background-secondary-default px-1.5 py-0.5 text-[11px] font-medium tracking-wide text-text-tertiary transition-colors hover:text-text-secondary">ESC</button>
             </div>
             <div id="global-student-search-results" role="listbox" aria-label="学生搜索结果" className="max-h-80 overflow-y-auto p-2">
               {results.map((student, index) => (
@@ -240,7 +240,7 @@ export function TopHeader({
                   onMouseEnter={() => setActiveIndex(index)}
                   className={`flex w-full items-center gap-3 rounded-[var(--app-radius-sm)] px-3 py-2.5 text-left transition-colors hover:bg-accent-50 focus-visible:bg-accent-50 focus-visible:outline-none ${index === activeIndex ? "bg-accent-50" : ""}`}
                 >
-                  <span className="grid h-9 w-9 place-items-center rounded-full bg-accent-50 text-body-semibold text-accent-600">{student.name.slice(0, 1)}</span>
+                  <span className="student-detail-avatar" style={{ width: 34, height: 34, fontSize: 13 }} aria-hidden="true">{student.name.slice(0, 1)}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-body-semibold text-text-primary">{student.name}</span>
                     <span className="block truncate text-caption-1-regular text-text-tertiary">{student.aliases.length ? student.aliases.join(" · ") : student.gender || "未填写别名"}</span>

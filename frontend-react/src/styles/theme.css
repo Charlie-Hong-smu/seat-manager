@@ -2729,8 +2729,9 @@
  --app-radius-lg: 24px;
  --app-shadow-card: var(--shadow-card);
  --app-shadow-float: var(--shadow-dropdown);
- --app-shadow-modal: 0 4px 12px -4px rgb(24 32 48 / 0.08), 0 24px 64px -20px rgb(24 32 48 / 0.22);
- --app-overlay: rgb(24 32 48 / 0.16);
+ --app-shadow-modal: 0 0 0 1px rgb(16 24 40 / 0.04), 0 1px 2px rgb(16 24 40 / 0.04), 0 10px 20px -6px rgb(16 24 40 / 0.08), 0 32px 64px -16px rgb(16 24 40 / 0.22);
+ --app-overlay: rgb(16 24 40 / 0.24);
+ --app-modal-radius: 20px;
  --app-modal-enter: 320ms;
  --app-modal-exit: 240ms;
  --app-motion-enter: 240ms;
@@ -2857,8 +2858,8 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
 .app-popover-motion[data-phase="open"] { filter: blur(0); }
 .app-popover-motion[data-phase="closing"] { filter: none; }
 @keyframes modal-panel-enter {
- from { opacity: 0; transform: translateY(6px); }
- to { opacity: 1; transform: translateY(0); }
+ from { opacity: 0; transform: translateY(10px) scale(0.985); }
+ to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .modal-panel-enter { animation-duration: var(--app-modal-enter); animation-timing-function: var(--app-motion-ease); }
 @media (prefers-reduced-motion: reduce) {
@@ -2906,7 +2907,7 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
 .dialog-presence[data-phase="closing"] { pointer-events: none; }
 @keyframes modal-panel-exit {
   from { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  to { opacity: 0; transform: translateY(6px); }
+  to { opacity: 0; transform: translateY(6px) scale(0.99); }
 }
 @keyframes soft-backdrop-exit {
   from { opacity: 1; }
@@ -2934,19 +2935,70 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
   z-index: -1;
   pointer-events: none;
   background: var(--app-overlay);
-  -webkit-backdrop-filter: blur(1px);
-  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(2px) saturate(0.9);
+  backdrop-filter: blur(2px) saturate(0.9);
   animation: soft-backdrop-enter var(--app-modal-enter) var(--app-motion-ease) both;
 }
 .dialog-presence[data-phase="closing"] .app-modal-overlay::before {
   animation: soft-backdrop-exit var(--app-modal-exit) var(--app-motion-ease) both;
 }
+/* One modal material: hairline edge, layered shadow and a faint top highlight, so the surface
+   reads as lifted paper rather than a flat white slab. */
 .app-modal-panel {
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
+  border: 0;
+  border-radius: var(--app-modal-radius);
   background: var(--app-surface);
-  box-shadow: var(--app-shadow-modal);
+  box-shadow: var(--app-shadow-modal), inset 0 1px 0 rgb(255 255 255 / 0.7);
 }
+/* Identity zone: title, context and (optionally) tabs share one lightly tinted band. */
+.app-modal-header {
+  flex-shrink: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-surface-muted) 55%, var(--app-surface));
+}
+.app-modal-header:has(> [role="tablist"], > .student-detail-tabs) { padding-bottom: 0; }
+.app-modal-header__icon {
+  display: grid; width: 2.25rem; height: 2.25rem; flex-shrink: 0; place-items: center;
+  border: 1px solid var(--app-border); border-radius: var(--app-radius-sm);
+  background: var(--app-surface); color: var(--app-text-muted);
+}
+/* Grouped content inside modals and panels: one border, no grey title strip. */
+.panel-section {
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+}
+.panel-section__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 0; }
+.panel-section__body { padding: 12px 16px 16px; }
+.student-detail-header { padding-inline: 20px; }
+.student-detail-avatar {
+  display: grid; width: 2.5rem; height: 2.5rem; flex-shrink: 0; place-items: center; border-radius: 999px;
+  background: var(--app-surface); box-shadow: inset 0 0 0 1px var(--app-border);
+  color: var(--app-text); font-size: 15px; font-weight: 600;
+}
+.student-detail-avatar[data-gender="男"] { background: color-mix(in srgb, var(--color-accent-100) 55%, var(--app-surface)); color: var(--color-accent-700); box-shadow: none; }
+.student-detail-avatar[data-gender="女"] { background: color-mix(in srgb, var(--color-status-pink-100) 60%, var(--app-surface)); color: var(--color-status-pink-600, var(--color-pink-600)); box-shadow: none; }
+/* Tonal record actions: reward/discipline stay recognisable without two saturated blocks. */
+.record-action[data-tone="reward"] { border-color: var(--color-status-success-200); background: var(--color-status-success-50); color: var(--color-status-success-700); }
+.record-action[data-tone="reward"]:hover { background: var(--color-status-success-100); border-color: var(--color-status-success-300); }
+.record-action[data-tone="punish"] { border-color: var(--color-status-danger-200); background: var(--color-status-danger-50); color: var(--color-status-danger-600); }
+.record-action[data-tone="punish"]:hover { background: var(--color-status-danger-100); border-color: var(--color-status-danger-300); }
+.record-row {
+  display: flex; align-items: center; gap: 10px; min-height: 2.75rem; padding: 6px 8px 6px 10px;
+  border-radius: var(--app-radius-sm); transition: background-color 150ms ease;
+}
+.record-row:hover { background: var(--color-background-secondary-default); }
+.record-row__type {
+  display: inline-grid; min-width: 2.25rem; height: 1.5rem; padding: 0 6px; place-items: center; border-radius: 999px;
+  background: var(--color-background-tertiary-default); color: var(--app-text-muted); font-size: 12px; font-weight: 600;
+}
+.record-row[data-type="reward"] .record-row__type { background: var(--color-status-success-50); color: var(--color-status-success-700); }
+.record-row[data-type="punish"] .record-row__type { background: var(--color-status-danger-50); color: var(--color-status-danger-600); }
+.record-row__delete { opacity: 0; transition: opacity 150ms ease; }
+.record-row:hover .record-row__delete, .record-row__delete:focus-visible { opacity: 1; }
+@media (hover: none) { .record-row__delete { opacity: 1; } }
+.panel-stat { border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); padding: 10px 12px; background: var(--app-surface); }
 .app-modal-footer {
   border-top: 1px solid var(--app-border);
   background: var(--app-surface-muted);

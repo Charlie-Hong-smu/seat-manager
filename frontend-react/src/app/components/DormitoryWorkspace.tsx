@@ -34,7 +34,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { MobilePaneTabs, MotionCollapse, MotionSwitch, ConfirmDialog, DatePicker, DialogPresence, IconButton, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { Button, Input, ModalHeader, MobilePaneTabs, MotionCollapse, MotionSwitch, ConfirmDialog, DatePicker, DialogPresence, IconButton, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-status-success-600" : value < 0 ? "text-status-danger-500" : "text-text-secondary";
@@ -972,29 +972,13 @@ export function DormitoryWorkspace({
           }}
         >
           <div ref={presetManagerRef} tabIndex={-1} className="modal-panel-enter app-modal-panel flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden outline-none">
-            <div className="flex items-start justify-between border-b border-separator-border px-5 py-4">
-              <div>
-                <h3 className="text-headline-semibold text-text-primary">管理事件类型</h3>
-                <p className="mt-1 text-caption-1-regular text-text-tertiary">在这里统一改名、设置默认分数或删除，避免在记录时误触。</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setPresetManagerOpen(false);
-                  setPendingDeletePreset("");
-                }}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-text-tertiary transition-colors hover:bg-background-tertiary-default hover:text-text-primary"
-                aria-label="关闭管理事件类型窗口"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            <ModalHeader title="管理事件类型" description="统一改名、设置默认分数或删除，避免在记录时误触。" closeLabel="关闭管理事件类型窗口" onClose={() => { setPresetManagerOpen(false); setPendingDeletePreset(""); }} />
 
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-background-secondary-default/60 p-4">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
               {presetDrafts.map((preset, index) => {
                 const deletePending = pendingDeletePreset === preset.originalLabel;
                 return (
-                  <div key={`${preset.originalLabel}-${index}`} className="overflow-hidden rounded-xl border border-border-button-default bg-background-primary-default shadow-sm">
+                  <div key={`${preset.originalLabel}-${index}`} className="overflow-hidden rounded-[var(--app-radius-sm)] border border-separator-border bg-background-primary-default">
                     <div className="flex items-center gap-2 p-3">
                       <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-caption-1-semibold ${preset.score > 0 ? "bg-status-success-50 text-status-success-600" : preset.score < 0 ? "bg-status-warning-50 text-status-warning-600" : "bg-background-tertiary-default text-text-secondary"}`}>
                         {preset.score > 0 ? `+${preset.score}` : preset.score}
@@ -1029,40 +1013,19 @@ export function DormitoryWorkspace({
                 );
               })}
               {presetDrafts.length === 0 && (
-                <div className="rounded-xl border border-dashed border-border-button-default bg-background-primary-default px-4 py-6 text-center text-caption-1-regular text-text-tertiary">暂无事件类型，可在下方新增</div>
+                <div className="rounded-[var(--app-radius-sm)] border border-dashed border-border-button-default px-4 py-6 text-center text-caption-1-regular text-text-tertiary">暂无事件类型，可在下方新增</div>
               )}
             </div>
 
-            <div className="border-t border-separator-border bg-background-primary-default p-4">
-              <div className="mb-3 flex gap-2">
-                <input
-                  value={customLabel}
-                  onChange={event => setCustomLabel(event.target.value)}
-                  onKeyDown={event => { if (event.key === "Enter") addCustomPresetDraft(); }}
-                  className="min-w-0 flex-1 rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2 text-body-regular outline-none transition-colors focus:border-accent-300 focus:bg-background-primary-default"
-                  placeholder="新增事件类型名称"
-                />
-                <button
-                  type="button"
-                  onClick={addCustomPresetDraft}
-                  disabled={!customLabel.trim() || presetDrafts.some(preset => preset.label.trim() === customLabel.trim())}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-accent-200 bg-accent-50 px-3 text-body-semibold text-accent-600 hover:bg-accent-100 disabled:border-border-button-default disabled:bg-background-secondary-default disabled:text-text-tertiary"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  新增
-                </button>
-              </div>
+            <div className="shrink-0 border-t border-separator-border px-4 py-3">
               <div className="flex gap-2">
-                <button type="button" onClick={() => setPresetManagerOpen(false)} className="flex-1 rounded-xl border border-border-button-default bg-background-primary-default py-2.5 text-body-semibold text-text-secondary hover:bg-background-secondary-default">取消</button>
-                <button
-                  type="button"
-                  onClick={savePresetManager}
-                  disabled={presetDrafts.some((preset, index, list) => !preset.label.trim() || list.findIndex(item => item.label.trim() === preset.label.trim()) !== index)}
-                  className="flex-[2] rounded-xl bg-accent-600 py-2.5 text-body-semibold text-text-white hover:bg-accent-700 disabled:bg-background-tertiary-hover disabled:text-text-tertiary"
-                >
-                  保存类型设置
-                </button>
+                <Input value={customLabel} onChange={setCustomLabel} onKeyDown={event => { if (event.key === "Enter") addCustomPresetDraft(); }} placeholder="新增事件类型名称" className="min-w-0 flex-1" />
+                <Button variant="secondary" onClick={addCustomPresetDraft} disabled={!customLabel.trim() || presetDrafts.some(preset => preset.label.trim() === customLabel.trim())}><Plus className="h-3.5 w-3.5" />新增</Button>
               </div>
+            </div>
+            <div className="app-modal-footer flex shrink-0 justify-end gap-2 px-4 py-3">
+              <Button variant="ghost" onClick={() => setPresetManagerOpen(false)}>取消</Button>
+              <Button onClick={savePresetManager} disabled={presetDrafts.some((preset, index, list) => !preset.label.trim() || list.findIndex(item => item.label.trim() === preset.label.trim()) !== index)}>保存类型设置</Button>
             </div>
           </div>
         </div>

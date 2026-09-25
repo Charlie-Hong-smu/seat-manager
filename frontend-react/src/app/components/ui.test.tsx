@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalShell, NumberStepper, SegmentedControl, ToolDrawer, ToolPopover, useAppDialog } from "./ui";
+import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalHeader, ModalShell, NumberStepper, PanelSection, SegmentedControl, ToolDrawer, ToolPopover, useAppDialog } from "./ui";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -280,5 +280,32 @@ describe("ToolDrawer docking", () => {
     expect(document.querySelector(".tool-drawer-backdrop")).not.toBeNull();
     overlay.remove();
     rects.mockRestore();
+  });
+});
+
+
+describe("ModalHeader", () => {
+  it("links the title, runs the quiet close button and keeps actions in the identity band", () => {
+    const onClose = vi.fn();
+    render(<ModalHeader eyebrow="考试表格" title="期中考试" titleId="mh-title" description="60 名学生" actions={<button type="button">自定义操作</button>} closeLabel="关闭考试表格" onClose={onClose} />);
+
+    expect(screen.getByText("期中考试").id).toBe("mh-title");
+    expect(screen.getByText("考试表格")).toBeTruthy();
+    expect(screen.getByText("自定义操作")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "关闭考试表格" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("PanelSection", () => {
+  it("renders a single bordered group with title, meta and action in one head row", () => {
+    render(<PanelSection title="记录" meta="3 条" action={<button type="button">切换周</button>}><p>正文</p></PanelSection>);
+
+    const section = document.querySelector(".panel-section");
+    expect(section).not.toBeNull();
+    expect(screen.getByText("记录")).toBeTruthy();
+    expect(screen.getByText("3 条")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "切换周" })).toBeTruthy();
+    expect(screen.getByText("正文")).toBeTruthy();
   });
 });

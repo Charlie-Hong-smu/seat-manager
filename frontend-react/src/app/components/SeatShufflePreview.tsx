@@ -1,6 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 
 import {
   getChangedSeatIndices,
@@ -12,7 +12,7 @@ import {
 } from "../state/seatPlanner";
 import { resolveSeatLayout } from "../state/seatLayout";
 import type { AppStudent, SeatSettings, StudentId } from "../state/types";
-import { useModalFocus } from "./ui";
+import { ModalHeader, useModalFocus } from "./ui";
 
 const COLS = 8;
 
@@ -370,16 +370,7 @@ export function SeatShufflePreview({ inline = false, students, currentOrder, can
   return (
     <div className={inline ? "flex h-full min-h-0 flex-col" : "soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"}>
       <div ref={modalRef} tabIndex={-1} role={inline ? undefined : "dialog"} aria-modal={inline ? undefined : true} aria-label={inline ? undefined : "随机排座预览"} className={inline ? "flex h-full min-h-0 w-full flex-col overflow-hidden outline-none" : "modal-panel-enter app-modal-panel flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden outline-none"}>
-        {!inline && <div className="flex items-start justify-between px-6 py-5 border-b border-separator-border">
-          <div>
-            <div className="text-caption-1-regular text-accent-500 mb-1" style={{ fontWeight: 800 }}>座位调整</div>
-            <h3 className="text-text-primary" style={{ fontSize: "1.25rem", fontWeight: 800 }}>随机排座预览</h3>
-            <p className="text-body-regular text-text-tertiary mt-1">可拖动交换座位，采用前不会影响当前座位。</p>
-          </div>
-          <button onClick={onClose} className="p-2 text-text-tertiary hover:text-text-secondary hover:bg-background-tertiary-default rounded-xl transition-colors" aria-label="关闭预览">
-            <X className="w-5 h-5" />
-          </button>
-        </div>}
+        {!inline && <ModalHeader eyebrow="座位调整" title="随机排座预览" description="可拖动交换座位，采用前不会影响当前座位。" closeLabel="关闭预览" onClose={onClose} />}
 
         <div className={inline ? "h-full min-h-0 overflow-y-auto bg-background-primary-default p-4" : "grid grid-cols-[1fr_19rem] gap-4 overflow-auto bg-background-secondary-default p-5"}>
           {!inline && <div ref={boardRef} className={`min-h-0 min-w-0 overflow-auto rounded-[var(--app-radius-md)] border border-separator-border bg-background-primary-default ${inline ? "p-2" : "p-4"} ${dragVisual ? "select-none" : ""}`}>

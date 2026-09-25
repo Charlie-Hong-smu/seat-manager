@@ -5,7 +5,7 @@ import { StudentDutiesSection } from "./StudentDutiesSection";
 import type { ClassDutiesBinding } from "../state/classDuties";
 import { followupHasStudent } from "../state/followupStudents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { X, Trash2, Plus, MoreHorizontal, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { X, Trash2, Plus, MoreHorizontal, ClipboardList, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
 import { RetryableLazy } from "./RetryableLazy";
 import { type NewDormEventInput } from "../state/dormitoryActions";
@@ -20,11 +20,10 @@ import { getNeighborIndexPairs, getSeatPositionLabel, resolveSeatLayout } from "
 import { todayKey, upsertAttendance } from "../state/dailyManagement";
 import { normalizeAttendancePatch } from "../state/classManagementCommands";
 import { createActivityEvent } from "../state/activityEvents";
-import { matchesStudentSearch } from "../state/studentSearch";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
-import { ActionMenu, MotionSwitch, MotionCollapse, AiGenerationPanel, Button, ConfirmDialog, DialogPresence, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { ActionMenu, Input, ModalShell, MotionList, PanelSection, MotionSwitch, MotionCollapse, AiGenerationPanel, Button, ConfirmDialog, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
-import { StudentPicker } from "./StudentPicker";
+import { StudentMultiPicker, StudentPicker } from "./StudentPicker";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
 import { StudentActivityTimeline, StudentAttentionSummary, type ContextPreviewRequest } from "./StudentAttentionSummary";
 import {
@@ -162,7 +161,6 @@ export function StudentModal({
     }))
   );
   const [selectedWeek, setSelectedWeek] = useState(() => toLocalDateKey(getWeekStart(new Date())));
-  const [syncSearch, setSyncSearch] = useState("");
   const [syncSelected, setSyncSelected] = useState<Set<StudentId>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingRecordDelete, setPendingRecordDelete] = useState<StudentModalRecord | null>(null);
@@ -197,7 +195,6 @@ export function StudentModal({
     setIsBoardingInput(student.isBoarding === true);
     setSelectedBehaviorTags(new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id))));
     setNoteInput("");
-    setSyncSearch("");
     setSyncSelected(new Set());
     setShowDeleteConfirm(false);
     setPendingRecordDelete(null);
@@ -346,6 +343,7 @@ export function StudentModal({
   const weekOptions = useMemo(() => buildWeekOptions(localRecords), [localRecords]);
   const activeWeek = weekOptions.find(week => week.key === selectedWeek) || weekOptions[0];
   const filteredRecords = activeWeek ? localRecords.filter(record => isRecordInWeek(record, activeWeek)) : localRecords;
+  const weekIndex = activeWeek ? weekOptions.indexOf(activeWeek) : 0;
 
   useEffect(() => {
     if (weekOptions.length > 0 && !weekOptions.some(week => week.key === selectedWeek)) {
@@ -469,15 +467,8 @@ export function StudentModal({
     setProfileStatus("AI 跟进素材已加入评语补充说明。");
   }
 
-  const syncCandidates = students.filter(s => s.id !== student.id && matchesStudentSearch(s, syncSearch));
+  const syncCandidates = students.filter(item => item.id !== student.id);
 
-  function toggleSync(id: StudentId) {
-    setSyncSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
 
   const recordTypeStyle: Record<RecordType, { bg: string; text: string; label: string }> = {
     reward: { bg: "bg-status-success-50 border-status-success-100", text: "text-status-success-700", label: "奖" },
@@ -496,6 +487,17 @@ export function StudentModal({
   const nearbyNames = nearbyIndexes
     .map(index => studentById.get(seatOrder[index] || "")?.name || "")
     .filter(Boolean);
+
+  const currentWeek = weekOptions.find(week => week.key === toLocalDateKey(getWeekStart(new Date())));
+  const weekRecords = currentWeek ? localRecords.filter(record => isRecordInWeek(record, currentWeek)) : [];
+  const weekRewards = weekRecords.filter(record => record.type === "reward").length;
+  const weekPunishments = weekRecords.filter(record => record.type === "punish").length;
+  const studentMeta = [
+    navPosition ? `${navPosition.index + 1} / ${navPosition.total}` : "",
+    seatIndex >= 0 ? `座位 ${getSeatPositionLabel(resolvedLayout, seatIndex)}` : "未入座",
+    currentDormitory?.name || "",
+    weekRewards || weekPunishments ? `本周 奖 ${weekRewards} · 罚 ${weekPunishments}` : "本周暂无奖罚",
+  ].filter(Boolean).join(" · ");
 
   async function handleGenerateAiTrend() {
     setAiTrendBusy(true);
@@ -539,33 +541,33 @@ export function StudentModal({
   return (
     <div className={`soft-backdrop-enter app-modal-overlay fixed inset-0 ${layerClassName} flex items-center justify-center p-4`}>
       <div ref={modalPanelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${student.name}学生详情`} className="student-detail-panel modal-panel-enter app-modal-panel flex max-h-[min(48rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden outline-none">
-        {/* Header */}
-        <div className="shrink-0 border-b border-separator-border p-5 pb-4">
-          <div className="relative flex min-h-10 items-center justify-between">
-            {onNavigate && <IconButton label="上一位学生" size="sm" onClick={() => navigateStudent(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
-            {!onNavigate && <span className="h-8 w-8" aria-hidden="true" />}
-            <div className="pointer-events-none absolute left-1/2 top-1/2 w-[min(18rem,calc(100%_-_11rem))] -translate-x-1/2 -translate-y-1/2 text-center">
-              <MotionSwitch transitionKey={student.id} direction={tabDirection}>
-                <div className="mb-0.5 text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
-                {onSelectStudent
-                  ? <div className="pointer-events-auto flex justify-center" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`}><StudentPicker variant="title" students={students} value={student.id} onChange={selectStudent} label={`切换学生，当前 ${student.name}`} /></div>
-                  : <h3 className="truncate text-title-3-semibold text-text-primary" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`}>{student.name}</h3>}
-              </MotionSwitch>
-            </div>
-            <div className="ml-auto flex items-center gap-1">
-              {onNavigate && <IconButton label="下一位学生" size="sm" onClick={() => navigateStudent(1)}><ChevronRight className="h-4 w-4" /></IconButton>}
+        <header className="app-modal-header student-detail-header">
+          <div className="flex items-center gap-3">
+            <MotionSwitch transitionKey={student.id} direction={tabDirection} className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-3">
+                <span aria-hidden="true" className="student-detail-avatar" data-gender={student.gender || "unknown"}>{Array.from(student.name.trim())[0] || "?"}</span>
+                <div className="min-w-0">
+                  {onSelectStudent
+                    ? <div className="-ml-2 flex min-w-0"><StudentPicker variant="title" students={students} value={student.id} onChange={selectStudent} label={`切换学生，当前 ${student.name}`} /></div>
+                    : <h3 className="truncate text-title-3-semibold text-text-primary">{student.name}</h3>}
+                  <p className="truncate text-caption-1-regular text-text-tertiary">{studentMeta}</p>
+                </div>
+              </div>
+            </MotionSwitch>
+            <div className="flex shrink-0 items-center gap-0.5">
+              {onNavigate && <IconButton label="上一位学生" size="sm" variant="quiet" onClick={() => navigateStudent(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
+              {onNavigate && <IconButton label="下一位学生" size="sm" variant="quiet" onClick={() => navigateStudent(1)}><ChevronRight className="h-4 w-4" /></IconButton>}
               <ActionMenu label="更多学生操作" iconOnly icon={<MoreHorizontal className="h-4 w-4" />} items={[
                 { key: "archive", label: "移出当前班级", tone: "danger", icon: <Trash2 className="h-4 w-4" />, onSelect: () => setShowDeleteConfirm(true) },
               ]} />
-              <IconButton label="关闭学生详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
+              <IconButton label="关闭学生详情" size="sm" variant="quiet" onClick={onClose}><X className="h-4 w-4" /></IconButton>
             </div>
           </div>
-        </div>
-
-        <div className="student-detail-tabs relative shrink-0 border-b border-separator-border pr-28">
-          <UnderlineTabs value={activeTab} options={STUDENT_DETAIL_TABS} onChange={changeActiveTab} ariaLabel="学生详情" className="border-b-0 px-6 pt-3" />
-          {activeTab === "profile" && <div className="absolute bottom-2 right-6"><MotionSwitch transitionKey={profileEditing ? "edit" : "view"} className="student-profile-actions">{profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存</Button></div> : <Button size="sm" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}</MotionSwitch></div>}
-        </div>
+          <div className="student-detail-tabs relative -mx-5 mt-2 pr-28">
+            <UnderlineTabs value={activeTab} options={STUDENT_DETAIL_TABS} onChange={changeActiveTab} ariaLabel="学生详情" className="border-b-0 px-3" />
+            {activeTab === "profile" && <div className="absolute bottom-1.5 right-5"><MotionSwitch transitionKey={profileEditing ? "edit" : "view"} className="student-profile-actions">{profileEditing ? <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={cancelProfileEditing}>取消</Button><Button size="sm" onClick={saveProfile} disabled={!profileDirty}><Save className="h-3.5 w-3.5" />保存</Button></div> : <Button size="sm" variant="secondary" onClick={() => { setProfileEditing(true); setProfileStatus("已进入编辑模式，修改后请保存。"); }}><Pencil className="h-3.5 w-3.5" />编辑资料</Button>}</MotionSwitch></div>}
+          </div>
+        </header>
 
         <MotionSwitch scrollable transitionKey={`${student.id}-${activeTab}`} contentClassName="space-y-5 p-6">
           {activeTab === "profile" && (
@@ -670,83 +672,44 @@ export function StudentModal({
 
           {activeTab === "records" && (
           <div className="space-y-5">
-          {/* Record Actions */}
-          <div className="flex items-center gap-2">
-            <input
-              value={noteInput}
-              onChange={e => setNoteInput(e.target.value)}
-              placeholder="备注（可选）"
-              maxLength={40}
-              className="flex-1 min-w-0 px-3.5 py-2.5 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300"
-            />
-            <button onClick={() => addRecord("reward")} className="shrink-0 flex items-center gap-1 px-3.5 py-2.5 bg-status-success-500 hover:bg-status-success-600 text-text-white rounded-xl text-body-regular transition-colors" style={{ fontWeight: 600 }}>
-              <Plus className="w-3.5 h-3.5" />奖
-            </button>
-            <button onClick={() => addRecord("punish")} className="shrink-0 flex items-center gap-1 px-3.5 py-2.5 bg-status-danger-500 hover:bg-status-danger-600 text-text-white rounded-xl text-body-regular transition-colors" style={{ fontWeight: 600 }}>
-              <Plus className="w-3.5 h-3.5" />罚
-            </button>
-            <button onClick={() => addRecord("note")} className="shrink-0 px-3.5 py-2.5 text-body-regular text-text-secondary border border-border-button-default hover:bg-background-tertiary-default rounded-xl transition-colors" style={{ fontWeight: 600 }}>
-              + 备注
-            </button>
-          </div>
-
-          {/* Sync to other students */}
-          <div className="border border-separator-border rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-background-secondary-default border-b border-separator-border">
-              <span className="text-body-regular text-text-secondary" style={{ fontWeight: 600 }}>同步到其他学生（可选）</span>
-              <div className="flex gap-2">
-                <button onClick={() => setSyncSelected(new Set(students.filter(s => s.id !== student.id).map(s => s.id)))} className="text-caption-1-regular text-accent-600 hover:underline">全选</button>
-                <button onClick={() => setSyncSelected(new Set())} className="text-caption-1-regular text-text-tertiary hover:underline">清空</button>
-              </div>
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Input value={noteInput} onChange={setNoteInput} placeholder="备注（可选）" maxLength={40} className="min-w-0 flex-1" />
+              <Button variant="secondary" onClick={() => void addRecord("reward")} className="record-action" data-tone="reward"><Plus className="h-3.5 w-3.5" />奖</Button>
+              <Button variant="secondary" onClick={() => void addRecord("punish")} className="record-action" data-tone="punish"><Plus className="h-3.5 w-3.5" />罚</Button>
+              <Button variant="secondary" onClick={() => void addRecord("note")}><Plus className="h-3.5 w-3.5" />备注</Button>
             </div>
-            <div className="px-3 pt-2 pb-1">
-              <input
-                value={syncSearch}
-                onChange={e => setSyncSearch(e.target.value)}
-                placeholder="搜索姓名"
-                className="w-full px-3 py-2 text-body-regular bg-background-secondary-default border border-border-button-default rounded-xl outline-none focus:border-accent-300 mb-2"
-              />
-              <div className="max-h-32 overflow-y-auto space-y-0.5 pb-2">
-                {syncCandidates.slice(0, 12).map(s => (
-                  <label key={s.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-background-secondary-default cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={syncSelected.has(s.id)}
-                      onChange={() => toggleSync(s.id)}
-                      className="w-4 h-4 accent-accent-600 rounded"
-                    />
-                    <span className="text-body-regular text-text-primary">{s.name}</span>
-                  </label>
-                ))}
-              </div>
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1"><StudentMultiPicker students={syncCandidates} values={[...syncSelected]} onChange={ids => setSyncSelected(new Set(ids))} label="同步给其他学生（可选）" emptyLabel="仅记录给当前学生" /></div>
+              <Button size="sm" variant="quiet" className="mt-1.5" onClick={() => setSyncSelected(syncSelected.size ? new Set() : new Set(syncCandidates.map(item => item.id)))}>{syncSelected.size ? "清空" : "全选"}</Button>
             </div>
           </div>
 
-          {/* Week selector + Records */}
-          <div className="flex items-center gap-3">
-            <span className="text-body-regular text-text-secondary" style={{ fontWeight: 600 }}>查看周</span>
-            <SelectMenu value={selectedWeek} onChange={setSelectedWeek} ariaLabel="查看周" className="w-64 bg-background-secondary-default" options={weekOptions.map(week => ({ value: week.key, label: week.label }))} />
-          </div>
-
+          <PanelSection title="记录" meta={filteredRecords.length ? `${filteredRecords.length} 条` : undefined} bodyClassName="pt-3" action={weekOptions.length > 0 && <div className="flex items-center gap-1">
+            <IconButton label="上一周" size="sm" variant="quiet" disabled={weekIndex >= weekOptions.length - 1} onClick={() => setSelectedWeek(weekOptions[weekIndex + 1].key)}><ChevronLeft className="h-4 w-4" /></IconButton>
+            <SelectMenu value={activeWeek?.key || selectedWeek} onChange={setSelectedWeek} ariaLabel="查看周" className="w-56" options={weekOptions.map(week => ({ value: week.key, label: week.label }))} />
+            <IconButton label="下一周" size="sm" variant="quiet" disabled={weekIndex <= 0} onClick={() => setSelectedWeek(weekOptions[weekIndex - 1].key)}><ChevronRight className="h-4 w-4" /></IconButton>
+          </div>}>
           {filteredRecords.length > 0 ? (
-            <div className="space-y-2">
+            <MotionList className="space-y-1.5">
               {filteredRecords.map(record => (
-                <div key={record.id} className={`flex items-center gap-3 px-4 py-3 border rounded-xl ${recordTypeStyle[record.type].bg}`}>
-                  <span className={`text-caption-1-regular px-2 py-0.5 rounded-full border ${recordTypeStyle[record.type].bg} ${recordTypeStyle[record.type].text}`} style={{ fontWeight: 700 }}>
-                    {recordTypeStyle[record.type].label}
-                  </span>
-                  <span className={`flex-1 text-body-regular ${recordTypeStyle[record.type].text}`}>{record.note || "(无备注)"}</span>
-                  {record.score !== undefined && <span className={`rounded-full px-2 py-0.5 text-caption-1-semibold ${record.score > 0 ? "bg-status-success-100 text-status-success-700" : record.score < 0 ? "bg-status-danger-100 text-status-danger-600" : "bg-background-tertiary-default text-text-secondary"}`}>{record.score > 0 ? "+" : ""}{record.score}</span>}
-                  <span className="text-caption-1-regular text-text-tertiary">{record.date}</span>
-                  <button onClick={() => setPendingRecordDelete(record)} aria-label={`删除记录 ${record.note || "无备注"}`} className="p-1 text-text-tertiary hover:text-status-danger-500 hover:bg-background-primary-default/70 rounded-lg transition-colors">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                <div key={record.id} className="record-row" data-type={record.type}>
+                  <span className="record-row__type">{recordTypeStyle[record.type].label}</span>
+                  <span className="min-w-0 flex-1 truncate text-body-regular text-text-primary">{record.note || <span className="text-text-tertiary">无备注</span>}</span>
+                  {record.score !== undefined && <span className={`rounded-full px-2 py-0.5 text-caption-1-semibold tabular-nums ${record.score > 0 ? "bg-status-success-50 text-status-success-700" : record.score < 0 ? "bg-status-danger-50 text-status-danger-600" : "bg-background-tertiary-default text-text-secondary"}`}>{record.score > 0 ? "+" : ""}{record.score}</span>}
+                  <span className="shrink-0 text-caption-1-regular tabular-nums text-text-tertiary">{record.date}</span>
+                  <IconButton label={`删除记录 ${record.note || "无备注"}`} size="xs" variant="quiet" className="record-row__delete" onClick={() => setPendingRecordDelete(record)}><X className="h-3.5 w-3.5" /></IconButton>
                 </div>
               ))}
-            </div>
+            </MotionList>
           ) : (
-            <p className="text-body-regular text-text-tertiary text-center py-3">该周暂无记录，可以先来添加奖罚。</p>
+            <div className="flex flex-col items-center gap-1.5 py-6 text-center">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-background-secondary-default text-text-tertiary"><ClipboardList className="h-4 w-4" /></span>
+              <p className="text-body-medium text-text-secondary">这一周还没有记录</p>
+              <p className="text-caption-1-regular text-text-tertiary">填写备注后点「奖」「罚」或「备注」即可添加</p>
+            </div>
           )}
+          </PanelSection>
           </div>
           )}
 
@@ -793,22 +756,15 @@ export function StudentModal({
             </div>
           )}
 
-          {activeTab === "attendance" && (() => { const current = getAttendanceForDate(attendanceRecords, todayKey()).find(item => item.studentId === student.id); const month = todayKey().slice(0,7); const monthly = getAttendanceRange(attendanceRecords, `${month}-01`, todayKey()).filter(item => item.studentId === student.id); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="rounded-xl bg-background-secondary-default p-3 text-center"><div className="text-title-2-regular font-black text-text-primary">{item.value}</div><div className="text-caption-1-regular text-text-tertiary">本月{item.label}天数</div></div>)}</div><div className="rounded-2xl border border-separator-border bg-background-secondary-default p-4"><div className="mb-3 text-body-semibold text-text-primary">今日状态</div><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></div><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-xl border border-separator-border px-4 py-3"><span className="text-body-semibold text-text-primary">{item.date}</span><span className="text-body-regular text-text-secondary">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-body-regular text-text-tertiary">暂无出勤异常</p>}</div><div className="rounded-xl bg-accent-50 p-3 text-body-regular text-accent-700">当前跟进任务 {followupTasks.filter(task=>followupHasStudent(task, student.id)&&task.status==="pending").length} 项</div></div>; })()}
+          {activeTab === "attendance" && (() => { const current = getAttendanceForDate(attendanceRecords, todayKey()).find(item => item.studentId === student.id); const month = todayKey().slice(0,7); const monthly = getAttendanceRange(attendanceRecords, `${month}-01`, todayKey()).filter(item => item.studentId === student.id); return <div className="space-y-4"><div className="grid grid-cols-4 gap-2">{[{label:"请假",value:monthly.filter(item=>item.status==="leave").length},{label:"缺勤",value:monthly.filter(item=>item.status==="absent").length},{label:"迟到",value:monthly.filter(item=>item.late).length},{label:"早退",value:monthly.filter(item=>item.earlyLeave).length}].map(item=><div key={item.label} className="panel-stat"><div className="text-caption-1-regular text-text-tertiary">本月{item.label}</div><div className="mt-0.5 flex items-baseline gap-1"><span className={`text-title-2-semibold tabular-nums ${item.value ? "text-text-primary" : "text-text-tertiary"}`}>{item.value}</span><span className="text-caption-1-regular text-text-tertiary">天</span></div></div>)}</div><PanelSection title="今日状态"><AttendanceStatusControl value={current?.status||"normal"} late={current?.late||false} earlyLeave={current?.earlyLeave||false} onChange={updateTodayAttendance}/></PanelSection><div className="space-y-2">{attendanceRecords.filter(item=>item.studentId===student.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(item=><div key={item.id} className="flex items-center justify-between rounded-[var(--app-radius-sm)] border border-separator-border px-4 py-2.5"><span className="text-body-medium tabular-nums text-text-primary">{item.date}</span><span className="text-body-regular text-text-secondary">{item.status==="leave"?"请假":item.status==="absent"?"缺勤":"正常"}{item.late?" · 迟到":""}{item.earlyLeave?" · 早退":""}</span></div>)}{!attendanceRecords.some(item=>item.studentId===student.id)&&<p className="py-8 text-center text-body-regular text-text-tertiary">暂无出勤异常</p>}</div><div className="rounded-xl bg-accent-50 p-3 text-body-regular text-accent-700">当前跟进任务 {followupTasks.filter(task=>followupHasStudent(task, student.id)&&task.status==="pending").length} 项</div></div>; })()}
 
           {activeTab === "trend" && (
           <div className="space-y-5">
           {/* Grade Trend */}
-          <div className="border border-separator-border rounded-2xl overflow-hidden">
-            <div className="flex items-start justify-between gap-3 px-4 py-3 bg-background-secondary-default border-b border-separator-border">
-              <div>
-                <span className="text-body-regular text-text-primary" style={{ fontWeight: 700 }}>成绩趋势</span>
-                <p className="text-caption-1-regular text-text-tertiary mt-0.5">{chronologicalExams.length} 次考试 · 分数曲线按时间展示，进退步按班排判断</p>
-              </div>
-              <div className="max-w-[60%] overflow-x-auto">
+          <PanelSection title="成绩趋势" meta={`${chronologicalExams.length} 次考试 · 分数按时间展示，进退步按班排判断`} action={<div className="max-w-[20rem] overflow-x-auto">
                 <SegmentedControl value={effectiveTrendMetric} ariaLabel="成绩趋势科目" onChange={setTrendMetric} options={trendMetricOptions.slice(0, 7).map(metric => ({ value: metric, label: metric === "total" ? "总分" : metric }))} className="shrink-0" />
-              </div>
-            </div>
-            <div className="p-4 space-y-4">
+              </div>}>
+            <div className="space-y-4">
               {hasTrendChart ? (
                 <div className="h-48">
                   <RetryableLazy
@@ -818,12 +774,12 @@ export function StudentModal({
                   />
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed border-border-button-default bg-background-secondary-default px-4 py-8 text-center text-body-regular text-text-tertiary">
+                <div className="rounded-[var(--app-radius-sm)] border border-dashed border-border-button-default px-4 py-8 text-center text-body-regular text-text-tertiary">
                   至少需要两次有效考试，才会显示趋势图。
                 </div>
               )}
 
-              <div className="rounded-2xl border border-[var(--app-border)] bg-background-primary-default p-4 space-y-3">
+              <div className="space-y-3 border-t border-separator-border pt-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-1.5 text-body-semibold text-text-primary">
@@ -863,7 +819,7 @@ export function StudentModal({
                       ["建议关注", aiTrendResult.suggestions],
                       ["参考提示", aiTrendResult.disclaimer],
                     ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
-                      <div key={label} className="rounded-xl border border-separator-border bg-background-primary-default px-3 py-2.5">
+                      <div key={label} className="rounded-[var(--app-radius-sm)] bg-background-secondary-default px-3 py-2.5">
                         <div className="text-caption-1-semibold text-text-tertiary mb-1">{label}</div>
                         <p className="text-body-regular text-text-primary leading-relaxed">{value}</p>
                       </div>
@@ -873,24 +829,20 @@ export function StudentModal({
                 </div>
               </div>
             </div>
-          </div>
+          </PanelSection>
 
           {/* Exam Scores */}
-          <div className="border-t border-separator-border pt-5">
-            <h4 className="text-text-primary mb-3" style={{ fontSize: "0.9375rem" }}>考试成绩</h4>
-            <div className="space-y-4">
+          <div>
+            <h4 className="mb-3 text-body-semibold text-text-primary">考试成绩</h4>
+            <div className="space-y-3">
               {examScores.map(exam => {
                 const scoreEntries = getScoreEntries(exam.scores);
                 const best = getBestSubject(exam.scores);
                 const weak = getWeakSubject(exam.scores);
                 const total = getExamTotal(exam);
                 return (
-                  <div key={exam.id} className="border border-separator-border rounded-2xl overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 bg-background-secondary-default border-b border-separator-border">
-                      <span className="text-body-regular text-text-primary" style={{ fontWeight: 700 }}>{exam.name}</span>
-                      <span className="text-caption-1-regular text-text-tertiary">{exam.date}</span>
-                    </div>
-                    <div className="p-4">
+                  <PanelSection key={exam.id} title={exam.name} action={<span className="text-caption-1-regular tabular-nums text-text-tertiary">{exam.date}</span>}>
+                    <div>
                       {/* Subject scores grid */}
                       <div className="grid grid-cols-3 gap-2 mb-3">
                         {scoreEntries.map(([sub, subScore]) => {
@@ -902,15 +854,15 @@ export function StudentModal({
                             <div
                               key={sub}
                               aria-label={`${sub}成绩 ${subScore}，班排 ${formatGradeRank(cell.rankClass)}${hasGradeScore(cell.rankSchool) ? `，校排 ${cell.rankSchool}` : ""}`}
-                              className={`rounded-xl border px-3 py-2 text-body-regular ${
+                              className={`rounded-[var(--app-radius-sm)] border px-3 py-2 text-body-regular ${
                               isBest ? "border-status-success-100 bg-status-success-50" :
                               isWeak ? "border-status-danger-100 bg-status-danger-50" :
                               "border-separator-border bg-background-primary-default"
                             }`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <span className={`${isBest ? "text-status-success-700" : isWeak ? "text-status-danger-500" : "text-text-secondary"}`} style={{ fontWeight: 600 }}>{sub}</span>
-                                <span className={`flex items-center gap-1 ${isBest ? "text-status-success-700" : isWeak ? "text-status-danger-500" : "text-text-primary"}`} style={{ fontWeight: 700 }}>
+                                <span className={`text-body-medium ${isBest ? "text-status-success-700" : isWeak ? "text-status-danger-500" : "text-text-secondary"}`}>{sub}</span>
+                                <span className={`flex items-center gap-1 text-body-semibold tabular-nums ${isBest ? "text-status-success-700" : isWeak ? "text-status-danger-500" : "text-text-primary"}`}>
                                   {scoreKind && <span className="rounded bg-background-primary-default/70 px-1 py-0.5 text-[9px] font-bold text-text-tertiary">{scoreKind}</span>}
                                   {subScore}
                                 </span>
@@ -928,12 +880,12 @@ export function StudentModal({
                       <div className="flex items-center gap-4 text-body-regular">
                         <div className="flex items-center gap-1.5 text-text-secondary">
                           <span className="text-text-tertiary">总分</span>
-                          <span className="text-headline-semibold text-accent-700" style={{ fontSize: "1.125rem" }}>{Math.round(total * 10) / 10}</span>
+                          <span className="text-headline-semibold tabular-nums text-text-primary">{Math.round(total * 10) / 10}</span>
                         </div>
                         {(exam.rank || hasGradeScore(exam.totalCell?.rankClass)) && (
                           <div className="flex items-center gap-1 text-text-tertiary">
                             <span>总班排</span>
-                            <span className="text-text-primary" style={{ fontWeight: 700 }}>第 {formatGradeRank(exam.totalCell?.rankClass) !== "—" ? formatGradeRank(exam.totalCell?.rankClass) : exam.rank} 名</span>
+                            <span className="text-body-semibold text-text-primary">第 {formatGradeRank(exam.totalCell?.rankClass) !== "—" ? formatGradeRank(exam.totalCell?.rankClass) : exam.rank} 名</span>
                           </div>
                         )}
                         {hasGradeScore(exam.totalCell?.rankSchool) && <div className="text-caption-1-regular text-text-tertiary">校排 {exam.totalCell.rankSchool}</div>}
@@ -948,7 +900,7 @@ export function StudentModal({
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </PanelSection>
                 );
               })}
             </div>
@@ -959,45 +911,17 @@ export function StudentModal({
         </MotionSwitch>
       </div>
 
-      <DialogPresence open={dormAssignmentOpen}>
-      {dormAssignmentOpen && (
-        <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="modal-panel-enter app-modal-panel w-full max-w-sm p-5">
-            <div className="text-headline-semibold text-text-primary">更换宿舍</div>
-            <SelectMenu value={pendingDormitoryId} onChange={setPendingDormitoryId} ariaLabel="选择宿舍" className="mt-4 w-full bg-background-secondary-default" options={[{ value: "", label: "未分配" }, ...dormitories.map(dormitory => ({ value: dormitory.id, label: dormitory.name }))]} />
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button onClick={() => setDormAssignmentOpen(false)} className="rounded-xl border border-border-button-default bg-background-primary-default py-2 text-body-semibold text-text-secondary hover:bg-background-secondary-default">取消</button>
-              <button onClick={() => handleDormitoryChange(pendingDormitoryId)} className="rounded-xl bg-accent-600 py-2 text-body-semibold text-text-white hover:bg-accent-700">保存</button>
-            </div>
-          </div>
-        </div>
-      )}
-      </DialogPresence>
+      <ModalShell open={dormAssignmentOpen} title="更换宿舍" description={student.name} onClose={() => setDormAssignmentOpen(false)} className="max-w-sm" footer={<><Button variant="ghost" onClick={() => setDormAssignmentOpen(false)}>取消</Button><Button onClick={() => handleDormitoryChange(pendingDormitoryId)}>保存</Button></>}>
+        <SelectMenu value={pendingDormitoryId} onChange={setPendingDormitoryId} ariaLabel="选择宿舍" className="w-full" options={[{ value: "", label: "未分配" }, ...dormitories.map(dormitory => ({ value: dormitory.id, label: dormitory.name }))]} />
+      </ModalShell>
 
-      <DialogPresence open={dormEventOpen && Boolean(currentDormitory)}>
-      {dormEventOpen && currentDormitory && (
-        <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="modal-panel-enter app-modal-panel w-full max-w-md p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-headline-semibold text-text-primary">记宿舍事件</div>
-                <div className="mt-1 text-caption-1-regular text-text-tertiary">{student.name} · {currentDormitory.name}</div>
-              </div>
-              <button onClick={() => setDormEventOpen(false)} className="rounded-lg p-1 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-secondary">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-4">
-              <DormEventForm
-                members={[]}
-                lockedResponsible={{ id: student.id, name: student.name }}
-                onSubmit={handleAddDormEvent}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-      </DialogPresence>
+      <ModalShell open={dormEventOpen && Boolean(currentDormitory)} title="记宿舍事件" description={`${student.name} · ${currentDormitory?.name || ""}`} onClose={() => setDormEventOpen(false)} className="max-w-md">
+        {currentDormitory && <DormEventForm
+          members={[]}
+          lockedResponsible={{ id: student.id, name: student.name }}
+          onSubmit={handleAddDormEvent}
+        />}
+      </ModalShell>
       <ConfirmDialog open={showDeleteConfirm} title="将这名学生移出当前班级？" description={`“${student.name}”会从当前名单、座位、宿舍、出勤和新作业中移出，但历史记录、成绩、任务和沟通内容都会保留，可随时从归档学生中恢复。`} confirmLabel="确认移出班级" onCancel={() => setShowDeleteConfirm(false)} onConfirm={() => onDeleteStudent(student.id)} />
       <ConfirmDialog open={Boolean(pendingRecordDelete)} title="删除这条学生记录？" description={`将删除“${pendingRecordDelete?.note || "无备注记录"}”，删除后无法恢复。`} confirmLabel="确认删除记录" onCancel={() => setPendingRecordDelete(null)} onConfirm={() => { if (!pendingRecordDelete) return; deleteRecord(pendingRecordDelete.id); setPendingRecordDelete(null); }} />
       {appDialog.dialog}
