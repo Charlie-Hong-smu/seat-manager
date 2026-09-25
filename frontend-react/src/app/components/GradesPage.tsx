@@ -376,7 +376,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               }`}
               style={{ fontWeight: 600 }}
             >
-              <MotionSwitch transitionKey={`${activeTab}-${selectedExam.id}`} className="min-w-0 flex-1 text-left [--motion-surface:transparent]" contentClassName="truncate">
+              <MotionSwitch transitionKey={`${activeTab}-${selectedExam.id}`} direction={activeTab === "trend" ? "right" : "left"} className="min-w-0 flex-1 text-left [--motion-surface:transparent]" contentClassName="truncate">
                 {activeTab === "single"
                   ? `${selectedExam.name} · ${selectedExam.date || "未填写日期"}`
                   : `全部考试 · ${exams.length} 场趋势`}
@@ -405,6 +405,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+          <MotionSwitch transitionKey={activeTab} direction={activeTab === "trend" ? "right" : "left"} className="shrink-0" contentClassName="flex items-center">
           {activeTab === "single" ? (
           <div className="relative shrink-0">
             <Button size="sm" variant="secondary" aria-expanded={thresholdOpen} onClick={() => setThresholdOpen(v => !v)}>
@@ -439,8 +440,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
             </AnimatedPopover>
           </div>
           ) : (
-            <span className="shrink-0 text-caption-1-regular text-text-tertiary">分数趋势展示 · 进退步按班排</span>
+            <span className="shrink-0 px-1 text-caption-1-regular text-text-tertiary">分数趋势展示 · 进退步按班排</span>
           )}
+          </MotionSwitch>
 
           <Button size="sm" variant="secondary" disabled={!exams.length} onClick={() => setExportOpen(true)} className="shrink-0">
             <Download className="h-3.5 w-3.5" />导出成绩
