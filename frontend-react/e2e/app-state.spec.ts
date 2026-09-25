@@ -69,7 +69,8 @@ test("quick-record undo preserves archived students", async ({ page }) => {
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
   await page.locator("[data-student-id]").filter({ hasText: "归档保留学生" }).click();
   const studentDialog = page.getByRole("dialog", { name: "归档保留学生学生详情" });
-  await studentDialog.getByRole("button", { name: "移出当前班级" }).click();
+  await studentDialog.getByRole("button", { name: "更多学生操作" }).click();
+  await page.getByRole("menuitem", { name: "移出当前班级" }).click();
   await page.getByRole("button", { name: "确认移出班级" }).click();
 
   await page.getByLabel("主导航").getByRole("button", { name: "今日", exact: true }).click();
@@ -713,16 +714,11 @@ test("opens student detail from the current comment avatar without a separate de
   await expect(workbench).toBeVisible();
   await expect(closeStudentDetail).toBeVisible();
   const currentStudentDialog = page.getByRole("dialog", { name: "头像详情学生学生详情" });
-  for (const label of ["AI跟进", "AI评语", "移出当前班级"]) {
-    const action = currentStudentDialog.getByRole("button", { name: label, exact: true });
-    const layout = await action.evaluate(element => ({
-      whiteSpace: getComputedStyle(element).whiteSpace,
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-    }));
-    expect(layout.whiteSpace).toBe("nowrap");
-    expect(layout.scrollHeight).toBeLessThanOrEqual(layout.clientHeight);
-  }
+  // The name itself switches students and destructive actions live in the "⋯" menu, so the header needs no action row.
+  await expect(currentStudentDialog.getByRole("button", { name: "AI跟进", exact: true })).toHaveCount(0);
+  await expect(currentStudentDialog.getByRole("button", { name: "移出当前班级", exact: true })).toHaveCount(0);
+  await expect(currentStudentDialog.getByRole("button", { name: "切换学生，当前 头像详情学生", exact: true })).toBeVisible();
+  await expect(currentStudentDialog.getByRole("tab", { name: "AI 评语", exact: true })).toBeVisible();
   const followupTab = currentStudentDialog.getByRole("tab", { name: "建议与沟通" });
   await followupTab.click();
   await expect(followupTab).toHaveAttribute("aria-selected", "true");
@@ -837,7 +833,7 @@ test("AI followup actions use clear labels, center confirmation, and close stude
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
   await page.locator('[data-student-id]').filter({ hasText: "跟进测试学生" }).click();
-  await page.getByRole("button", { name: "AI跟进" }).click();
+  await page.getByRole("tab", { name: "建议与沟通" }).click();
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
   await expect(page.getByRole("button", { name: "存入学生记录" })).toBeVisible();
@@ -866,7 +862,7 @@ test("weekly communication surfaces expose editable drafts and AI polish", async
   await page.getByRole("button", { name: "添加到班级" }).click();
   await page.getByRole("button", { name: "关闭工具面板" }).last().click();
   await page.locator('[data-student-id]').filter({ hasText: "周沟通测试学生" }).click();
-  await page.getByRole("button", { name: "AI跟进" }).click();
+  await page.getByRole("tab", { name: "建议与沟通" }).click();
   await page.getByRole("tab", { name: "周沟通稿" }).click();
 
   const studentPolish = page.getByRole("button", { name: "AI 润色" });

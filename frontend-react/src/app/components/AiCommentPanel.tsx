@@ -17,13 +17,10 @@ import {
   resolveCommentWordCount,
   toggleCommentCriterion,
 } from "./commentEditor";
-import { MotionCollapse, Checkbox, AiGenerationPanel, Button, SegmentedControl, ToolDrawer, Input, Textarea } from "./ui";
+import { MotionCollapse, Checkbox, AiGenerationPanel, Button, SegmentedControl, Input, Textarea } from "./ui";
 
-interface AiCommentDrawerProps {
-  open: boolean;
+interface AiCommentPanelProps {
   student: AppStudent;
-  onClose: () => void;
-  elevated?: boolean;
 }
 
 type GenerationPhase = "idle" | "loading" | "revealing";
@@ -40,9 +37,10 @@ function getAiErrorMessage(reason: string): string {
   }[reason] || "AI 评语暂时不可用，请稍后重试。";
 }
 
-export function AiCommentDrawer({ open, student, onClose, elevated = false }: AiCommentDrawerProps) {
+/** 学生详情内的 AI 期末评语页签：与评语工作台共享素材、字数、风格与草稿缓存规则。 */
+export function AiCommentPanel({ student }: AiCommentPanelProps) {
   const currentScope = getCurrentWorkspaceScope();
-  const generation = useScopedRequest(`${currentScope}:${student.id}:${open}`);
+  const generation = useScopedRequest(`${currentScope}:${student.id}`);
   const rubric = useMemo(() => readCommentRubric(), []);
   const [draftState, setDraftState] = useState(() => readStudentCommentDraft(student));
   const [savedText, setSavedText] = useState(() => readStudentCommentProfile(student).generatedComment);
@@ -72,7 +70,7 @@ export function AiCommentDrawer({ open, student, onClose, elevated = false }: Ai
     setCustomLabel("");
     setStatusError(false);
     if (revealFrame.current !== null) window.cancelAnimationFrame(revealFrame.current);
-  }, [student, open]);
+  }, [student]);
 
   useEffect(() => () => {
     if (revealFrame.current !== null) window.cancelAnimationFrame(revealFrame.current);
@@ -212,7 +210,7 @@ export function AiCommentDrawer({ open, student, onClose, elevated = false }: Ai
     setCustomCriterionId("");
   }
 
-  const footer = <div className="flex gap-2">
+  const actions = <div className="ai-comment-actions sticky bottom-0 z-[1] -mx-6 -mb-6 flex gap-2 border-t border-separator-border bg-background-primary-default px-6 py-3">
     <Button variant="ai" disabled={phase !== "idle"} onClick={handleGenerate} className="flex-1">
       <Sparkles className="h-4 w-4" />{phase === "idle" ? (savedText ? "重新生成" : "生成评语") : "生成中"}
     </Button>
@@ -220,8 +218,7 @@ export function AiCommentDrawer({ open, student, onClose, elevated = false }: Ai
     <Button variant="ghost" disabled={!draftState.generatedComment || phase !== "idle"} onClick={() => void handleCopy()} aria-label="复制评语"><Copy className="h-4 w-4" /></Button>
   </div>;
 
-  return <>
-    <ToolDrawer open={open} title={`AI 期末评语 · ${student.name}`} onClose={onClose} widthClassName="w-[420px]" bodyClassName="p-4" positionClassName="fixed" backdropLayerClassName={elevated ? "z-[100]" : "z-[70]"} panelLayerClassName={elevated ? "z-[110]" : "z-[80]"} footer={footer}>
+  return (
       <div className="space-y-4">
         <section className="overflow-hidden rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default">
           <button type="button" aria-expanded={materialsOpen} onClick={() => setMaterialsOpen(value => !value)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500/30">
@@ -261,7 +258,7 @@ export function AiCommentDrawer({ open, student, onClose, elevated = false }: Ai
           {phase === "loading" && <div className="absolute inset-0"><AiGenerationPanel compact title="正在生成评语" steps={["整理学生素材", "组织评语结构", "生成评语草稿"]} /></div>}
         </div></section>
         <p className={`rounded-[var(--app-radius-sm)] px-3 py-2 text-caption-1-regular leading-5 ${statusError ? "bg-status-danger-50 text-status-danger-700" : "bg-background-secondary-default text-text-tertiary"}`} role="status">{status}</p>
+        {actions}
       </div>
-    </ToolDrawer>
-  </>;
+  );
 }

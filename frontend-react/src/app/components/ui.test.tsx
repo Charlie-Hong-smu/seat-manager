@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ActionMenu, ConfirmDialog, IconButton, InlineStatus, ModalShell, NumberStepper, SegmentedControl, ToolDrawer, ToolPopover, useAppDialog } from "./ui";
+import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalShell, NumberStepper, SegmentedControl, ToolDrawer, ToolPopover, useAppDialog } from "./ui";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -252,5 +252,33 @@ describe("NumberStepper", () => {
     expect(input).toHaveValue("3");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     expect(onChange).toHaveBeenLastCalledWith(2);
+  });
+});
+
+describe("ToolDrawer docking", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("docks beside the workspace without a scrim and falls back to an overlay above dialogs", async () => {
+    const rects = vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function (this: Element) {
+      return (this.id === "app-drawer-dock" ? [{}] : []) as unknown as DOMRectList;
+    });
+    const { rerender } = render(<><DrawerDock /><ToolDrawer open={false} title="班级职务" onClose={() => {}}>内容</ToolDrawer></>);
+    rerender(<><DrawerDock /><ToolDrawer open title="班级职务" onClose={() => {}}>内容</ToolDrawer></>);
+    const dock = document.getElementById("app-drawer-dock")!;
+    const panel = screen.getByRole("complementary", { name: "班级职务" });
+    expect(dock).toContainElement(panel);
+    expect(dock).toHaveAttribute("data-open", "true");
+    expect(document.querySelector(".tool-drawer-backdrop")).toBeNull();
+    rerender(<><DrawerDock /><ToolDrawer open={false} title="班级职务" onClose={() => {}}>内容</ToolDrawer></>);
+    await waitFor(() => expect(dock).toHaveAttribute("data-open", "false"));
+
+    const overlay = document.createElement("div");
+    overlay.className = "app-modal-overlay";
+    document.body.append(overlay);
+    rerender(<><DrawerDock /><ToolDrawer open title="快捷记录" onClose={() => {}}>内容</ToolDrawer></>);
+    expect(dock).not.toContainElement(screen.getByRole("complementary", { name: "快捷记录" }));
+    expect(document.querySelector(".tool-drawer-backdrop")).not.toBeNull();
+    overlay.remove();
+    rects.mockRestore();
   });
 });

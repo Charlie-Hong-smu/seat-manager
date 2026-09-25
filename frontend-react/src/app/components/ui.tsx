@@ -13,7 +13,7 @@ export { StatCards as DashboardStats } from "@/components/application/dashboard/
 import { Button as BoardButton } from "@/components/base/buttons/button";
 import { SegmentedControl as BoardSegments, SegmentedControlItem } from "@/components/base/segmented-control/segmented-control";
 import { cx } from "@/utils/cx";
-import { type CSSProperties, type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, Search, TriangleAlert, X } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 
@@ -586,18 +586,20 @@ function useAnchoredLayer(open: boolean, getAnchor: () => HTMLElement | null, pa
 // Clicks inside other floating layers (select lists, date pickers, dialogs) belong to the open tool.
 const NESTED_LAYER_SELECTOR = "[role='listbox'], [role='dialog'], [role='alertdialog'], .app-popover-motion";
 
-export type ActionMenuItem = { key: string; label: string; icon?: ReactNode; onSelect: () => void; disabled?: boolean };
+export type ActionMenuItem = { key: string; label: string; icon?: ReactNode; onSelect: () => void; disabled?: boolean; tone?: "danger" };
 
 /**
  * 工具栏"更多操作"菜单：收纳低频入口，保持唯一主操作醒目。
  * 方向键在项目间移动，Esc / Tab / 点击外部关闭并把焦点还给触发器。
  */
-export function ActionMenu({ label, icon, items, triggerId, align = "end", className = "" }: {
+export function ActionMenu({ label, icon, items, triggerId, align = "end", iconOnly = false, className = "" }: {
   label: string;
   icon?: ReactNode;
   items: ActionMenuItem[];
   triggerId?: string;
   align?: "start" | "end";
+  /** Compact "⋯" style trigger; `label` becomes its accessible name. */
+  iconOnly?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -632,18 +634,19 @@ export function ActionMenu({ label, icon, items, triggerId, align = "end", class
   }
 
   return <>
-    <BoardButton ref={triggerRef} id={triggerId} size="small" variant="quiet" className={cx("app-button", className)} aria-haspopup="menu" aria-expanded={open} aria-controls={menuId}
+    <BoardButton ref={triggerRef} id={triggerId} size="small" variant="quiet" className={cx(iconOnly ? "app-icon-button size-8 p-0" : "app-button", className)} aria-haspopup="menu" aria-expanded={open} aria-controls={menuId}
+      aria-label={iconOnly ? label : undefined} title={iconOnly ? label : undefined}
       onClick={() => setOpen(value => !value)}
       onKeyDown={event => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); setOpen(true); } }}>
-      {icon}{label}<ChevronDown aria-hidden className={cx("h-3.5 w-3.5 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none", open && "rotate-180")} />
+      {iconOnly ? icon : <>{icon}{label}<ChevronDown aria-hidden className={cx("h-3.5 w-3.5 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none", open && "rotate-180")} /></>}
     </BoardButton>
     {typeof document !== "undefined" && createPortal(<AnimatedPopover open={open} className={cx(MENU_POPOVER_SURFACE, "fixed z-[125] min-w-[12rem] p-1.5")} style={{ left: position.left, top: position.top, transformOrigin: position.origin }}>
       <div ref={panelRef} id={menuId} role="menu" aria-label={label} onKeyDown={handleMenuKeyDown} className="flex flex-col gap-0.5">
         {items.map((item, index) => <button key={item.key} type="button" role="menuitem" tabIndex={-1} disabled={item.disabled} data-menu-key={item.key}
           style={{ "--menu-item-index": index } as CSSProperties}
           onClick={() => { setOpen(false); triggerRef.current?.focus({ preventScroll: true }); item.onSelect(); }}
-          className={cx(MENU_ITEM, "action-menu-item h-9 text-body-medium hover:bg-dropdown-item-hover-background focus-visible:bg-dropdown-item-hover-background disabled:cursor-not-allowed disabled:opacity-40")}>
-          {item.icon && <span aria-hidden className="grid size-5 shrink-0 place-items-center text-text-tertiary">{item.icon}</span>}
+          className={cx(MENU_ITEM, "action-menu-item h-9 text-body-medium disabled:cursor-not-allowed disabled:opacity-40", item.tone === "danger" ? "text-status-danger-600 hover:bg-status-danger-50 focus-visible:bg-status-danger-50" : "hover:bg-dropdown-item-hover-background focus-visible:bg-dropdown-item-hover-background")}>
+          {item.icon && <span aria-hidden className={cx("grid size-5 shrink-0 place-items-center", item.tone === "danger" ? "text-status-danger-500" : "text-text-tertiary")}>{item.icon}</span>}
           <span className="min-w-0 flex-1 truncate">{item.label}</span>
         </button>)}
       </div>
@@ -894,6 +897,36 @@ export function DatePicker({ value, onChange, ariaLabel, className = "", min, ma
   </>;
 }
 
+const DRAWER_DOCK_ID = "app-drawer-dock";
+const DRAWER_DOCK_GAP = 12;
+const DRAWER_DOCK_MS = 440;
+let dockStack: Array<{ key: object; width: number }> = [];
+const dockListeners = new Set<() => void>();
+function updateDockStack(next: typeof dockStack) {
+  dockStack = next;
+  dockListeners.forEach(listener => listener());
+}
+function subscribeDock(listener: () => void) {
+  dockListeners.add(listener);
+  return () => { dockListeners.delete(listener); };
+}
+
+/**
+ * 工作区右侧的抽屉停靠槽。打开的 `ToolDrawer` 停进这里，主界面以同一缓动让出宽度，
+ * 而不是被遮罩盖住；槽位关闭时宽度与间距同时归零。
+ */
+export function DrawerDock() {
+  const width = useSyncExternalStore(subscribeDock, () => dockStack[dockStack.length - 1]?.width ?? 0, () => 0);
+  return <div id={DRAWER_DOCK_ID} className="app-drawer-dock" data-open={width > 0 ? "true" : "false"} style={{ "--dock-width": `${width}px` } as CSSProperties} />;
+}
+
+// Dock only when the drawer is opened from the workspace itself; from a modal it must stay above it.
+function canDockDrawer(positionClassName: string) {
+  if (typeof document === "undefined" || positionClassName !== "fixed" || window.innerWidth < 1024) return false;
+  const slot = document.getElementById(DRAWER_DOCK_ID);
+  return Boolean(slot && slot.getClientRects().length && !document.querySelector(".app-modal-overlay"));
+}
+
 export function ToolDrawer({
   open,
   title,
@@ -923,12 +956,28 @@ export function ToolDrawer({
   const lastView = useRef({ title, children, footer });
   if (open) lastView.current = { title, children, footer };
   const view = open ? { title, children, footer } : lastView.current;
+  // Decide the presentation once per opening so the panel never jumps between modes mid-flight.
+  const modeRef = useRef<{ docked: boolean; width: number } | null>(null);
+  const wasOpenRef = useRef(false);
+  if (open && !wasOpenRef.current) {
+    const requested = Number(/w-\[(\d+)px\]/.exec(widthClassName)?.[1] ?? 400);
+    modeRef.current = { docked: canDockDrawer(positionClassName), width: Math.min(requested, Math.round((typeof window === "undefined" ? 1440 : window.innerWidth) * 0.42)) };
+  }
+  wasOpenRef.current = open;
+  const docked = Boolean(modeRef.current?.docked);
+  const dockWidth = modeRef.current?.width ?? 400;
   useEffect(() => {
     if (open) { setPresent(true); return; }
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : 220);
+    const timer = window.setTimeout(() => setPresent(false), reduced ? 0 : docked ? DRAWER_DOCK_MS : 220);
     return () => window.clearTimeout(timer);
-  }, [open]);
+  }, [docked, open]);
+  useEffect(() => {
+    if (!open || !docked) return;
+    const entry = { key: {}, width: dockWidth };
+    updateDockStack([...dockStack, entry]);
+    return () => updateDockStack(dockStack.filter(item => item !== entry));
+  }, [dockWidth, docked, open]);
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -937,40 +986,53 @@ export function ToolDrawer({
   useEffect(() => {
     if (!open) return;
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
+    closeRef.current?.focus({ preventScroll: true });
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented) return;
-      if (event.key === "Escape") onCloseRef.current();
+      if (event.defaultPrevented || event.key !== "Escape") return;
+      // A docked drawer sits beside the workspace; a dialog opened later owns Escape first.
+      if (docked && document.querySelector(".app-modal-overlay")) return;
+      onCloseRef.current();
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       const explicitTarget = returnFocusId ? document.getElementById(returnFocusId) : null;
-      if (explicitTarget instanceof HTMLElement) explicitTarget.focus();
-      else previousFocusRef.current?.focus();
+      if (explicitTarget instanceof HTMLElement) explicitTarget.focus({ preventScroll: true });
+      else previousFocusRef.current?.focus({ preventScroll: true });
     };
-  }, [open, returnFocusId]);
+  }, [docked, open, returnFocusId]);
 
   if (!open && !present) return null;
+  const panelBody = <>
+    <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-separator-border px-4">
+      <h2 className="text-headline-semibold text-[var(--app-text)]">{view.title}</h2>
+      <button
+        ref={closeRef}
+        type="button"
+        aria-label="关闭工具面板"
+        title="关闭工具面板"
+        onClick={onClose}
+        className="grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+    <div className={cx("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{view.children}</div>
+    {view.footer && <div className="shrink-0 border-t border-separator-border p-3">{view.footer}</div>}
+  </>;
+  const dockSlot = docked && typeof document !== "undefined" ? document.getElementById(DRAWER_DOCK_ID) : null;
+  if (dockSlot) {
+    return createPortal(<PresenceMotion active={open}>
+      <aside ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} aria-label={title}
+        className="tool-drawer-docked absolute inset-y-0 flex flex-col overflow-hidden rounded-[var(--app-radius-lg)] border border-[var(--app-border)] bg-background-primary-default shadow-[var(--app-shadow-card)]"
+        style={{ left: DRAWER_DOCK_GAP, width: dockWidth }}>{panelBody}</aside>
+    </PresenceMotion>, dockSlot);
+  }
   const drawerContent = (
     <PresenceMotion active={open}>
       <button type="button" aria-label="关闭工具面板" tabIndex={-1} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-backdrop soft-backdrop-enter inset-0 bg-text-primary/10 backdrop-blur-[1px] ${positionClassName} ${backdropLayerClassName}`} onClick={onClose} />
       <aside ref={node => { if (node) node.inert = !open; }} aria-hidden={!open || undefined} data-phase={open ? "open" : "closing"} className={`tool-drawer-enter inset-y-0 right-0 flex max-w-[calc(100%-24px)] flex-col overflow-hidden border-l border-border-button-default bg-background-primary-default shadow-[var(--app-shadow-float)] ${positionClassName} ${panelLayerClassName} ${widthClassName}`} aria-label={title}>
-        <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-separator-border px-4">
-          <h2 className="text-headline-semibold text-[var(--app-text)]">{view.title}</h2>
-          <button
-            ref={closeRef}
-            type="button"
-            aria-label="关闭工具面板"
-            title="关闭工具面板"
-            onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className={cx("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{view.children}</div>
-        {view.footer && <div className="shrink-0 border-t border-separator-border p-3">{view.footer}</div>}
+        {panelBody}
       </aside>
     </PresenceMotion>
   );

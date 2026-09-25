@@ -138,24 +138,25 @@ test("batch candidates preserve edits made during generation and stop when leavi
   expect((await data(page)).students[2].aiComments?.profile?.generatedComment || "").toBe("");
 });
 
-test("student drawer keeps generated text as a draft and cancels requests when closed", async ({ page }) => {
+test("student AI comment tab keeps generated text as a draft and cancels requests when left", async ({ page }) => {
   let calls = 0; let release = () => {};
   const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route("**/generate-comment", async route => { calls += 1; const current = calls; if (current > 1) await gate; await route.fulfill({ json: { comment: current === 1 ? "抽屉待确认评语" : "关闭后过期结果" } }).catch(() => {}); });
   await login(page); await nav(page, /^座位/);
   await page.locator('[data-student-id="s1"]').click();
-  await page.getByRole("button", { name: "AI评语", exact: true }).click();
-  const drawer = page.getByRole("complementary", { name: "AI 期末评语 · 张三" });
+  const studentDialog = page.getByRole("dialog", { name: "张三学生详情" });
+  await studentDialog.getByRole("tab", { name: "AI 评语", exact: true }).click();
+  const drawer = studentDialog;
   const text = drawer.getByPlaceholder("生成后可在这里继续编辑评语草稿。");
   await drawer.getByRole("button", { name: "重新生成", exact: true }).click();
   await expect(text).toHaveValue("抽屉待确认评语");
   expect((await data(page)).students[0].aiComments.profile.generatedComment).toBe("已经保存的原评语");
   await drawer.getByRole("button", { name: "重新生成", exact: true }).click();
   await expect.poll(() => calls).toBe(2);
-  await drawer.getByRole("button", { name: "关闭工具面板", exact: true }).click();
-  await expect(drawer).not.toBeVisible();
+  await studentDialog.getByRole("tab", { name: "奖罚记录", exact: true }).click();
+  await expect(text).toHaveCount(0);
   release();
-  await page.getByRole("button", { name: "AI评语", exact: true }).click();
+  await studentDialog.getByRole("tab", { name: "AI 评语", exact: true }).click();
   await expect(text).toHaveValue("抽屉待确认评语");
   await drawer.getByRole("button", { name: "保存评语草稿", exact: true }).click();
   await expect.poll(async () => (await data(page)).students[0].aiComments.profile.generatedComment).toBe("抽屉待确认评语");

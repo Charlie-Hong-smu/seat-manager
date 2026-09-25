@@ -5,7 +5,7 @@ import { StudentDutiesSection } from "./StudentDutiesSection";
 import type { ClassDutiesBinding } from "../state/classDuties";
 import { followupHasStudent } from "../state/followupStudents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { X, Trash2, Plus, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { X, Trash2, Plus, MoreHorizontal, Sparkles, TrendingUp, TrendingDown, Save, Loader2, Pencil, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
 import { RetryableLazy } from "./RetryableLazy";
 import { type NewDormEventInput } from "../state/dormitoryActions";
@@ -22,7 +22,7 @@ import { normalizeAttendancePatch } from "../state/classManagementCommands";
 import { createActivityEvent } from "../state/activityEvents";
 import { matchesStudentSearch } from "../state/studentSearch";
 import { listDormitoryEvents } from "../state/dormitoryPeriods";
-import { MotionSwitch, MotionCollapse, AiGenerationPanel, Button, ConfirmDialog, DialogPresence, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { ActionMenu, MotionSwitch, MotionCollapse, AiGenerationPanel, Button, ConfirmDialog, DialogPresence, IconButton, SegmentedControl, SelectMenu, UnderlineTabs, useActionToast, useAppDialog, useModalFocus } from "./ui";
 import { AttendanceStatusControl } from "./AttendanceStatusControl";
 import { StudentPicker } from "./StudentPicker";
 import { StudentCommunicationPanel } from "./StudentCommunicationPanel";
@@ -43,6 +43,7 @@ import {
 } from "./studentModalSelectors";
 
 const loadStudentTrendChart = () => import("./StudentTrendChart");
+const loadAiCommentPanel = () => import("./AiCommentPanel").then(module => ({ default: module.AiCommentPanel }));
 
 function formatGradeRank(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
@@ -56,7 +57,7 @@ function getStudentExamScoreCell(exam: AppStudent["exams"][number], subject: str
   return exam.scoreCells?.[subject] || { score, rankClass: null, rankSchool: null };
 }
 
-export type StudentDetailTab = "records" | "profile" | "attendance" | "trend" | "followup";
+export type StudentDetailTab = "records" | "profile" | "attendance" | "trend" | "followup" | "comment";
 
 const STUDENT_DETAIL_TABS: Array<{ value: StudentDetailTab; label: string; tone?: "default" | "ai" }> = [
   { value: "records", label: "奖罚记录" },
@@ -64,6 +65,7 @@ const STUDENT_DETAIL_TABS: Array<{ value: StudentDetailTab; label: string; tone?
   { value: "attendance", label: "出勤" },
   { value: "trend", label: "成绩" },
   { value: "followup", label: "建议与沟通" },
+  { value: "comment", label: "AI 评语", tone: "ai" },
 ];
 
 interface Props {
@@ -78,7 +80,6 @@ interface Props {
   onAssignDormitory: (studentId: StudentId, dormitoryId?: string) => void;
   onAddDormitoryEvent: (input: NewDormEventInput) => void;
   onOpenDormitories: () => void;
-  onOpenAiComment?: () => void;
   seatOrder?: Array<StudentId | null>;
   seatLayout?: SeatLayoutV1;
   initialActiveTab?: StudentDetailTab;
@@ -113,7 +114,6 @@ export function StudentModal({
   onAssignDormitory,
   onAddDormitoryEvent,
   onOpenDormitories,
-  onOpenAiComment,
   seatOrder = [],
   seatLayout,
   initialActiveTab = "records",
@@ -544,33 +544,21 @@ export function StudentModal({
           <div className="relative flex min-h-10 items-center justify-between">
             {onNavigate && <IconButton label="上一位学生" size="sm" onClick={() => navigateStudent(-1)}><ChevronLeft className="h-4 w-4" /></IconButton>}
             {!onNavigate && <span className="h-8 w-8" aria-hidden="true" />}
-            <div className="pointer-events-none absolute left-1/2 top-1/2 w-[min(16rem,calc(100%_-_10rem))] -translate-x-1/2 -translate-y-1/2 text-center">
+            <div className="pointer-events-none absolute left-1/2 top-1/2 w-[min(18rem,calc(100%_-_11rem))] -translate-x-1/2 -translate-y-1/2 text-center">
               <MotionSwitch transitionKey={student.id} direction={tabDirection}>
-                <div className="mb-1 text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
-                <h3 className="truncate text-text-primary" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`} style={{ fontSize: "1.25rem" }}>
-                  {student.name}
-                  <span className="ml-2 hidden text-text-tertiary 2xl:inline" style={{ fontWeight: 400, fontSize: "0.875rem" }}>· 本周 {weekOptions[0]?.key || ""}</span>
-                </h3>
+                <div className="mb-0.5 text-caption-1-regular text-text-tertiary" style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>学生{navPosition ? ` · ${navPosition.index + 1} / ${navPosition.total}` : ""}</div>
+                {onSelectStudent
+                  ? <div className="pointer-events-auto flex justify-center" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`}><StudentPicker variant="title" students={students} value={student.id} onChange={selectStudent} label={`切换学生，当前 ${student.name}`} /></div>
+                  : <h3 className="truncate text-title-3-semibold text-text-primary" title={`${student.name} · 本周 ${weekOptions[0]?.key || ""}`}>{student.name}</h3>}
               </MotionSwitch>
             </div>
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex items-center gap-1">
               {onNavigate && <IconButton label="下一位学生" size="sm" onClick={() => navigateStudent(1)}><ChevronRight className="h-4 w-4" /></IconButton>}
+              <ActionMenu label="更多学生操作" iconOnly icon={<MoreHorizontal className="h-4 w-4" />} items={[
+                { key: "archive", label: "移出当前班级", tone: "danger", icon: <Trash2 className="h-4 w-4" />, onSelect: () => setShowDeleteConfirm(true) },
+              ]} />
               <IconButton label="关闭学生详情" size="sm" onClick={onClose}><X className="h-4 w-4" /></IconButton>
             </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-                {onSelectStudent && <div className="w-40 shrink-0"><StudentPicker compact students={students} value={student.id} onChange={selectStudent} label="直接选择学生" /></div>}
-                <Button type="button" size="sm" variant="ghost" aria-label="AI跟进" onClick={() => changeActiveTab("followup")} className="shrink-0 whitespace-nowrap px-2 sm:px-2.5">
-                  <Sparkles className="h-3.5 w-3.5 text-status-ai-500" /><span className="hidden sm:inline">AI跟进</span>
-                </Button>
-                {onOpenAiComment && (
-                  <Button type="button" size="sm" variant="ghost" aria-label="AI评语" onClick={onOpenAiComment} className="shrink-0 whitespace-nowrap px-2 sm:px-2.5">
-                    <Sparkles className="h-3.5 w-3.5 text-status-ai-500" /><span className="hidden sm:inline">AI评语</span>
-                  </Button>
-                )}
-                <Button type="button" size="sm" variant="ghost" aria-label="移出当前班级" onClick={() => setShowDeleteConfirm(true)} className="shrink-0 whitespace-nowrap border-status-danger-200 px-2 text-status-danger-500 hover:border-status-danger-200 hover:bg-status-danger-50 sm:px-2.5">
-                  <Trash2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">移出当前班级</span>
-                </Button>
           </div>
         </div>
 
@@ -761,6 +749,8 @@ export function StudentModal({
           )}
           </div>
           )}
+
+          {activeTab === "comment" && <RetryableLazy key={student.id} load={loadAiCommentPanel} componentProps={{ student }} fallback={<div className="py-12 text-center text-body-regular text-text-secondary">正在准备 AI 评语…</div>} />}
 
           {activeTab === "followup" && (
             <div className="space-y-4">

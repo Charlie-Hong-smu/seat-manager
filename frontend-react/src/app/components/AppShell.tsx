@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ModalShell } from "./ui";
+import { DrawerDock, ModalShell } from "./ui";
 
 interface AppShellProps {
   header: ReactNode;
@@ -32,6 +32,7 @@ export function AppShell({ header, sidebar, mainTabs, children, overlays, sideba
           {mainTabs}
           <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
         </div>
+        {!isMobile && <DrawerDock />}
       </div>
 
       {isMobile && <ModalShell open={mobileNavigationOpen} title="切换工作区" onClose={onCloseMobileNavigation} className="app-mobile-navigation max-w-sm">{sidebar}</ModalShell>}

@@ -20,3 +20,16 @@ describe("StudentPicker", () => {
     expect(onChange).toHaveBeenCalledWith("s2");
   });
 });
+
+describe("StudentPicker title variant", () => {
+  it("uses the heading-sized name as the trigger and switches students from its list", () => {
+    const onChange = vi.fn();
+    const people = [{ id: "a", name: "张芷涵" }, { id: "b", name: "李四" }] as unknown as Parameters<typeof StudentPicker>[0]["students"];
+    render(<StudentPicker variant="title" students={people} value="a" onChange={onChange} label="切换学生，当前 张芷涵" />);
+    const trigger = screen.getByRole("button", { name: "切换学生，当前 张芷涵" });
+    expect(trigger).toHaveTextContent("张芷涵");
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("option", { name: "李四" }));
+    expect(onChange).toHaveBeenCalledWith("b");
+  });
+});

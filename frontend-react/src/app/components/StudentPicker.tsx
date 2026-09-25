@@ -8,13 +8,15 @@ import { matchesStudentSearch } from "../state/studentSearch";
 import { animateSelectionTransfer } from "./selectionMotion";
 import { AnimatedPopover, Input } from "./ui";
 
-export function StudentPicker({ students, value, onChange, label = "选择学生", allowClear = false, compact = false, className = "" }: {
+export function StudentPicker({ students, value, onChange, label = "选择学生", allowClear = false, compact = false, variant = "field", className = "" }: {
   students: AppStudent[];
   value: StudentId;
   onChange: (id: StudentId) => void;
   label?: string;
   allowClear?: boolean;
   compact?: boolean;
+  /** `title` turns a heading-sized name into the trigger, so detail views need no extra picker row. */
+  variant?: "field" | "title";
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -36,7 +38,8 @@ export function StudentPicker({ students, value, onChange, label = "选择学生
       const opensUp = roomBelow < 220 && rect.top > roomBelow;
       const maxHeight = Math.max(160, Math.min(320, Math.max(roomBelow, rect.top - margin)));
       const width = Math.min(Math.max(rect.width, 240), window.innerWidth - margin * 2);
-      const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
+      const anchorLeft = variant === "title" ? rect.left + rect.width / 2 - width / 2 : rect.left;
+      const left = Math.min(Math.max(margin, anchorLeft), window.innerWidth - width - margin);
       const estimatedHeight = Math.min(maxHeight, 54 + Math.max(1, Math.min(candidates.length + (allowClear ? 1 : 0), 6)) * 44);
       const top = opensUp ? Math.max(margin, rect.top - estimatedHeight - gap) : Math.min(rect.bottom + gap, window.innerHeight - estimatedHeight - margin);
       setPosition({ left, top, width, maxHeight });
@@ -48,7 +51,7 @@ export function StudentPicker({ students, value, onChange, label = "选择学生
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [allowClear, candidates.length, open]);
+  }, [allowClear, candidates.length, open, variant]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,11 +79,14 @@ export function StudentPicker({ students, value, onChange, label = "选择学生
   }, [open]);
 
   return <>
-    <button ref={triggerRef} type="button" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex w-full items-center rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default text-left transition-colors hover:border-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20 ${compact ? "h-8 gap-2 px-2.5" : "h-11 gap-3 px-3"} ${className}`}>
+    {variant === "title" ? <button ref={triggerRef} type="button" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={cx("student-title-picker group inline-flex max-w-full items-center gap-1 rounded-[var(--app-radius-sm)] px-2 py-0.5 text-text-primary transition-colors duration-150 hover:bg-background-secondary-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring aria-expanded:bg-background-secondary-default", className)}>
+      <span className="min-w-0 truncate text-title-3-semibold">{selected?.name || "请选择"}</span>
+      <ChevronDown aria-hidden className={`h-4 w-4 shrink-0 text-text-tertiary transition-[transform,color] duration-200 group-hover:text-text-secondary motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+    </button> : <button ref={triggerRef} type="button" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex w-full items-center rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default text-left transition-colors hover:border-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20 ${compact ? "h-8 gap-2 px-2.5" : "h-11 gap-3 px-3"} ${className}`}>
       <span className={`grid shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-600 ${compact ? "h-6 w-6" : "h-7 w-7"}`}><UserRound className="h-4 w-4" /></span>
       <span className="min-w-0 flex-1">{!compact && <span className="block text-[10px] font-bold text-[var(--app-text-muted)]">{label}</span>}<span className={`block truncate font-bold ${compact ? "text-caption-1-regular" : "text-body-regular"} ${selected ? "text-[var(--app-text)]" : "text-text-tertiary"}`}>{selected?.name || "请选择"}</span></span>
       <ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
-    </button>
+    </button>}
     {createPortal(<AnimatedPopover open={open} className={cx(MENU_POPOVER_SURFACE, "fixed z-[125] p-2")} style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight }}>
       <div ref={panelRef}>
         <Input autoFocus value={search} onChange={setSearch} leadingIcon={Search} placeholder="搜索姓名或别名" className="mb-2" />

@@ -417,13 +417,14 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     const dialog = page.getByRole('dialog', { name: '连续切换甲学生详情' });
     await page.screenshot({ path: `../output/app-motion-dialog-${reducedMotion}.png` });
     const original = await dialog.boundingBox();
-    await dialog.getByRole('button', { name: '移出当前班级', exact: true }).click();
+    await dialog.getByRole('button', { name: '更多学生操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '移出当前班级', exact: true }).click();
     const confirm = page.getByRole('alertdialog');
     await expect(confirm).toBeVisible();
     await confirm.getByRole('button', { name: '取消', exact: true }).click();
     await expect(confirm).toHaveCount(0);
     expect(await dialog.boundingBox()).toEqual(original);
-    await expect(dialog.getByRole('button', { name: '移出当前班级', exact: true })).toBeFocused();
+    await expect(dialog.getByRole('button', { name: '更多学生操作', exact: true })).toBeFocused();
     await dialog.getByRole('button', { name: '关闭学生详情', exact: true }).click();
     await expect(page.locator('.app-modal-overlay')).toHaveCount(0);
     const interrupted = await seat.evaluate(async button => {

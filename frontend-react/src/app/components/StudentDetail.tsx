@@ -1,8 +1,5 @@
 import type { SaveCommunication } from "./CommunicationEditor";
 import type { ClassDutiesBinding } from "../state/classDuties";
-import { useState } from "react";
-
-import { AiCommentDrawer } from "./AiCommentDrawer";
 import { StudentModal, type StudentDetailTab } from "./StudentModal";
 import type { NewDormEventInput } from "../state/dormitoryActions";
 import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreviewFallback, BusinessEntityPreviewModel, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, HomeworkAssignment, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
@@ -74,8 +71,6 @@ export function StudentDetail({
   onOpenEntity,
   resolveEntityPreview,
 }: StudentDetailProps) {
-  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
-
   return (
     <>
       <StudentModal
@@ -90,7 +85,6 @@ export function StudentDetail({
         onAssignDormitory={onAssignDormitory}
         onAddDormitoryEvent={onAddDormitoryEvent}
         onOpenDormitories={onOpenDormitories}
-        onOpenAiComment={() => setAiDrawerOpen(true)}
         seatOrder={seatOrder}
         seatLayout={seatLayout}
         initialActiveTab={initialActiveTab}
@@ -111,12 +105,6 @@ export function StudentDetail({
         resolveEntityPreview={resolveEntityPreview}
         leavesWorkbench={leavesWorkbench}
         layerClassName={elevated ? "z-[90]" : "z-[60]"}
-      />
-      <AiCommentDrawer
-        open={aiDrawerOpen}
-        student={student}
-        onClose={() => setAiDrawerOpen(false)}
-        elevated={elevated}
       />
     </>
   );
