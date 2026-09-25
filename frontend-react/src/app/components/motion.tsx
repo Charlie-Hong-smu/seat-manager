@@ -173,6 +173,12 @@ export class MotionSwitch extends Component<SwitchProps> {
         const rect = target.rect, style = getComputedStyle(node);
         const wasVisible = old.rect.bottom + origin.top > 0 && old.rect.top + origin.top < window.innerHeight;
         if (!wasVisible && (rect.bottom <= 0 || rect.top >= window.innerHeight)) return;
+        // Same footprint: no pixel handoff. The live node already carries the new
+        // state (charts animate their own data transition), and the page-level
+        // snapshot fading over it performs the crossfade.
+        const sameBox = Math.abs(old.rect.x - (rect.x - origin.x)) < 2 && Math.abs(old.rect.y - (rect.y - origin.y)) < 2
+          && Math.abs(old.rect.width - rect.width) < 2 && Math.abs(old.rect.height - rect.height) < 2;
+        if (sameBox) return;
         const frame = document.createElement("div");
         frame.className = "app-motion-surface";
         frame.dataset.motionSurfaceFrame = old.key;
