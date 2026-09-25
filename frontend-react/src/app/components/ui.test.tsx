@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalHeader, ModalShell, NumberStepper, PanelSection, SegmentedControl, ToolDrawer, ToolPopover, useAppDialog } from "./ui";
+import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalHeader, ModalShell, NumberStepper, PanelSection, SegmentedControl, SelectMenu, ToolDrawer, ToolPopover, useAppDialog } from "./ui";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -307,5 +307,20 @@ describe("PanelSection", () => {
     expect(screen.getByText("3 条")).toBeTruthy();
     expect(screen.getByRole("button", { name: "切换周" })).toBeTruthy();
     expect(screen.getByText("正文")).toBeTruthy();
+  });
+});
+
+describe("SelectMenu escape handling", () => {
+  it("consumes Escape inside a modal instead of letting the dialog close", async () => {
+    const modalEscape = vi.fn();
+    window.addEventListener("keydown", event => { if (event.key === "Escape" && !event.defaultPrevented) modalEscape(); });
+    render(<SelectMenu value="a" ariaLabel="列用途" onChange={() => {}} options={Array.from({ length: 12 }, (_, index) => ({ value: `v${index}`, label: `选项 ${index}` }))} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "列用途" }));
+    expect(screen.getByRole("listbox", { name: "列用途" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("listbox", { name: "列用途" })).toBeNull());
+    expect(modalEscape).not.toHaveBeenCalled();
   });
 });

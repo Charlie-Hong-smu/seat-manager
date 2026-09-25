@@ -178,10 +178,10 @@ test("phone score mapping stays editable and cancel does not import teacher data
   await page.getByRole("button", { name: /^映射设置/ }).tap();
   const mapping = page.getByRole("dialog", { name: "成绩列映射" });
   await contained(page, mapping);
-  const nameColumn = mapping.getByRole("button", { name: /姓名列/ });
-  await nameColumn.scrollIntoViewIfNeeded();
-  await contained(page, nameColumn);
-  await nameColumn.tap();
+  const firstColumnRole = mapping.getByRole("button", { name: /第 1 列.*用途/ });
+  await firstColumnRole.scrollIntoViewIfNeeded();
+  await contained(page, firstColumnRole);
+  await firstColumnRole.tap();
   await contained(page, page.getByRole("listbox"));
   await page.keyboard.press("Escape");
   await contained(page, mapping.getByRole("button", { name: "应用映射", exact: true }));

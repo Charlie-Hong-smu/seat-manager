@@ -863,10 +863,17 @@ function SearchableSelectMenu({ value, options, onChange, ariaLabel, placeholder
       const target = event.target as Node;
       if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     };
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
     document.addEventListener("mousedown", close);
-    window.addEventListener("keydown", key);
-    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", key); };
+    // Capture phase: an open menu consumes Escape before modal-level bubble
+    // listeners (registered earlier on window) can close the dialog.
+    window.addEventListener("keydown", key, true);
+    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", key, true); };
   }, [open]);
 
   return <>
@@ -928,10 +935,17 @@ export function DatePicker({ value, onChange, ariaLabel, className = "", min, ma
   useEffect(() => {
     if (!open) return;
     const close = (event: MouseEvent) => { const target = event.target as Node; if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false); };
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
     document.addEventListener("mousedown", close);
-    window.addEventListener("keydown", key);
-    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", key); };
+    // Capture phase: an open menu consumes Escape before modal-level bubble
+    // listeners (registered earlier on window) can close the dialog.
+    window.addEventListener("keydown", key, true);
+    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", key, true); };
   }, [open]);
 
   const gridStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1 - visibleMonth.getDay());

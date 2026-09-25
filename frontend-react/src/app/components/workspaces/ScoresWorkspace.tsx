@@ -1,6 +1,6 @@
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { useEffect, useState } from "react";
-import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, Pencil, RotateCcw, Sparkles, Table, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RotateCcw, Sparkles, Table, Trash2 } from "lucide-react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 
@@ -24,6 +24,7 @@ import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
 import { AiGenerationPanel, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalHeader, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
+import { assignColumnRole, columnRoleOf, columnRoleOptions, mappedColumnCount } from "../scoreColumnRoles";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
 import { toLocalDateKey } from "../../state/dateKey";
@@ -386,11 +387,8 @@ export function ScoresWorkspace({
   }
 
   const scoreHeaders = scoreRows[0] || [];
-  const columnOptions = scoreHeaders.map((header, index) => ({
-    value: index,
-    label: `${index + 1}. ${header || "空列"}`,
-  }));
   const scorePreviewRows = scoreRows.slice(1, 13);
+  const columnRoleOptionsCache = useMemo(() => (manualMapping ? columnRoleOptions(manualMapping) : []), [manualMapping]);
   const missingRankSummary = sourceDraft ? getMissingClassRankSummary(sourceDraft) : null;
   const rankChoiceLabel = rankChoice === "auto" ? "自动补全" : rankChoice === "source" ? "保留原表" : "待确认";
 
@@ -549,34 +547,47 @@ export function ScoresWorkspace({
       <DialogPresence open={mappingModalOpen && Boolean(manualMapping)}>
       {mappingModalOpen && manualMapping && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
-          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="score-mapping-panel modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden outline-none">
+          <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="score-mapping-panel modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-[88rem] flex-col overflow-hidden outline-none">
             <ModalHeader title="成绩列映射" description="AI 会读取表头和最多 80 行样例，生成后仍可手动调整。" onClose={() => setMappingModalOpen(false)} />
 
-            <div className="score-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_25rem] gap-0 overflow-hidden">
-              <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">
+            <div className="score-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem] gap-0 overflow-hidden">
+              <div className="flex min-h-0 min-w-0 flex-col border-r border-separator-border bg-background-secondary-default p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-body-semibold text-text-primary">表格预览</div>
-                    <div className="mt-0.5 text-caption-1-regular text-text-tertiary">{scoreFilename || "成绩表"} · 共 {Math.max(scoreRows.length - 1, 0)} 行数据</div>
+                    <div className="text-body-semibold text-text-primary">表格预览 · 点击列头选择用途</div>
+                    <div className="mt-0.5 text-caption-1-regular text-text-tertiary">{scoreFilename || "成绩表"} · 共 {Math.max(scoreRows.length - 1, 0)} 行数据 · 已标记 {mappedColumnCount(manualMapping, scoreHeaders.length)} / {scoreHeaders.length} 列</div>
                   </div>
                   <span className="rounded-full bg-background-primary-default px-3 py-1 text-caption-1-regular text-text-secondary shadow-sm">显示前 12 行</span>
                 </div>
-                <div className="max-h-[58vh] overflow-auto rounded-2xl border border-border-button-default bg-background-primary-default">
+                <div className="min-h-0 flex-1 overflow-auto rounded-[var(--app-radius-md)] border border-border-button-default bg-background-primary-default">
                   <table className="min-w-full border-separate border-spacing-0 text-left text-caption-1-regular">
-                    <thead className="sticky top-0 bg-background-tertiary-default text-text-secondary">
+                    <thead className="sticky top-0 z-10 text-text-secondary">
                       <tr>
-                        {scoreHeaders.map((header, index) => (
-                          <th key={`${header}-${index}`} className="whitespace-nowrap border-b border-border-button-default px-3 py-2 font-semibold">
-                            {index + 1}. {header || "空列"}
-                          </th>
-                        ))}
+                        {scoreHeaders.map((header, index) => {
+                          const role = columnRoleOf(manualMapping, index);
+                          const mapped = role !== "unused";
+                          return (
+                            <th key={`${header}-${index}`} data-mapped={mapped} className={`whitespace-nowrap border-b border-border-button-default px-2 py-2 align-top font-normal ${mapped ? "bg-accent-50/80" : "bg-background-tertiary-default"}`}>
+                              <div className="min-w-[8.5rem]">
+                                <div className={`mb-1 truncate px-0.5 font-semibold ${mapped ? "text-accent-700" : "text-text-secondary"}`}>{index + 1}. {header || "空列"}</div>
+                                <SelectMenu
+                                  value={role}
+                                  onChange={value => updateManualMapping(mapping => assignColumnRole(mapping, index, value))}
+                                  ariaLabel={`第 ${index + 1} 列「${header || "空列"}」用途`}
+                                  className="h-8 w-full rounded-lg px-2 py-1 text-caption-1-regular shadow-none"
+                                  options={columnRoleOptionsCache}
+                                />
+                              </div>
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
                       {scorePreviewRows.map((row, rowIndex) => (
-                        <tr key={rowIndex} className="odd:bg-background-primary-default even:bg-background-secondary-default/70">
+                        <tr key={rowIndex}>
                           {scoreHeaders.map((_, colIndex) => (
-                            <td key={colIndex} className="whitespace-nowrap border-b border-separator-border px-3 py-2 text-text-secondary">
+                            <td key={colIndex} className={`whitespace-nowrap border-b border-separator-border px-3 py-2 text-text-secondary ${columnRoleOf(manualMapping, colIndex) !== "unused" ? "bg-accent-50/30" : rowIndex % 2 ? "bg-background-secondary-default/70" : "bg-background-primary-default"}`}>
                               {row[colIndex] || ""}
                             </td>
                           ))}
@@ -589,7 +600,7 @@ export function ScoresWorkspace({
 
               <div className="min-h-0 overflow-y-auto p-4">
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-separator-border bg-background-secondary-default p-3">
+                  <div className="rounded-[var(--app-radius-md)] border border-separator-border bg-background-secondary-default p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <div className="text-body-semibold text-text-primary">AI 映射</div>
@@ -618,170 +629,42 @@ export function ScoresWorkspace({
                     )}
                   </div>
 
-                  <div className="space-y-3">
-                    <label className="block text-caption-1-regular text-text-secondary">姓名列</label>
-                    <SelectMenu value={manualMapping.nameCol} onChange={value => updateManualMapping(mapping => ({ ...mapping, nameCol: Number(value) }))} ariaLabel="姓名列" className="w-full" options={columnOptions} />
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="block text-caption-1-regular text-text-secondary">学号列（可选）</label>
-                    <SelectMenu value={manualMapping.studentNoCol} onChange={value => updateManualMapping(mapping => ({ ...mapping, studentNoCol: Number(value) }))} ariaLabel="学号列" className="w-full" options={[{ value: -1, label: "未识别学号" }, ...columnOptions]} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-body-semibold text-text-primary">科目分数列</div>
-                      <button
-                        type="button"
-                        onClick={() => updateManualMapping(mapping => ({
-                          ...mapping,
-                          subjectMappings: [...mapping.subjectMappings, { subject: "科目", scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }],
-                        }))}
-                        className="rounded-xl border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-regular text-text-secondary hover:bg-background-secondary-default"
-                        style={{ fontWeight: 800 }}
-                      >
-                        添加科目
-                      </button>
+                  <div className="rounded-[var(--app-radius-md)] border border-separator-border p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="text-body-semibold text-text-primary">科目</div>
+                      <Button variant="quiet" size="sm" onClick={() => updateManualMapping(mapping => ({
+                        ...mapping,
+                        subjectMappings: [...mapping.subjectMappings, { subject: `科目${mapping.subjectMappings.length + 1}`, scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }],
+                      }))}><Plus className="h-3.5 w-3.5" />添加科目</Button>
                     </div>
-                    {manualMapping.subjectMappings.map((item, index) => (
-                      <div key={`${item.subject}-${index}`} className="space-y-2 rounded-2xl border border-separator-border bg-background-secondary-default p-3">
-                        <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <div className="space-y-1.5">
+                      {manualMapping.subjectMappings.map((item, index) => (
+                        <div key={`${item.subject}-${index}`} className="flex items-center gap-1.5">
                           <SelectMenu
                             value={item.subject}
                             onChange={value => updateManualMapping(mapping => ({
                               ...mapping,
                               subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, subject: value } : subjectItem),
                             }))}
-                            ariaLabel="科目"
-                            className="w-full"
+                            ariaLabel={`第 ${index + 1} 个科目名称`}
+                            className="h-8 min-w-0 flex-1 rounded-lg px-2 py-1 text-caption-1-regular shadow-none"
                             options={[...SUBJECT_ORDER.map(subject => ({ value: subject, label: subject })), ...(!SUBJECT_ORDER.includes(item.subject) ? [{ value: item.subject, label: item.subject }] : [])]}
                           />
-                          <button
-                            type="button"
+                          <IconButton
+                            label={`删除科目 ${item.subject}`}
+                            size="sm"
+                            variant="quiet"
+                            className="text-text-tertiary hover:bg-status-danger-50 hover:text-status-danger-600"
                             onClick={() => updateManualMapping(mapping => ({
                               ...mapping,
                               subjectMappings: mapping.subjectMappings.filter((_, subjectIndex) => subjectIndex !== index),
                             }))}
-                            className="rounded-xl px-2 text-status-danger-400 hover:bg-status-danger-50 hover:text-status-danger-600"
-                            aria-label="删除科目"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          ><Trash2 className="h-3.5 w-3.5" /></IconButton>
                         </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                          <SelectMenu
-                            value={item.scoreCol}
-                            onChange={value => updateManualMapping(mapping => ({
-                              ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, scoreCol: Number(value) } : subjectItem),
-                            }))}
-                            ariaLabel={`${item.subject}普通成绩列`}
-                            className="w-full"
-                            options={[{ value: -1, label: "普通成绩列" }, ...columnOptions]}
-                          />
-                          <SelectMenu
-                            value={item.rawScoreCol}
-                            onChange={value => updateManualMapping(mapping => ({
-                              ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, rawScoreCol: Number(value) } : subjectItem),
-                            }))}
-                            ariaLabel={`${item.subject}原始分列`}
-                            className="w-full"
-                            options={[{ value: -1, label: "原始分列" }, ...columnOptions]}
-                          />
-                          <SelectMenu
-                            value={item.assignedScoreCol}
-                            onChange={value => updateManualMapping(mapping => ({
-                              ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, assignedScoreCol: Number(value) } : subjectItem),
-                            }))}
-                            ariaLabel={`${item.subject}赋分列`}
-                            className="w-full"
-                            options={[{ value: -1, label: "赋分列" }, ...columnOptions]}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <SelectMenu
-                            value={item.rankClassCol}
-                            onChange={value => updateManualMapping(mapping => ({
-                              ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, rankClassCol: Number(value) } : subjectItem),
-                            }))}
-                            ariaLabel="班级排名列"
-                            className="w-full"
-                            options={[{ value: -1, label: "班排列（可选）" }, ...columnOptions]}
-                          />
-                          <SelectMenu
-                            value={item.rankSchoolCol}
-                            onChange={value => updateManualMapping(mapping => ({
-                              ...mapping,
-                              subjectMappings: mapping.subjectMappings.map((subjectItem, subjectIndex) => subjectIndex === index ? { ...subjectItem, rankSchoolCol: Number(value) } : subjectItem),
-                            }))}
-                            ariaLabel="学校排名列"
-                            className="w-full"
-                            options={[{ value: -1, label: "校排列（可选）" }, ...columnOptions]}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    <label className="block text-caption-1-regular text-text-secondary">总分与总排名</label>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <SelectMenu
-                        value={manualMapping.totalMapping.scoreCol}
-                        onChange={value => updateManualMapping(mapping => ({
-                          ...mapping,
-                          totalMapping: { ...mapping.totalMapping, scoreCol: Number(value) },
-                        }))}
-                        ariaLabel="普通总分列"
-                        className="w-full"
-                        options={[{ value: -1, label: "普通总分列" }, ...columnOptions]}
-                      />
-                      <SelectMenu
-                        value={manualMapping.totalMapping.rawScoreCol}
-                        onChange={value => updateManualMapping(mapping => ({
-                          ...mapping,
-                          totalMapping: { ...mapping.totalMapping, rawScoreCol: Number(value) },
-                        }))}
-                        ariaLabel="原始总分列"
-                        className="w-full"
-                        options={[{ value: -1, label: "原始总分列" }, ...columnOptions]}
-                      />
-                      <SelectMenu
-                        value={manualMapping.totalMapping.assignedScoreCol}
-                        onChange={value => updateManualMapping(mapping => ({
-                          ...mapping,
-                          totalMapping: { ...mapping.totalMapping, assignedScoreCol: Number(value) },
-                        }))}
-                        ariaLabel="赋分总分列"
-                        className="w-full"
-                        options={[{ value: -1, label: "赋分总分列" }, ...columnOptions]}
-                      />
+                      ))}
+                      {!manualMapping.subjectMappings.length && <p className="rounded-[var(--app-radius-sm)] border border-dashed border-border-button-default px-3 py-4 text-center text-caption-1-regular text-text-tertiary">还没有科目，点「添加科目」或在列头直接标总分/姓名列。</p>}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <SelectMenu
-                        value={manualMapping.totalMapping.rankClassCol}
-                        onChange={value => updateManualMapping(mapping => ({
-                          ...mapping,
-                          totalMapping: { ...mapping.totalMapping, rankClassCol: Number(value) },
-                        }))}
-                        ariaLabel="总班级排名列"
-                        className="w-full"
-                        options={[{ value: -1, label: "总班排（可选）" }, ...columnOptions]}
-                      />
-                      <SelectMenu
-                        value={manualMapping.totalMapping.rankSchoolCol}
-                        onChange={value => updateManualMapping(mapping => ({
-                          ...mapping,
-                          totalMapping: { ...mapping.totalMapping, rankSchoolCol: Number(value) },
-                        }))}
-                        ariaLabel="总学校排名列"
-                        className="w-full"
-                        options={[{ value: -1, label: "总校排（可选）" }, ...columnOptions]}
-                      />
-                    </div>
+                    <p className="mt-3 text-caption-1-regular leading-5 text-text-tertiary">每列只需标记一次；同一用途只能分给一列，重新分配会自动腾位置。班排、校排、原始分、赋分都可以在列头上标记。</p>
                   </div>
                 </div>
               </div>
