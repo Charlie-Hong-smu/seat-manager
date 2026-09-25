@@ -3,6 +3,7 @@ import { useState } from "react";
 import { DORM_EVENT_PRESETS, type NewDormEventInput } from "../state/dormitoryActions";
 import type { AppStudent } from "../state/types";
 import { StudentPicker } from "./StudentPicker";
+import { NumberStepper } from "./ui";
 
 interface DormEventFormProps {
   /** 可作为责任人的成员；当 lockedResponsible 存在时忽略。 */
@@ -70,20 +71,20 @@ export function DormEventForm({ members, lockedResponsible, submitLabel = "保�
         })}
       </div>
 
-      <div className="grid grid-cols-[1fr_5rem] gap-2">
+      <div className="grid grid-cols-[1fr_auto] gap-2">
         <input
           value={reason}
           onChange={event => setReason(event.target.value)}
           className="min-w-0 rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300"
           placeholder="原因"
         />
-        <input
-          type="number"
+        <NumberStepper
           value={score}
-          onChange={event => setScore(Number(event.target.value) || 0)}
-          className={`rounded-xl border bg-background-secondary-default px-2 py-2 text-center text-body-semibold outline-none focus:border-accent-300 ${
-            score > 0 ? "border-status-success-200 text-status-success-600" : score < 0 ? "border-status-danger-200 text-status-danger-500" : "border-border-button-default text-text-secondary"
-          }`}
+          onChange={setScore}
+          min={-50}
+          max={50}
+          ariaLabel="事件分值"
+          className={score > 0 ? "border-status-success-200" : score < 0 ? "border-status-danger-200" : ""}
         />
       </div>
 

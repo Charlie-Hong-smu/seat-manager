@@ -809,11 +809,14 @@ export function NumberStepper({ value, onChange, min = 0, max = 99, ariaLabel, c
   useEffect(() => setDraft(String(value)), [value]);
   const clamp = (next: number) => Math.min(max, Math.max(min, Math.round(next)));
   const commit = (raw: string) => { const parsed = Number(raw); const next = Number.isFinite(parsed) && raw.trim() ? clamp(parsed) : value; setDraft(String(next)); if (next !== value) onChange(next); };
+  const sanitize = (raw: string) => min < 0
+    ? raw.replace(/[^\d-]/g, "").replace(/-/g, (m, i) => (i === 0 ? "-" : ""))
+    : raw.replace(/[^\d]/g, "");
   const stepClass = "grid h-full w-8 shrink-0 place-items-center text-text-secondary transition-colors duration-150 hover:bg-background-secondary-default hover:text-text-primary disabled:cursor-not-allowed disabled:text-text-tertiary disabled:hover:bg-transparent focus-visible:outline-none focus-visible:bg-background-secondary-default";
   return <div role="group" aria-label={ariaLabel} className={cx("number-stepper inline-flex h-8 items-stretch overflow-hidden rounded-lg border border-border-button-default bg-background-primary-default shadow-xs focus-within:border-accent-300", className)}>
     <button type="button" aria-label={`减少${ariaLabel}`} disabled={value <= min} onClick={() => onChange(clamp(value - 1))} className={stepClass}><Minus className="h-3.5 w-3.5" /></button>
-    <span className="relative w-9 min-w-0 border-x border-separator-border">
-      <input aria-label={ariaLabel} inputMode="numeric" value={draft} onChange={event => setDraft(event.target.value.replace(/[^\d]/g, ""))}
+    <span className="relative w-10 min-w-0 border-x border-separator-border">
+      <input aria-label={ariaLabel} inputMode="numeric" value={draft} onChange={event => setDraft(sanitize(event.target.value))}
         onFocus={() => setEditing(true)}
         onBlur={event => { commit(event.target.value); setEditing(false); }}
         onKeyDown={event => {

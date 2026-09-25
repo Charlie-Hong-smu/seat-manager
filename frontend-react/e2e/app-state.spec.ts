@@ -1078,7 +1078,7 @@ test("dormitory periods, custom settings and event dates work together", async (
   await expect(settingsButton).toBeHidden();
   await periodGroup.getByRole("button", { name: "自定义周期" }).click();
   await settingsButton.click();
-  await page.getByText("每 N 个单位").locator("..").getByRole("spinbutton").fill("3");
+  await page.getByText("每 N 个单位").locator("..").getByRole("textbox", { name: "周期重复间隔" }).fill("3");
   await page.getByRole("button", { name: "保存周期" }).click();
   await expect(periodGroup.getByRole("button", { name: "自定义周期" })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => page.evaluate(() => {

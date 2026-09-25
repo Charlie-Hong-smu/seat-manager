@@ -34,7 +34,7 @@ import { animateSelectionTransfer } from "./selectionMotion";
 import { DormitoryListPanel } from "./DormitoryListPanel";
 import { DormitoryMembersPanel } from "./DormitoryMembersPanel";
 import { DormitoryPeriodToolbar } from "./DormitoryPeriodToolbar";
-import { Button, Input, ModalHeader, MobilePaneTabs, MotionCollapse, MotionSwitch, ConfirmDialog, DatePicker, DialogPresence, IconButton, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
+import { Button, Input, ModalHeader, MobilePaneTabs, MotionCollapse, MotionSwitch, ConfirmDialog, DatePicker, DialogPresence, IconButton, NumberStepper, runViewTransition, useActionToast, useAppDialog, useModalFocus } from "./ui";
 
 function scoreClass(value: number): string {
   return value > 0 ? "text-status-success-600" : value < 0 ? "text-status-danger-500" : "text-text-secondary";
@@ -651,18 +651,14 @@ export function DormitoryWorkspace({
                           {reason}
                         </span>
                         <div className="ml-auto flex items-center gap-2">
-                          <input
-                            type="number"
+                          <NumberStepper
                             value={score}
-                            onChange={e => setScore(Number(e.target.value) || 0)}
-                            className={`w-20 rounded-lg border bg-background-primary-default px-2 py-1.5 text-center text-body-semibold outline-none focus:border-accent-300 ${
-                              score > 0 ? "border-status-success-200 text-status-success-600" : score < 0 ? "border-status-danger-200 text-status-danger-500" : "border-border-button-default text-text-secondary"
-                            }`}
+                            onChange={setScore}
+                            min={-50}
+                            max={50}
+                            ariaLabel="事件分值"
+                            className={score > 0 ? "border-status-success-200" : score < 0 ? "border-status-danger-200" : ""}
                           />
-                          <div className="flex gap-1">
-                            <button onClick={() => setScore(s => s - 1)} className="grid h-7 w-7 place-items-center rounded-lg border border-border-button-default bg-background-primary-default text-text-tertiary hover:bg-status-danger-50 hover:text-status-danger-500 text-body-regular">−</button>
-                            <button onClick={() => setScore(s => s + 1)} className="grid h-7 w-7 place-items-center rounded-lg border border-border-button-default bg-background-primary-default text-text-tertiary hover:bg-status-success-50 hover:text-status-success-500 text-body-regular">+</button>
-                          </div>
                         </div>
                       </div>
 
@@ -820,11 +816,13 @@ export function DormitoryWorkspace({
                                 className="flex-1 rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300"
                                 placeholder="原因"
                               />
-                              <input
-                                type="number"
+                              <NumberStepper
                                 value={editScore}
-                                onChange={e => setEditScore(Number(e.target.value) || 0)}
-                                className="w-16 rounded-lg border border-border-button-default bg-background-primary-default px-2 py-1.5 text-center text-body-regular outline-none focus:border-accent-300"
+                                onChange={setEditScore}
+                                min={-50}
+                                max={50}
+                                ariaLabel="修改分值"
+                                className="shrink-0"
                               />
                             </div>
                             <input
@@ -993,11 +991,12 @@ export function DormitoryWorkspace({
                       </label>
                       <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-text-tertiary">
                         默认分
-                        <input
-                          type="number"
+                        <NumberStepper
                           value={preset.score}
-                          onChange={event => setPresetDrafts(previous => previous.map((item, itemIndex) => itemIndex === index ? { ...item, score: Number(event.target.value) || 0 } : item))}
-                          className="w-14 rounded-lg border border-border-button-default bg-background-primary-default px-1.5 py-1.5 text-center text-body-semibold text-text-primary outline-none focus:border-accent-300"
+                          onChange={score => setPresetDrafts(previous => previous.map((item, itemIndex) => itemIndex === index ? { ...item, score } : item))}
+                          min={-50}
+                          max={50}
+                          ariaLabel={`${preset.label}默认分`}
                         />
                       </label>
                       <button

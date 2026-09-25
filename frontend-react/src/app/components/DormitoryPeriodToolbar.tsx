@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Settings2 } from "lucide-react";
 
 import type { DormitoryPeriodMode, DormitoryPeriodSettings } from "../state/types";
 import type { DormitoryPeriodRange } from "../state/dormitoryPeriods";
-import { Button, Card, DatePicker, IconButton, SegmentedControl } from "./ui";
+import { Button, Card, DatePicker, IconButton, NumberStepper, SegmentedControl } from "./ui";
 
 export function DormitoryPeriodToolbar({
   mode,
@@ -73,17 +73,16 @@ export function DormitoryPeriodToolbar({
                 <span className="mb-1.5 block text-caption-1-semibold text-[var(--app-text-muted)]">重复单位</span>
                 <SegmentedControl value={draft.unit} onChange={unit => setDraft(current => ({ ...current, unit }))} ariaLabel="自定义周期单位" options={[{ value: "week", label: "周" }, { value: "month", label: "月" }]} />
               </div>
-              <label className="w-28">
+              <div>
                 <span className="mb-1.5 block text-caption-1-semibold text-[var(--app-text-muted)]">每 N 个单位</span>
-                <input
-                  type="number"
+                <NumberStepper
+                  value={draft.intervalCount}
+                  onChange={intervalCount => setDraft(current => ({ ...current, intervalCount }))}
                   min={1}
                   max={12}
-                  value={draft.intervalCount}
-                  onChange={event => setDraft(current => ({ ...current, intervalCount: Math.min(12, Math.max(1, Number(event.target.value) || 1)) }))}
-                  className="h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default px-3 text-body-regular outline-none focus:border-accent-300"
+                  ariaLabel="周期重复间隔"
                 />
-              </label>
+              </div>
               <div className="pb-0.5 text-caption-1-regular text-[var(--app-text-muted)]">当前规则：每 {draft.intervalCount} {draft.unit === "week" ? "周" : "个月"}一个周期</div>
               <div className="ml-auto flex gap-2">
                 <Button variant="secondary" size="sm" onClick={() => { setDraft(settings); setSettingsOpen(false); }}>取消</Button>
