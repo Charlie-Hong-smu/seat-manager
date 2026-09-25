@@ -550,12 +550,13 @@ export function ScoresWorkspace({
           <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="score-mapping-panel modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-[88rem] flex-col overflow-hidden outline-none">
             <ModalHeader title="成绩列映射" onClose={() => setMappingModalOpen(false)} actions={<Button variant="ai" size="sm" disabled={aiMappingBusy} onClick={() => void generateAiMapping()}>{aiMappingBusy ? "识别中…" : "AI 识别"}</Button>} />
 
-            <div className="score-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem] gap-0 overflow-hidden">
-              <div className="flex min-h-0 min-w-0 flex-col border-r border-separator-border bg-background-secondary-default p-4">
-                <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                  <span className="truncate text-caption-1-regular text-text-tertiary">{scoreFilename || "成绩表"} · 前 12 行预览 · 已标记 {mappedColumnCount(manualMapping, scoreHeaders.length)} / {scoreHeaders.length} 列</span>
+            <div className="score-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem] gap-3 overflow-hidden bg-background-secondary-default p-4">
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
+                <div className="flex items-center justify-between gap-3 border-b border-separator-border px-4 py-2.5">
+                  <span className="truncate text-caption-1-medium text-text-secondary">{scoreFilename || "成绩表"}</span>
+                  <span className="shrink-0 text-caption-1-regular text-text-tertiary">已标记 {mappedColumnCount(manualMapping, scoreHeaders.length)} / {scoreHeaders.length} 列</span>
                 </div>
-                <div className="min-h-0 flex-1 overflow-auto rounded-[var(--app-radius-md)] border border-border-button-default bg-background-primary-default">
+                <div className="min-h-0 flex-1 overflow-auto">
                   <table className="min-w-full border-separate border-spacing-0 text-left text-caption-1-regular">
                     <thead className="sticky top-0 z-10 text-text-secondary">
                       <tr>
@@ -563,8 +564,8 @@ export function ScoresWorkspace({
                           const role = columnRoleOf(manualMapping, index);
                           const mapped = role !== "unused";
                           return (
-                            <th key={`${header}-${index}`} data-mapped={mapped} className={`whitespace-nowrap border-b border-border-button-default px-2 py-2 align-top font-normal ${mapped ? "bg-accent-50/80" : "bg-background-tertiary-default"}`}>
-                              <div className="min-w-[8.5rem]">
+                            <th key={`${header}-${index}`} data-mapped={mapped} className={`whitespace-nowrap border-b border-separator-border px-2 py-2 align-top font-normal ${mapped ? "bg-accent-50/80" : "bg-background-secondary-default"}`}>
+                              <div className="min-w-[8rem]">
                                 <div className={`mb-1 truncate px-0.5 font-semibold ${mapped ? "text-text-primary" : "text-text-secondary"}`}>{index + 1}. {header || "空列"}</div>
                                 <SelectMenu
                                   value={role}
@@ -594,8 +595,8 @@ export function ScoresWorkspace({
                 </div>
               </div>
 
-              <div className="min-h-0 overflow-y-auto p-4">
-                <div className="space-y-4">
+              <div className="min-h-0 overflow-y-auto rounded-2xl border border-separator-border bg-background-primary-default p-3 shadow-sm">
+                <div className="space-y-3">
                   {!hasAiMappingAuth && (
                     <div className="space-y-2">
                       <Input
@@ -614,7 +615,7 @@ export function ScoresWorkspace({
 
                   <div>
                     <div className="mb-2 flex items-center justify-between gap-2 px-1">
-                      <div className="text-body-semibold text-text-primary">科目</div>
+                      <div className="text-caption-1-semibold text-text-secondary">科目</div>
                       <Button variant="quiet" size="sm" onClick={() => updateManualMapping(mapping => ({
                         ...mapping,
                         subjectMappings: [...mapping.subjectMappings, { subject: `科目${mapping.subjectMappings.length + 1}`, scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }],
@@ -652,7 +653,7 @@ export function ScoresWorkspace({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-separator-border px-5 py-4">
+            <div className="app-modal-footer flex items-center justify-end gap-2 px-5 py-4">
               <Button variant="secondary" onClick={() => setMappingModalOpen(false)}>先不应用</Button>
               <Button onClick={applyManualMapping}>应用映射</Button>
             </div>
