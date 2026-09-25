@@ -43,7 +43,7 @@ async function setup(page: Page) {
   await page.goto("./");
   await page.getByPlaceholder("请输入授权码").fill("TEST-MOTION");
   await page.getByRole("button", { name: "进入工作台", exact: true }).click();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
   await openSeatTool(page, "新增学生");
   for (const name of ["连续切换甲", "连续切换乙"]) {
     await page.getByPlaceholder("姓名", { exact: true }).fill(name);

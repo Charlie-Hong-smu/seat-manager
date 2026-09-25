@@ -6,7 +6,7 @@ test("adopted rotation creates a saved snapshot and undo removes it", async ({ p
   await page.goto("./");
   await page.getByPlaceholder("请输入授权码").fill("TEST-ONLY-ROTATION");
   await page.getByRole("button", { name: /^进入/ }).click();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
   await openSeatTool(page, "新增学生");
   for (const name of ["轮换甲", "轮换乙", "轮换丙", "轮换丁", "轮换戊", "轮换己"]) {
     await page.getByRole("textbox", { name: "姓名", exact: true }).fill(name);
@@ -157,7 +157,7 @@ test("shuffle preview waiting dock edits only the candidate until adoption", asy
   await page.goto("./");
   await page.getByPlaceholder("请输入授权码").fill("TEST-WAITING-PREVIEW");
   await page.getByRole("button", { name: /^进入/ }).click();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
   const persistedOrder = () => page.evaluate(() => {
     const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "{}");
     return book.slices[0].data.seatOrder as Array<string | null>;

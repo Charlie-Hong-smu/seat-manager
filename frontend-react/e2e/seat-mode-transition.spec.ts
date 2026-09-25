@@ -10,7 +10,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.goto("./");
     await page.getByPlaceholder("请输入授权码").fill("TEST-SEAT-MODE");
     await page.getByRole("button", { name: "进入工作台", exact: true }).click();
-    await page.getByRole("button", { name: "座位", exact: true }).click();
+    await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openSeatTool(page, "新增学生");
     await page.getByPlaceholder("姓名", { exact: true }).fill("过渡测试学生");

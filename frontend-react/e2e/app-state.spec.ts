@@ -18,7 +18,7 @@ async function login(page: import("@playwright/test").Page) {
   await page.getByPlaceholder("请输入授权码").fill("TEST-ZHANG-CODE");
   await page.getByRole("button", { name: "进入" }).click();
   await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: "管理", exact: true })).toBeVisible();
 }
 
@@ -53,7 +53,7 @@ test("license login and student edits survive a reload", async ({ page }) => {
   await expect(page.getByRole("button", { name: /测试学生/ }).last()).toBeVisible();
 
   await page.reload();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: /测试学生/ }).last()).toBeVisible();
   const storedBook = await page.evaluate(() => JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "null"));
   expect(storedBook.slices[0].data.students.some((student: { name: string }) => student.name === "测试学生")).toBe(true);
@@ -655,7 +655,7 @@ test("corrupt local workspace stays untouched until an explicit recovery", async
   });
   await page.getByRole("button", { name: "确认恢复" }).click();
   await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "今日", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: "管理", exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("seat-manager-workspaces-v1"))).not.toBe(corruptRaw);
 });

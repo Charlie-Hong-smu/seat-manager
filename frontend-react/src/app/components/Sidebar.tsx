@@ -43,16 +43,16 @@ const NAV_GROUPS: Array<{ label: string; items: NavEntry[] }> = [
     label: "日常管理",
     items: [
       { key: "today", label: "今日", icon: <SunMedium className="h-[18px] w-[18px]" /> },
-      { key: "daily", label: "座位", icon: <LayoutGrid className="h-[18px] w-[18px]" />, getBadge: ({ students }) => String(students.length) },
+      { key: "daily", label: "座位", icon: <LayoutGrid className="h-[18px] w-[18px]" /> },
       { key: "attendance", label: "出勤", icon: <CalendarCheck2 className="h-[18px] w-[18px]" /> },
       { key: "followups", label: "任务与作业", icon: <ListTodo className="h-[18px] w-[18px]" />, getBadge: ({ pendingTaskCount }) => pendingTaskCount ? String(pendingTaskCount) : "" },
-      { key: "dormitories", label: "宿舍", icon: <Home className="h-[18px] w-[18px]" />, getBadge: ({ dormitories }) => String(dormitories.length) },
+      { key: "dormitories", label: "宿舍", icon: <Home className="h-[18px] w-[18px]" /> },
     ],
   },
   {
     label: "学情分析",
     items: [
-      { key: "scores", label: "成绩", icon: <BarChart2 className="h-[18px] w-[18px]" />, getBadge: ({ gradeExams }) => String(gradeExams.length) },
+      { key: "scores", label: "成绩", icon: <BarChart2 className="h-[18px] w-[18px]" /> },
       { key: "comments", label: "评语工作台", icon: <MessageSquareText className="h-[18px] w-[18px]" /> },
     ],
   },
@@ -60,7 +60,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavEntry[] }> = [
     label: "班级工具",
     items: [
       { key: "funds", label: "班费", icon: <Wallet className="h-[18px] w-[18px]" /> },
-      { key: "history", label: "历史", icon: <History className="h-[18px] w-[18px]" />, getBadge: ({ savedSeatHistoryCount }) => String(savedSeatHistoryCount) },
+      { key: "history", label: "历史", icon: <History className="h-[18px] w-[18px]" /> },
     ],
   },
   {
@@ -179,9 +179,9 @@ export function Sidebar({
                       {item.icon}
                     </span>
                     <span className={`min-w-0 flex-1 truncate text-left whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${collapsed ? "max-w-0 translate-x-2 opacity-0" : "max-w-28 translate-x-0 opacity-100"}`}>{item.label}</span>
-                    {badge !== undefined && (
+                    {badge ? (
                       <span className={`min-w-5 shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold transition-[max-width,opacity,transform,padding] duration-300 ${collapsed ? "max-w-0 translate-x-2 overflow-hidden px-0 opacity-0" : "max-w-10 translate-x-0 opacity-100"} ${active ? "bg-background-primary-default text-button-ghost-foreground" : "bg-background-tertiary-default text-text-secondary"}`}><RollingText value={badge} /></span>
-                    )}
+                    ) : null}
                     <span className={`absolute -left-2 h-5 w-1 rounded-r-full bg-accent-500 transition-[opacity,transform] duration-300 ${collapsed && active ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-0"}`} />
                   </button>
                 );

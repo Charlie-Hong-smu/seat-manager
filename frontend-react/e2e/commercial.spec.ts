@@ -21,7 +21,7 @@ test("commercial login uses the real product-login UI with a test-only mocked re
   await page.getByPlaceholder("请输入授权码").fill("TEST-ONLY-CODE");
   await page.getByRole("button", { name: "进入" }).click();
   await expect(page.getByText("今日班务", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
   await expect(page.getByRole("button", { name: "管理", exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "AI 助手", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "打开 AI 助手", exact: true }).click();
@@ -64,7 +64,7 @@ test("commercial keeps comment context while previewing a student task", async (
   await page.goto("./");
   await page.getByPlaceholder("请输入授权码").fill("TEST-CONTEXT-PREVIEW");
   await page.getByRole("button", { name: "进入" }).click();
-  await page.getByRole("button", { name: "座位", exact: true }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "座位", exact: true }).click();
   await openSeatTool(page, "新增学生");
   await page.getByPlaceholder("姓名", { exact: true }).fill("商用速览学生");
   await page.getByRole("button", { name: "添加到班级" }).click();
