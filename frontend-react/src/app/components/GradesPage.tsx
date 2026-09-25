@@ -20,7 +20,7 @@ import {
 
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
-import { ChartViewport, MotionSwitch, AnimatedPopover, Button, DialogPresence, SegmentedControl } from "./ui";
+import { ChartViewport, MotionSwitch, AnimatedPopover, Button, DialogPresence, RollingText, SegmentedControl } from "./ui";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholds } from "../state/teacherWorkbench";
 import { createCompetitionRankMap } from "../state/gradeRanking";
@@ -493,8 +493,8 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                 <div key={stat.label} className="min-w-0 px-4 py-3">
                   <div className="truncate text-caption-1-regular text-text-tertiary">{stat.label}</div>
                   <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
-                    <span className="text-headline-semibold tabular-nums text-text-primary">{stat.value}</span>
-                    <span className="text-caption-1-regular text-text-tertiary">{stat.sub}</span>
+                    <RollingText value={stat.value} className="text-headline-semibold tabular-nums text-text-primary" />
+                    <RollingText value={stat.sub} className="text-caption-1-regular text-text-tertiary" />
                   </div>
                 </div>
               ))}

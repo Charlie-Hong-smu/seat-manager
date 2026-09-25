@@ -2999,6 +2999,12 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
 .record-row:hover .record-row__delete, .record-row__delete:focus-visible { opacity: 1; }
 @media (hover: none) { .record-row__delete { opacity: 1; } }
 .panel-stat { border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); padding: 10px 12px; background: var(--app-surface); }
+/* Odometer digits: a vertical 0-9 strip translates to the current digit. */
+.rolling-text { display: inline-flex; overflow: hidden; }
+.rolling-digit { display: inline-block; height: 1em; width: 1ch; overflow: hidden; }
+.rolling-digit__strip { display: flex; flex-direction: column; transition: transform 460ms var(--app-motion-ease); }
+.rolling-digit__cell, .rolling-char { display: block; height: 1em; line-height: 1em; }
+@media (prefers-reduced-motion: reduce) { .rolling-digit__strip { transition: none; } }
 .app-modal-footer {
   border-top: 1px solid var(--app-border);
   background: var(--app-surface-muted);

@@ -111,6 +111,24 @@ export function InlineStatus({ message, tone = "auto", className = "" }: {
   return <p role={resolvedTone === "error" ? "alert" : "status"} aria-live="polite" className={`rounded-[var(--app-radius-sm)] px-3 py-2 text-caption-1-semibold leading-5 ${toneClass} ${className}`}>{message}</p>;
 }
 
+const ROLLING_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/** Odometer-style text: each digit rolls vertically to its new value; other characters swap in place. */
+export function RollingText({ value, className = "" }: { value: string; className?: string }) {
+  const chars = Array.from(value);
+  return <span className={`rolling-text ${className}`} role="text" aria-label={value}>
+    {chars.map((char, index) => /\d/.test(char) ? (
+      <span key={index} aria-hidden="true" className="rolling-digit">
+        <span className="rolling-digit__strip" style={{ transform: `translateY(-${char}em)` }}>
+          {ROLLING_DIGITS.map(digit => <span key={digit} className="rolling-digit__cell">{digit}</span>)}
+        </span>
+      </span>
+    ) : (
+      <span key={index} aria-hidden="true" className="rolling-char">{char}</span>
+    ))}
+  </span>;
+}
+
 /**
  * 内联指标行：语义圆点 + 标签 + 数字 + 小字。
  * 用于替换装饰性统计大卡——信息相同时更轻；onOpen 时整段可点；
