@@ -23,7 +23,7 @@ import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuest
 import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Checkbox, Input, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalHeader, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
+import { AiGenerationPanel, Checkbox, Input, MotionCollapse, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalHeader, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
 import { assignColumnRole, columnRoleOf, columnRoleOptions, mappedColumnCount } from "../scoreColumnRoles";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
@@ -338,7 +338,7 @@ export function ScoresWorkspace({
       setRankDialogOpen(false);
       setMappingModalOpen(true);
       setAiMappingSuggestion(null);
-      setScoreStatus(`正在重新映射「${exam.name}」，应用映射后可覆盖保存。`);
+      setScoreStatus("");
     } catch {
       setScoreStatus("这场考试的原始表格无法重新映射，只能编辑考试名称和日期。");
       setEditingExamId(exam.id);
@@ -417,13 +417,11 @@ export function ScoresWorkspace({
                 <FileUp className="h-4 w-4 text-text-tertiary" />
                   <span className="text-body-regular text-text-secondary">{draft ? draft.filename : "拖拽或选择成绩文件"}</span>
               </FileDropZone>
-              {draft && (
+              <MotionCollapse open={Boolean(draft)} contentClassName="space-y-3">
                 <div className="space-y-2">
                   {remappingExamId && (
-                    <div className="flex items-start gap-2 rounded-xl border border-accent-100 bg-accent-50 px-3 py-2 text-caption-1-regular text-accent-700">
-                      <span className="min-w-0 flex-1">
-                        正在重新映射已保存考试，保存后会覆盖原考试。
-                      </span>
+                    <div className="flex items-center gap-2 rounded-xl border border-accent-100 bg-accent-50 px-3 py-2 text-caption-1-regular text-accent-700">
+                      <span className="min-w-0 flex-1">正在修改「{exams.find(e => e.id === remappingExamId)?.name || "已保存考试"}」，保存后覆盖原考试。</span>
                       <button
                         type="button"
                         onClick={() => {
@@ -447,34 +445,32 @@ export function ScoresWorkspace({
                   <DatePicker required value={examDate} onChange={setExamDate} ariaLabel="考试日期" className="w-full bg-background-primary-default" />
                   <Button onClick={saveDraft} className="w-full">{remappingExamId ? "保存修改" : "保存考试"}</Button>
                 </div>
-              )}
-              {scoreRows.length > 0 && manualMapping && (
-                <button
-                  type="button"
-                  onClick={() => setMappingModalOpen(true)}
-                  className="flex w-full items-center justify-between rounded-2xl border border-border-button-default bg-background-primary-default px-4 py-3 text-left text-body-regular text-text-primary hover:bg-background-secondary-default"
-                  style={{ fontWeight: 900 }}
-                >
-                  <span>映射设置</span>
-                  <span className="text-caption-1-regular text-text-tertiary">{manualMapping.subjectMappings.length} 个科目</span>
-                </button>
-              )}
-              {missingRankSummary && missingRankSummary.missingCellCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setRankDialogOpen(true)}
-                  className="flex w-full items-center justify-between rounded-2xl border border-accent-100 bg-accent-50 px-4 py-3 text-left text-body-regular text-accent-800 hover:bg-accent-100"
-                  style={{ fontWeight: 900 }}
-                >
-                  <span className="flex items-center gap-2"><ListOrdered className="h-4 w-4" />排名设置</span>
-                  <span className="text-caption-1-regular text-accent-500">{rankChoiceLabel}</span>
-                </button>
-              )}
-              {draft?.warnings.length ? (
-                <div className="rounded-xl border border-status-warning-100 bg-status-warning-50 px-3 py-2 text-caption-1-regular leading-5 text-status-warning-700">
-                  {draft.warnings.join(" ")}
-                </div>
-              ) : null}
+                {scoreRows.length > 0 && manualMapping && (
+                  <button
+                    type="button"
+                    onClick={() => setMappingModalOpen(true)}
+                    className="flex w-full items-center justify-between rounded-xl border border-separator-border bg-background-primary-default px-3.5 py-2.5 text-left text-body-medium text-text-primary transition-colors hover:bg-background-secondary-default"
+                  >
+                    <span>映射设置</span>
+                    <span className="text-caption-1-regular text-text-tertiary">{manualMapping.subjectMappings.length} 个科目</span>
+                  </button>
+                )}
+                {missingRankSummary && missingRankSummary.missingCellCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setRankDialogOpen(true)}
+                    className="flex w-full items-center justify-between rounded-xl border border-accent-100 bg-accent-50 px-3.5 py-2.5 text-left text-body-medium text-accent-800 transition-colors hover:bg-accent-100"
+                  >
+                    <span className="flex items-center gap-2"><ListOrdered className="h-4 w-4" />排名设置</span>
+                    <span className="text-caption-1-regular text-accent-500">{rankChoiceLabel}</span>
+                  </button>
+                )}
+                {draft?.warnings.length ? (
+                  <div className="rounded-xl border border-status-warning-100 bg-status-warning-50 px-3 py-2 text-caption-1-regular leading-5 text-status-warning-700">
+                    {draft.warnings.join(" ")}
+                  </div>
+                ) : null}
+              </MotionCollapse>
               {scoreStatus && <InlineStatus message={scoreStatus} className="text-body-regular" />}
             </div>
           </Panel>
