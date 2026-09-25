@@ -187,9 +187,17 @@ export class MotionSwitch extends Component<SwitchProps> {
         this.observers.push(observer);
         overlay.append(frame);
         before.image.querySelectorAll<HTMLElement>("[data-motion-surface], [data-motion-surface-frame]").forEach(copy => { if ((copy.dataset.motionSurfaceFrame || copy.dataset.motionSurface) === old.key) copy.style.visibility = "hidden"; });
+        // Position rides on transform (compositor) instead of left/top (layout),
+        // so the frame glides without per-frame pixel snapping; width/height still
+        // animate to morph the shell's size.
+        const dx = old.rect.x - (rect.x - origin.x);
+        const dy = old.rect.y - (rect.y - origin.y);
         this.animations.push(
           node.animate([{ opacity: 0 }, { opacity: 0 }], options),
-          frame.animate([{ left: `${old.rect.x}px`, top: `${old.rect.y}px`, width: `${old.rect.width}px`, height: `${old.rect.height}px`, borderRadius: old.radius, background: old.background, boxShadow: `inset 0 0 0 1px ${old.border}` }, { left: `${rect.x - origin.x}px`, top: `${rect.y - origin.y}px`, width: `${rect.width}px`, height: `${rect.height}px`, borderRadius: style.borderRadius, background: style.backgroundColor, boxShadow: `inset 0 0 0 1px ${style.borderColor}` }], options),
+          frame.animate([
+            { transform: `translate(${dx}px, ${dy}px)`, width: `${old.rect.width}px`, height: `${old.rect.height}px`, borderRadius: old.radius, background: old.background, boxShadow: `inset 0 0 0 1px ${old.border}` },
+            { transform: "translate(0px, 0px)", width: `${rect.width}px`, height: `${rect.height}px`, borderRadius: style.borderRadius, background: style.backgroundColor, boxShadow: `inset 0 0 0 1px ${style.borderColor}` },
+          ], options),
           old.image.animate([{ opacity: 1 }, { opacity: 0 }], options),
           arriving.animate([{ opacity: 0 }, { opacity: 1 }], options),
         );

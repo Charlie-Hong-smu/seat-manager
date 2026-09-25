@@ -478,7 +478,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
         </div>
       </div>
 
-      <MotionSwitch transitionKey={activeTab} contentClassName="grade-content p-6 flex flex-col gap-5">
+      <MotionSwitch transitionKey={activeTab} direction={activeTab === "trend" ? "right" : "left"} sharedLayout contentClassName="grade-content p-6 flex flex-col gap-5">
         {activeTab === "single" ? (
           <>
             <div className="grade-stat-grid grid grid-cols-4 divide-x divide-separator-border overflow-hidden rounded-xl border border-separator-border bg-background-primary-default">

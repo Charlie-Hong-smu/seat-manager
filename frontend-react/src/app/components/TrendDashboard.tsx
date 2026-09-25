@@ -46,7 +46,7 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
   const reducedMotion = useReducedMotion();
   return (
     <>
-      <div className="bg-background-primary-default rounded-2xl p-6 border border-separator-border shadow-sm">
+      <div data-motion-surface="grade-main-chart" className="bg-background-primary-default rounded-2xl p-6 border border-separator-border shadow-sm">
         <div className="flex items-start justify-between mb-5">
           <div>
             <h3 className="text-text-primary">多次考试趋势</h3>
