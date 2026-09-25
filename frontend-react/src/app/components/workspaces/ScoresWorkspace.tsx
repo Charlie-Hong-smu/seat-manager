@@ -336,7 +336,7 @@ export function ScoresWorkspace({
       setRemappingExamId(exam.id);
       setRankChoice(nextRankChoice);
       setRankDialogOpen(false);
-      setMappingModalOpen(true);
+      setMappingModalOpen(false);
       setAiMappingSuggestion(null);
       setScoreStatus("");
     } catch {
