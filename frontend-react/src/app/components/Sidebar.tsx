@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import type { AppStudent, Dormitory, GradeExam, StudentId } from "../state/types";
+import { RollingText } from "./ui";
 
 export type SidebarTab = "today" | "daily" | "attendance" | "followups" | "dormitories" | "scores" | "comments" | "funds" | "data" | "history";
 
@@ -179,7 +180,7 @@ export function Sidebar({
                     </span>
                     <span className={`min-w-0 flex-1 truncate text-left whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${collapsed ? "max-w-0 translate-x-2 opacity-0" : "max-w-28 translate-x-0 opacity-100"}`}>{item.label}</span>
                     {badge !== undefined && (
-                      <span className={`min-w-5 shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold transition-[max-width,opacity,transform,padding] duration-300 ${collapsed ? "max-w-0 translate-x-2 overflow-hidden px-0 opacity-0" : "max-w-10 translate-x-0 opacity-100"} ${active ? "bg-background-primary-default text-button-ghost-foreground" : "bg-background-tertiary-default text-text-secondary"}`}>{badge}</span>
+                      <span className={`min-w-5 shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold transition-[max-width,opacity,transform,padding] duration-300 ${collapsed ? "max-w-0 translate-x-2 overflow-hidden px-0 opacity-0" : "max-w-10 translate-x-0 opacity-100"} ${active ? "bg-background-primary-default text-button-ghost-foreground" : "bg-background-tertiary-default text-text-secondary"}`}><RollingText value={badge} /></span>
                     )}
                     <span className={`absolute -left-2 h-5 w-1 rounded-r-full bg-accent-500 transition-[opacity,transform] duration-300 ${collapsed && active ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-0"}`} />
                   </button>

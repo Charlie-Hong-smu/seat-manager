@@ -153,7 +153,7 @@ export function MetricStrip({ items, size = "md", className = "" }: {
       const content = <>
         {item.dot && <span aria-hidden="true" className={cx("size-2 shrink-0 self-center rounded-full", item.dot)} />}
         <span className={cx(compact ? "text-caption-1-semibold" : "text-body-medium", item.selected ? "text-accent-700" : "text-text-secondary")}>{item.label}</span>
-        <span className={cx("tabular-nums", compact ? "text-body-semibold" : "text-title-2-medium", item.selected ? "text-accent-700" : "text-text-primary")}>{item.value}</span>
+        <RollingText value={String(item.value)} className={cx("tabular-nums", compact ? "text-body-semibold" : "text-title-2-medium", item.selected ? "text-accent-700" : "text-text-primary")} />
         {item.caption && <span className="text-caption-1-regular text-text-secondary">{item.caption}</span>}
       </>;
       const itemClass = cx("flex items-baseline rounded-lg", compact ? "gap-1.5 px-2.5 py-1.5" : "gap-2 px-3 py-2");
@@ -805,19 +805,25 @@ export function NumberStepper({ value, onChange, min = 0, max = 99, ariaLabel, c
   className?: string;
 }) {
   const [draft, setDraft] = useState(String(value));
+  const [editing, setEditing] = useState(false);
   useEffect(() => setDraft(String(value)), [value]);
   const clamp = (next: number) => Math.min(max, Math.max(min, Math.round(next)));
   const commit = (raw: string) => { const parsed = Number(raw); const next = Number.isFinite(parsed) && raw.trim() ? clamp(parsed) : value; setDraft(String(next)); if (next !== value) onChange(next); };
   const stepClass = "grid h-full w-8 shrink-0 place-items-center text-text-secondary transition-colors duration-150 hover:bg-background-secondary-default hover:text-text-primary disabled:cursor-not-allowed disabled:text-text-tertiary disabled:hover:bg-transparent focus-visible:outline-none focus-visible:bg-background-secondary-default";
   return <div role="group" aria-label={ariaLabel} className={cx("number-stepper inline-flex h-8 items-stretch overflow-hidden rounded-lg border border-border-button-default bg-background-primary-default shadow-xs focus-within:border-accent-300", className)}>
     <button type="button" aria-label={`减少${ariaLabel}`} disabled={value <= min} onClick={() => onChange(clamp(value - 1))} className={stepClass}><Minus className="h-3.5 w-3.5" /></button>
-    <input aria-label={ariaLabel} inputMode="numeric" value={draft} onChange={event => setDraft(event.target.value.replace(/[^\d]/g, ""))} onBlur={event => commit(event.target.value)}
-      onKeyDown={event => {
-        if (event.key === "Enter") commit(event.currentTarget.value);
-        else if (event.key === "ArrowUp") { event.preventDefault(); onChange(clamp(value + 1)); }
-        else if (event.key === "ArrowDown") { event.preventDefault(); onChange(clamp(value - 1)); }
-      }}
-      className="w-9 min-w-0 border-x border-separator-border bg-transparent text-center text-body-semibold tabular-nums text-text-primary outline-none" />
+    <span className="relative w-9 min-w-0 border-x border-separator-border">
+      <input aria-label={ariaLabel} inputMode="numeric" value={draft} onChange={event => setDraft(event.target.value.replace(/[^\d]/g, ""))}
+        onFocus={() => setEditing(true)}
+        onBlur={event => { commit(event.target.value); setEditing(false); }}
+        onKeyDown={event => {
+          if (event.key === "Enter") commit(event.currentTarget.value);
+          else if (event.key === "ArrowUp") { event.preventDefault(); onChange(clamp(value + 1)); }
+          else if (event.key === "ArrowDown") { event.preventDefault(); onChange(clamp(value - 1)); }
+        }}
+        className={`h-full w-full bg-transparent text-center text-body-semibold tabular-nums outline-none ${editing ? "text-text-primary" : "text-transparent caret-transparent"}`} />
+      {!editing && <span aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center text-body-semibold tabular-nums text-text-primary"><RollingText value={draft} /></span>}
+    </span>
     <button type="button" aria-label={`增加${ariaLabel}`} disabled={value >= max} onClick={() => onChange(clamp(value + 1))} className={stepClass}><Plus className="h-3.5 w-3.5" /></button>
   </div>;
 }

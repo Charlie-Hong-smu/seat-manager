@@ -23,7 +23,7 @@ import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuest
 import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, Checkbox, Input, MotionCollapse, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalHeader, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
+import { AiGenerationPanel, Checkbox, Input, MotionCollapse, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalHeader, ModalShell, RollingText, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
 import { assignColumnRole, columnRoleOf, columnRoleOptions, mappedColumnCount } from "../scoreColumnRoles";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
@@ -582,7 +582,7 @@ export function ScoresWorkspace({
               <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
                 <div className="flex items-center justify-between gap-3 border-b border-separator-border px-4 py-2.5">
                   <span className="truncate text-caption-1-medium text-text-secondary">{scoreFilename || "成绩表"}</span>
-                  <span className="shrink-0 text-caption-1-regular text-text-tertiary">已标记 {mappedColumnCount(manualMapping, scoreHeaders.length)} / {scoreHeaders.length} 列</span>
+                  <RollingText value={`已标记 ${mappedColumnCount(manualMapping, scoreHeaders.length)} / ${scoreHeaders.length} 列`} className="shrink-0 text-caption-1-regular text-text-tertiary" />
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto">
                   <table className="min-w-full border-separate border-spacing-0 text-left text-caption-1-regular">

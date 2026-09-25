@@ -1,4 +1,4 @@
-import { ChartViewport } from "./ui";
+import { ChartViewport, RollingText } from "./ui";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import {
   CartesianGrid,
@@ -120,19 +120,15 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
                       const diff = v !== null && previous !== null ? Math.round((v - previous) * 10) / 10 : null;
                       return (
                         <td key={i} className="text-center px-6 py-3">
-                          <span className="tabular-nums text-text-primary" style={{ fontWeight: 600 }}>{v ?? "—"}</span>
+                          <RollingText value={v !== null ? String(v) : "—"} className="tabular-nums text-text-primary font-semibold" />
                           {diff !== null && (
-                            <span className={`ml-1.5 text-caption-1-regular tabular-nums ${diff > 0 ? "text-status-success-500" : diff < 0 ? "text-status-danger-400" : "text-text-tertiary"}`}>
-                              {diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "—"}
-                            </span>
+                            <RollingText value={diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : "—"} className={`ml-1.5 text-caption-1-regular tabular-nums ${diff > 0 ? "text-status-success-500" : diff < 0 ? "text-status-danger-400" : "text-text-tertiary"}`} />
                           )}
                         </td>
                       );
                     })}
                     <td className="text-center px-6 py-3">
-                      <span className={`text-body-regular tabular-nums ${total === null ? "text-text-tertiary" : total > 0 ? "text-status-success-600" : total < 0 ? "text-status-danger-500" : "text-text-tertiary"}`} style={{ fontWeight: 700 }}>
-                        {total === null ? "—" : total > 0 ? `+${total}` : total}
-                      </span>
+                      <RollingText value={total === null ? "—" : total > 0 ? `+${total}` : String(total)} className={`text-body-regular tabular-nums font-bold ${total === null ? "text-text-tertiary" : total > 0 ? "text-status-success-600" : total < 0 ? "text-status-danger-500" : "text-text-tertiary"}`} />
                     </td>
                   </tr>
                 );

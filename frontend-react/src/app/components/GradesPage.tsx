@@ -597,7 +597,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             title={matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
                             className={`border-t border-separator-border hover:bg-background-secondary-default/60 transition-colors ${matchedStudent ? "cursor-pointer" : ""}`}
                           >
-                            <td className="px-6 py-3 text-text-tertiary tabular-nums">{row.rankClass ?? rank ?? "—"}</td>
+                            <td className="px-6 py-3 text-text-tertiary tabular-nums"><RollingText value={String(row.rankClass ?? rank ?? "—")} /></td>
                             <td className="px-4 py-3 text-text-primary" style={{ fontWeight: 600 }}>{row.name}</td>
                             {subjects.map(subject => {
                               const score = row.scores[subject]?.score ?? null;
@@ -606,7 +606,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                                 <td key={subject} className={`text-center px-4 py-3 tabular-nums ${color}`}>{formatScore(score)}</td>
                               );
                             })}
-                            <td className="text-center px-4 py-3 tabular-nums text-text-primary bg-accent-50/50" style={{ fontWeight: 700 }}>{formatScore(row.totalScore)}</td>
+                            <td className="text-center px-4 py-3 tabular-nums text-text-primary bg-accent-50/50" style={{ fontWeight: 700 }}><RollingText value={formatScore(row.totalScore)} /></td>
                             <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
                               <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption-1-regular ${gradeColor}`}>{grade}</span>
                             </td>
@@ -659,9 +659,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             title={item.matchedStudent ? "点击查看学生详情" : "未匹配到学生档案"}
                             className={`border-t border-separator-border hover:bg-background-secondary-default/60 transition-colors ${item.matchedStudent ? "cursor-pointer" : ""}`}
                           >
-                            <td className="px-6 py-3 text-text-tertiary tabular-nums">{item.row.scores[metricKey]?.rankClass ?? metricRankById.get(item.row.id) ?? "—"}</td>
+                            <td className="px-6 py-3 text-text-tertiary tabular-nums"><RollingText value={String(item.row.scores[metricKey]?.rankClass ?? metricRankById.get(item.row.id) ?? "—")} /></td>
                             <td className="px-4 py-3 text-text-primary" style={{ fontWeight: 600 }}>{item.row.name}</td>
-                            <td className="text-center px-4 py-3 tabular-nums text-accent-700" style={{ fontWeight: 700 }}>{formatScore(item.value)}</td>
+                            <td className="text-center px-4 py-3 tabular-nums text-accent-700" style={{ fontWeight: 700 }}><RollingText value={formatScore(item.value)} /></td>
                             <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
                               <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption-1-regular ${gradeColor}`}>{grade}</span>
                             </td>
