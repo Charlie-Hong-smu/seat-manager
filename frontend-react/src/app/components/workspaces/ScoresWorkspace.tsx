@@ -279,12 +279,28 @@ export function ScoresWorkspace({
     setScoreFilename("");
     setManualMapping(null);
     setRemappingExamId("");
+    setEditingExamId("");
     setRankChoice("pending");
     setRankDialogOpen(false);
     setMappingModalOpen(false);
     setAiMappingSuggestion(null);
     setScoreStatus(`已保存「${saved.name}」。`);
     actionToast.show({ message: `考试“${saved.name}”已保存`, duration: 4000 });
+  }
+
+  function resetImportDraft() {
+    setDraft(null);
+    setSourceDraft(null);
+    setScoreRows([]);
+    setScoreFilename("");
+    setManualMapping(null);
+    setRemappingExamId("");
+    setRankChoice("pending");
+    setRankDialogOpen(false);
+    setMappingModalOpen(false);
+    setAiMappingSuggestion(null);
+    setEditingExamId("");
+    setScoreStatus("");
   }
 
   function editExam(exam: GradeExam) {
@@ -301,7 +317,7 @@ export function ScoresWorkspace({
       setRemappingExamId(exam.id);
       setMappingModalOpen(false);
       setAiMappingSuggestion(null);
-      setEditingExamId("");
+      setEditingExamId(exam.id);
       setScoreStatus(`「${exam.name}」没有保存原始表格，请重新选择原成绩文件，确认映射后会覆盖原考试。`);
       return;
     }
@@ -334,6 +350,7 @@ export function ScoresWorkspace({
       setExamName(exam.name);
       setExamDate(exam.date || toLocalDateKey());
       setRemappingExamId(exam.id);
+      setEditingExamId(exam.id);
       setRankChoice(nextRankChoice);
       setRankDialogOpen(false);
       setMappingModalOpen(false);
@@ -417,33 +434,11 @@ export function ScoresWorkspace({
                 <FileUp className="h-4 w-4 text-text-tertiary" />
                   <span className="text-body-regular text-text-secondary">{draft ? draft.filename : "拖拽或选择成绩文件"}</span>
               </FileDropZone>
-              <MotionCollapse open={Boolean(draft)} contentClassName="space-y-3">
+              <MotionCollapse open={Boolean(draft) && !remappingExamId} contentClassName="space-y-3">
                 <div className="space-y-2">
-                  {remappingExamId && (
-                    <div className="flex items-center gap-2 rounded-xl border border-accent-100 bg-accent-50 px-3 py-2 text-caption-1-regular text-accent-700">
-                      <span className="min-w-0 flex-1">正在修改「{exams.find(e => e.id === remappingExamId)?.name || "已保存考试"}」，保存后覆盖原考试。</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraft(null);
-                          setSourceDraft(null);
-                          setScoreRows([]);
-                          setScoreFilename("");
-                          setManualMapping(null);
-                          setRemappingExamId("");
-                          setRankChoice("pending");
-                          setRankDialogOpen(false);
-                          setScoreStatus("");
-                        }}
-                        className="shrink-0 font-semibold text-accent-500 hover:text-accent-700"
-                      >
-                        取消
-                      </button>
-                    </div>
-                  )}
                   <input value={examName} onChange={event => setExamName(event.target.value)} className="w-full rounded-xl border border-border-button-default bg-background-primary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
                   <DatePicker required value={examDate} onChange={setExamDate} ariaLabel="考试日期" className="w-full bg-background-primary-default" />
-                  <Button onClick={saveDraft} className="w-full">{remappingExamId ? "保存修改" : "保存考试"}</Button>
+                  <Button onClick={saveDraft} className="w-full">保存考试</Button>
                 </div>
                 {scoreRows.length > 0 && manualMapping && (
                   <button
@@ -481,22 +476,59 @@ export function ScoresWorkspace({
                 <MotionSwitch key={exam.id} transitionKey={editingExamId === exam.id ? "edit" : "view"} className="score-exam-edit-morph">
                 {editingExamId === exam.id ? (
                   <div key={exam.id} className="rounded-xl border border-separator-border p-3">
-                    <div className="space-y-2">
-                      <input value={editExamName} onChange={e => setEditExamName(e.target.value)} className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
-                      <DatePicker required value={editExamDate} onChange={setEditExamDate} ariaLabel="修改考试日期" className="w-full" />
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            if (!editExamName.trim()) return;
-                            if (onUpdateGradeExam(exam.id, editExamName, editExamDate)) setEditingExamId("");
-                          }}
-                        >
-                          保存
-                        </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setEditingExamId("")}>取消</Button>
+                    {remappingExamId === exam.id ? (
+                      <div className="space-y-2">
+                        <p className="text-caption-1-regular text-text-tertiary">保存后覆盖原考试数据。</p>
+                        <input value={examName} onChange={e => setExamName(e.target.value)} className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
+                        <DatePicker required value={examDate} onChange={setExamDate} ariaLabel="考试日期" className="w-full" />
+                        {manualMapping && (
+                          <button
+                            type="button"
+                            onClick={() => setMappingModalOpen(true)}
+                            className="flex w-full items-center justify-between rounded-lg border border-separator-border bg-background-primary-default px-3 py-2 text-left text-caption-1-medium text-text-primary transition-colors hover:bg-background-secondary-default"
+                          >
+                            <span>映射设置</span>
+                            <span className="text-caption-1-regular text-text-tertiary">{manualMapping.subjectMappings.length} 个科目</span>
+                          </button>
+                        )}
+                        {missingRankSummary && missingRankSummary.missingCellCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setRankDialogOpen(true)}
+                            className="flex w-full items-center justify-between rounded-lg border border-accent-100 bg-accent-50 px-3 py-2 text-left text-caption-1-medium text-accent-800 transition-colors hover:bg-accent-100"
+                          >
+                            <span className="flex items-center gap-1.5"><ListOrdered className="h-3.5 w-3.5" />排名设置</span>
+                            <span className="text-caption-1-regular text-accent-500">{rankChoiceLabel}</span>
+                          </button>
+                        )}
+                        {draft?.warnings.length ? (
+                          <div className="rounded-lg border border-status-warning-100 bg-status-warning-50 px-3 py-2 text-caption-1-regular leading-5 text-status-warning-700">
+                            {draft.warnings.join(" ")}
+                          </div>
+                        ) : null}
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button size="sm" onClick={saveDraft}>保存修改</Button>
+                          <Button size="sm" variant="secondary" onClick={resetImportDraft}>取消</Button>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <input value={editExamName} onChange={e => setEditExamName(e.target.value)} className="w-full rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-body-regular outline-none focus:border-accent-300" placeholder="考试名称" />
+                        <DatePicker required value={editExamDate} onChange={setEditExamDate} ariaLabel="修改考试日期" className="w-full" />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              if (!editExamName.trim()) return;
+                              if (onUpdateGradeExam(exam.id, editExamName, editExamDate)) setEditingExamId("");
+                            }}
+                          >
+                            保存
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => setEditingExamId("")}>取消</Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div key={exam.id} className="flex items-center gap-1 py-2.5">
