@@ -23,7 +23,7 @@ import type { AppStudent, FollowupTask, GradeExam, GradeItemAnalysis, GradeQuest
 import type { TimelineTarget } from "../../state/dataInsights";
 import { ExamTableModal } from "../ExamTableModal";
 import { GradesPage } from "../GradesPage";
-import { AiGenerationPanel, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalHeader, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
+import { AiGenerationPanel, Checkbox, Input, MotionSwitch, Button, ConfirmDialog, DatePicker, DialogPresence, FileDropZone, IconButton, InlineStatus, ModalHeader, ModalShell, SelectMenu, UnderlineTabs, useActionToast, useModalFocus } from "../ui";
 import { assignColumnRole, columnRoleOf, columnRoleOptions, mappedColumnCount } from "../scoreColumnRoles";
 import { ScoreItemAnalysisPanel } from "../ScoreItemAnalysisPanel";
 import { WorkspacePanel as Panel } from "./WorkspacePanel";
@@ -548,16 +548,12 @@ export function ScoresWorkspace({
       {mappingModalOpen && manualMapping && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
           <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="score-mapping-panel modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-[88rem] flex-col overflow-hidden outline-none">
-            <ModalHeader title="成绩列映射" description="AI 会读取表头和最多 80 行样例，生成后仍可手动调整。" onClose={() => setMappingModalOpen(false)} />
+            <ModalHeader title="成绩列映射" onClose={() => setMappingModalOpen(false)} actions={<Button variant="ai" size="sm" disabled={aiMappingBusy} onClick={() => void generateAiMapping()}>{aiMappingBusy ? "识别中…" : "AI 识别"}</Button>} />
 
             <div className="score-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem] gap-0 overflow-hidden">
               <div className="flex min-h-0 min-w-0 flex-col border-r border-separator-border bg-background-secondary-default p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-body-semibold text-text-primary">表格预览 · 点击列头选择用途</div>
-                    <div className="mt-0.5 text-caption-1-regular text-text-tertiary">{scoreFilename || "成绩表"} · 共 {Math.max(scoreRows.length - 1, 0)} 行数据 · 已标记 {mappedColumnCount(manualMapping, scoreHeaders.length)} / {scoreHeaders.length} 列</div>
-                  </div>
-                  <span className="rounded-full bg-background-primary-default px-3 py-1 text-caption-1-regular text-text-secondary shadow-sm">显示前 12 行</span>
+                <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                  <span className="truncate text-caption-1-regular text-text-tertiary">{scoreFilename || "成绩表"} · 前 12 行预览 · 已标记 {mappedColumnCount(manualMapping, scoreHeaders.length)} / {scoreHeaders.length} 列</span>
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto rounded-[var(--app-radius-md)] border border-border-button-default bg-background-primary-default">
                   <table className="min-w-full border-separate border-spacing-0 text-left text-caption-1-regular">
@@ -569,7 +565,7 @@ export function ScoresWorkspace({
                           return (
                             <th key={`${header}-${index}`} data-mapped={mapped} className={`whitespace-nowrap border-b border-border-button-default px-2 py-2 align-top font-normal ${mapped ? "bg-accent-50/80" : "bg-background-tertiary-default"}`}>
                               <div className="min-w-[8.5rem]">
-                                <div className={`mb-1 truncate px-0.5 font-semibold ${mapped ? "text-accent-700" : "text-text-secondary"}`}>{index + 1}. {header || "空列"}</div>
+                                <div className={`mb-1 truncate px-0.5 font-semibold ${mapped ? "text-text-primary" : "text-text-secondary"}`}>{index + 1}. {header || "空列"}</div>
                                 <SelectMenu
                                   value={role}
                                   onChange={value => updateManualMapping(mapping => assignColumnRole(mapping, index, value))}
@@ -600,42 +596,29 @@ export function ScoresWorkspace({
 
               <div className="min-h-0 overflow-y-auto p-4">
                 <div className="space-y-4">
-                  <div className="rounded-[var(--app-radius-md)] border border-separator-border bg-background-secondary-default p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="text-body-semibold text-text-primary">AI 映射</div>
-                        <div className="mt-0.5 text-caption-1-regular leading-5 text-text-tertiary">先让 AI 填好映射，再由你确认或继续改。</div>
-                      </div>
-                      <Button variant="ai" size="sm" disabled={aiMappingBusy} onClick={() => void generateAiMapping()}>{aiMappingBusy ? "识别中" : "AI 识别"}</Button>
+                  {!hasAiMappingAuth && (
+                    <div className="space-y-2">
+                      <Input
+                        value={aiMappingAccessCode}
+                        onChange={setAiMappingAccessCode}
+                        placeholder="输入 AI 授权码"
+                      />
+                      <Checkbox isSelected={aiMappingRemember} onChange={setAiMappingRemember}>记住授权码</Checkbox>
                     </div>
-                    {!hasAiMappingAuth && (
-                      <div className="mt-3 space-y-2">
-                        <input
-                          value={aiMappingAccessCode}
-                          onChange={event => setAiMappingAccessCode(event.target.value)}
-                          className="w-full rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 py-2 text-body-regular outline-none focus:border-accent-300"
-                          placeholder="输入 AI 授权码"
-                        />
-                        <label className="flex items-center gap-2 text-caption-1-regular text-text-secondary">
-                          <input type="checkbox" checked={aiMappingRemember} onChange={event => setAiMappingRemember(event.target.checked)} />
-                          记住授权码
-                        </label>
-                      </div>
-                    )}
-                    {aiMappingSuggestion && (
-                      <div className="mt-3 rounded-[var(--app-radius-sm)] border border-separator-border bg-background-primary-default px-3 py-2 text-caption-1-regular leading-5 text-text-secondary">
-                        {aiMappingSuggestion.note || "AI 已填入映射，可继续手动修改或直接应用。"}
-                      </div>
-                    )}
-                  </div>
+                  )}
+                  {aiMappingSuggestion && (
+                    <p className="rounded-[var(--app-radius-sm)] border border-separator-border bg-background-secondary-default px-3 py-2 text-caption-1-regular leading-5 text-text-secondary">
+                      {aiMappingSuggestion.note || "AI 已填入映射，可继续手动修改或直接应用。"}
+                    </p>
+                  )}
 
-                  <div className="rounded-[var(--app-radius-md)] border border-separator-border p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-2 px-1">
                       <div className="text-body-semibold text-text-primary">科目</div>
                       <Button variant="quiet" size="sm" onClick={() => updateManualMapping(mapping => ({
                         ...mapping,
                         subjectMappings: [...mapping.subjectMappings, { subject: `科目${mapping.subjectMappings.length + 1}`, scoreCol: -1, rawScoreCol: -1, assignedScoreCol: -1, rankClassCol: -1, rankSchoolCol: -1 }],
-                      }))}><Plus className="h-3.5 w-3.5" />添加科目</Button>
+                      }))}><Plus className="h-3.5 w-3.5" />添加</Button>
                     </div>
                     <div className="space-y-1.5">
                       {manualMapping.subjectMappings.map((item, index) => (
@@ -662,9 +645,8 @@ export function ScoresWorkspace({
                           ><Trash2 className="h-3.5 w-3.5" /></IconButton>
                         </div>
                       ))}
-                      {!manualMapping.subjectMappings.length && <p className="rounded-[var(--app-radius-sm)] border border-dashed border-border-button-default px-3 py-4 text-center text-caption-1-regular text-text-tertiary">还没有科目，点「添加科目」或在列头直接标总分/姓名列。</p>}
+                      {!manualMapping.subjectMappings.length && <p className="text-caption-1-regular text-text-tertiary">还没有科目</p>}
                     </div>
-                    <p className="mt-3 text-caption-1-regular leading-5 text-text-tertiary">每列只需标记一次；同一用途只能分给一列，重新分配会自动腾位置。班排、校排、原始分、赋分都可以在列头上标记。</p>
                   </div>
                 </div>
               </div>
