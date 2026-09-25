@@ -20,7 +20,7 @@ import {
 
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
-import { ChartViewport, MotionSwitch, AnimatedPopover, Button, DialogPresence, RollingText, SegmentedControl } from "./ui";
+import { ChartViewport, MotionSwitch, AnimatedPopover, Button, DialogPresence, NumberStepper, RollingText, SegmentedControl } from "./ui";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholds } from "../state/teacherWorkbench";
 import { createCompetitionRankMap } from "../state/gradeRanking";
@@ -414,26 +414,18 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
             <AnimatedPopover
               open={activeTab === "single" && thresholdOpen}
-              className="absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border border-separator-border bg-background-primary-default p-4 shadow-xl shadow-gray-200/70"
+              className="absolute left-0 top-full z-30 mt-2 w-56 rounded-2xl border border-separator-border bg-background-primary-default p-4 shadow-xl shadow-gray-200/70"
             >
-                <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2.5">
                   {(([
                     ["pass", "及格"],
                     ["good", "良好"],
                     ["excellent", "优秀"],
                   ]) as Array<[keyof GradeThresholds, string]>).map(([key, label]) => (
-                    <label key={key} className="space-y-1.5 text-caption-1-regular text-text-secondary" style={{ fontWeight: 700 }}>
-                      <span>{label}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={thresholds[key]}
-                        onChange={event => updateThreshold(key, Number(event.target.value))}
-                        className="h-9 w-full rounded-xl border border-border-button-default bg-background-primary-default px-2 text-center text-body-regular text-text-primary outline-none transition-colors focus:border-accent-300"
-                        style={{ fontWeight: 800 }}
-                      />
-                    </label>
+                    <div key={key} className="flex items-center justify-between gap-3">
+                      <span className="text-body-medium text-text-secondary">{label}</span>
+                      <NumberStepper value={thresholds[key]} onChange={value => updateThreshold(key, value)} min={0} max={100} ariaLabel={`${label}阈值`} />
+                    </div>
                   ))}
                 </div>
                 <p className="mt-3 truncate text-caption-1-regular text-text-tertiary">{metricKey === "total" ? totalThresholdHint : subjectThresholdHint}</p>

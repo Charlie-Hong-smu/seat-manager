@@ -2852,6 +2852,8 @@ html, body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
  }
  input:focus-visible, textarea:focus-visible { outline-color: var(--color-border-focus-ring); }
  input[type=checkbox], input[type=radio] { accent-color: var(--app-primary); }
+input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
  button { transition-timing-function: var(--app-motion-ease); }
 }
 .app-popover-motion { transform-origin: top; transition: opacity 200ms var(--app-motion-ease), transform 200ms var(--app-motion-ease); }
