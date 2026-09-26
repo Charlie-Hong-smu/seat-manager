@@ -176,7 +176,8 @@ export class MotionSwitch extends Component<SwitchProps> {
         // Same footprint: no pixel handoff. The live node already carries the new
         // state (charts animate their own data transition), and the page-level
         // snapshot fading over it performs the crossfade.
-        const sameBox = Math.abs(old.rect.x - (rect.x - origin.x)) < 2 && Math.abs(old.rect.y - (rect.y - origin.y)) < 2
+        const sameBox = rect.width > 0 && rect.height > 0
+          && Math.abs(old.rect.x - (rect.x - origin.x)) < 2 && Math.abs(old.rect.y - (rect.y - origin.y)) < 2
           && Math.abs(old.rect.width - rect.width) < 2 && Math.abs(old.rect.height - rect.height) < 2;
         if (sameBox) return;
         const frame = document.createElement("div");

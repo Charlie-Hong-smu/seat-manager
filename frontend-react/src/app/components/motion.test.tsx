@@ -64,6 +64,11 @@ describe("shared continuous motion", () => {
 
   it("morphs matching surfaces without scaling their text or duplicating live controls", async () => {
     const { container, rerender } = render(<MotionSwitch transitionKey="quick" sharedLayout><button data-motion-surface="student-a" id="student-a">甲</button></MotionSwitch>);
+    // Surfaces actually move: same-footprint morphs are skipped on purpose.
+    vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function (this: Element) {
+      if (this.getAttribute?.("data-motion-surface") === "student-a") return this.tagName === "BUTTON" ? new DOMRect(0, 0, 300, 100) : new DOMRect(40, 20, 200, 140);
+      return new DOMRect(0, 0, 300, 100);
+    });
     rerender(<MotionSwitch transitionKey="detail" sharedLayout><div data-motion-surface="student-a"><input id="student-a" aria-label="甲备注" /></div></MotionSwitch>);
     const frame = container.querySelector(".app-motion-surface");
     expect(frame).not.toBeNull();
@@ -80,6 +85,11 @@ describe("shared continuous motion", () => {
   it("refreshes arriving chart pixels after measurement and keeps SVG references local", async () => {
     const chart = (id: string) => <div data-motion-surface="chart"><svg><defs><clipPath id={id}><rect width="100" height="100" /></clipPath></defs><g clipPath={`url(#${id})`}><path d="M0 0H10V10Z" /></g></svg></div>;
     const { container, rerender } = render(<MotionSwitch transitionKey="a" sharedLayout>{chart("chart-a")}</MotionSwitch>);
+    // Surfaces actually move: same-footprint morphs are skipped on purpose.
+    vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function (this: Element) {
+      if (this.getAttribute?.("data-motion-surface") === "chart") return this.querySelector("clipPath")?.id === "chart-a" ? new DOMRect(0, 0, 300, 100) : new DOMRect(40, 20, 200, 140);
+      return new DOMRect(0, 0, 300, 100);
+    });
     rerender(<MotionSwitch transitionKey="b" sharedLayout>{chart("chart-b")}</MotionSwitch>);
     const live = container.querySelector<HTMLElement>(".app-motion-content > [data-motion-surface]")!;
     const arriving = container.querySelector<HTMLElement>(".app-motion-surface > .app-motion-snapshot")!;
