@@ -5,18 +5,23 @@
 ## 代码边界
 
 - `worker-entry.js`：Wrangler 入口，导出应用与 AccountCoordinator；`deepseek-ai-worker.js` 保持纯应用 facade，供既有 Node 检查使用。
-- `worker-app.js`：CORS、异常边界、显式路由装配与现有领域 handler。
+- `worker-app.js`：CORS、异常边界、显式路由装配，以及尚未提取的授权、管理和 AI handler。
+- `routes/sync-routes.js`：完整的手动同步领域，包括兼容同步码授权、产品 token 校验、状态、上传和恢复。
+- `worker-input.js`：共享请求 JSON 读取与既有文本转换；`worker-license-keys.js` 统一授权记录和账户同步空间的键规则。
 - `worker-auth.js`：token、hash 和常量时间比较。
 - `worker-usage.js`：`AiRequestContext`、短窗口限流和持久每日计数。
 - `worker-account-coordinator.js`：按授权键或计数日键分片，串行计数、绑定设备及管理员写入；保持 KV 兼容镜像。
-- `routes/`：license、sync 与 AI 的领域路由表；管理员路由仍由应用入口显式装配并受同一鉴权/响应边界保护。
+- `routes/license-routes.js`、`routes/ai-routes.js`：领域路由表；管理员路由仍由应用入口显式装配并受同一鉴权/响应边界保护。
 - `worker-router.js`：统一路由调度。
 - `worker-response.js`：CORS、JSON 和异常响应。
 - `worker-routes.js`：浏览器可调用的公共路由契约。
 - `test/routes.test.js`：Worker 与 Netlify 代理路由一致性。
 - `test/worker.test.js`：鉴权边界、请求限制和异常响应。
+- `test/sync.test.js`：账户隔离、旧同步码和旧备份、整柜往返、字节上限、等待写入及失败响应、Commercial 代理链路。
 
 新增或删除公共接口时，必须同时更新 handler 与 `worker-routes.js`，并让路由契约测试通过。不要在 README 中维护另一份容易过期的完整路由清单。
+
+同步存储同时保留前端传入的 `workspaceBook` 与旧客户端使用的 `data`，整柜也计入 5 MiB 上限。旧记录只有 `data` 时继续按原响应返回，不伪造缺失班级或学期。Worker 不合并或迁移备份；前端在老师确认恢复后校验整柜、下载本机安全备份，再替换本机数据。
 
 ## 本地命令
 

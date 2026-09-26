@@ -26,7 +26,7 @@
 - 学生姓名与别名搜索统一走 `state/studentSearch.ts`，CSV 转义与下载统一走 `state/csv.ts`，页面不要再复制同类逻辑。
 - 成绩阈值与宿舍事件偏好保存在当前切片 `settings`，会随备份和手动云同步迁移；旧宿舍全局键只作为首次兼容读取源。
 - 弹窗焦点约束与状态反馈分别复用 `useModalFocus`、`InlineStatus`；高风险删除优先保留审计记录，并提供短时撤销。
-- Worker 已分出鉴权、usage 和路由分发，`routes/` 目前仍主要是转发层；授权、同步、AI 等 handler 主体仍集中在 `worker-app.js`，后续应按领域逐个提取。
+- Worker 已分出鉴权、usage 和路由分发；维护分支进一步将手动同步的授权、状态、上传和恢复提取到 `routes/sync-routes.js`，并修复整柜 `workspaceBook` 被遗漏的问题。授权、管理、AI handler 仍集中在 `worker-app.js`，后续按领域逐个提取。该维护分支尚未发布，勿把本地修复当作线上行为。
 - GitHub Pages、Commercial Pages 和 Worker workflow 发布前都会运行自动检查。
 
 ## 修改后的最低验收

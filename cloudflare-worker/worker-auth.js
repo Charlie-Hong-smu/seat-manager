@@ -1,3 +1,5 @@
+export const SESSION_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+
 export function getBearerToken(request) {
   const header = request.headers.get("Authorization") || "";
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";

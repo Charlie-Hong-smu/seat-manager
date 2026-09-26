@@ -33,6 +33,7 @@
 - `components/AiAssistantLauncher.tsx`、`AiAssistantWorkspace.tsx`：全局 AI Companion 的轻量常驻入口与按需加载面板；同一组件状态跨业务页保留对话与草稿，并按工作区 ID 复用既有 `seat-manager-ai-assistant-chat:*` 缓存。
 - `state/aiApiClient.ts`：AI token、商用授权复用、代理/直连 fallback 和公共错误语义。
 - `cloudflare-worker/`：授权、手动同步、AI 和授权管理接口。
+- `cloudflare-worker/routes/sync-routes.js`：手动同步领域的实际实现，包含旧同步码授权、产品凭证校验和状态/保存/读取；通过 `worker-input.js` 复用请求与文本处理，通过 `worker-license-keys.js` 与授权管理共享 KV 键规则，不反向依赖 `worker-app.js`。
 - `cloudflare-worker/worker-routes.js`：浏览器可调用的公共路由契约；Netlify 代理直接复用。
 - `license-admin/`：仅管理员使用的静态授权运营后台；`admin-model.js` 保持搜索、筛选和指标计算为可测试纯函数，页面不进入产品构建。
 
@@ -63,9 +64,11 @@ React event
 - WorkspaceSlice `data`：保持旧完整 state 形状，供导入、导出和旧客户端兼容。
 - 本机备份：`{ version, exportedAt, data }`。
 - 本机整柜备份：v2 `{ version, exportedAt, workspaceBook }`；继续兼容导入 v1 单班 `{ version, data }`。
-- 云同步：同时发送 `workspaceBook` 和旧兼容字段 `data`，上限 5 MiB。
+- 云同步：前端同时发送 `workspaceBook` 和旧兼容字段 `data`；Worker 将二者一起保存、读取，并对完整备份执行 5 MiB 限制。旧记录未包含整柜时继续返回单班 `data`。
 
 云同步是显式上传/恢复，不做后台同步、冲突合并或增量覆盖。恢复前先生成本机备份。
+
+2026-09-26 同步领域提取时修复了 Worker 只保存/返回 `data`、遗漏前端 `workspaceBook` 的问题。既有仅含单班数据的云记录不会凭空补齐其他班级；此修复部署后，需从保有完整文件柜的客户端重新手动上传，才能得到完整整柜备份。
 
 `workspaceValidation.ts` 是本机整柜、备份导入和云恢复的统一结构校验边界。它校验版本、切片/学期唯一 ID、当前切片引用以及每个切片的 `students` / `seatOrder` 基础形状，同时保留未知兼容字段。所有恢复必须先完整校验，再通过一次整柜写入替换本机数据；旧单班云数据也先包装成切片后执行同一条写入链路。
 
