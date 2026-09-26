@@ -62,6 +62,16 @@ describe("shared continuous motion", () => {
     expect(flights.every(flight => flight.cancel.mock.calls.length === 0)).toBe(true);
   });
 
+  it("slides tab panels in from the side of the chosen tab", () => {
+    const animate = vi.mocked(Element.prototype.animate as unknown as (...args: unknown[]) => unknown);
+    const entering = () => (animate.mock.calls[animate.mock.calls.length - 2][0] as Keyframe[])[0].transform;
+    const { rerender } = render(<MotionSwitch transitionKey="tasks" order={0}>待办</MotionSwitch>);
+    rerender(<MotionSwitch transitionKey="homework" order={1}>作业</MotionSwitch>);
+    expect(entering()).toBe("translateX(24px)");
+    rerender(<MotionSwitch transitionKey="tasks" order={0}>待办</MotionSwitch>);
+    expect(entering()).toBe("translateX(-24px)");
+  });
+
   it("morphs matching surfaces without scaling their text or duplicating live controls", async () => {
     const { container, rerender } = render(<MotionSwitch transitionKey="quick" sharedLayout><button data-motion-surface="student-a" id="student-a">甲</button></MotionSwitch>);
     // Surfaces actually move: same-footprint morphs are skipped on purpose.

@@ -141,7 +141,7 @@ export function FundTransactionForm({ students, onSubmit }: FundTransactionFormP
       {/* 类别 */}
       <div>
         <div className="mb-2 text-caption-1-regular text-text-tertiary">类别</div>
-        <MotionSwitch transitionKey={type} contentClassName="flex flex-wrap gap-2">
+        <MotionSwitch transitionKey={type} order={type === "income" ? 1 : 0} contentClassName="flex flex-wrap gap-2">
           {presets.map(preset => (
             <button
               key={preset.category}

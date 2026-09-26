@@ -490,7 +490,7 @@ export function StudentModal({
           </div>
         </header>
 
-        <MotionSwitch scrollable transitionKey={`${student.id}-${activeTab}`} contentClassName="space-y-5 p-6">
+        <MotionSwitch scrollable transitionKey={`${student.id}-${activeTab}`} direction={tabDirection} contentClassName="space-y-5 p-6">
           {activeTab === "profile" && (
           <div className="student-profile-sheet" data-editing={profileEditing}>
             <section className="student-profile-section" aria-label="基本资料">
@@ -660,7 +660,7 @@ export function StudentModal({
               leavesWorkbench={leavesWorkbench}
             />
             <UnderlineTabs value={followupView} onChange={nextView => { setContextPreview(null); setFollowupView(nextView); }} ariaLabel="跟进与沟通" options={[{ value: "advice", label: "跟进建议", tone: "ai" }, { value: "communication", label: "周沟通稿" }]} />
-            <MotionSwitch transitionKey={followupView}>{followupView === "advice" ? <AiStudentFollowupPanel
+            <MotionSwitch transitionKey={followupView} order={followupView === "advice" ? 0 : 1}>{followupView === "advice" ? <AiStudentFollowupPanel
               student={student}
               context={{
                 dormitories,

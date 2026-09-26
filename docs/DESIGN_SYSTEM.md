@@ -68,7 +68,7 @@
 | 日期选择 | `DatePicker` | 浏览器原生 `input[type=date]` 或各页面自行格式化日期按钮 |
 | 标准模态面板 | `ModalShell` | 仅靠透明度隐藏、缺少焦点圈定或关闭后不恢复焦点的局部遮罩 |
 | 自定义浮层 | `AnimatedPopover` | 条件渲染导致只有展开动画、没有收起动画 |
-| 页签切换 | `UnderlineTabs` + `MotionSwitch` 连续交接 | 静态下划线、内容瞬切或每页独立实现 tab |
+| 页签切换 | `UnderlineTabs` / 视图 `SegmentedControl` + `MotionSwitch order={页签序号}`：按所选页签的方向 24px 横向滑入、旧内容反向淡出（380ms）；已用 `sharedLayout` 逐卡形变的快速/详细视图不再叠加滑动 | 静态下划线、内容瞬切、无方向的原地交接或每页独立实现 tab |
 | 右侧工具面板 | `ToolDrawer`（工作区内打开时停靠进 `DrawerDock`，从弹窗打开时浮在弹窗之上） | 新建结构相同但焦点、Esc、遮罩行为不同的抽屉；在工作区内为抽屉加遮罩或虚化页面 |
 | 工具栏短操作面板 | `ToolPopover` | 为一两个字段的短操作打开整屏高抽屉并虚化页面 |
 | 工具栏低频入口收纳 | `ActionMenu` | 页面内自拼菜单、缺少方向键/Esc/焦点归还，或把低频入口和主操作平铺成同权重按钮 |

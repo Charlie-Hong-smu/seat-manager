@@ -176,7 +176,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
               <h4 className="mb-2 text-body-semibold text-text-primary">考试范围</h4>
               <SegmentedControl value={options.range} ariaLabel="考试范围" className="flex w-full" options={[{ value: "all", label: "全部考试" }, { value: "specific", label: "指定考试" }, { value: "date", label: "指定时间段" }]} onChange={value => update({ range: value as GradeExportOptions["range"] })} />
 
-              <MotionSwitch transitionKey={options.range}>
+              <MotionSwitch transitionKey={options.range} order={["all", "specific", "date"].indexOf(options.range)}>
               {options.range === "specific" && (
                 <div className="mt-3 grid max-h-44 grid-cols-2 gap-x-3 gap-y-2 overflow-y-auto rounded-[var(--app-radius-md)] border border-separator-border p-3">
                   {exams.map(exam => (

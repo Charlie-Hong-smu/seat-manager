@@ -72,7 +72,7 @@ export function FollowupWorkspace({ students, tasks, homeworkAssignments, subjec
 
   return <div className="h-full overflow-y-auto bg-background-primary-default p-4"><div className="mx-auto max-w-6xl space-y-4">
     <UnderlineTabs value={mode} onChange={setMode} ariaLabel="任务与作业" options={[{ value: "tasks", label: "待办" }, { value: "homework", label: "作业" }]}/>
-    <MotionSwitch transitionKey={mode} contentClassName="space-y-4">{mode === "homework" ? <HomeworkPanel students={students} assignments={homeworkAssignments} tasks={tasks} subjectCatalog={subjectCatalog} onChange={onHomeworkChange} onTaskChange={onChange} onOpenTask={openLinkedTask} onSubjectCatalogChange={onSubjectCatalogChange} onCreateFollowups={createHomeworkFollowups} onActivity={onActivity} initialAssignmentId={homeworkTargetId}/> : <>
+    <MotionSwitch transitionKey={mode} order={mode === "homework" ? 1 : 0} contentClassName="space-y-4">{mode === "homework" ? <HomeworkPanel students={students} assignments={homeworkAssignments} tasks={tasks} subjectCatalog={subjectCatalog} onChange={onHomeworkChange} onTaskChange={onChange} onOpenTask={openLinkedTask} onSubjectCatalogChange={onSubjectCatalogChange} onCreateFollowups={createHomeworkFollowups} onActivity={onActivity} initialAssignmentId={homeworkTargetId}/> : <>
     <MetricStrip items={[
       { key: "pending", label: "待处理", value: pendingGroups.length, dot: "bg-accent-500", caption: overdue > 0 ? `含逾期 ${overdue} 项` : "无逾期", onOpen: () => setFilter("pending") },
       { key: "today", label: "今日到期", value: today, dot: "bg-status-warning-500", caption: "今日截止", onOpen: () => setFilter("today") },

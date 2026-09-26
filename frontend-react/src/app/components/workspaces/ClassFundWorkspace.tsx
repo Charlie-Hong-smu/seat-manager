@@ -194,7 +194,7 @@ export function ClassFundWorkspace({
             </Card>
           </div>
 
-          <MotionSwitch transitionKey={view}>{view === "projects" && onSaveCollection && <Suspense fallback={<div role="status" className="p-6 text-body-regular text-text-secondary">正在加载收费事项…</div>}><FundCollectionsPanel key={focusedCollectionId} initialId={focusedCollectionId} collections={collections} students={students} transactions={transactions} tasks={tasks} onSave={onSaveCollection} onAdd={addTransaction} onLink={(id, collectionId) => {
+          <MotionSwitch transitionKey={view} order={["ledger", "projects", "collection"].indexOf(view)}>{view === "projects" && onSaveCollection && <Suspense fallback={<div role="status" className="p-6 text-body-regular text-text-secondary">正在加载收费事项…</div>}><FundCollectionsPanel key={focusedCollectionId} initialId={focusedCollectionId} collections={collections} students={students} transactions={transactions} tasks={tasks} onSave={onSaveCollection} onAdd={addTransaction} onLink={(id, collectionId) => {
             const before = transactions.find(item => item.id === id); if (!before) return;
             onUpdate(id, { collectionId });
             const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "fund", entityId: id }, studentIds: before.relatedStudentIds || [], title: "流水已关联收费事项", detail: before.category }));

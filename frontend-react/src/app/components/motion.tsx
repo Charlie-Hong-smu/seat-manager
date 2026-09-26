@@ -57,6 +57,8 @@ type SwitchProps = {
   className?: string;
   contentClassName?: string;
   direction?: "left" | "right";
+  /** Position of the active tab: panels slide in from the side of the tab that was chosen. */
+  order?: number;
   /** Ordered sidebar navigation: a short visual lead, then a vertical page handoff. */
   navigationIndex?: number;
   /** Ordered records: move only data-motion-shift regions inside a stationary shell. */
@@ -144,9 +146,10 @@ export class MotionSwitch extends Component<SwitchProps> {
     const surfaceTargets = before.surfaces.length
       ? new Map(surfaces(content).map(node => [node.dataset.motionSurface!, { node, rect: node.getBoundingClientRect() }]))
       : null;
-    const distance = this.props.direction ? (this.props.direction === "left" ? -12 : 12) : 0;
+    const orderDelta = this.props.order !== undefined && _previous.order !== undefined ? this.props.order - _previous.order : 0;
+    const distance = orderDelta ? Math.sign(orderDelta) * 24 : this.props.direction ? (this.props.direction === "left" ? -12 : 12) : 0;
     const orderedContent = this.props.contentIndex !== undefined;
-    const options: KeyframeAnimationOptions = { duration: orderedContent ? 400 : DURATION, easing: orderedContent ? "cubic-bezier(0.3, 0, 0.2, 1)" : EASING, fill: "both" };
+    const options: KeyframeAnimationOptions = { duration: orderedContent ? 400 : orderDelta ? 380 : DURATION, easing: orderedContent ? "cubic-bezier(0.3, 0, 0.2, 1)" : EASING, fill: "both" };
     // Keep the destination opaque: fading both layers exposes the background mid-flight.
     if (orderedContent) {
       const offset = this.props.contentIndex! >= (_previous.contentIndex ?? 0) ? 24 : -24;

@@ -117,7 +117,7 @@ export function HistoryWorkspace({ students, history, timeline = [], onSave, onR
         <SegmentedControl value={view} onChange={changeView} ariaLabel="历史视图" options={[{ value: "activity", label: "班级动态" }, { value: "seats", label: "座位快照" }]} />
       </div>
 
-      <MotionSwitch transitionKey={view}>{view === "activity" ? <div className="space-y-4">
+      <MotionSwitch transitionKey={view} order={view === "seats" ? 1 : 0}>{view === "activity" ? <div className="space-y-4">
         <Card overflow="visible" className="relative z-20" bodyClassName="p-4">
           <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_260px]">
             <div className="relative"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[var(--app-text-muted)]"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索学生、事项、说明或业务类型" className="h-10 w-full rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default pl-9 pr-10 text-body-regular outline-none transition-colors focus:border-accent-300 focus:ring-2 focus:ring-accent-500/10"/>{query && <button type="button" onClick={() => setQuery("")} aria-label="清除搜索" className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-lg text-text-tertiary hover:bg-background-tertiary-default"><X className="h-3.5 w-3.5"/></button>}</div>
