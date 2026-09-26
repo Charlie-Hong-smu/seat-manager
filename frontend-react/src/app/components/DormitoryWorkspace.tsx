@@ -1,3 +1,4 @@
+import { useDormitoryEventEditor } from "../hooks/useDormitoryEventEditor";
 import type { ClassDutiesBinding } from "../state/classDuties";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { isValidDateKey } from "../state/dateKey";
@@ -111,13 +112,6 @@ export function DormitoryWorkspace({
   const [mobilePane, setMobilePane] = useState<"list" | "events" | "members">("list");
   const [newName, setNewName] = useWorkspaceDraftState("dormitory:new:newName", "");
   const [memberSearch, setMemberSearch] = useState("");
-  const [editingEventId, setEditingEventId] = useState("");
-  const editingSource = dormitories.flatMap(dorm => [...dorm.events, ...dorm.history.flatMap(history => history.events)]).find(event => event.id === editingEventId);
-  const [editReason, setEditReason, cleareditReason] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:reason`, editingSource?.reason ?? "");
-  const [editScore, setEditScore, cleareditScore] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:score`, editingSource?.score ?? 0);
-  const [editNote, setEditNote, cleareditNote] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:note`, editingSource?.note ?? "");
-  const [editPunishment, setEditPunishment, cleareditPunishment] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:punishment`, editingSource?.punishment ?? "");
-  const [editDate, setEditDate, cleareditDate] = useWorkspaceDraftState(`dormitory:edit:${editingEventId}:date`, editingSource?.date ?? localDateKey());
   const [eventDate, setEventDate] = useWorkspaceDraftState(`dormitory:new:eventDate:${selectedDormId}`, localDateKey());
   const [periodMode, setPeriodMode] = useState<DormitoryPeriodMode>("week");
   const [periodAnchor, setPeriodAnchor] = useState(localDateKey());
@@ -165,6 +159,10 @@ export function DormitoryWorkspace({
   const periodScores = new Map(dormitories.map(dormitory => [dormitory.id, calculateDormitoryPeriodScore(dormitory, periodRange)]));
   const sortedDormitories = [...dormitories].sort((a, b) => (periodScores.get(b.id) || 0) - (periodScores.get(a.id) || 0) || a.name.localeCompare(b.name, "zh-Hans-CN"));
   const selectedDormitory = dormitories.find(dormitory => dormitory.id === selectedDormId) || sortedDormitories[0] || null;
+  const { editingEventId, startEditEvent, closeEditor, save: saveEventDraft,
+    editReason, setEditReason, editScore, setEditScore, editNote, setEditNote,
+    editPunishment, setEditPunishment, editDate, setEditDate,
+  } = useDormitoryEventEditor({ selectionKey: selectedDormId, dormitory: selectedDormitory, onUpdate: onUpdateDormitoryEvent, onActivity });
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const memberStudents = useMemo(() => selectedDormitory ? selectedDormitory.memberIds.map(id => studentById.get(id)).filter((student): student is AppStudent => Boolean(student)) : [], [selectedDormitory, studentById]);
   const assignableStudents = useMemo(() => students
@@ -200,7 +198,6 @@ export function DormitoryWorkspace({
 
   // 切换宿舍时重置编辑状态 + 触发主区域动画
   useEffect(() => {
-    setEditingEventId("");
     setRenamingDormId("");
     setRenameError("");
     setAnimKey(k => k + 1);
@@ -335,24 +332,10 @@ export function DormitoryWorkspace({
     });
   }
 
-  function startEditEvent(eventId: string, _reason: string, _score: number, _note: string, _punishment: string, _date: string) {
-    setEditingEventId(eventId);
-  }
-
   function saveEditEvent() {
-    if (!selectedDormitory || !editingEventId || !isValidDateKey(editDate)) return;
-    const previousEvent = selectedPeriodEvents.find(entry => entry.event.id === editingEventId)?.event;
-    onUpdateDormitoryEvent(selectedDormitory.id, editingEventId, { reason: editReason, score: editScore, note: editNote, punishment: editPunishment, date: editDate });
-    cleareditReason(); cleareditScore(); cleareditNote(); cleareditPunishment(); cleareditDate();
-    const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "dormitory", entityId: editingEventId, studentId: previousEvent?.responsibleStudentIds?.[0] || previousEvent?.responsibleStudentId }, studentIds: previousEvent?.responsibleStudentIds || (previousEvent?.responsibleStudentId ? [previousEvent.responsibleStudentId] : []), title: `修改宿舍事件：${editReason}`, detail: `${selectedDormitory.name} · ${editScore > 0 ? "+" : ""}${editScore} 分` }));
-    setEditingEventId("");
-    actionToast.show({
-      message: "宿舍事件修改已保存",
-      actionLabel: previousEvent ? "撤销" : undefined,
-      actionIcon: previousEvent ? <RotateCcw className="h-3.5 w-3.5" /> : undefined,
-      onAction: previousEvent ? () => { onUpdateDormitoryEvent(selectedDormitory.id, previousEvent.id, { reason: previousEvent.reason, score: previousEvent.score, note: previousEvent.note, punishment: previousEvent.punishment || "", date: previousEvent.date }); if (typeof undoActivity === "function") undoActivity(); } : undefined,
-      duration: 6000,
-    });
+    const saved = saveEventDraft();
+    if (!saved) return;
+    actionToast.show({ message: "宿舍事件修改已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: saved.undo, duration: 6000 });
   }
 
   function toggleResponsible(studentId: string) {
@@ -848,7 +831,7 @@ export function DormitoryWorkspace({
                               </button>
                               <button
                                 aria-label="取消宿舍事件修改"
-                                onClick={() => setEditingEventId("")}
+                                onClick={closeEditor}
                                 className="rounded-lg border border-border-button-default bg-background-primary-default px-3 py-1.5 text-caption-1-semibold text-text-secondary hover:bg-background-secondary-default"
                               >
                                 <X className="h-3.5 w-3.5" />
@@ -878,7 +861,7 @@ export function DormitoryWorkspace({
                                   <button
                                     aria-label={`编辑宿舍事件：${event.reason}`}
                                     onClick={() =>
-                                      startEditEvent(event.id, event.reason, event.score, event.note, event.punishment || "", event.date)
+                                      startEditEvent(event.id)
                                     }
                                     className="rounded-md p-1 text-text-tertiary hover:bg-background-tertiary-default hover:text-text-primary"
                                   >
