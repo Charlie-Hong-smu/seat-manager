@@ -1,7 +1,9 @@
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { useScopedRequest } from "../hooks/useScopedRequest";
+import { useCommentDrafts, type CommentState } from "../hooks/useCommentDrafts";
+import { useCommentBatch } from "../hooks/useCommentBatch";
+import { useCommentEditor } from "../hooks/useCommentEditor";
 import { getCurrentWorkspaceScope } from "../state/workspaces";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertCircle,
@@ -23,24 +25,18 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
+import { hasStoredAiAuth } from "../state/aiCommentService";
 import {
   COMMENT_REFINEMENT_ACTIONS,
-  refineCommentSelection,
-  replaceCommentSelection,
-  type CommentRefinementAction,
 } from "../state/aiCommentRefinementService";
 import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
-import { cacheStudentCommentDraft, readStudentCommentDraft, readStudentCommentDrafts, saveStudentCommentDraft } from "../state/commentStorage";
+import { cacheStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
-  readCommentRubric,
-  readStudentCommentProfile,
-  readStudentCommentProfiles,
   saveCommentRubric,
   saveStudentCommentProfile,
   summarizeCommentProfile,
 } from "../state/commentRubricStorage";
-import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentDraft, StudentCommentProfile, StudentId } from "../state/types";
+import type { AppStudent, CommentCriterion, CommentRubric, StudentCommentProfile, StudentId } from "../state/types";
 import { Checkbox, MobilePaneTabs, ModalHeader, MotionList, MotionCollapse, DialogPresence, AiGenerationPanel, Button, IconButton, MotionSwitch, SegmentedControl, useModalFocus, useAppDialog } from "./ui";
 import {
   addCommentCustomOption,
@@ -52,97 +48,13 @@ import {
   toggleCommentCriterion,
 } from "./commentEditor";
 import {
-  emptyCommentBatchState,
   loadCommentBatchState,
-  saveCommentBatchState,
-  type CommentBatchState,
 } from "./commentBatchStorage";
 import { toLocalDateKey } from "../state/dateKey";
 import { matchesStudentSearch } from "../state/studentSearch";
 
-interface CommentState {
-  studentId: StudentId;
-  text: string;
-  generated: boolean;
-  needsInfo: boolean;
-  failed: boolean;
-  lengthMode: string;
-  style: string;
-  targetWordCount: number;
-}
-
 type CommentFilterMode = "all" | "pending" | "needsInfo";
 type WorkbenchMode = "single" | "batch";
-type SingleGenerationPhase = "idle" | "loading" | "revealing";
-type RefinementPhase = "idle" | "loading" | "ready";
-
-interface CommentTextSelection {
-  start: number;
-  end: number;
-  text: string;
-  actionLeft: number;
-  actionTop: number;
-}
-
-function measureTextareaSelection(textarea: HTMLTextAreaElement, selectionStart: number, selectionEnd: number) {
-  const computed = window.getComputedStyle(textarea);
-  const mirror = document.createElement("div");
-  const borderWidth = (Number.parseFloat(computed.borderLeftWidth) || 0) + (Number.parseFloat(computed.borderRightWidth) || 0);
-  Object.assign(mirror.style, {
-    position: "fixed",
-    left: "-10000px",
-    top: "0",
-    width: `${textarea.clientWidth + borderWidth}px`,
-    boxSizing: computed.boxSizing,
-    whiteSpace: "pre-wrap",
-    overflowWrap: "break-word",
-    font: computed.font,
-    letterSpacing: computed.letterSpacing,
-    lineHeight: computed.lineHeight,
-    padding: computed.padding,
-    border: computed.border,
-  });
-  mirror.appendChild(document.createTextNode(textarea.value.slice(0, selectionStart)));
-  const selectedSpan = document.createElement("span");
-  selectedSpan.textContent = textarea.value.slice(selectionStart, selectionEnd) || "\u200b";
-  mirror.appendChild(selectedSpan);
-  document.body.appendChild(mirror);
-  const mirrorRect = mirror.getBoundingClientRect();
-  const selectedRects = Array.from(selectedSpan.getClientRects());
-  const lastRect = selectedRects[selectedRects.length - 1];
-  const anchor = lastRect
-    ? { left: lastRect.left - mirrorRect.left, top: lastRect.top - mirrorRect.top, height: lastRect.height }
-    : { left: 8, top: 8, height: 28 };
-  const viewportLeft = anchor.left - textarea.scrollLeft;
-  const belowTop = anchor.top + anchor.height + 8;
-  const viewportBelowTop = belowTop - textarea.scrollTop;
-  mirror.remove();
-  return {
-    left: Math.min(Math.max(8, viewportLeft), Math.max(8, textarea.clientWidth - 238)) + textarea.scrollLeft,
-    top: viewportBelowTop > textarea.clientHeight - 42
-      ? Math.max(8, anchor.top - 42)
-      : belowTop,
-  };
-}
-
-function buildInitialComments(students: AppStudent[], failedIds: StudentId[] = []): CommentState[] {
-  const failedSet = new Set(failedIds);
-  const drafts = readStudentCommentDrafts(students);
-  return students.map(s => {
-    const draft = drafts[s.id];
-    return {
-    studentId: s.id,
-    text: draft.generatedComment,
-    generated: Boolean(draft.generatedComment),
-    needsInfo: failedSet.has(s.id) || (s.academicTags.length === 0 && !draft.teacherNote),
-    failed: failedSet.has(s.id),
-    lengthMode: draft.lengthMode,
-    style: draft.style,
-    targetWordCount: draft.targetWordCount,
-  };
-  });
-}
-
 interface Props {
   students: AppStudent[];
   onClose: () => void;
@@ -181,22 +93,11 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
   const [mobilePane, setMobilePane] = useState<"roster" | "editor" | "materials">("editor");
   const [initialBatchState] = useState(() => loadCommentBatchState(students));
-  const initialRubric = useMemo(() => readCommentRubric(), []);
-  const [storedComments, setComments] = useState<CommentState[]>(() => buildInitialComments(students, initialBatchState.failed));
-  const comments = useMemo(() => {
-    const byId = new Map(storedComments.map(comment => [comment.studentId, comment]));
-    return students.map(student => byId.get(student.id) || buildInitialComments([student])[0]);
-  }, [storedComments, students]);
-  const [rubric, setRubric] = useState<CommentRubric>(() => initialRubric);
-  const persistedProfiles = useMemo(() => readStudentCommentProfiles(students), [students]);
-  const [storedProfiles, setCommentProfiles] = useState(persistedProfiles);
-  const commentProfiles = useMemo(() => Object.fromEntries(students.map(student => {
-    const local = storedProfiles[student.id];
-    const saved = persistedProfiles[student.id];
-    return [student.id, !local || (Date.parse(saved.updatedAt) || 0) > (Date.parse(local.updatedAt) || 0) ? saved : local];
-  })), [students, storedProfiles, persistedProfiles]);
-  const [requestedStudentId, setSelectedId] = useState<StudentId>(students[0]?.id || "");
-  const selectedId = students.some(student => student.id === requestedStudentId) ? requestedStudentId : students[0]?.id || "";
+  const drafts = useCommentDrafts(students, initialBatchState.failed);
+  const { initialRubric, comments, rubric, setRubric, commentProfiles, setCommentProfiles, selectedId, setSelectedId,
+    teacherNote, setTeacherNote, selectedStudentIndex, selectedStudent, selectedComment, selectedProfile,
+    unsavedComments, updateComment, buildDraft, markEdited,
+  } = drafts;
   const [filterSearch, setFilterSearch] = useState("");
   const [filterMode, setFilterMode] = useState<CommentFilterMode>("all");
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<StudentId>>(() => new Set());
@@ -208,19 +109,10 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   ));
   const [showGenerationSettings, setShowGenerationSettings] = useState(false);
   const [showTeacherNote, setShowTeacherNote] = useState(() => Boolean(commentProfiles[students[0]?.id]?.teacherNote || comments[0]?.needsInfo));
-  const [teacherNote, setTeacherNote] = useState(() => commentProfiles[students[0]?.id]?.teacherNote || "");
-  const [batchRunning, setBatchRunning] = useState(false);
-  const [batchState, setBatchState] = useState<CommentBatchState>(() => initialBatchState);
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiAuth());
   const [aiStatus, setAiStatus] = useState("");
-  const [singleGenerationPhase, setSingleGenerationPhase] = useState<SingleGenerationPhase>("idle");
-  const [displayedCommentText, setDisplayedCommentText] = useState(() => comments[0]?.text || "");
-  const [commentSelection, setCommentSelection] = useState<CommentTextSelection | null>(null);
-  const [refinementPhase, setRefinementPhase] = useState<RefinementPhase>("idle");
-  const [refinementSuggestion, setRefinementSuggestion] = useState("");
-
   const [customMaterialCriterionId, setCustomMaterialCriterionId] = useState("");
   const [customMaterialLabel, setCustomMaterialLabel] = useState("");
   const customLengthInputRef = useRef<HTMLInputElement>(null);
@@ -232,14 +124,17 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const [exportSelectedIds, setExportSelectedIds] = useState<Set<StudentId>>(() => new Set());
 
   const [exportFormat, setExportFormat] = useState<"csv" | "txt">("csv");
-  const pauseRequested = useRef(false);
-  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const commentPreviewScrollRef = useRef<HTMLDivElement>(null);
-  const selectionToolbarRef = useRef<HTMLDivElement>(null);
-  const commentScrollPosition = useRef(0);
-  const commentRevealFrame = useRef<number | null>(null);
-  const batchProgress = batchState.total ? Math.round((batchState.done / batchState.total) * 100) : 0;
-  const resumableCount = batchState.queue.length + batchState.failed.length;
+
+  const batch = useCommentBatch({ drafts, initialState: initialBatchState, selectedBatchIds, setSelectedBatchIds,
+    accessCode, rememberAuth, setAccessCode, setHasAuth, setAiStatus, confirm: appDialog.confirm,
+    onStart: () => { editor.beginBatch(); }, onFinish: () => { editor.endBatch(); },
+  });
+  const editor = useCommentEditor({ drafts, accessCode, rememberAuth, setAccessCode, setHasAuth, setAiStatus, onGenerated: batch.markGenerated });
+  const { batchRunning, batchState, batchProgress, resumableCount, startBatch, resumeBatch, pauseBatch } = batch;
+  const { singleGenerationPhase, displayedCommentText, commentSelection, refinementPhase, refinementSuggestion,
+    commentTextareaRef, commentPreviewScrollRef, selectionToolbarRef, setDisplayedCommentText,
+    dismissCommentRefinement, handleCommentSelection, syncSelectionToolbar, requestCommentRefinement, applyCommentRefinement, generateSingle,
+  } = editor;
 
   const generatedCount = comments.filter(c => c.generated).length;
   const pendingCount = comments.filter(c => !c.generated).length;
@@ -265,23 +160,8 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const filteredStudentIds = useMemo(() => filteredStudents.map(student => student.id), [filteredStudents]);
   const selectedBatchCount = students.filter(student => selectedBatchIds.has(student.id)).length;
   const currentScope = getCurrentWorkspaceScope();
-  const generation = useScopedRequest(`${currentScope}:${selectedId}`);
-  const refinement = useScopedRequest(`${currentScope}:${selectedId}`);
-  const rosterScope = `${currentScope}:${students.map(student => student.id).join("|")}`;
-  const batchRequest = useScopedRequest(rosterScope);
-  useEffect(() => { setBatchRunning(false); setSingleGenerationPhase("idle"); }, [rosterScope]);
-  const draftContext = useRef({ selectedId, teacherNote, commentProfiles, rubric, students });
-  draftContext.current = { selectedId, teacherNote, commentProfiles, rubric, students };
-  const commentsRef = useRef(comments);
-  commentsRef.current = comments;
-  const revision = useRef(new Map<StudentId, number>());
-  const unsavedComments = comments.filter(comment => comment.text !== (commentProfiles[comment.studentId]?.generatedComment || ""));
   const allFilteredSelected = filteredStudentIds.length > 0 && filteredStudentIds.every(id => selectedBatchIds.has(id));
 
-  const selectedStudentIndex = students.findIndex(student => student.id === selectedId);
-  const selectedStudent = students[selectedStudentIndex] || students[0];
-  const selectedComment = comments.find(c => c.studentId === selectedStudent?.id) || comments[0];
-  const selectedProfile = selectedStudent ? commentProfiles[selectedStudent.id] || readStudentCommentProfile(selectedStudent) : null;
   const selectedSummary = selectedProfile ? summarizeCommentProfile(rubric, selectedProfile) : { criteriaSummary: [], customOptions: [] };
   const latestExam = selectedStudent?.exams[0];
 
@@ -302,37 +182,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         setExpandedCriteria(current => new Set([...current, ...selectedCriterionIds, ...customCriterionIds]));
       }
     }
-  }, [selectedComment?.needsInfo, selectedId, selectedProfile, selectedStudent]);
-
-  useEffect(() => {
-    if (commentRevealFrame.current !== null) {
-      window.cancelAnimationFrame(commentRevealFrame.current);
-      commentRevealFrame.current = null;
-    }
-    setSingleGenerationPhase("idle");
-    setDisplayedCommentText(selectedComment?.text || "");
-    setCommentSelection(null);
-    setRefinementPhase("idle");
-    setRefinementSuggestion("");
-    return () => {
-      if (commentRevealFrame.current !== null) window.cancelAnimationFrame(commentRevealFrame.current);
-    };
-  }, [selectedComment?.text, selectedId]);
-
-  useEffect(() => {
-    setCommentSelection(null);
-    setRefinementPhase("idle");
-    setRefinementSuggestion("");
-  }, [selectedId]);
-
-  useEffect(() => {
-    if (singleGenerationPhase === "idle") setDisplayedCommentText(selectedComment?.text || "");
-  }, [selectedComment?.text, singleGenerationPhase]);
-
-  useLayoutEffect(() => {
-    if (refinementPhase === "idle" || !commentPreviewScrollRef.current) return;
-    commentPreviewScrollRef.current.scrollTop = commentScrollPosition.current;
-  }, [refinementPhase, refinementSuggestion]);
+  }, [selectedComment?.needsInfo, selectedId, selectedProfile, selectedStudent, setTeacherNote]);
 
   function handleWorkbenchKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -342,15 +192,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
       else onClose();
       return;
     }
-  }
-
-  function updateComment(id: StudentId, patch: Partial<CommentState>) {
-    revision.current.set(id, (revision.current.get(id) || 0) + 1);
-    const next = commentsRef.current.map(comment => comment.studentId === id ? { ...comment, ...patch, generated: Boolean((patch.text ?? comment.text).trim()) } : comment);
-    commentsRef.current = next;
-    setComments(next);
-    const changed = next.find(comment => comment.studentId === id);
-    if (changed) cacheStudentCommentDraft(id, buildDraft(changed));
   }
 
   function cacheSelectedCommentText(text: string, nextTeacherNote = teacherNote) {
@@ -365,109 +206,19 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     });
   }
 
-  function dismissCommentRefinement() {
-    refinement.cancel();
-    setCommentSelection(null);
-    setRefinementPhase("idle");
-    setRefinementSuggestion("");
-  }
-
-  function handleCommentSelection() {
-    const textarea = commentTextareaRef.current;
-    if (!textarea || singleGenerationPhase !== "idle" || refinementPhase === "loading") return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value.slice(start, end);
-    if (start === end || !text.trim()) {
-      if (refinementPhase !== "ready") dismissCommentRefinement();
-      return;
-    }
-    const position = measureTextareaSelection(textarea, start, end);
-    const sameSelection = commentSelection?.start === start && commentSelection.end === end && commentSelection.text === text;
-    setCommentSelection({ start, end, text, actionLeft: position.left, actionTop: position.top });
-    if (!sameSelection) {
-      setRefinementPhase("idle");
-      setRefinementSuggestion("");
-    }
-  }
-
-  function syncSelectionToolbar(textarea: HTMLTextAreaElement) {
-    commentScrollPosition.current = textarea.scrollTop;
-    if (!selectionToolbarRef.current || !commentSelection) return;
-    selectionToolbarRef.current.style.left = `${commentSelection.actionLeft - textarea.scrollLeft}px`;
-    selectionToolbarRef.current.style.top = `${commentSelection.actionTop - textarea.scrollTop}px`;
-  }
-
-  async function requestCommentRefinement(action: CommentRefinementAction) {
-    if (!selectedStudent || !selectedComment || !commentSelection || refinementPhase === "loading") return;
-    if (commentSelection.text.length > 600) {
-      setAiStatus("一次最多优化 600 个字，请缩小选中文字范围。");
-      return;
-    }
-    const request = refinement.start();
-    commentScrollPosition.current = commentTextareaRef.current?.scrollTop || 0;
-    setRefinementPhase("loading");
-    setRefinementSuggestion("");
-    setAiStatus("");
-    try {
-      const result = await refineCommentSelection({
-        studentId: selectedStudent.id,
-        action,
-        selectedText: commentSelection.text,
-        contextBefore: selectedComment.text.slice(0, commentSelection.start),
-        contextAfter: selectedComment.text.slice(commentSelection.end),
-        accessCode,
-        remember: rememberAuth,
-        signal: request.signal,
-      });
-      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
-      setRefinementSuggestion(result.replacement);
-      setRefinementPhase("ready");
-      setAiStatus("");
-    } catch (error) {
-      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
-      setRefinementPhase("idle");
-      setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
-    }
-  }
-
-  function applyCommentRefinement() {
-    if (!selectedComment || !commentSelection || !refinementSuggestion) return;
-    if (selectedComment.text.slice(commentSelection.start, commentSelection.end) !== commentSelection.text) {
-      setAiStatus("评语内容已经变化，请重新选择要优化的文字。");
-      dismissCommentRefinement();
-      return;
-    }
-    const nextText = replaceCommentSelection(
-      selectedComment.text,
-      commentSelection.start,
-      commentSelection.end,
-      refinementSuggestion,
-    );
-    const caretPosition = commentSelection.start + refinementSuggestion.length;
-    setDisplayedCommentText(nextText);
-    updateComment(selectedId, { text: nextText, generated: Boolean(nextText) });
-    dismissCommentRefinement();
-    setAiStatus("已应用到当前草稿；请继续检查，保存后才会写入评语记录。");
-    window.requestAnimationFrame(() => {
-      commentTextareaRef.current?.focus();
-      commentTextareaRef.current?.setSelectionRange(caretPosition, caretPosition);
-    });
-  }
-
   function persistRubric(next: CommentRubric) {
     const saved = saveCommentRubric(next);
     setRubric(saved);
     const profiles = Object.fromEntries(Object.entries(commentProfiles).map(([studentId, profile]) => [studentId, saveStudentCommentProfile(studentId, saved, profile)]));
     setCommentProfiles(profiles);
-    commentsRef.current.forEach(comment => cacheStudentCommentDraft(comment.studentId, buildDraft(comment)));
+    comments.forEach(comment => cacheStudentCommentDraft(comment.studentId, buildDraft(comment)));
   }
 
   function updateSelectedProfile(updater: (profile: StudentCommentProfile) => StudentCommentProfile) {
     if (!selectedStudent || !selectedProfile) {
       return;
     }
-    revision.current.set(selectedStudent.id, (revision.current.get(selectedStudent.id) || 0) + 1);
+    markEdited(selectedStudent.id);
     const nextProfile = updater({ ...selectedProfile });
     const saved = saveStudentCommentProfile(selectedStudent.id, rubric, nextProfile);
     setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: saved }));
@@ -498,135 +249,9 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     });
   }
 
-  function commitBatchState(next: CommentBatchState) {
-    const normalized = {
-      ...next,
-      queue: Array.from(new Set(next.queue)),
-      failed: Array.from(new Set(next.failed)),
-      updatedAt: new Date().toISOString(),
-    };
-    setBatchState(normalized);
-    saveCommentBatchState(normalized);
-  }
-
-  function clearBatchState() {
-    commitBatchState(emptyCommentBatchState());
-  }
-
-  function buildDraft(comment: CommentState, note?: string): StudentCommentDraft {
-    const context = draftContext.current;
-    const profile = context.commentProfiles[comment.studentId];
-    const summary = profile ? summarizeCommentProfile(context.rubric, profile) : { criteriaSummary: [], customOptions: [] };
-    const student = context.students.find(item => item.id === comment.studentId);
-    const recoveredNote = student ? readStudentCommentDraft(student).teacherNote : "";
-    const draftTeacherNote = note ?? (comment.studentId === context.selectedId ? context.teacherNote : recoveredNote);
-    return {
-      generatedComment: comment.text,
-      teacherNote: draftTeacherNote,
-      style: comment.style as "warm" | "formal" | "brief",
-      lengthMode: comment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: resolveCommentWordCount(comment.lengthMode as "short" | "standard" | "long" | "custom", comment.targetWordCount),
-      updatedAt: new Date().toISOString(),
-      criteriaSummary: summary.criteriaSummary,
-      customOptions: summary.customOptions,
-    };
-  }
-
-  function getAiErrorMessage(reason: string): string {
-    return {
-      ai_auth_required: "产品授权已失效，请退出后重新登录。",
-      ai_unauthorized: "当前授权未开通 AI 或 AI 已到期。",
-      ai_auth_failed: "AI 授权暂时不可用，请稍后重试。",
-      ai_file_protocol: "当前是本地文件打开方式，请通过网页地址打开后再使用 AI。",
-      ai_offline: "当前离线，联网后可生成评语。",
-      ai_payload_too_large: "当前素材过多，请减少补充内容后再试。",
-      ai_rate_limited: "今日 AI 调用较多，请稍后再试。",
-    }[reason] || "AI 评语暂时不可用，请稍后重试。";
-  }
-
-  function revealGeneratedComment(text: string) {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setDisplayedCommentText(text); setSingleGenerationPhase("idle"); return; }
-    if (commentRevealFrame.current !== null) window.cancelAnimationFrame(commentRevealFrame.current);
-    setSingleGenerationPhase("revealing");
-    setDisplayedCommentText("");
-    const startedAt = window.performance.now();
-    const duration = Math.min(1500, Math.max(520, text.length * 8));
-    const tick = (now: number) => {
-      const progress = Math.min(1, (now - startedAt) / duration);
-      const eased = 1 - Math.pow(1 - progress, 2.4);
-      const visibleLength = Math.min(text.length, Math.max(1, Math.ceil(text.length * eased)));
-      setDisplayedCommentText(text.slice(0, visibleLength));
-      if (progress < 1) {
-        commentRevealFrame.current = window.requestAnimationFrame(tick);
-      } else {
-        commentRevealFrame.current = null;
-        setDisplayedCommentText(text);
-        setSingleGenerationPhase("idle");
-      }
-    };
-    commentRevealFrame.current = window.requestAnimationFrame(tick);
-  }
-
-  async function generateSingle() {
-    if (!selectedStudent || !selectedComment || singleGenerationPhase !== "idle") return;
-    const request = generation.start();
-    setSingleGenerationPhase("loading");
-    setDisplayedCommentText("");
-    setAiStatus("");
-    try {
-      const draft = buildDraft(selectedComment);
-      const result = await generateStudentAiComment(selectedStudent, draft, { accessCode, remember: rememberAuth, force: true, signal: request.signal });
-      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
-      if (!result.comment) {
-        setAiStatus(result.missingInfo?.length ? `需要补充：${result.missingInfo.join("、")}` : "信息不足，暂未生成评语。");
-        setDisplayedCommentText(selectedComment.text);
-        setSingleGenerationPhase("idle");
-        return;
-      }
-      updateComment(selectedId, { text: result.comment, generated: true, needsInfo: Boolean(result.needsMoreInfo), failed: false });
-      if (batchState.failed.includes(selectedId)) {
-        commitBatchState({
-          ...batchState,
-          failed: batchState.failed.filter(id => id !== selectedId),
-        });
-      }
-      setAccessCode("");
-      setHasAuth(true);
-      setAiStatus("草稿已生成，请核对后保存。");
-      revealGeneratedComment(result.comment);
-    } catch (error) {
-      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
-      setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
-      setHasAuth(hasStoredAiAuth());
-      setDisplayedCommentText(selectedComment.text);
-      setSingleGenerationPhase("idle");
-    }
-  }
-
   function saveSelectedComment() {
-    if (!selectedStudent || !selectedComment) return;
-    if (selectedProfile) {
-      const savedProfile = saveStudentCommentProfile(selectedStudent.id, rubric, {
-        ...selectedProfile,
-        teacherNote,
-        style: selectedComment.style as "warm" | "formal" | "brief",
-        lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-        generatedComment: selectedComment.text,
-        status: selectedComment.text.trim() ? "edited" : "draft",
-        updatedAt: new Date().toISOString(),
-      });
-      setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
-    }
-    const saved = saveStudentCommentDraft(selectedStudent.id, {
-      generatedComment: selectedComment.text,
-      teacherNote,
-      style: selectedComment.style as "warm" | "formal" | "brief",
-      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: resolveCommentWordCount(selectedComment.lengthMode as "short" | "standard" | "long" | "custom", selectedComment.targetWordCount),
-      updatedAt: new Date().toISOString(),
-    });
-    updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
-    setAiStatus(`${selectedStudent.name} 的评语已保存。`);
+    const name = drafts.saveSelectedComment();
+    if (name) setAiStatus(`${name} 的评语已保存。`);
   }
 
   async function saveUnsavedComments() {
@@ -714,7 +339,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     });
     setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
     setTeacherNote(savedProfile.teacherNote);
-    draftContext.current.teacherNote = savedProfile.teacherNote;
     setShowTeacherNote(true);
     updateComment(selectedStudent.id, { needsInfo: false });
     setAiStatus(`已把 AI 跟进素材加入 ${selectedStudent.name} 的补充说明。`);
@@ -765,168 +389,6 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
         },
       ],
     });
-  }
-
-  function isRecoverableAuthError(reason: string): boolean {
-    return reason === "ai_auth_required" || reason === "ai_unauthorized" || reason === "ai_auth_failed" || reason === "ai_rate_limited";
-  }
-
-  async function runBatchQueue(seed: CommentBatchState) {
-    if (batchRunning) return;
-    const request = batchRequest.start();
-    if (commentRevealFrame.current !== null) {
-      window.cancelAnimationFrame(commentRevealFrame.current);
-      commentRevealFrame.current = null;
-    }
-    setBatchRunning(true);
-    setSingleGenerationPhase("loading");
-    setDisplayedCommentText("");
-    pauseRequested.current = false;
-    const queue = [...seed.queue];
-    const failed = [...seed.failed];
-    let done = seed.done;
-    let skippedEdits = 0;
-    const total = seed.total || queue.length;
-    commitBatchState({ ...seed, queue, failed, done, total, status: "running" });
-
-    try {
-      for (let i = 0; i < queue.length; i += 1) {
-        if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
-        if (pauseRequested.current) {
-          const paused = { queue: queue.slice(i), failed, done, total, status: "paused" as const, updatedAt: "" };
-          commitBatchState(paused);
-          setAiStatus(`已暂停，剩余 ${paused.queue.length} 人。`);
-          return;
-        }
-        const studentId = queue[i];
-        const student = draftContext.current.students.find(s => s.id === studentId);
-        if (!student) {
-          done += 1;
-          continue;
-        }
-        const comment = commentsRef.current.find(c => c.studentId === studentId);
-        if (!comment) {
-          done += 1;
-          continue;
-        }
-        setAiStatus(`正在生成 ${done + 1}/${total}：${student.name}`);
-        const inputRevision = revision.current.get(studentId) || 0;
-        try {
-          const result = await generateStudentAiComment(student, buildDraft(comment), {
-            accessCode,
-            remember: rememberAuth,
-            force: true,
-            signal: request.signal,
-          });
-          if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
-          done += 1;
-          if ((revision.current.get(studentId) || 0) !== inputRevision) {
-            skippedEdits += 1;
-          } else if (result.comment) {
-            updateComment(student.id, {
-              text: result.comment,
-              generated: true,
-              needsInfo: Boolean(result.needsMoreInfo),
-              failed: false,
-            });
-          } else {
-            updateComment(student.id, { needsInfo: true, failed: false });
-          }
-          commitBatchState({
-            queue: queue.slice(i + 1),
-            failed,
-            done,
-            total,
-            status: "running",
-            updatedAt: "",
-          });
-        } catch (error) {
-          if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
-          const reason = error instanceof Error ? error.message : "";
-          failed.push(student.id);
-          updateComment(student.id, { needsInfo: true, failed: true });
-          const remainingQueue = queue.slice(i + 1);
-          commitBatchState({
-            queue: remainingQueue,
-            failed,
-            done,
-            total,
-            status: "failed",
-            updatedAt: "",
-          });
-          setAiStatus(`${student.name} 生成失败：${getAiErrorMessage(reason)}`);
-          if (isRecoverableAuthError(reason)) {
-            return;
-          }
-        }
-      }
-      setAccessCode("");
-      setHasAuth(true);
-      setSelectedBatchIds(new Set());
-      const finalState = { queue: [], failed, done: total, total, status: failed.length ? "failed" as const : "complete" as const, updatedAt: "" };
-      commitBatchState(finalState);
-      if (failed.length) {
-        setAiStatus(`批量生成完成，${failed.length} 人失败，可重试失败项。`);
-      } else {
-        setAiStatus(skippedEdits ? `草稿生成完成；${skippedEdits} 人保留了生成期间的手动修改。请核对后保存。` : "草稿生成完成，请核对后保存。");
-      }
-    } catch (error) {
-      if (!request.isCurrent() || getCurrentWorkspaceScope() !== currentScope) return;
-      setAiStatus(getAiErrorMessage(error instanceof Error ? error.message : ""));
-      setHasAuth(hasStoredAiAuth());
-    } finally {
-      if (request.isCurrent() && getCurrentWorkspaceScope() === currentScope) { setBatchRunning(false); setSingleGenerationPhase("idle"); }
-    }
-  }
-
-  async function startBatch() {
-    const failedIds = new Set(batchState.failed);
-    const selectedIds = students.filter(student => selectedBatchIds.has(student.id)).map(student => student.id);
-    const pending = selectedIds.length
-      ? comments.filter(c => selectedIds.includes(c.studentId))
-      : comments.filter(c => !c.generated || failedIds.has(c.studentId));
-    if (!pending.length) {
-      setAiStatus(selectedIds.length ? "请选择要批量生成的学生。" : "没有待生成的学生。");
-      clearBatchState();
-      return;
-    }
-    const replacing = pending.filter(comment => comment.text.trim()).length;
-    if (replacing && !await appDialog.confirm({ title: `重新生成 ${replacing} 份已有草稿？`, description: "生成结果会替换这些学生当前的草稿；正式保存的评语保持原样，直到你再次确认保存。", confirmLabel: "重新生成", variant: "primary" })) return;
-    if (getCurrentWorkspaceScope() !== currentScope) return;
-    const next = {
-      queue: pending.map(c => c.studentId),
-      failed: [],
-      done: 0,
-      total: pending.length,
-      status: "running" as const,
-      updatedAt: "",
-    };
-    if (selectedIds.length) {
-      setAiStatus(`准备为已选 ${pending.length} 名学生批量生成评语。`);
-    }
-    void runBatchQueue(next);
-  }
-
-  function resumeBatch() {
-    const retryIds = batchState.queue.length ? batchState.queue : batchState.failed;
-    if (!retryIds.length) {
-      setAiStatus("没有可继续的队列。");
-      return;
-    }
-    const next = {
-      queue: retryIds,
-      failed: batchState.queue.length ? batchState.failed : [],
-      done: batchState.queue.length ? batchState.done : 0,
-      total: batchState.queue.length ? batchState.total : retryIds.length,
-      status: "running" as const,
-      updatedAt: "",
-    };
-    void runBatchQueue(next);
-  }
-
-  function pauseBatch() {
-    pauseRequested.current = true;
-    setAiStatus("正在暂停，当前学生生成完成后停止。");
   }
 
   function exportSelectedComments(format: "csv" | "txt") {
@@ -1312,7 +774,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
               </button>
               <MotionCollapse open={showTeacherNote}>
                 <div className="overflow-hidden">
-                  <textarea value={teacherNote} onChange={event => { revision.current.set(selectedId, (revision.current.get(selectedId) || 0) + 1); setTeacherNote(event.target.value); cacheSelectedCommentText(selectedComment.text, event.target.value); }} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-regular leading-5 outline-none focus:border-accent-300" />
+                  <textarea value={teacherNote} onChange={event => { markEdited(selectedId); setTeacherNote(event.target.value); cacheSelectedCommentText(selectedComment.text, event.target.value); }} rows={3} placeholder="例如：回答问题积极，作业偶尔拖交，数学进步明显。" className="mt-1 w-full resize-none rounded-[var(--app-radius-sm)] border border-border-button-default bg-background-primary-default px-3 py-2.5 text-body-regular leading-5 outline-none focus:border-accent-300" />
                   <div className="mt-2 flex justify-end"><button type="button" onClick={saveSelectedTeacherNote} disabled={!hasUnsavedTeacherNote} className={`flex h-8 items-center gap-1.5 rounded-[var(--app-radius-sm)] px-3 text-caption-1-semibold ${hasUnsavedTeacherNote ? "bg-accent-50 text-accent-700 hover:bg-accent-100" : "bg-background-secondary-default text-text-tertiary"}`}><Save className="h-3.5 w-3.5" />暂存说明</button></div>
                 </div>
               </MotionCollapse>

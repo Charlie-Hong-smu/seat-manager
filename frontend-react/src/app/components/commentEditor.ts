@@ -104,3 +104,15 @@ export function buildStudentCommentDraft(
     customOptions: summary.customOptions,
   };
 }
+
+export function getCommentAiErrorMessage(reason: string): string {
+  return {
+    ai_auth_required: "产品授权已失效，请退出后重新登录。",
+    ai_unauthorized: "当前授权未开通 AI 或 AI 已到期。",
+    ai_auth_failed: "AI 授权暂时不可用，请稍后重试。",
+    ai_file_protocol: "当前是本地文件打开方式，请通过网页地址打开后再使用 AI。",
+    ai_offline: "当前离线，联网后可生成评语。",
+    ai_payload_too_large: "当前素材过多，请减少补充内容后再试。",
+    ai_rate_limited: "今日 AI 调用较多，请稍后再试。",
+  }[reason] || "AI 评语暂时不可用，请稍后重试。";
+}
