@@ -23,7 +23,9 @@
 
 ## 功能矩阵
 
-已验证发布基线（2026-09-26）：Zhang 与 Commercial 均为 `12622969ddfd9f3f8ef819baf4693201ad1eae9f`，成功运行分别为 [Zhang 36205514834](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36205514834) 与 [Commercial 36205862687](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36205862687)。下表旧条目的 `pending` 表示首次引入 SHA 尚未补录，旧“批准晋升/待晋升”属于决策时记录；这些已收录于基线的公共实现以本发布记录为准，不能据此误判为尚未上线。本轮维护优化尚未发布，也不继承此前的发布授权。
+本轮维护前的已验证发布基线（2026-09-26）：Zhang 与 Commercial 均为 `12622969ddfd9f3f8ef819baf4693201ad1eae9f`，成功运行分别为 [Zhang 36205514834](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36205514834) 与 [Commercial 36205862687](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36205862687)。下表旧条目的 `pending` 表示首次引入 SHA 尚未补录，旧“批准晋升/待晋升”属于决策时记录；这些已收录于基线的公共实现以本发布记录为准，不能据此误判为尚未上线。
+
+2026-09-26（维护优化）：用户确认优化完成后明确要求合并并推送。业务与本地验收基线为 `7bc807bb8cff9c2b5c824580baf4324235113cfc`，包含发布证据门禁、入口按需加载、Worker 领域拆分与整柜/授权删除修复、宿舍/学生/评语编辑流程拆分。授权合并本轮完整改动到 main，由既有流程发布 Zhang 和共享 Worker；本次没有授权 Commercial 前端晋升，保留其上述稳定 SHA。发布成功须以包含本记录的 main 完整 SHA 的实际 workflow 结果确认。
 
 每个非纯修复功能增加或更新一行。`首次 Zhang 版本` 使用 commit 短 SHA；尚未提交时写 `pending`。
 

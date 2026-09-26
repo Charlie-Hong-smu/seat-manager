@@ -26,7 +26,7 @@
 - 学生姓名与别名搜索统一走 `state/studentSearch.ts`，CSV 转义与下载统一走 `state/csv.ts`，页面不要再复制同类逻辑。
 - 成绩阈值与宿舍事件偏好保存在当前切片 `settings`，会随备份和手动云同步迁移；旧宿舍全局键只作为首次兼容读取源。
 - 弹窗焦点约束与状态反馈分别复用 `useModalFocus`、`InlineStatus`；高风险删除优先保留审计记录，并提供短时撤销。
-- Worker 的同步、产品授权、授权管理与 AI handler 均由 `routes/` 对应领域持有，`worker-app.js` 只负责装配。维护分支已修复整柜 `workspaceBook` 被遗漏、删除授权后协调器仍保留旧记录两项问题；尚未发布，勿把本地修复当作线上行为。
+- Worker 的同步、产品授权、授权管理与 AI handler 均由 `routes/` 对应领域持有，`worker-app.js` 只负责装配。已修复整柜 `workspaceBook` 被遗漏、删除授权后协调器仍保留旧记录两项问题；线上生效以包含修复的 Worker workflow 成功部署为准。
 - 宿舍事件和学生资料编辑会话已进入专用 hook；评语的共享草稿、单人编辑、批量队列分别由 `useCommentDrafts`、`useCommentEditor`、`useCommentBatch` 管理。页面保留原布局和交互，草稿缓存与正式保存边界保持兼容。
 - GitHub Pages、Commercial Pages 和 Worker workflow 发布前都会运行自动检查。
 
