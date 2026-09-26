@@ -1,6 +1,6 @@
 # Codex 交接入口
 
-更新时间：2026-07-26。
+更新时间：2026-09-26。
 
 本文件只说明当前可依赖的项目状态，不记录单次会话的“待推送”或临时排障进度。
 
@@ -11,6 +11,7 @@
 1. `AGENTS.md`：必须遵守的兼容、安全和验证规则。
 2. `docs/ARCHITECTURE.md`：模块、数据、edition、AI 与 PWA 架构。
 3. `docs/OPERATIONS.md`：本地验证、发布面和排障顺序。
+   发布或规划功能前同时阅读 `docs/VERSION_GOVERNANCE.md`；维护优先级见 `docs/MAINTENANCE_PLAN.md`。
 4. UI 工作再读 `docs/DESIGN_SYSTEM.md`；Worker 细节再读 `cloudflare-worker/README.md`。
 
 ## 当前事实
@@ -20,19 +21,21 @@
 - `AiApiClient` 统一 AI auth 与代理 fallback；不要在新 service 再复制 token 存储逻辑。
 - React PWA 支持 Zhang `/seat-manager/` 和 Commercial `/`，更新由用户确认。
 - Worker 公共路由在 `cloudflare-worker/worker-routes.js`，Netlify 代理复用并有契约测试。
-- 工作区页面位于 `components/workspaces/`；Scores、AI Assistant、Comment Workbench 为可重试的非首屏异步模块。
+- 工作区页面集中在 `components/workspaces/`，宿舍主协调组件仍在 `components/DormitoryWorkspace.tsx`；成绩、宿舍、班费、历史、名单/备份、AI Assistant 和 Comment Workbench 按需加载，复用 `RetryableLazy`。
 - App 的学生、宿舍、班费更新分别在 `hooks/use*Actions.ts`；宿舍列表/成员区已是独立组件，AI Assistant payload/result 已从 facade 分离。
 - 学生姓名与别名搜索统一走 `state/studentSearch.ts`，CSV 转义与下载统一走 `state/csv.ts`，页面不要再复制同类逻辑。
 - 成绩阈值与宿舍事件偏好保存在当前切片 `settings`，会随备份和手动云同步迁移；旧宿舍全局键只作为首次兼容读取源。
 - 弹窗焦点约束与状态反馈分别复用 `useModalFocus`、`InlineStatus`；高风险删除优先保留审计记录，并提供短时撤销。
-- Worker 入口只装配 CORS、异常和路由；鉴权、usage 与领域路由分别在 `worker-auth.js`、`worker-usage.js`、`routes/`。
+- Worker 已分出鉴权、usage 和路由分发，`routes/` 目前仍主要是转发层；授权、同步、AI 等 handler 主体仍集中在 `worker-app.js`，后续应按领域逐个提取。
 - GitHub Pages、Commercial Pages 和 Worker workflow 发布前都会运行自动检查。
 
 ## 修改后的最低验收
 
 ```bash
 cd frontend-react
-pnpm check
+pnpm check:design
+pnpm lint
+pnpm typecheck
 pnpm test:coverage
 pnpm build:zhang
 pnpm check:size
@@ -43,6 +46,9 @@ pnpm test:e2e:all
 
 cd ../cloudflare-worker
 npm run check
+
+cd ..
+node --test .github/scripts/verify-zhang-release.test.mjs
 ```
 
 涉及登录、持久数据或 PWA 时，两种 edition 都要运行 `pnpm test:e2e:all`。涉及 Worker 配置时，增加 Wrangler dry-run。线上部署不是普通本地修改的默认步骤。

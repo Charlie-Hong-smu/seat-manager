@@ -56,6 +56,10 @@ python3 -m http.server 4174 --directory license-admin
 - `.github/workflows/pages.yml`：前端变化时并行运行静态/单元检查、Zhang 两份浏览器验收和 Commercial 浏览器验收；全部通过后，使用 Zhang 第一份验收时生成的构建产物自动发布 Zhang 先行版。
 - `.github/workflows/cloudflare-commercial.yml`：只按目录变化自动发布共享 Worker 或授权管理页，不再自动发布 Commercial 前端。
 - `.github/workflows/promote-commercial.yml`：用户明确说“上线商用版”后，由 Codex传入已在 Zhang 验证的完整 commit SHA；同一入口传入上一稳定 SHA 即为回滚。
+
+Commercial 晋升先通过 GitHub Actions API 核验该完整 SHA 的 Zhang Pages 成功运行：必须是 `main`，且同一次 attempt 中静态/单元检查、两个 Zhang 浏览器分片、Commercial 浏览器检查及 Zhang 部署的 job 和关键 step 全部成功。API 不可读、记录缺失、跳过或失败都禁止发布。验证脚本来自发起 workflow 的版本，应用源码仍严格检出用户指定 SHA，因此旧版本回滚不依赖旧提交是否含新脚本。
+
+有 `Validate release verification contract v1` 成功标记时，复用该次运行的设计、lint、typecheck、覆盖率和双版浏览器证据；保留当前 Commercial 环境变量下的重新构建、`check:size`、`check:production`、部署及发布后的线上人工验收。旧运行没有该标记时仍完整重跑。workflow summary 记录证据 run ID、attempt、SHA 和是否复用。门禁变化必须同步修改核验脚本、契约版本及 `node --test .github/scripts/verify-zhang-release.test.mjs`，不能复用其他 SHA 或跨 attempt 拼接证据。
 - `frontend-react/dist` 不进入 Git；根 `index.html` 只是线上入口说明，不是应用 bundle。
 
 Cloudflare workflow 需要 GitHub Secrets `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`；Commercial 前端可通过仓库变量 `COMMERCIAL_WORKER_URL` 指向 Netlify `/api`。Commercial 晋升必须遵守 `VERSION_GOVERNANCE.md`；普通 `main` push 不得改变 Commercial 前端，晋升记录以 workflow summary 中的完整 SHA 为准。

@@ -481,13 +481,18 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       (button as HTMLElement).focus();
       (button as HTMLElement).click();
       const start = performance.now();
-      const frames: Array<{ time: number; delay: number; selected: boolean; y: number; opacity: number; incomingY: number; moving: boolean; height: number; width: number }> = [];
+      const frames: Array<{ time: number; lead: number; selected: boolean; y: number; opacity: number; incomingY: number; moving: boolean; height: number; width: number }> = [];
       return new Promise<typeof frames>(resolve => {
         function sample() {
           const old = root.querySelector<HTMLElement>(":scope > .app-motion-overlay > .app-motion-snapshot");
           const live = root.querySelector<HTMLElement>(":scope > .app-motion-content")!;
           const rect = root.getBoundingClientRect();
-          frames.push({ time: performance.now() - start, delay: Number(live.getAnimations()[0]?.effect?.getTiming().delay || 0), selected: button.getAttribute("aria-current") === "page", y: old ? old.getBoundingClientRect().y - frame.y : 0, opacity: old ? Number(getComputedStyle(old).opacity) : 0, incomingY: live.getBoundingClientRect().y - frame.y, moving: root.hasAttribute("data-moving"), height: rect.height, width: rect.width });
+          const time = performance.now() - start;
+          const animation = live.getAnimations()[0];
+          // Cold-module preparation consumes part of the navigation lead. Measure
+          // click-to-motion time, including that hold, rather than the remaining delay.
+          const lead = animation ? time - Number(animation.currentTime ?? 0) + Number(animation.effect?.getTiming().delay || 0) : 0;
+          frames.push({ time, lead, selected: button.getAttribute("aria-current") === "page", y: old ? old.getBoundingClientRect().y - frame.y : 0, opacity: old ? Number(getComputedStyle(old).opacity) : 0, incomingY: live.getBoundingClientRect().y - frame.y, moving: root.hasAttribute("data-moving"), height: rect.height, width: rect.width });
           if (performance.now() - start < 570) requestAnimationFrame(sample); else resolve(frames);
         }
         requestAnimationFrame(sample);
@@ -500,7 +505,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       if (reducedMotion === "no-preference") {
         const hold = frames.filter(frame => frame.time < 65);
         // Busy CI may miss the first 65ms; check the actual navigation lead as well as any sampled held frames.
-        expect(frames.some(frame => frame.delay >= 70)).toBe(true);
+        expect(frames.some(frame => frame.lead >= 70)).toBe(true);
         expect(hold.every(frame => Math.abs(frame.y) < 1 && frame.opacity > 0.99)).toBe(true);
         const sliding = frames.filter(frame => frame.time > 115 && frame.time < 450);
         expect(sliding.some(frame => frame.y * sign < -2 && frame.incomingY * sign > 0.1)).toBe(true);

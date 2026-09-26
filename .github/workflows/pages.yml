@@ -15,6 +15,8 @@ on:
       - "frontend-react/playwright.config.ts"
       - "frontend-react/tsconfig*.json"
       - ".github/workflows/pages.yml"
+      - ".github/workflows/promote-commercial.yml"
+      - ".github/scripts/verify-zhang-release*.mjs"
   workflow_dispatch:
 
 permissions:
@@ -52,7 +54,12 @@ jobs:
 
       - name: Validate React frontend
         working-directory: frontend-react
-        run: pnpm run lint && pnpm run typecheck && pnpm run test:coverage
+        run: pnpm run check:design && pnpm run lint && pnpm run typecheck && pnpm run test:coverage
+
+      # This marker is reusable only with every required check and Zhang deploy
+      # successful in the same attempt. Bump the contract when gates change.
+      - name: Validate release verification contract v1
+        run: node --test .github/scripts/verify-zhang-release.test.mjs
 
   zhang-e2e:
     runs-on: ubuntu-latest

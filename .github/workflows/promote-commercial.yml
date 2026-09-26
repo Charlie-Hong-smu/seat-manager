@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: commercial-frontend-production
@@ -30,13 +31,23 @@ jobs:
 
       - name: Verify immutable main commit
         shell: bash
+        env:
+          APPROVED_SHA: ${{ inputs.commit_sha }}
         run: |
-          APPROVED_SHA="${{ inputs.commit_sha }}"
           ACTUAL_SHA="$(git rev-parse HEAD)"
           [[ "$APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$ACTUAL_SHA" = "$APPROVED_SHA"
           git fetch origin main --no-tags
           git merge-base --is-ancestor "$ACTUAL_SHA" origin/main
+
+      # Read the verifier from the dispatched workflow revision, so rollback to
+      # a commit predating this script can still use the full-validation path.
+      - name: Checkout release verification tooling
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: .github/scripts
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -51,15 +62,24 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend-react/pnpm-lock.yaml
 
+      - name: Verify successful Zhang deployment and validation evidence
+        id: zhang
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_SHA: ${{ inputs.commit_sha }}
+        run: node .release-tools/.github/scripts/verify-zhang-release.mjs
+
       - name: Install dependencies
         working-directory: frontend-react
         run: pnpm install --frozen-lockfile
 
       - name: Install Chromium
+        if: steps.zhang.outputs.reuse_validation != 'true'
         working-directory: frontend-react
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Validate shared frontend and both editions
+        if: steps.zhang.outputs.reuse_validation != 'true'
         working-directory: frontend-react
         run: pnpm run check:design && pnpm run lint && pnpm run typecheck && pnpm run test:coverage && pnpm run test:e2e:all
 
@@ -79,7 +99,14 @@ jobs:
         run: npx wrangler pages deploy dist --project-name seat-manager-commercial --branch main --commit-hash="${{ inputs.commit_sha }}" --commit-dirty=true
 
       - name: Record promoted release
+        env:
+          APPROVED_SHA: ${{ inputs.commit_sha }}
+          EVIDENCE_RUN_ID: ${{ steps.zhang.outputs.evidence_run_id }}
+          EVIDENCE_ATTEMPT: ${{ steps.zhang.outputs.evidence_attempt }}
+          REUSED_VALIDATION: ${{ steps.zhang.outputs.reuse_validation }}
         run: |
           echo "## Commercial release" >> "$GITHUB_STEP_SUMMARY"
-          echo "Promoted Zhang commit: \`${{ inputs.commit_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Promoted Zhang commit: \`$APPROVED_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Zhang evidence: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$EVIDENCE_RUN_ID (attempt $EVIDENCE_ATTEMPT)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reused shared validation: $REUSED_VALIDATION" >> "$GITHUB_STEP_SUMMARY"
           echo "Rollback: rerun this workflow with the previous stable 40-character SHA." >> "$GITHUB_STEP_SUMMARY"

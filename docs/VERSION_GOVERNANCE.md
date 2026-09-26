@@ -16,12 +16,14 @@
 | --- | --- | --- |
 | “先在小张版测试”或未说明版本 | Zhang 先行功能 | 进入公共源码并自动发布 Zhang；Commercial 保持当前稳定 SHA，不添加永久版本开关 |
 | “只给小张版” | Zhang 永久专属 | 入口通过 `editionCapabilities` 集中控制，底层复用公共业务能力 |
-| “上线商用版” | 晋升已验证版本 | 核对工作区和 Zhang 验收，取得完整 SHA，运行全套检查后触发 `promote-commercial.yml` |
+| “上线商用版” | 晋升已验证版本 | 核对工作区和 Zhang 验收，取得完整 SHA，确认该 SHA 的完整检查证据后触发 `promote-commercial.yml` |
 | “商用版不要上线” | 不进入 Commercial | 明确转为 Zhang 专属或删除；不得长期保留含糊的“测试中”状态 |
 
 自然语言出现冲突时，以用户最后一次明确的版本范围为准。涉及登录、存储、同步、AI写入边界或公共接口的高风险变更，即使说“先测试”，也必须保持对当前 Commercial 的向后兼容。
 
 ## 功能矩阵
+
+已验证发布基线（2026-09-26）：Zhang 与 Commercial 均为 `12622969ddfd9f3f8ef819baf4693201ad1eae9f`，成功运行分别为 [Zhang 36205514834](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36205514834) 与 [Commercial 36205862687](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36205862687)。下表旧条目的 `pending` 表示首次引入 SHA 尚未补录，旧“批准晋升/待晋升”属于决策时记录；这些已收录于基线的公共实现以本发布记录为准，不能据此误判为尚未上线。本轮维护优化尚未发布，也不继承此前的发布授权。
 
 每个非纯修复功能增加或更新一行。`首次 Zhang 版本` 使用 commit 短 SHA；尚未提交时写 `pending`。
 
@@ -70,7 +72,7 @@
 
 1. 检查 dirty worktree、提交范围和目标 SHA，保留无关用户文件。
 2. 确认目标是 `main` 上完整的 40 位 SHA，且该 SHA 的 Zhang Pages 部署成功并已获用户验收。
-3. 运行设计检查、lint、strict typecheck、覆盖率、双版本构建、体积/生产包检查、双版本浏览器测试和相关 Worker 检查。
+3. 确认设计检查、lint、strict typecheck、覆盖率、双版本构建、体积/生产包检查、双版本浏览器测试和相关 Worker 检查通过。同一不可变 SHA 可按 `OPERATIONS.md` 复用 Zhang workflow 的成功验证证据；Commercial 当前环境的构建、体积/生产包检查与部署后线上验收仍需执行。缺少契约标记时重跑全套检查，缺少成功 Zhang 部署时禁止晋升。
 4. 触发 `Promote verified Zhang release to Commercial`，参数只允许该 SHA。
 5. 验证 Commercial 线上登录、工作区、本地数据读取、PWA更新提示和本次功能；失败立即停止并报告。
 

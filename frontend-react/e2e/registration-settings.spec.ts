@@ -251,8 +251,9 @@ test("switching dormitories keeps the AI launcher above the transition", async (
 
 test("dormitory names can be edited in place without replacing their data", async ({ page }) => {
   await login(page, true); await nav(page, /^宿舍/);
+  await expect(page.getByRole("button", { name: "重命名宿舍" })).toBeVisible();
   const original = (await data(page)).dormitories[0];
-  const shell = page.locator(".app-inline-name-editor");
+  const shell = page.locator(".app-inline-name-editor:not(.app-motion-overlay *)");
   const viewWidth = (await shell.boundingBox())!.width;
   await shell.evaluate(element => { element.dataset.motionProbe = "same-element"; });
   await page.getByRole("button", { name: "重命名宿舍" }).click();
@@ -292,7 +293,11 @@ test("dormitory and fund editors morph in their original list rows", async ({ pa
     localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify(book));
   });
   await page.reload(); await nav(page, /^宿舍/);
-  const dormRow = page.locator(".dorm-event-edit-morph:not(.app-motion-snapshot)");
+  // Cold loading can expose the initial DOM before the mount effect settles.
+  // Start the identity probe once the real page becomes interactive.
+  await expect(page.getByRole("button", { name: "编辑宿舍事件：卫生优秀" })).toBeVisible();
+  // Exclude every descendant of the visual overlay, not only its snapshot root.
+  const dormRow = page.locator(".dorm-event-edit-morph:not(.app-motion-overlay *)");
   await dormRow.evaluate(element => { element.dataset.motionProbe = "dorm"; });
   await page.getByRole("button", { name: "编辑宿舍事件：卫生优秀" }).click();
   await expect(dormRow).toHaveAttribute("data-motion-probe", "dorm");
@@ -302,7 +307,8 @@ test("dormitory and fund editors morph in their original list rows", async ({ pa
   await expect(dormRow).toHaveAttribute("data-moving", "true");
 
   await nav(page, /^班费/);
-  const fundRow = page.locator(".fund-transaction-edit-morph:not(.app-motion-snapshot)");
+  await expect(page.getByRole("button", { name: "编辑流水：活动费" })).toBeVisible();
+  const fundRow = page.locator(".fund-transaction-edit-morph:not(.app-motion-overlay *)");
   await fundRow.evaluate(element => { element.dataset.motionProbe = "fund"; });
   await page.getByRole("button", { name: "编辑流水：活动费" }).click();
   await expect(fundRow).toHaveAttribute("data-motion-probe", "fund");
@@ -365,7 +371,8 @@ test("seat snapshot rename morphs on the same title surface", async ({ page }) =
   await page.getByPlaceholder("记录名称，例如：期中后调整").fill("旧快照");
   await page.getByRole("button", { name: "保存座位" }).click();
   await page.getByRole("button", { name: "关闭历史座位详情" }).click();
-  const editor = page.locator(".app-inline-name-editor");
+  await expect(page.getByRole("button", { name: "重命名座位快照" })).toBeVisible();
+  const editor = page.locator(".app-inline-name-editor:not(.app-motion-overlay *)");
   await expect(editor).toBeVisible();
   await editor.evaluate(element => { element.dataset.motionProbe = "snapshot"; });
   await page.getByRole("button", { name: "重命名座位快照" }).click();

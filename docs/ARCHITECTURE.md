@@ -17,7 +17,7 @@
 
 - `frontend-react/src/app/App.tsx`：应用壳、页面切换和跨业务协调。
 - `state/seatManagerController.ts`：唯一持久业务状态控制器；学生、座位、成绩、宿舍、班费和历史都来自同一个 `SeatManagerState`。
-- `components/workspaces/`：Today、Daily（座位）、Data、History、Scores、ClassFund 的独立页面实现与稳定 barrel；Scores 由 App 按需加载。
+- `components/workspaces/`：各工作区页面实现与稳定 barrel；Scores、Data、History、ClassFund，以及 `components/DormitoryWorkspace.tsx` 由 App 直接按需加载，复用 `RetryableLazy` 的缓存与加载状态。
 - `state/teacherWorkbench.ts`：课表、作业、今日队列、周报事实和题目得分率的本地纯函数边界；这些计算不依赖 AI。
 - `state/studentSearch.ts`：学生姓名与别名的统一搜索归一化边界；顶栏、成绩、评语、座位、出勤、作业、宿舍和班费选择器复用同一规则。
 - `state/dormitoryPreferences.ts`：宿舍事件类型和默认分数的切片设置规范化与旧全局键只读迁移边界。
@@ -131,7 +131,7 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 
 `vite-plugin-pwa` 为两种 base 生成 manifest 和 service worker。静态应用壳、哈希资源和图标进入 precache；API、Worker、同步和第三方请求不缓存。本地 XLSX 库（约 861 KiB）不进 precache：`vendor/**` 被 `globIgnores` 排除，改用运行时 `CacheFirst`（cache 名 `xlsx-vendor`），并在成绩与名单/备份工作区挂载时空闲预热一次，首次联网访问后离线导入仍可用。发现新 service worker 时只显示提示，用户点击“立即更新”后才刷新。
 
-Scores、AI Companion 面板、Comment Workbench 和学生详情的成绩趋势图（`StudentTrendChart`，recharts 唯一非懒加载入口曾经在此）是非首屏异步模块；AI 浮动入口、登录、应用壳和默认今日页保持同步加载。recharts/charts-vendor 只允许被异步 chunk 引用，不得回到入口的静态导入链。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.25 MiB，XLSX vendor 单独报告。2026-07 把 XLSX 移出 precache、图表退出首屏后，precache 约 1.4 MiB、入口 gzip 约 159 KiB；这是当前基线，不能以预算上限为由回退。
+成绩、宿舍、班费、历史、名单/备份、AI Companion 面板、Comment Workbench 和学生详情成绩趋势图是非首屏异步模块；AI 浮动入口、登录、应用壳、默认今日页和常用座位/出勤/任务保持同步加载。目的页加载时沿用 `data-motion-pending` 与 `MotionSwitch` 保留旧画面；不得提前挂载隐藏的业务页、延迟数据提交或重建状态控制器。recharts/charts-vendor 只允许被异步 chunk 引用，不得回到入口的静态导入链。构建预算固定为入口/单个异步 JS gzip 各 220 KiB，PWA precache 2.25 MiB，XLSX vendor 单独报告。2026-07 的入口约 159 KiB、precache 约 1.4 MiB 为历史测量；本次优化前的 `1262296` 入口为 217.0 KiB、precache 1.96 MiB，后续对照同一命令的测量结果，不能把预算上限视为目标。
 
 ## 设计原则
 

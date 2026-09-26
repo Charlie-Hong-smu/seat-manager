@@ -19,7 +19,9 @@ import { CloudSyncModal } from "./components/CloudSyncModal";
 import { InstallHelpModal } from "./components/InstallHelpModal";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { HistorySeatModal } from "./components/HistorySeatModal";
-import { DailyWorkspace, DataWorkspace, DormitoryWorkspace, HistoryWorkspace, ClassFundWorkspace, AttendanceWorkspace, FollowupWorkspace } from "./components/workspaces";
+import { DailyWorkspace } from "./components/workspaces/DailyWorkspace";
+import { AttendanceWorkspace } from "./components/workspaces/AttendanceWorkspace";
+import { FollowupWorkspace } from "./components/workspaces/FollowupWorkspace";
 import { preloadFeature, RetryableLazy } from "./components/RetryableLazy";
 import {
   buildSeatOrderByStudentList,
@@ -74,6 +76,10 @@ type BeforeInstallPromptEvent = Event & {
 const loadCommentWorkbench = () => import("./components/CommentWorkbench").then((module) => ({ default: module.CommentWorkbench }));
 const loadAiAssistantCompanion = () => import("./components/AiAssistantWorkspace").then((module) => ({ default: module.AiAssistantCompanion }));
 const loadScoresWorkspace = () => import("./components/workspaces/ScoresWorkspace").then((module) => ({ default: module.ScoresWorkspace }));
+const loadDormitoryWorkspace = () => import("./components/DormitoryWorkspace").then((module) => ({ default: module.DormitoryWorkspace }));
+const loadClassFundWorkspace = () => import("./components/workspaces/ClassFundWorkspace").then((module) => ({ default: module.ClassFundWorkspace }));
+const loadHistoryWorkspace = () => import("./components/workspaces/HistoryWorkspace").then((module) => ({ default: module.HistoryWorkspace }));
+const loadDataWorkspace = () => import("./components/workspaces/DataWorkspace").then((module) => ({ default: module.DataWorkspace }));
 
 const APP_TAB_LABELS: Record<AppTab, string> = {
   today: "今日",
@@ -1303,36 +1309,36 @@ export default function App() {
 
         {sidebarTab === "dormitories" && (
           <div className="h-full">
-            <DormitoryWorkspace
-              classDuties={classDuties}
-              students={students}
-              dormitories={dormitories}
-              onCreateDormitory={handleCreateDormitory}
-              onRenameDormitory={handleRenameDormitory}
-              onDeleteDormitory={id => {
+            <RetryableLazy load={loadDormitoryWorkspace} componentProps={{
+              classDuties: classDuties,
+              students: students,
+              dormitories: dormitories,
+              onCreateDormitory: handleCreateDormitory,
+              onRenameDormitory: handleRenameDormitory,
+              onDeleteDormitory: id => {
                 const leader = classDuties.value.dormitoryLeaders[id];
                 const undo = handleDeleteDormitory(id);
                 return () => {
                   undo();
                   if (leader) classDuties.onChange(current => ({ ...current, dormitoryLeaders: { ...current.dormitoryLeaders, [id]: leader } }));
                 };
-              }}
-              onAssignStudentDormitory={handleAssignStudentDormitory}
-              onAddDormitoryEvent={handleAddDormitoryEvent}
-              onUpdateDormitoryEvent={handleUpdateDormEvent}
-              onDeleteDormitoryEvent={handleDeleteDormEvent}
-              onSelectStudent={student => openStudentDetail(student)}
-              followupTasks={followupTasks}
-              onRequestFollowupTask={requestFollowupTask}
-              onActivity={recordActivity}
-              onSetLinkedTaskStatus={handleSetLinkedTaskStatus}
-              periodSettings={dormitoryPeriodSettings}
-              onPeriodSettingsChange={settings => setSettings(current => ({ ...current, dormitoryPeriod: settings }))}
-              preferences={appState.settings.dormitoryPreferences}
-              onPreferencesChange={preferences => setSettings(current => ({ ...current, dormitoryPreferences: preferences }))}
-              initialTarget={timelineTarget?.workspace === "dormitories" ? timelineTarget : undefined}
-              onInitialTargetConsumed={consumeTimelineTarget}
-            />
+              },
+              onAssignStudentDormitory: handleAssignStudentDormitory,
+              onAddDormitoryEvent: handleAddDormitoryEvent,
+              onUpdateDormitoryEvent: handleUpdateDormEvent,
+              onDeleteDormitoryEvent: handleDeleteDormEvent,
+              onSelectStudent: student => openStudentDetail(student),
+              followupTasks: followupTasks,
+              onRequestFollowupTask: requestFollowupTask,
+              onActivity: recordActivity,
+              onSetLinkedTaskStatus: handleSetLinkedTaskStatus,
+              periodSettings: dormitoryPeriodSettings,
+              onPeriodSettingsChange: settings => setSettings(current => ({ ...current, dormitoryPeriod: settings })),
+              preferences: appState.settings.dormitoryPreferences,
+              onPreferencesChange: preferences => setSettings(current => ({ ...current, dormitoryPreferences: preferences })),
+              initialTarget: timelineTarget?.workspace === "dormitories" ? timelineTarget : undefined,
+              onInitialTargetConsumed: consumeTimelineTarget,
+            }} />
           </div>
         )}
 
@@ -1348,52 +1354,56 @@ export default function App() {
 
         {sidebarTab === "data" && (
           <div className="h-full">
-            <DataWorkspace
-              students={students}
-              archivedStudents={allStudents.filter(student => student.enrollmentStatus === "archived")}
-              seatOrder={seatOrder}
-              seatLayout={seatSettings.layout}
-              onImportRoster={handleImportRoster}
-              onBeforeBackupExport={saveCurrentLegacySnapshot}
-              onBackupImported={reloadFromLegacyState}
-              healthIssues={healthIssues}
-              onRestoreStudent={handleRestoreStudent}
-              onPermanentlyDeleteStudent={handlePermanentlyDeleteStudent}
-            />
+            <RetryableLazy load={loadDataWorkspace} componentProps={{
+              students: students,
+              archivedStudents: allStudents.filter(student => student.enrollmentStatus === "archived"),
+              seatOrder: seatOrder,
+              seatLayout: seatSettings.layout,
+              onImportRoster: handleImportRoster,
+              onBeforeBackupExport: saveCurrentLegacySnapshot,
+              onBackupImported: reloadFromLegacyState,
+              healthIssues: healthIssues,
+              onRestoreStudent: handleRestoreStudent,
+              onPermanentlyDeleteStudent: handlePermanentlyDeleteStudent,
+            }} />
           </div>
         )}
 
         {sidebarTab === "history" && (
           <div className="h-full">
-            <HistoryWorkspace
-              students={students}
-              history={savedSeatHistory}
-              timeline={historyTimeline}
-              onSave={handleSaveSeatHistory}
-              onRename={handleUpdateSeatHistoryNote}
-              onView={setSelectedHistorySnapshot}
-              onApply={handleApplySeatHistory}
-              onDelete={handleDeleteSeatHistory}
-              onOpenTimeline={openTimelineTarget}
-            />
+            <RetryableLazy load={loadHistoryWorkspace} componentProps={{
+              students: students,
+              history: savedSeatHistory,
+              timeline: historyTimeline,
+              onSave: handleSaveSeatHistory,
+              onRename: handleUpdateSeatHistoryNote,
+              onView: setSelectedHistorySnapshot,
+              onApply: handleApplySeatHistory,
+              onDelete: handleDeleteSeatHistory,
+              onOpenTimeline: openTimelineTarget,
+            }} />
           </div>
         )}
 
         {sidebarTab === "funds" && (
           <div className="h-full">
-            <ClassFundWorkspace
-              transactions={fundTransactions}
-              initialTarget={timelineTarget?.workspace === "funds" ? timelineTarget : undefined} onInitialTargetConsumed={consumeTimelineTarget}
-              collections={readFundCollections(appState.settings)} tasks={followupTasks} onSaveCollection={saveFundCollection} onOpenTask={id => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: id })}
-              students={students}
-              onAdd={handleAddFundTransaction}
-              onRemoveCreated={handleRemoveCreatedFundTransaction}
-              onUpdate={handleUpdateFundTransaction}
-              onDelete={handleDeleteFundTransaction}
-              onClearAll={handleClearFundTransactions}
-              onRequestFollowupTask={requestFollowupTask}
-              onActivity={recordActivity}
-            />
+            <RetryableLazy load={loadClassFundWorkspace} componentProps={{
+              transactions: fundTransactions,
+              initialTarget: timelineTarget?.workspace === "funds" ? timelineTarget : undefined,
+              onInitialTargetConsumed: consumeTimelineTarget,
+              collections: readFundCollections(appState.settings),
+              tasks: followupTasks,
+              onSaveCollection: saveFundCollection,
+              onOpenTask: id => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: id }),
+              students: students,
+              onAdd: handleAddFundTransaction,
+              onRemoveCreated: handleRemoveCreatedFundTransaction,
+              onUpdate: handleUpdateFundTransaction,
+              onDelete: handleDeleteFundTransaction,
+              onClearAll: handleClearFundTransactions,
+              onRequestFollowupTask: requestFollowupTask,
+              onActivity: recordActivity,
+            }} />
           </div>
         )}
       </MotionSwitch>
