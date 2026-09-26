@@ -162,6 +162,9 @@ test("shuffle preview waiting dock edits only the candidate until adoption", asy
     const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "{}");
     return book.slices[0].data.seatOrder as Array<string | null>;
   });
+  // Loading legacy data fills unassigned students and trims spare rows before autosaving.
+  // Capture the settled baseline so that migration is not mistaken for a preview write.
+  await expect.poll(persistedOrder).toEqual(["s0", "s1", "s2", "s3", null, null, null, null]);
   const initialOrder = await persistedOrder();
   const dock = page.locator("[data-seat-board-layer] .seat-waiting-dock");
   await page.getByRole("button", { name: "排座", exact: true }).click();

@@ -300,7 +300,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
         function tick(now: number) {
           if (!start) start = now;
           const live = host.querySelector<HTMLElement>(':scope > .app-motion-content .grade-main-chart')!;
-          const arriving = host.querySelector<HTMLElement>(':scope > .app-motion-overlay > .app-motion-surface > .app-motion-snapshot');
+          // Unchanged chart geometry keeps the live surface; only a resized surface
+          // needs an arriving snapshot. Both paths must show the new bars immediately.
+          const arriving = host.querySelector<HTMLElement>(':scope > .app-motion-overlay > [data-motion-surface-frame="grade-main-chart"] > .app-motion-snapshot') || live;
           if (reverse && !resumed) resumed = readWidth();
           samples.push({ time: now - start, width: readWidth(), title: live.querySelector('h3')!.textContent!, barCount: live.querySelectorAll('.recharts-bar-rectangle').length, plotWidth: live.querySelector('svg')?.getBoundingClientRect().width || 0, incomingBars: arriving?.querySelectorAll('.recharts-bar-rectangle').length || 0, incomingOpacity: arriving ? Number(getComputedStyle(arriving).opacity) : 1, moving: host.hasAttribute('data-moving'), barHeights: [...live.querySelectorAll('.recharts-bar-rectangle path')].map(node => node.getAttribute('height')).join(',') });
           if (now - start > 650) resolve({ before, interrupted, resumed, samples });
