@@ -28,18 +28,21 @@
 - `components/studentModalSelectors.ts`：学生弹窗的日期周、成绩和别名纯派生逻辑。
 - `components/commentBatchStorage.ts`：评语批量队列的兼容存储边界，键保持 `seat-manager-ai-comment-batch-state-v1`。
 - `hooks/useStudentActions.ts`、`useDormitoryActions.ts`、`useClassFundActions.ts`：App 使用的三个领域 action 组；不得合并成万能 action hook。
+- `hooks/useDormitoryEventEditor.ts`：宿舍事件草稿、保存和撤销；继续复用工作区草稿缓存，关闭编辑保留草稿，成功保存后清除。`useStudentProfileEditor.ts` 管理学生资料编辑会话，取消或切换学生时恢复已保存资料。
+- `hooks/useCommentDrafts.ts`：单人编辑与批量生成共用的评语草稿、材料及修订计数；`useCommentEditor.ts` 管理单人生成、选区修改与展示状态，`useCommentBatch.ts` 管理暂停、继续、失败重试队列。异步结果经过工作区/学生范围校验，批量结果不能覆盖生成期间的手动修改，正式评语仍需老师显式保存。
 - `components/DormitoryListPanel.tsx`、`DormitoryMembersPanel.tsx`：宿舍周期/列表与成员交互区；事件账本仍由工作区顶层协调。
 - `state/aiAssistantPayload.ts`、`aiAssistantResult.ts`：AI 助手请求裁剪和上游结果清洗；`aiAssistantService.ts` 保持对外 facade。
 - `components/AiAssistantLauncher.tsx`、`AiAssistantWorkspace.tsx`：全局 AI Companion 的轻量常驻入口与按需加载面板；同一组件状态跨业务页保留对话与草稿，并按工作区 ID 复用既有 `seat-manager-ai-assistant-chat:*` 缓存。
 - `state/aiApiClient.ts`：AI token、商用授权复用、代理/直连 fallback 和公共错误语义。
 - `cloudflare-worker/`：授权、手动同步、AI 和授权管理接口。
+- `cloudflare-worker/worker-app.js`：仅装配领域路由、CORS 与异常边界；`routes/license-routes.js`、`license-admin-routes.js`、`ai-routes.js` 分别拥有产品授权、管理员授权操作和 AI handler。`worker-license-store.js` 统一授权记录兼容读取/序列化与设备操作，`worker-ai-access.js` 统一 AI 鉴权/配额，`worker-ai-payload.js` 负责 AI 输入校验和输出清洗。
 - `cloudflare-worker/routes/sync-routes.js`：手动同步领域的实际实现，包含旧同步码授权、产品凭证校验和状态/保存/读取；通过 `worker-input.js` 复用请求与文本处理，通过 `worker-license-keys.js` 与授权管理共享 KV 键规则，不反向依赖 `worker-app.js`。
 - `cloudflare-worker/worker-routes.js`：浏览器可调用的公共路由契约；Netlify 代理直接复用。
 - `license-admin/`：仅管理员使用的静态授权运营后台；`admin-model.js` 保持搜索、筛选和指标计算为可测试纯函数，页面不进入产品构建。
 
 BoardUI 预览的评语工作台由 `App` 主导航在原右侧工作面内挂载，和其他工作区共用 `MotionSwitch` 的可中断纵向交接；只保留一个真实业务实例，过渡副本禁止交互。`RetryableLazy` 的加载标记让导航保留旧画面直到目的页就绪；评语导出与学生详情继续走顶层模态层，避免被主区域的裁切与容器宽度限制。
 
-`DormitoryWorkspace.tsx` 继续协调事件编辑，`CommentWorkbench.tsx` 和 `StudentModal.tsx` 仍包含较多紧密相连的交互状态。新增工作应从现有 action/selector/storage 边界继续局部提取，不得为了缩短文件一次性改写业务流程，也不得创建无业务意义的一行转发组件。
+宿舍、学生详情和评语页面保留布局、导航与业务组件装配，编辑会话由各自领域 hook 管理。新增工作应沿现有 action/selector/storage 边界局部修改，不得为了缩短文件改写业务流程，也不得创建无业务意义的一行转发组件。
 
 ## 持久数据流
 
@@ -75,6 +78,8 @@ React event
 若 `seat-manager-workspaces-v1` 已存在但无法通过校验，启动流程不得初始化空柜或自动保存。产品登录后显示独立恢复界面，只允许导出原始字符串、导入通过校验的备份，或在二次确认后显式创建空柜。授权到期时间、AI 权益和设备额度继续只存在于管理员后台，不新增产品侧授权信息页。
 
 授权记录存放在 `seat-manager:license:*` KV 键中。产品认证字段保持既有语义；管理员专用元数据包括 `acquisitionChannel`、`acquisitionDetail`、`createdAt` 和 `updatedAt`。缺少渠道的旧 `xhs-` 代号读取为小红书，其他旧记录读取为待补充；缺少创建时间时保持为空，不用更新时间倒推。所有设备绑定、解绑和清空操作必须通过统一的授权记录序列化边界，避免重写 KV 时丢失管理员元数据。
+
+已绑定 AccountCoordinator 时，授权删除与设备/管理员写入经过同一串行入口；删除先保存空记录标记，再删除 KV 镜像，避免后续读取从旧镜像恢复已删除授权。管理员显式重建仍可覆盖此标记。未绑定协调器的旧部署继续使用 KV 路径。
 
 `POST /admin/licenses/list` 只接受管理员 Bearer token，并使用可选 `cursor` 分页返回授权记录；授权后台会逐页加载完整列表后在浏览器内计算看板和筛选。渠道和来源明细只存在于管理员接口，不进入产品登录响应或产品 token。
 

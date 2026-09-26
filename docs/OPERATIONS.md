@@ -43,6 +43,8 @@ npm run check
 npx wrangler deploy --dry-run
 ```
 
+Worker 检查会自动扫描根目录与 `routes/` 下的 JavaScript，并运行本地 Miniflare/workerd 集成测试。集成测试通过真实 Durable Object RPC 检查设备名额和 AI 日额度的并发边界，以及授权删除、旧镜像和重建；测试使用本地 KV、测试专用凭证与上游替身，无需线上 secret，不会请求真实 AI。CI 的 `npm ci` 会安装锁定的运行时开发依赖。
+
 授权后台保持无构建静态页面。其搜索、筛选、分页和看板计算测试已包含在 Worker 的 `npm run check` 中；本地视觉检查可从仓库根目录启动：
 
 ```bash
