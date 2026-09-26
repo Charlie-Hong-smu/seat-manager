@@ -73,9 +73,15 @@ test("adopted rotation creates a saved snapshot and undo removes it", async ({ p
   await page.getByRole("button", { name: "评估详情" }).click();
   await expect(preview.getByText("近期轮换")).toBeVisible();
   await page.getByRole("button", { name: "返回规则" }).click();
+  await expect(page.locator("#seat-evaluation-trigger")).toBeFocused();
+  // Rules stay docked beside the live candidate: edit them and regenerate without leaving the plan.
+  await expect(page.locator(".seat-workflow-panel")).toHaveAttribute("data-seat-flow", "preview");
+  await page.locator("[data-seat-rules-layer]").getByText("尽量男女同桌", { exact: true }).click();
+  await expect(page.getByText("规则已修改，重新生成后生效")).toBeVisible();
+  await page.getByRole("button", { name: "重新生成" }).click();
+  await expect(page.getByRole("button", { name: "再随机一次" })).toBeVisible();
+  await page.getByRole("button", { name: "放弃", exact: true }).click();
   await expect(page.getByRole("button", { name: "生成方案", exact: true })).toBeFocused();
-  await expect(page.getByLabel("轮换时尽量避开最近的座位和同桌")).toBeVisible();
-  await page.getByRole("button", { name: "生成方案", exact: true }).click();
   await page.getByRole("button", { name: "返回座位" }).click();
   await expect(page.getByRole("button", { name: "排座" })).toBeVisible();
   expect(await page.evaluate(() => {
@@ -168,6 +174,12 @@ test("shuffle preview waiting dock edits only the candidate until adoption", asy
   const initialOrder = await persistedOrder();
   const dock = page.locator("[data-seat-board-layer] .seat-waiting-dock");
   await page.getByRole("button", { name: "排座", exact: true }).click();
+  // The board stays operable beside the docked rules: lock a seat before generating.
+  const board = page.locator("[data-seat-board-layer]");
+  await board.locator('button[aria-label="锁定 候选学生0 的座位"]').click({ force: true });
+  await expect(board.locator('[data-student-id="s0"]')).toHaveAttribute("data-seat-locked", "true");
+  await board.locator('button[aria-label="解锁 候选学生0 的座位"]').click({ force: true });
+  await expect(board.locator('[data-student-id="s0"]')).toHaveAttribute("data-seat-locked", "false");
   await page.getByRole("button", { name: "生成方案", exact: true }).click();
   async function dragSeatToWaiting(studentId: string) {
     const source = page.locator(`[data-seat-board-layer] [data-seat-index][data-student-id="${studentId}"]`);

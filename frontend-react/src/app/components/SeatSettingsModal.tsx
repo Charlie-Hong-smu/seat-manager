@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, ChevronRight, ListOrdered, Plus, Search, Shuffle, Undo2, X } from "lucide-react";
 
@@ -6,7 +6,7 @@ import { COMPLEMENT_RULES } from "../state/seatPlanner";
 import { matchesStudentSearch } from "../state/studentSearch";
 import type { AppStudent, ComplementRuleId, SeatSettings, StudentId } from "../state/types";
 import { animateSelectionTransfer } from "./selectionMotion";
-import { AnimatedPopover, Button, Checkbox, IconButton, MotionCollapse, NumberStepper, SelectMenu, useModalFocus } from "./ui";
+import { AnimatedPopover, Button, Checkbox, IconButton, MotionCollapse, MotionSwitch, NumberStepper, SelectMenu, useModalFocus } from "./ui";
 
 interface SeatSettingsModalProps {
   open: boolean;
@@ -19,6 +19,10 @@ interface SeatSettingsModalProps {
   onOrderByList: () => void;
   onUndo: () => void;
   onClose: () => void;
+  /** Inline workbench: current plan summary above the rules. */
+  summary?: ReactNode;
+  /** Inline workbench: replaces the generate actions while a plan is being previewed. */
+  footer?: ReactNode;
 }
 
 /** 可搜索的单选学生下拉。 */
@@ -158,7 +162,7 @@ function ConstraintRow({ motionId, tone, children, onRemove, removeLabel }: { mo
   );
 }
 
-export function SeatSettingsModal({ open, inline = false, students, settings, canUndo, onUpdate, onRandomize, onOrderByList, onUndo, onClose }: SeatSettingsModalProps) {
+export function SeatSettingsModal({ open, inline = false, students, settings, canUndo, onUpdate, onRandomize, onOrderByList, onUndo, onClose, summary, footer }: SeatSettingsModalProps) {
   const modalRef = useModalFocus(open && !inline, onClose);
   const [pairA, setPairA] = useState("");
   const [pairB, setPairB] = useState("");
@@ -283,6 +287,8 @@ export function SeatSettingsModal({ open, inline = false, students, settings, ca
           </div>
         </div>
 
+        {inline && <MotionCollapse open={Boolean(summary)} className="shrink-0">{summary}</MotionCollapse>}
+
         <div className="seat-rule-scroll min-h-0 flex-1 overflow-y-auto px-3 py-1">
           <Section title="基础规则" count={basicCount}>
             <div className="space-y-2.5">
@@ -356,10 +362,14 @@ export function SeatSettingsModal({ open, inline = false, students, settings, ca
           </Section>
         </div>
 
-        <div className="seat-inline-rules-footer flex shrink-0 items-center gap-2 border-t border-separator-border px-4 py-3">
-          <Button size="sm" variant="quiet" onClick={() => { if (!inline) onClose(); onOrderByList(); }}><ListOrdered className="h-4 w-4" />按名单重排</Button>
-          {!inline && <Button size="sm" variant="quiet" disabled={!canUndo} onClick={onUndo}><Undo2 className="h-4 w-4" />撤销</Button>}
-          <Button id="seat-generate-preview" className="ml-auto" onClick={() => { if (!inline) onClose(); onRandomize(); }}><Shuffle className="h-4 w-4" />生成方案</Button>
+        <div className="seat-inline-rules-footer shrink-0 border-t border-separator-border px-4 py-3">
+          <MotionSwitch transitionKey={footer ? "plan" : "rules"} direction={footer ? "right" : "left"} contentClassName="flex items-center gap-2">
+            {footer ?? <>
+              <Button size="sm" variant="quiet" onClick={() => { if (!inline) onClose(); onOrderByList(); }}><ListOrdered className="h-4 w-4" />按名单重排</Button>
+              {!inline && <Button size="sm" variant="quiet" disabled={!canUndo} onClick={onUndo}><Undo2 className="h-4 w-4" />撤销</Button>}
+              <Button id="seat-generate-preview" className="ml-auto" onClick={() => { if (!inline) onClose(); onRandomize(); }}><Shuffle className="h-4 w-4" />生成方案</Button>
+            </>}
+          </MotionSwitch>
         </div>
       </div>
     </div>

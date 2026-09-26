@@ -100,12 +100,14 @@ export function DailyWorkspace({
 }) {
   const [seatFlow, setSeatFlow] = useState<"view" | "rules" | "preview">("view");
   const [evaluationOpen, setEvaluationOpen] = useState(false);
-  const [wideSeatPanel, setWideSeatPanel] = useState(false);
+  // Matches the 700px seat-workflow container query: phones stack panels over the board.
+  const [compactSeatPanel, setCompactSeatPanel] = useState(false);
+  const [previewSettings, setPreviewSettings] = useState<SeatSettings | null>(null);
   const { editingLayout, transitioning, seatPanelRef, switchLayoutEditing } = useSeatModeTransition();
   useEffect(() => {
     const panel = seatPanelRef.current;
     if (!panel) return;
-    const observer = new ResizeObserver(entries => setWideSeatPanel(entries[0].contentRect.width > 1400));
+    const observer = new ResizeObserver(entries => setCompactSeatPanel(entries[0].contentRect.width <= 700));
     observer.observe(panel);
     return () => observer.disconnect();
   }, [seatPanelRef]);
@@ -145,7 +147,9 @@ export function DailyWorkspace({
   const todayAttendance = getAttendanceForDate(attendanceRecords, todayKey()).filter(item => activeStudentIds.has(item.studentId));
   const abnormalAttendance = todayAttendance.filter(item => item.status !== "normal" || item.late || item.earlyLeave).length;
   const dueTasks = groupFollowupTasks(followupTasks.filter(item => item.status === "pending" && item.dueDate && item.dueDate <= todayKey())).length;
-  const evaluationVisible = seatFlow === "preview" && (wideSeatPanel || evaluationOpen);
+  const evaluationVisible = seatFlow === "preview" && evaluationOpen;
+  const rulesOpen = seatFlow === "rules" || (seatFlow === "preview" && !compactSeatPanel);
+  const previewStale = seatFlow === "preview" && previewSettings !== null && previewSettings !== seatSettings;
   const seatShuffleCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => seatShuffleCleanupRef.current?.(), []);
 
@@ -233,17 +237,29 @@ export function DailyWorkspace({
   }
 
   function generatePreview() {
-    transitionSeatBoard(() => { if (onRandomizeSeats()) { setSeatFlow("preview"); setEvaluationOpen(false); } });
+    transitionSeatBoard(() => { if (onRandomizeSeats()) { setSeatFlow("preview"); setEvaluationOpen(false); setPreviewSettings(seatSettings); } });
     requestAnimationFrame(() => document.getElementById("seat-preview-title")?.focus({ preventScroll: true }));
   }
 
   function regeneratePreview() {
-    transitionSeatBoard(() => { onRandomizeSeats(); });
+    transitionSeatBoard(() => { if (onRandomizeSeats()) setPreviewSettings(seatSettings); });
   }
 
-  function backToRules() {
-    transitionSeatBoard(() => { setSeatFlow("rules"); setEvaluationOpen(false); });
+  /** Drop the candidate but stay in the workbench with the rules as they are. */
+  function discardPreview() {
+    transitionSeatBoard(() => { onDiscardShufflePreview(); setSeatFlow("rules"); setEvaluationOpen(false); });
     requestAnimationFrame(() => document.getElementById("seat-generate-preview")?.focus({ preventScroll: true }));
+  }
+
+  function closeEvaluation() {
+    setEvaluationOpen(false);
+    requestAnimationFrame(() => document.getElementById(compactSeatPanel ? "seat-evaluation-trigger-compact" : "seat-evaluation-trigger")?.focus({ preventScroll: true }));
+  }
+
+  function toggleEvaluation() {
+    if (evaluationOpen) { closeEvaluation(); return; }
+    setEvaluationOpen(true);
+    requestAnimationFrame(() => document.getElementById("seat-shuffle-evaluation")?.focus({ preventScroll: true }));
   }
 
   function applyPreview() {
@@ -347,14 +363,10 @@ export function DailyWorkspace({
             <strong id="seat-preview-title" tabIndex={-1} className="block min-w-0 truncate text-body-semibold text-text-primary outline-none"><span key={seatFlow} className="seat-flow-title-enter inline-block">{seatFlow === "preview" ? "方案预览" : "排座"}</span></strong>
           </nav>
           {seatFlow === "preview" && <span className="seat-flow-title-enter text-caption-1-regular text-text-tertiary">采用后才会保存</span>}
-          {seatFlow === "preview" && shufflePreview && <div className="seat-flow-actions-enter ml-auto flex flex-wrap items-center justify-end gap-1">
-            <span className={`mr-1 rounded-[var(--app-radius-sm)] px-2.5 py-1.5 text-caption-1-semibold ${shufflePreview.evaluation.details.required.every(item => item.satisfied) ? "bg-status-success-50 text-status-success-700" : "bg-status-warning-50 text-status-warning-700"}`}>明确要求 {shufflePreview.evaluation.details.required.filter(item => item.satisfied).length}/{shufflePreview.evaluation.details.required.length}</span>
-            <Button size="sm" variant="quiet" onClick={backToRules}>返回规则</Button>
-            <Button id="seat-evaluation-trigger" size="sm" variant="quiet" aria-expanded={evaluationVisible} onClick={() => {
-              if (wideSeatPanel) { document.getElementById("seat-shuffle-evaluation")?.focus({ preventScroll: true }); return; }
-              setEvaluationOpen(value => !value);
-              if (!evaluationOpen) requestAnimationFrame(() => document.getElementById("seat-shuffle-evaluation")?.focus({ preventScroll: true }));
-            }}>评估详情</Button>
+          {/* Phones cannot dock the rules card beside the board, so plan actions stay in the toolbar there. */}
+          {seatFlow === "preview" && shufflePreview && compactSeatPanel && <div className="seat-flow-actions-enter ml-auto flex flex-wrap items-center justify-end gap-1">
+            <Button size="sm" variant="quiet" onClick={discardPreview}>返回规则</Button>
+            <Button id="seat-evaluation-trigger-compact" size="sm" variant="quiet" aria-expanded={evaluationVisible} onClick={toggleEvaluation}>评估详情</Button>
             <Button size="sm" variant="secondary" onClick={regeneratePreview}><Shuffle className="h-4 w-4" />再随机一次</Button>
             <Button size="sm" onClick={applyPreview}>采用方案</Button>
           </div>}
@@ -362,8 +374,8 @@ export function DailyWorkspace({
       </div>
 
       <div className="min-h-0 flex-1 p-3">
-        <div ref={seatPanelRef} data-seat-flow={seatFlow} data-evaluation-open={evaluationOpen ? "true" : "false"} className="seat-workflow-panel relative h-full min-h-0 overflow-hidden bg-background-primary-default">
-          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-2" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout || seatFlow === "rules"} inert={editingLayout || seatFlow === "rules" || transitioning ? true : undefined}>
+        <div ref={seatPanelRef} data-seat-flow={seatFlow} data-rules-open={rulesOpen ? "true" : "false"} data-evaluation-open={evaluationVisible ? "true" : "false"} className="seat-workflow-panel relative h-full min-h-0 overflow-hidden bg-background-primary-default">
+          {(!editingLayout || transitioning) && <div data-seat-board-layer className="absolute inset-0 p-2" style={{ visibility: editingLayout ? "hidden" : undefined }} aria-hidden={editingLayout || (compactSeatPanel && seatFlow === "rules")} inert={editingLayout || (compactSeatPanel && seatFlow === "rules") || transitioning ? true : undefined}>
             <SeatBoard footerAccessory={<SegmentedControl
               value={cardMode}
               ariaLabel="座位卡显示方式"
@@ -374,11 +386,34 @@ export function DailyWorkspace({
               ]}
             />} cardMode={cardMode} previewMode={seatFlow === "preview"} students={students} seatOrder={seatFlow === "preview" && shufflePreview ? shufflePreview.order : seatOrder} seatSettings={seatSettings} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} onMoveSeat={seatFlow === "preview" ? movePreviewSeat : onMoveSeat} onMoveStudentToWaiting={seatFlow === "preview" ? movePreviewStudentToWaiting : onMoveStudentToWaiting} onAssignStudentToSeat={seatFlow === "preview" ? assignPreviewStudentToSeat : onAssignStudentToSeat} lockedSeats={lockedSeats} onToggleLock={seatFlow === "preview" ? () => {} : onToggleLock} />
           </div>}
-          {!editingLayout && <div data-seat-rules-layer aria-hidden={seatFlow !== "rules"} inert={seatFlow !== "rules" ? true : undefined}>
-            <SeatSettingsModal inline open students={students} settings={seatSettings} canUndo={canUndoSeatOrder} onUpdate={onUpdateSeatSettings} onRandomize={generatePreview} onOrderByList={orderSeatsByList} onUndo={() => transitionSeatBoard(onUndoSeatOrder)} onClose={returnToSeats} />
+          {!editingLayout && <div data-seat-rules-layer aria-hidden={!rulesOpen || evaluationVisible} inert={!rulesOpen || evaluationVisible ? true : undefined}>
+            <SeatSettingsModal inline open students={students} settings={seatSettings} canUndo={canUndoSeatOrder} onUpdate={onUpdateSeatSettings} onRandomize={generatePreview} onOrderByList={orderSeatsByList} onUndo={() => transitionSeatBoard(onUndoSeatOrder)} onClose={returnToSeats}
+              summary={seatFlow === "preview" && shufflePreview ? (() => {
+                const required = shufflePreview.evaluation.details.required;
+                const satisfied = required.filter(item => item.satisfied).length;
+                return <div className="seat-plan-summary mx-3 mt-3 rounded-[var(--app-radius-md)] border border-accent-100 bg-accent-50/60 px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-body-semibold text-text-primary">当前方案</span>
+                    {required.length > 0 && <span className={`rounded-full px-2 py-0.5 text-caption-1-semibold ${satisfied === required.length ? "bg-status-success-50 text-status-success-700" : "bg-status-warning-50 text-status-warning-700"}`}>明确要求 {satisfied}/{required.length}</span>}
+                    <button id="seat-evaluation-trigger" type="button" aria-expanded={evaluationVisible} onClick={toggleEvaluation} className="ml-auto inline-flex items-center gap-0.5 rounded-md text-caption-1-semibold text-accent-600 hover:text-accent-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">评估详情<ChevronRight className="h-3.5 w-3.5" /></button>
+                  </div>
+                  <p className={`mt-1 text-caption-1-regular ${previewStale ? "text-status-warning-700" : "text-text-tertiary"}`}>{previewStale ? "规则已修改，重新生成后生效" : "可直接在座位图上拖动调整"}</p>
+                </div>;
+              })() : undefined}
+              footer={seatFlow === "preview" && shufflePreview ? <>
+                <Button size="sm" variant="quiet" onClick={discardPreview}>放弃</Button>
+                <Button size="sm" variant={previewStale ? "primary" : "secondary"} className="ml-auto" onClick={regeneratePreview}><Shuffle className="h-4 w-4" />{previewStale ? "重新生成" : "再随机一次"}</Button>
+                <Button size="sm" variant={previewStale ? "secondary" : "primary"} onClick={applyPreview}>采用方案</Button>
+              </> : undefined} />
           </div>}
-          {shufflePreview && !editingLayout && <div id="seat-shuffle-evaluation" tabIndex={-1} data-seat-preview-layer aria-hidden={!evaluationVisible} inert={!evaluationVisible ? true : undefined}>
-            <RetryableLazy load={loadSeatShufflePreview} componentProps={{ inline: true, students, currentOrder: seatOrder, candidate: shufflePreview, seatSettings, onOrderChange: onShufflePreviewOrderChange, onRegenerate: regeneratePreview, onApply: applyPreview, onClose: returnToSeats, onBackToRules: backToRules, onSelectStudent }} fallback={<div className="flex h-full items-center justify-center text-body-regular text-text-secondary">正在准备评估详情…</div>} />
+          {shufflePreview && !editingLayout && <div id="seat-shuffle-evaluation" tabIndex={-1} data-seat-preview-layer className="flex flex-col" aria-hidden={!evaluationVisible} inert={!evaluationVisible ? true : undefined}>
+            <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-separator-border px-2">
+              <Button size="sm" variant="quiet" onClick={closeEvaluation}><ArrowLeft className="h-4 w-4" />{compactSeatPanel ? "返回方案" : "返回规则"}</Button>
+              <span className="pr-2 text-body-semibold text-text-primary">评估详情</span>
+            </div>
+            <div className="min-h-0 flex-1">
+              <RetryableLazy load={loadSeatShufflePreview} componentProps={{ inline: true, students, currentOrder: seatOrder, candidate: shufflePreview, seatSettings, onOrderChange: onShufflePreviewOrderChange, onRegenerate: regeneratePreview, onApply: applyPreview, onClose: returnToSeats, onBackToRules: closeEvaluation, onSelectStudent }} fallback={<div className="flex h-full items-center justify-center text-body-regular text-text-secondary">正在准备评估详情…</div>} />
+            </div>
           </div>}
           {(editingLayout || transitioning) && (
             <div data-seat-designer-layer className="absolute inset-0" style={{ visibility: editingLayout ? undefined : "hidden" }} aria-hidden={!editingLayout} inert={!editingLayout || transitioning ? true : undefined}>
