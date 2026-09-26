@@ -26,6 +26,12 @@ export class AccountCoordinator extends DurableObject {
 
   mutateLicense(key, operation) {
     return this.enqueue(async () => {
+      if (operation.type === "delete") {
+        // Retain a tombstone so a later read cannot rehydrate a stale KV mirror.
+        await this.ctx.storage.put("record", { value: null });
+        await this.env.SEAT_MANAGER_KV.delete(key);
+        return { ok: true, license: null };
+      }
       const current = await this.load(key);
       const now = new Date().toISOString();
       let next;

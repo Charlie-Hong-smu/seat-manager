@@ -5,19 +5,21 @@
 ## 代码边界
 
 - `worker-entry.js`：Wrangler 入口，导出应用与 AccountCoordinator；`deepseek-ai-worker.js` 保持纯应用 facade，供既有 Node 检查使用。
-- `worker-app.js`：CORS、异常边界、显式路由装配，以及尚未提取的授权、管理和 AI handler。
+- `worker-app.js`：CORS、异常边界与显式路由装配，不持有请求级共享状态。
 - `routes/sync-routes.js`：完整的手动同步领域，包括兼容同步码授权、产品 token 校验、状态、上传和恢复。
 - `worker-input.js`：共享请求 JSON 读取与既有文本转换；`worker-license-keys.js` 统一授权记录和账户同步空间的键规则。
 - `worker-auth.js`：token、hash 和常量时间比较。
 - `worker-usage.js`：`AiRequestContext`、短窗口限流和持久每日计数。
 - `worker-account-coordinator.js`：按授权键或计数日键分片，串行计数、绑定设备及管理员写入；保持 KV 兼容镜像。
-- `routes/license-routes.js`、`routes/ai-routes.js`：领域路由表；管理员路由仍由应用入口显式装配并受同一鉴权/响应边界保护。
+- `routes/license-routes.js`、`routes/license-admin-routes.js`、`routes/ai-routes.js`：产品授权、管理员操作与 AI 的实际 handler 及领域路由表。
+- `worker-license-store.js`：授权读取、设备操作、管理员输入规范化与序列化；`worker-ai-access.js`：AI 鉴权与配额；`worker-ai-payload.js`：AI 输入校验与输出清洗。
 - `worker-router.js`：统一路由调度。
 - `worker-response.js`：CORS、JSON 和异常响应。
 - `worker-routes.js`：浏览器可调用的公共路由契约。
 - `test/routes.test.js`：Worker 与 Netlify 代理路由一致性。
 - `test/worker.test.js`：鉴权边界、请求限制和异常响应。
 - `test/sync.test.js`：账户隔离、旧同步码和旧备份、整柜往返、字节上限、等待写入及失败响应、Commercial 代理链路。
+- `test/account-runtime.test.js`：使用本地 Miniflare/workerd 与 SQLite Durable Object 验证真实 RPC、并发设备名额、并发 AI 日额度、解绑/清空、删除及显式重建。KV 与上游 AI 都留在本地测试环境，不访问真实授权或 AI 服务。
 
 新增或删除公共接口时，必须同时更新 handler 与 `worker-routes.js`，并让路由契约测试通过。不要在 README 中维护另一份容易过期的完整路由清单。
 
@@ -33,6 +35,10 @@ npm run dev
 npm run check
 npx wrangler deploy --dry-run
 ```
+
+`npm run check` 自动检查根目录和 `routes/` 下所有 JavaScript 语法，再运行全部测试；新增领域文件无需维护一条硬编码文件清单。Miniflare 作为明确的开发依赖固定到与锁文件中 Wrangler 配套的版本。
+
+授权删除在已绑定协调器时同时更新其权威记录与 KV 镜像，并保留空记录标记，防止已删除授权重新登录或由延迟镜像恢复；显式管理员重建仍可用。仅删除 KV 无法注销已被协调器加载的记录。
 
 获得用户明确部署授权后才运行：
 
