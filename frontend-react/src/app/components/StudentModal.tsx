@@ -1,3 +1,4 @@
+import { useStudentProfileEditor } from "../hooks/useStudentProfileEditor";
 import { getAttendanceForDate, getAttendanceRange } from "../state/attendancePeriods";
 import type { SaveCommunication } from "./CommunicationEditor";
 import { useAttendanceUndo } from "../hooks/useAttendanceUndo";
@@ -11,9 +12,9 @@ import { RetryableLazy, preloadFeature } from "./RetryableLazy";
 import { type NewDormEventInput } from "../state/dormitoryActions";
 import { DormEventForm } from "./DormEventForm";
 import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
-import { createStudentRecord, updateStudentProfile } from "../state/studentActions";
+import { createStudentRecord } from "../state/studentActions";
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "../state/commentRubricStorage";
-import { BEHAVIOR_TAG_GROUPS, BEHAVIOR_TAG_IDS } from "../state/tagCatalog";
+import { BEHAVIOR_TAG_GROUPS } from "../state/tagCatalog";
 import { generateStudentAiTrend, hasStoredAiTrendAuth, readCachedStudentAiTrend, type AiTrendResult } from "../state/aiTrendService";
 import type { ActivityEvent, AppStudent, AttendanceRecord, BusinessEntityPreviewFallback, BusinessEntityPreviewModel, BusinessEntityRef, CommunicationDraft, Dormitory, FollowupTask, Gender, GradeScoreCell, HomeworkAssignment, RecordType, SeatLayoutV1, StudentId, StudentRecord } from "../state/types";
 import { getNeighborIndexPairs, getSeatPositionLabel, resolveSeatLayout } from "../state/seatLayout";
@@ -35,8 +36,6 @@ import {
   getWeakSubject,
   getWeekStart,
   isRecordInWeek,
-  parseAliases,
-  sortTagIds,
   toLocalDateKey,
   type StudentModalRecord,
 } from "./studentModalSelectors";
@@ -138,16 +137,11 @@ export function StudentModal({
   const appDialog = useAppDialog();
   const actionToast = useActionToast();
   const attendanceUndo = useAttendanceUndo(attendanceRecords, next => onAttendanceChange?.(next), todayKey());
-  const [nameInput, setNameInput] = useState(student.name);
-  const [genderInput, setGenderInput] = useState<Gender>(student.gender);
-  const [aliasesInput, setAliasesInput] = useState(student.aliases.join("、"));
-  const [parentPhoneInput, setParentPhoneInput] = useState(student.parentPhone || "");
-  const [addressInput, setAddressInput] = useState(student.address || "");
-  const [emergencyContactInput, setEmergencyContactInput] = useState(student.emergencyContact || "");
-  const [isBoardingInput, setIsBoardingInput] = useState(student.isBoarding === true);
-  const [selectedBehaviorTags, setSelectedBehaviorTags] = useState<Set<string>>(
-    () => new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id)))
-  );
+  const { nameInput, setNameInput, genderInput, setGenderInput, aliasesInput, setAliasesInput,
+    parentPhoneInput, setParentPhoneInput, addressInput, setAddressInput, emergencyContactInput, setEmergencyContactInput,
+    isBoardingInput, setIsBoardingInput, selectedBehaviorTags, toggleBehaviorTag, saveProfile, cancelProfileEditing,
+    profileDirty, profileStatus, setProfileStatus, profileEditing, setProfileEditing,
+  } = useStudentProfileEditor(student, onUpdateStudent, initialActiveTab);
   const [noteInput, setNoteInput] = useState("");
   const [localRecords, setLocalRecords] = useState<StudentModalRecord[]>(() =>
     student.records.map(r => ({
@@ -164,8 +158,6 @@ export function StudentModal({
   const [syncSelected, setSyncSelected] = useState<Set<StudentId>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingRecordDelete, setPendingRecordDelete] = useState<StudentModalRecord | null>(null);
-  const [profileStatus, setProfileStatus] = useState("");
-  const [profileEditing, setProfileEditing] = useState(false);
   const profileNameRef = useRef<HTMLInputElement>(null);
   const [dormStatus, setDormStatus] = useState("");
   const [activeTab, setActiveTab] = useState<StudentDetailTab>(initialActiveTab);
@@ -186,20 +178,10 @@ export function StudentModal({
   const [contextPreview, setContextPreview] = useState<ContextPreviewRequest | null>(null);
 
   useLayoutEffect(() => {
-    setNameInput(student.name);
-    setGenderInput(student.gender);
-    setAliasesInput(student.aliases.join("、"));
-    setParentPhoneInput(student.parentPhone || "");
-    setAddressInput(student.address || "");
-    setEmergencyContactInput(student.emergencyContact || "");
-    setIsBoardingInput(student.isBoarding === true);
-    setSelectedBehaviorTags(new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id))));
     setNoteInput("");
     setSyncSelected(new Set());
     setShowDeleteConfirm(false);
     setPendingRecordDelete(null);
-    setProfileStatus("");
-    setProfileEditing(false);
     setDormStatus("");
     setDormAssignmentOpen(false);
     setDormEventOpen(false);
@@ -326,24 +308,6 @@ export function StudentModal({
     const undo = attendanceUndo.commit(next, action, undoActivity);
     if (undo) actionToast.show({ message: "出勤已保存，6 秒内再次点击可恢复", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5" />, onAction: () => { undo(); }, duration: 6000 });
   }
-  const preservedManualTagIds = useMemo(
-    () => student.manualTagIds.filter(id => !BEHAVIOR_TAG_IDS.has(id)),
-    [student.manualTagIds]
-  );
-  const initialBehaviorTagKey = useMemo(
-    () => sortTagIds(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id))),
-    [student.manualTagIds]
-  );
-  const selectedBehaviorTagKey = sortTagIds(selectedBehaviorTags);
-  const profileDirty =
-    nameInput.trim() !== student.name ||
-    genderInput !== student.gender ||
-    parseAliases(aliasesInput).join("|") !== student.aliases.join("|") ||
-    parentPhoneInput.trim() !== (student.parentPhone || "") ||
-    addressInput.trim() !== (student.address || "") ||
-    emergencyContactInput.trim() !== (student.emergencyContact || "") ||
-    isBoardingInput !== (student.isBoarding === true) ||
-    selectedBehaviorTagKey !== initialBehaviorTagKey;
   const weekOptions = useMemo(() => buildWeekOptions(localRecords), [localRecords]);
   const activeWeek = weekOptions.find(week => week.key === selectedWeek) || weekOptions[0];
   const filteredRecords = activeWeek ? localRecords.filter(record => isRecordInWeek(record, activeWeek)) : localRecords;
@@ -354,53 +318,6 @@ export function StudentModal({
       setSelectedWeek(weekOptions[0].key);
     }
   }, [selectedWeek, weekOptions]);
-
-  function toggleBehaviorTag(id: string) {
-    setSelectedBehaviorTags(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-    setProfileStatus("");
-  }
-
-  function saveProfile() {
-    if (!nameInput.trim()) {
-      setProfileStatus("姓名不能为空。");
-      return;
-    }
-
-    const nextStudent = updateStudentProfile(student, {
-      name: nameInput,
-      gender: genderInput,
-      aliases: parseAliases(aliasesInput),
-      parentPhone: parentPhoneInput,
-      address: addressInput,
-      emergencyContact: emergencyContactInput,
-      isBoarding: isBoardingInput,
-      manualTagIds: [...preservedManualTagIds, ...selectedBehaviorTags],
-    });
-    onUpdateStudent(nextStudent);
-    setProfileStatus("学生信息已保存。");
-    setProfileEditing(false);
-  }
-
-  function cancelProfileEditing() {
-    setNameInput(student.name);
-    setGenderInput(student.gender);
-    setAliasesInput(student.aliases.join("、"));
-    setParentPhoneInput(student.parentPhone || "");
-    setAddressInput(student.address || "");
-    setEmergencyContactInput(student.emergencyContact || "");
-    setIsBoardingInput(student.isBoarding === true);
-    setSelectedBehaviorTags(new Set(student.manualTagIds.filter(id => BEHAVIOR_TAG_IDS.has(id))));
-    setProfileEditing(false);
-    setProfileStatus("已取消本次修改。");
-  }
 
   async function addRecord(type: RecordType) {
     if (type !== "note" && !noteInput.trim() && !await appDialog.confirm({ title: "添加无备注记录？", description: `将为 ${student.name} 添加一条没有说明的${type === "reward" ? "奖励" : "纪律"}记录。建议填写事实依据，便于以后回看。`, confirmLabel: "仍然添加", variant: "primary" })) return;
