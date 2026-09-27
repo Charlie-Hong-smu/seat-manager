@@ -319,6 +319,8 @@ export interface GradeExam {
   rankConfig?: GradeRankConfig;
   importSource?: ScoreImportSource;
   itemAnalysis?: GradeItemAnalysis;
+  /** 老师确认的各科满分；缺省科目按本场最高分推断（≤100 为 100，≤150 为 150）。 */
+  fullScores?: Record<string, number>;
 }
 
 export interface GradeQuestionDefinition {
@@ -461,6 +463,7 @@ export interface SavedGradeExamRecord {
   rankConfig?: GradeRankConfig;
   importSource?: ScoreImportSource;
   itemAnalysis?: GradeItemAnalysis;
+  fullScores?: Record<string, number>;
 }
 
 export interface ScoreImportDraft {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSeatManagerState } from "./legacyStateAdapter";
-import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamRecordMetadata } from "./legacyWriteAdapter";
+import { deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamFullScores, updateGradeExamRecordMetadata } from "./legacyWriteAdapter";
 import { ensureWorkspaceBook, readCurrentSliceData, writeCurrentSliceData } from "./workspaces";
 import { createTestStudent } from "./testFixtures";
 import type { ActivityEvent, SavedGradeExamRecord, SeatManagerState, StudentExamSummary } from "./types";
@@ -108,6 +108,18 @@ describe("grade exam lifecycle", () => {
     expect(restored.students[0].address).toBe("new address");
     expect(restored.students[0].exams.find(item => item.id === "midterm")).toMatchObject({ scoreCells: { 语文: cell }, totalCell: total });
     expect(reload().gradeExams[0].rankConfig).toEqual(record().rankConfig);
+  });
+
+  it("persists teacher-confirmed subject full scores across snapshot writes, metadata edits and reloads", () => {
+    const saved = saveGradeExamRecord({ ...snapshot(seed()), record: record() })!;
+    expect(saved.gradeExams.find(exam => exam.id === "midterm")?.fullScores).toBeUndefined();
+    const updated = updateGradeExamFullScores({ ...snapshot(saved), examId: "midterm", fullScores: { 语文: 150, 空: 0 } })!;
+    expect(updated.gradeExams.find(exam => exam.id === "midterm")?.fullScores).toEqual({ 语文: 150 });
+    expect(saveLegacySnapshot(snapshot(updated))).toBe(true);
+    const renamed = updateGradeExamRecordMetadata({ ...snapshot(reload()), examId: "midterm", name: "期中考修订", date: "2026-08-31" })!;
+    expect(renamed.gradeExams.find(exam => exam.id === "midterm")?.fullScores).toEqual({ 语文: 150 });
+    expect(reload().gradeExams.find(exam => exam.id === "midterm")?.fullScores).toEqual({ 语文: 150 });
+    expect(updateGradeExamFullScores({ ...snapshot(renamed), examId: "legacy", fullScores: { 语文: 150 } })).toBeNull();
   });
 
   it("does not write or change state when the target does not exist or storage fails", () => {

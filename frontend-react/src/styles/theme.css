@@ -1917,19 +1917,20 @@
 .grade-chart-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 .grade-chart-grid[data-split="false"] { grid-template-columns: minmax(0, 1fr); }
 
-/* 图表标题换科时轻淡入，避免文字瞬跳 */
-@keyframes grade-label-swap {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+/* 分档人数跟随所在卡片宽度：窄卡两列、宽卡四列，避免标签被截断。 */
+.grade-band-summary-host { container-type: inline-size; }
+.grade-band-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container (max-width: 17rem) { .grade-band-summary { grid-template-columns: minmax(0, 1fr); } }
+@container (min-width: 42rem) { .grade-band-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
-.grade-label-swap {
-  animation: grade-label-swap 180ms ease-out both;
+/* 分档方式或阈值变化时，等级徽标的底色平滑过渡；柱形颜色由 useBlendedColors 在数据层过渡。 */
+.grade-badge {
+  transition: color 240ms ease-out, background-color 240ms ease-out, border-color 240ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .grade-label-swap {
-    animation: none;
+  .grade-badge {
+    transition: none;
   }
 }
 
@@ -3079,8 +3080,10 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 
 /* Continuous content replacement and intrinsic-height disclosures. */
 .app-motion-list { position: relative; }
-.app-motion-switch { position: relative; min-width: 0; }
-.app-motion-switch--navigation { isolation: isolate; overflow: hidden; background: var(--app-surface); }
+/* Stacking boundary: descendants' z-index stays inside the switch, so scrolled
+   content can never paint over a sticky sibling header. */
+.app-motion-switch { position: relative; min-width: 0; isolation: isolate; }
+.app-motion-switch--navigation { overflow: hidden; background: var(--app-surface); }
 .app-motion-switch--navigation[data-moving] > .app-motion-content { will-change: transform; }
 .app-motion-switch--fixed, .app-motion-switch--fixed > .app-motion-content { height: 100%; min-height: 0; }
 .app-motion-switch[data-moving] { overflow: clip; }
@@ -3093,8 +3096,16 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .app-motion-collapse[data-open="true"] { grid-template-rows: 1fr; opacity: 1; }
 .app-motion-collapse__clip { min-height: 0; overflow: hidden; }
 .app-motion-collapse__content { display: flow-root; }
+/* 同格交叉淡化：新旧内容叠在同一格同时换透明度，任何一帧都留有内容。 */
+.app-fade-swap { display: inline-grid; min-width: 0; }
+.app-fade-swap > .app-fade-swap__cell { grid-area: 1 / 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@keyframes app-fade-swap-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes app-fade-swap-out { from { opacity: 1; } to { opacity: 0; } }
+.app-fade-swap__in { animation: app-fade-swap-in 180ms ease-out both; }
+.app-fade-swap__out { animation: app-fade-swap-out 160ms ease-in both; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .app-motion-collapse { transition: none; }
+  .app-fade-swap__in, .app-fade-swap__out { animation: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

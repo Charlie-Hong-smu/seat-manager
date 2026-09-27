@@ -32,7 +32,7 @@ import { buildBestShuffleCandidate, evaluateSeatOrder, type ShuffleCandidate } f
 import { buildSeatRotationContext, createRotationSnapshot, evaluateSeatRotation } from "./state/seatRotation";
 import { clearAuth, isAuthenticated, unbindCurrentDevice } from "./state/authStorage";
 import { USES_LICENSE_AUTH } from "./config";
-import { buildLegacySnapshot, deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamItemAnalysis, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
+import { buildLegacySnapshot, deleteGradeExamRecord, saveGradeExamRecord, saveLegacySnapshot, updateGradeExamFullScores, updateGradeExamItemAnalysis, updateGradeExamRecordMetadata } from "./state/legacyWriteAdapter";
 import { importRosterFile, type RosterImportOptions, type RosterImportResult } from "./state/rosterImport";
 import { useSeatManagerState } from "./state/store";
 import { useSeatManagerController } from "./state/seatManagerController";
@@ -799,6 +799,7 @@ export default function App() {
       rankConfig: exam.rankConfig,
       importSource: exam.importSource,
       itemAnalysis: exam.itemAnalysis,
+      fullScores: exam.fullScores,
     } satisfies SavedGradeExamRecord : undefined);
     if (!deletedRecord) return null;
     const deletionEvent = createActivityEvent({ action: "deleted", ref: { domain: "score", entityId: examId }, studentIds: exam?.rows.map(row => row.studentId).filter((id): id is string => Boolean(id)) || [], title: `删除考试：${exam?.name || deletedRecord.name || "考试"}`, detail: "考试成绩已删除" });
@@ -846,6 +847,13 @@ export default function App() {
     if (!next) return false;
     replaceState(next);
     recordActivity(createActivityEvent({ action: "updated", ref: { domain: "score", entityId: examId }, studentIds: itemAnalysis.rows.map(row => row.studentId).filter((id): id is string => Boolean(id)), title: `更新题目分析：${appState.gradeExams.find(exam => exam.id === examId)?.name || "考试"}`, detail: `${itemAnalysis.questions.length} 道题目` }));
+    return true;
+  }
+
+  function handleUpdateGradeExamFullScores(examId: string, fullScores: Record<string, number>): boolean {
+    const next = updateGradeExamFullScores({ examId, fullScores, students: allStudents, seatOrder, lockedSeats: [...lockedSeats], seatSettings, settings: appState.settings, dormitories, seatHistory: savedSeatHistory, fundTransactions, attendanceRecords, followupTasks, drawSessions, schedule, homeworkAssignments, quickRecordPresets, communicationDrafts, activityEvents: appState.activityEvents, savedExams: appState.savedExams, exams: appState.exams });
+    if (!next) return false;
+    replaceState(next);
     return true;
   }
 
@@ -1348,7 +1356,7 @@ export default function App() {
 
         {sidebarTab === "scores" && (
           <div className="h-full">
-            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, tasks: followupTasks, gradeThresholds, onGradeThresholdsChange: (next: GradeThresholds) => setSettings(current => ({ ...current, gradeThresholds: next })), initialTarget: timelineTarget?.workspace === "scores" ? timelineTarget : undefined, onInitialTargetConsumed: consumeTimelineTarget, onOpenTask: (taskId: string) => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId }), onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, studentId } }), onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => requestFollowupTask({ studentId: studentIds[0], studentIds, title: `跟进${exam.name} · ${question.label}`, type: "学业关注", description: question.knowledgePoints.length ? `薄弱知识点：${question.knowledgePoints.join("、")}` : `${question.label}得分低于 60%`, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, subEntityId: question.id } }) }} />
+            <RetryableLazy load={loadScoresWorkspace} componentProps={{ exams: appState.gradeExams, students, tasks: followupTasks, gradeThresholds, onGradeThresholdsChange: (next: GradeThresholds) => setSettings(current => ({ ...current, gradeThresholds: next })), onUpdateExamFullScores: handleUpdateGradeExamFullScores, initialTarget: timelineTarget?.workspace === "scores" ? timelineTarget : undefined, onInitialTargetConsumed: consumeTimelineTarget, onOpenTask: (taskId: string) => openTimelineTarget({ kind: "workspace", workspace: "followups", entityId: taskId }), onSelectStudent: (student: AppStudent) => openStudentDetail(student), onOpenStudentFollowup: (student: AppStudent) => openStudentDetail(student, "followup"), onSaveScoreImport: handleSaveScoreImport, onUpdateGradeExam: handleUpdateGradeExam, onDeleteGradeExam: handleDeleteGradeExam, onGenerateClassAnalysis: handleGenerateClassAnalysis, onGenerateLocalClassAnalysis: handleGenerateLocalClassAnalysis, onGenerateStudentTrendAdvice: handleGenerateStudentTrendAdvice, studentAdviceProgress, onSaveItemAnalysis: handleSaveGradeItemAnalysis, onCreateScoreFollowup: (studentId: string, exam: GradeExam, reason: string) => requestFollowupTask({ studentId, title: `跟进考试：${exam.name}`, type: "学业关注", description: reason, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, studentId } }), onCreateQuestionFollowups: (studentIds: StudentId[], exam: GradeExam, question: GradeQuestionDefinition) => requestFollowupTask({ studentId: studentIds[0], studentIds, title: `跟进${exam.name} · ${question.label}`, type: "学业关注", description: question.knowledgePoints.length ? `薄弱知识点：${question.knowledgePoints.join("、")}` : `${question.label}得分低于 60%`, plannedDate: todayKey(), dueDate: todayKey(), source: "score", sourceRef: { domain: "score", entityId: exam.id, subEntityId: question.id } }) }} />
           </div>
         )}
 

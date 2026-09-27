@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
-import { MotionCollapse, MotionList, MotionSwitch, PresenceMotion } from "./motion";
+import { FadeSwap, MotionCollapse, MotionList, MotionSwitch, PresenceMotion } from "./motion";
 
 let reduce = false;
 let flights: Array<{ cancel: ReturnType<typeof vi.fn>; complete: () => void }>;
@@ -206,5 +206,40 @@ describe("shared continuous motion", () => {
     rerender(<><MotionSwitch transitionKey="b">乙</MotionSwitch><MotionList><div key="b">乙</div></MotionList><PresenceMotion active={false}><div className="modal-panel-enter">弹窗</div></PresenceMotion></>);
     expect(flights).toHaveLength(0);
     expect(container.querySelector('.app-motion-snapshot')).toBeNull();
+  });
+});
+
+describe("FadeSwap", () => {
+  it("crossfades old and new text in one cell without a blank frame", () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(<FadeSwap swapKey="score">优秀</FadeSwap>);
+    const node = container.querySelector(".app-fade-swap")!;
+    rerender(<FadeSwap swapKey="rank">前10%</FadeSwap>);
+    expect(node).toHaveTextContent("前10%");
+    expect(node).toHaveTextContent("优秀");
+    expect(node.querySelector(".app-fade-swap__out")).not.toBeNull();
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(node.querySelector(".app-fade-swap__out")).toBeNull();
+    expect(node.textContent).toBe("前10%");
+    vi.useRealTimers();
+  });
+
+  it("re-fades from the in-flight text on rapid reversal", () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(<FadeSwap swapKey="score">优秀</FadeSwap>);
+    const node = container.querySelector(".app-fade-swap")!;
+    rerender(<FadeSwap swapKey="rank">前10%</FadeSwap>);
+    rerender(<FadeSwap swapKey="score">优秀</FadeSwap>);
+    expect(node).toHaveTextContent("优秀");
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(node.textContent).toBe("优秀");
+    vi.useRealTimers();
+  });
+
+  it("swaps immediately with reduced motion", () => {
+    reduce = true;
+    const { container, rerender } = render(<FadeSwap swapKey="a">甲</FadeSwap>);
+    rerender(<FadeSwap swapKey="b">乙</FadeSwap>);
+    expect(container.querySelector(".app-fade-swap")).toHaveTextContent("乙");
   });
 });

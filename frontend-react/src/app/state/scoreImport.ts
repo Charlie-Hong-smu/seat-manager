@@ -386,7 +386,7 @@ export async function parseScoreFile(file: File): Promise<ScoreImportDraft> {
 
 export function createSavedGradeExamRecord(
   draft: ScoreImportDraft,
-  input: { id?: string; name: string; date: string; rows?: string[][]; mapping?: ScoreMapping; rankConfig?: GradeRankConfig },
+  input: { id?: string; name: string; date: string; rows?: string[][]; mapping?: ScoreMapping; rankConfig?: GradeRankConfig; fullScores?: Record<string, number> },
 ): SavedGradeExamRecord {
   const name = input.name.trim() || draft.filename.replace(/\.[^.]+$/, "") || "考试";
   const date = input.date || toLocalDateKey();
@@ -408,6 +408,9 @@ export function createSavedGradeExamRecord(
     subjects: [...preparedDraft.subjects],
     entries,
     rankConfig: input.rankConfig,
+    fullScores: input.fullScores && Object.keys(input.fullScores).some(subject => preparedDraft.subjects.includes(subject))
+      ? Object.fromEntries(Object.entries(input.fullScores).filter(([subject]) => preparedDraft.subjects.includes(subject)))
+      : undefined,
     importSource: input.rows?.length && input.mapping ? {
       filename: draft.filename,
       rows: input.rows.map(row => row.map(cell => String(cell ?? ""))),

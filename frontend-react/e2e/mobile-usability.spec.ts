@@ -56,7 +56,7 @@ for (const width of [320, 390]) test(`phone ${width}: all workspaces, grade cont
     await contained(page, page.locator('.app-work-surface'));
   }
   await nav(page, "成绩");
-  await expect(page.getByRole("heading", { name: "各科平均分对比" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "各科平均得分率" })).toBeVisible();
   await page.getByRole("toolbar", { name: "成绩学科切换" }).getByRole("button", { name: "语文", exact: true }).tap();
   await expect(page.getByRole("heading", { name: "语文分数分布" })).toBeVisible();
   await expect(page.locator('.app-motion-switch[data-moving]')).toHaveCount(0);

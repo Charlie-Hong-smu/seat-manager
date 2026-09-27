@@ -1,5 +1,5 @@
 import { DIALOG_EXIT_DURATION, MotionSwitch, PresenceMotion } from "./motion";
-export { MotionSwitch, MotionCollapse, MotionList } from "./motion";
+export { FadeSwap, MotionSwitch, MotionCollapse, MotionList } from "./motion";
 export { ChartViewport } from "./ChartViewport";
 import { AgentThinking } from "@/components/application/agent-thinking/agent-thinking";
 import { Input } from "@/components/base/input/input";

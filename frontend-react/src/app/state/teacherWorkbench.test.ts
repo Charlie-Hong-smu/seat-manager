@@ -57,4 +57,14 @@ describe("teacher workbench domains", () => {
     });
     expect(normalizeGradeThresholds(null)).toEqual({ pass: 60, good: 75, excellent: 90 });
   });
+
+  it("keeps an optional independent total threshold and falls back to subject rates for missing fields", () => {
+    expect(normalizeGradeThresholds({ pass: 60, good: 75, excellent: 90, total: { pass: 55, excellent: 80 } })).toEqual({
+      pass: 60,
+      good: 75,
+      excellent: 90,
+      total: { pass: 55, good: 75, excellent: 80 },
+    });
+    expect(normalizeGradeThresholds({ pass: 60, good: 75, excellent: 90, total: "bad" })).toEqual({ pass: 60, good: 75, excellent: 90 });
+  });
 });

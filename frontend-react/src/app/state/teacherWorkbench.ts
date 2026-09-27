@@ -56,24 +56,37 @@ export function createDefaultQuickRecordPresets(): QuickRecordPreset[] {
   ];
 }
 
-export interface GradeThresholds {
+/** 得分率阈值（%），按各科/总分满分换算成分数线。 */
+export interface GradeThresholdRates {
   pass: number;
   good: number;
   excellent: number;
 }
 
+export interface GradeThresholds extends GradeThresholdRates {
+  /** 总分单独的得分率阈值；缺省时总分沿用单科得分率。 */
+  total?: GradeThresholdRates;
+}
+
 export const DEFAULT_GRADE_THRESHOLDS: GradeThresholds = { pass: 60, good: 75, excellent: 90 };
+
+function normalizeThresholdRates(raw: Record<string, unknown>, fallback: GradeThresholdRates): GradeThresholdRates {
+  const clamp = (input: unknown, fallbackValue: number) =>
+    typeof input === "number" && Number.isFinite(input) ? Math.max(0, Math.min(100, Math.round(input))) : fallbackValue;
+  const pass = clamp(raw.pass, fallback.pass);
+  const good = Math.max(clamp(raw.good, fallback.good), pass);
+  const excellent = Math.max(clamp(raw.excellent, fallback.excellent), good);
+  return { pass, good, excellent };
+}
 
 // 成绩阈值保存在当前切片 settings.gradeThresholds，随备份和手动云同步走。
 export function normalizeGradeThresholds(value: unknown): GradeThresholds {
   if (!value || typeof value !== "object") return DEFAULT_GRADE_THRESHOLDS;
   const raw = value as Record<string, unknown>;
-  const clamp = (input: unknown, fallback: number) =>
-    typeof input === "number" && Number.isFinite(input) ? Math.max(0, Math.min(100, Math.round(input))) : fallback;
-  const pass = clamp(raw.pass, DEFAULT_GRADE_THRESHOLDS.pass);
-  const good = Math.max(clamp(raw.good, DEFAULT_GRADE_THRESHOLDS.good), pass);
-  const excellent = Math.max(clamp(raw.excellent, DEFAULT_GRADE_THRESHOLDS.excellent), good);
-  return { pass, good, excellent };
+  const rates = normalizeThresholdRates(raw, DEFAULT_GRADE_THRESHOLDS);
+  return raw.total && typeof raw.total === "object"
+    ? { ...rates, total: normalizeThresholdRates(raw.total as Record<string, unknown>, rates) }
+    : rates;
 }
 
 export function normalizeSubjectCatalog(value: unknown, usedSubjects: string[] = []): string[] {

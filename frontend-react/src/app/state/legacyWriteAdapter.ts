@@ -1,6 +1,7 @@
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import { createSeatManagerState } from "./legacyStateAdapter";
 import { normalizeGradeItemAnalysis } from "./teacherWorkbench";
+import { normalizeFullScores } from "./gradeBands";
 import { attachSavedGradeStudentIds, resolveGradeStudent, type GradeStudentCandidate } from "./gradeStudentIdentity";
 import type { ActivityEvent, AppStudent, AttendanceRecord, ClassScheduleV1, CommunicationDraft, Dormitory, DrawSession, FollowupTask, FundTransaction, GradeItemAnalysis, HomeworkAssignment, QuickRecordPreset, SavedGradeExamEntry, SavedGradeExamRecord, ScoreImportSource, SeatHistorySnapshot, SeatManagerState, SeatSettings, StudentId } from "./types";
 
@@ -221,6 +222,7 @@ function normalizeSavedGradeExamRecord(value: unknown): SavedGradeExamRecord | n
     } : undefined,
     importSource: normalizeImportSource(value.importSource),
     itemAnalysis: normalizeGradeItemAnalysis(value.itemAnalysis),
+    fullScores: normalizeFullScores(value.fullScores),
   };
 }
 
@@ -413,6 +415,18 @@ export function updateGradeExamItemAnalysis(input: PersistSnapshotInput & { exam
     if (record.id !== input.examId) return record;
     changed = true;
     return { ...record, itemAnalysis: input.itemAnalysis };
+  });
+  return changed ? persistSavedExamRecords(input, nextRecords) : null;
+}
+
+export function updateGradeExamFullScores(input: PersistSnapshotInput & { examId: string; fullScores: Record<string, number> }): SeatManagerState | null {
+  const baseState = getBaseState();
+  const savedExams = getSavedExamRecords(input.savedExams ?? baseState.savedExams);
+  let changed = false;
+  const nextRecords = savedExams.map(record => {
+    if (record.id !== input.examId) return record;
+    changed = true;
+    return { ...record, fullScores: normalizeFullScores(input.fullScores) };
   });
   return changed ? persistSavedExamRecords(input, nextRecords) : null;
 }

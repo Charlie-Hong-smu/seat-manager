@@ -2,6 +2,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import { FileSpreadsheet, Printer, Search } from "lucide-react";
 import { buildGradePrintPreviewHtml, exportGradeWorkbook, getDefaultGradeExportOptions } from "../state/gradeExport";
 import type { AppStudent, GradeExam } from "../state/types";
+import type { GradeThresholds } from "../state/teacherWorkbench";
 import type { GradeExportContentKey, GradeExportOptions } from "../state/gradeExport";
 import { matchesStudentSearch } from "../state/studentSearch";
 import { Button, Checkbox, DatePicker, Input, ModalHeader, MotionCollapse, MotionSwitch, SegmentedControl, useModalFocus } from "./ui";
@@ -9,6 +10,7 @@ import { Button, Checkbox, DatePicker, Input, ModalHeader, MotionCollapse, Motio
 interface GradeExportModalProps {
   exams: GradeExam[];
   students: AppStudent[];
+  thresholds?: GradeThresholds;
   onClose: () => void;
 }
 
@@ -22,7 +24,7 @@ const CONTENT_OPTIONS: Array<{ key: GradeExportContentKey; label: string }> = [
   { key: "missing", label: "缺考/无成绩记录" },
 ];
 
-export function GradeExportModal({ exams, students, onClose }: GradeExportModalProps) {
+export function GradeExportModal({ exams, students, thresholds, onClose }: GradeExportModalProps) {
   const defaultOptions = useMemo(() => getDefaultGradeExportOptions(exams), [exams]);
   const [options, setOptions] = useState<GradeExportOptions>(() => defaultOptions);
   const [studentSearch, setStudentSearch] = useState("");
@@ -100,7 +102,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
     setExporting(true);
     setErrorMessage("");
     try {
-      await exportGradeWorkbook(exams, students, options);
+      await exportGradeWorkbook(exams, students, options, thresholds);
     } catch (error) {
       setErrorMessage(
         error instanceof Error && error.message === "no_exams"
@@ -120,7 +122,7 @@ export function GradeExportModal({ exams, students, onClose }: GradeExportModalP
     }
     try {
       setErrorMessage("");
-      setPrintHtml(buildGradePrintPreviewHtml(exams, students, options));
+      setPrintHtml(buildGradePrintPreviewHtml(exams, students, options, thresholds));
     } catch (error) {
       setErrorMessage(
         error instanceof Error && error.message === "no_exams"

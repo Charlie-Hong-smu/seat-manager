@@ -278,7 +278,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: /^成绩/ }).click();
     const chart = page.locator('.grade-chart-transition');
     const liveMain = chart.locator(':scope > .app-motion-content .grade-main-chart');
-    await expect(liveMain.getByRole('heading', { name: '各科平均分对比' })).toBeVisible();
+    await expect(liveMain.getByRole('heading', { name: '各科平均得分率' })).toBeVisible();
     await expect(liveMain.locator('.recharts-bar-rectangle')).toHaveCount(6);
     await expect(page.locator('.app-motion-switch[data-moving]')).toHaveCount(0);
     const beforeData = await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("seat-manager-workspaces-v1")!).slices[0].data));
@@ -311,11 +311,14 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
         requestAnimationFrame(tick);
       });
     }, reverse);
-    for (const [name, title, barCount] of [["语文", "语文分数分布", 4], ["全部", "各科平均分对比", 6], ["数学", "数学分数分布", 4], ["英语", "英语分数分布", 4]] as const) {
+    // Subject views are fixed-width score histograms; the fixture spreads 30-100 over 5-point bins.
+    for (const [name, title, expectedBars] of [["语文", "语文分数分布", 0], ["全部", "各科平均得分率", 6], ["数学", "数学分数分布", 0], ["英语", "英语分数分布", 0]] as const) {
       const { before, samples } = await sampleChange(name);
       const final = samples.at(-1)!;
+      const barCount = expectedBars || final.barCount;
       expect(samples.every(sample => sample.title === title)).toBe(true);
-      expect(final.barCount).toBe(barCount);
+      if (expectedBars) expect(final.barCount).toBe(expectedBars);
+      else expect(final.barCount).toBeGreaterThanOrEqual(12);
       if (reducedMotion === 'no-preference') {
         expect(samples[0].width).toBeCloseTo(before, 0);
         expect(new Set(samples.filter(sample => sample.time < 370).map(sample => sample.barHeights)).size).toBeGreaterThan(2);
@@ -379,9 +382,55 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await expect(liveMain.locator('.recharts-bar-rectangle')).toHaveCount(6);
     await control.getByRole('button', { name: '语文', exact: true }).click();
     await expect(chart.locator('.app-motion-snapshot, .app-motion-surface')).toHaveCount(0);
-    await expect(liveMain.locator('.recharts-bar-rectangle')).toHaveCount(4);
+    expect(await liveMain.locator('.recharts-bar-rectangle').count()).toBeGreaterThanOrEqual(12);
   });
 }
+
+test("scrolled score content stays under the sticky view tabs and the split charts fill their cards", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await setup(page);
+  await page.evaluate(() => {
+    const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1")!);
+    const subjects = ["语文", "数学", "英语", "物理", "化学", "地理"];
+    const cell = (score: number) => ({ score, rankClass: null, rankSchool: null });
+    book.slices[0].data.savedExams = [{
+      id: "sticky-tab-exam", name: "粘性标题测试", date: "2026-09-22", savedAt: "2026-09-22T00:00:00Z",
+      studentCount: 60, subjectCount: subjects.length, subjects,
+      entries: Array.from({ length: 60 }, (_, index) => {
+        const scores = Object.fromEntries(subjects.map((subject, position) => [subject, cell(30 + (index * 11 + position * 7) % 71)]));
+        return { name: `学生${index + 1}`, scores, total: cell(Object.values(scores).reduce((sum, item) => sum + item.score, 0)) };
+      }),
+    }];
+    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify(book));
+  });
+  await page.reload();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: /^成绩/ }).click();
+  const main = page.locator('main.overflow-y-auto');
+  await expect(main.locator('.grade-chart-transition .recharts-bar-rectangle').first()).toBeVisible({ timeout: 15000 });
+  // The workspace handoff keeps content inert and overlays a fading snapshot; wait for it to settle.
+  await expect(page.locator('.app-motion-switch[data-moving]')).toHaveCount(0);
+  // The split view stretches both cards equally; the subject-rate chart fills the leftover height.
+  const heights = await page.evaluate(() => ({
+    main: document.querySelector('.grade-main-chart .recharts-surface')!.getBoundingClientRect().height,
+    distribution: document.querySelector('.grade-distribution-chart .recharts-surface')!.getBoundingClientRect().height,
+    cards: [...document.querySelectorAll('.grade-chart-grid > div')].map(node => Math.round(node.getBoundingClientRect().height)),
+  }));
+  expect(heights.cards[0]).toBe(heights.cards[1]);
+  expect(heights.main).toBeGreaterThan(heights.distribution + 40);
+  // The subject switcher carries z-10 buttons; scrolling must keep them under the sticky tabs.
+  const covered = await main.evaluate(el => {
+    el.scrollTop = 0;
+    const tablist = el.querySelector('[role="tablist"]')!;
+    const segmented = el.querySelector('.grade-subject-switcher')!;
+    const tabBottom = tablist.getBoundingClientRect().bottom;
+    el.scrollTop = segmented.getBoundingClientRect().top - tabBottom + segmented.getBoundingClientRect().height / 2;
+    const point = { x: segmented.getBoundingClientRect().left + 20, y: tabBottom - 8 };
+    const top = document.elementsFromPoint(point.x, point.y)[0];
+    return { segTop: segmented.getBoundingClientRect().top, tabBottom, underTabs: top ? tablist.contains(top) : false };
+  });
+  expect(covered.segTop).toBeLessThan(covered.tabBottom);
+  expect(covered.underTabs).toBe(true);
+});
 
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
   test(`dialog scrim and panel stay independent through interrupted exit (${reducedMotion})`, async ({ page }) => {

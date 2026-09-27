@@ -29,6 +29,7 @@ import type {
 } from "./types";
 import { toLocalDateKey } from "./dateKey";
 import { attachStudentIdsToRawSavedGradeExams, resolveGradeStudent } from "./gradeStudentIdentity";
+import { normalizeFullScores } from "./gradeBands";
 
 const COLS = 8;
 const SUBJECT_ORDER = ["语文", "数学", "英语", "物理", "化学", "地理", "历史", "政治", "生物"];
@@ -614,6 +615,7 @@ function normalizeSavedExamRecord(record: unknown, index: number, students: AppS
     } : undefined,
     importSource: normalizeImportSource(record.importSource),
     itemAnalysis: normalizeGradeItemAnalysis(record.itemAnalysis),
+    fullScores: normalizeFullScores(record.fullScores),
   };
 }
 

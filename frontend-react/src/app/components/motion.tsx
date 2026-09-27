@@ -1,4 +1,4 @@
-import { Children, Component, createRef, isValidElement, type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { Children, Component, createRef, isValidElement, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const DURATION = 320;
 export const DIALOG_EXIT_DURATION = 240;
@@ -394,4 +394,30 @@ export class PresenceMotion extends Component<PresenceProps> {
   }
   componentWillUnmount() { this.animations.forEach(animation => animation.cancel()); }
   render() { return <div ref={node => { this.root.current = node; if (node) node.inert = !this.props.active; }} data-phase={this.props.active ? "open" : "closing"} aria-hidden={!this.props.active || undefined} {...{ inert: (!this.props.active ? "" : undefined) as unknown as boolean }} className={`app-presence-motion ${this.props.className || "contents"}`}>{this.props.children}</div>; }
+}
+
+const FADE_SWAP_DURATION = 180;
+
+/**
+ * Short labels whose meaning changes in place (e.g. grade band names): old and new
+ * text share one grid cell and crossfade, so every frame still shows content —
+ * no blank beat, unlike a fade-out-then-in. Content edits under the same `swapKey`
+ * render immediately; rapid reversal re-fades from whatever is currently shown.
+ */
+export function FadeSwap({ swapKey, children, className = "" }: { swapKey: string; children: ReactNode; className?: string }) {
+  const [state, setState] = useState<{ key: string; children: ReactNode; leaving: ReactNode }>({ key: swapKey, children, leaving: null });
+  if (state.key !== swapKey) {
+    setState({ key: swapKey, children, leaving: reduced() ? null : state.children });
+  }
+  useEffect(() => {
+    if (state.leaving == null) return;
+    const timer = window.setTimeout(() => setState(current => (current.leaving == null ? current : { ...current, leaving: null })), FADE_SWAP_DURATION);
+    return () => window.clearTimeout(timer);
+  }, [state.leaving]);
+  return (
+    <span className={`app-fade-swap ${className}`}>
+      <span className={`app-fade-swap__cell${state.leaving != null ? " app-fade-swap__in" : ""}`}>{state.key === swapKey ? children : state.children}</span>
+      {state.leaving != null && <span aria-hidden="true" className="app-fade-swap__cell app-fade-swap__out">{state.leaving}</span>}
+    </span>
+  );
 }

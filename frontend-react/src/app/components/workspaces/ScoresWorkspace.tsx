@@ -50,6 +50,7 @@ export function ScoresWorkspace({
   onOpenTask,
   gradeThresholds,
   onGradeThresholdsChange,
+  onUpdateExamFullScores,
 }: {
   exams: GradeExam[];
   students: AppStudent[];
@@ -78,6 +79,7 @@ export function ScoresWorkspace({
   onOpenTask?: (taskId: string) => void;
   gradeThresholds?: GradeThresholds;
   onGradeThresholdsChange?: (next: GradeThresholds) => void;
+  onUpdateExamFullScores?: (examId: string, fullScores: Record<string, number>) => boolean;
 }) {
   const actionToast = useActionToast();
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
@@ -268,6 +270,7 @@ export function ScoresWorkspace({
       rows: scoreRows,
       mapping: manualMapping || undefined,
       rankConfig: { autoClassRank: rankChoice === "auto", scoreBasis: "effective" },
+      fullScores: remappingExamId ? exams.find(exam => exam.id === remappingExamId)?.fullScores : undefined,
     }));
     if (!saved) {
       setScoreStatus("保存失败，当前导入内容已保留，请检查存储空间后重试。");
@@ -569,7 +572,7 @@ export function ScoresWorkspace({
 
         <main hidden={isMobile && managementOpen} className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
           <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-background-primary-default pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
-          <MotionSwitch transitionKey={scoreView} order={scoreView === "items" ? 1 : 0}>{scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}</MotionSwitch>
+          <MotionSwitch transitionKey={scoreView} order={scoreView === "items" ? 1 : 0}>{scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} onFullScoresChange={onUpdateExamFullScores} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}</MotionSwitch>
         </main>
       </div>
       <DialogPresence open={mappingModalOpen && Boolean(manualMapping)}>

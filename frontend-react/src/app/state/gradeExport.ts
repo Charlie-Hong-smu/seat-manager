@@ -1,6 +1,8 @@
 import { loadXlsx, SUBJECT_ORDER } from "./scoreImport";
 import type { AppStudent, GradeExam, GradeRow, GradeScoreCell, StudentId } from "./types";
 import { toLocalDateKey } from "./dateKey";
+import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholds } from "./teacherWorkbench";
+import { SCORE_BAND_LABELS, countBands as countBandKeys, getBandKey, getExamTotalFullScore, getScoreBandLines, getSubjectFullScore, resolveThresholdRates } from "./gradeBands";
 
 type CellValue = string | number | boolean | null;
 type SheetRows = CellValue[][];
@@ -26,7 +28,6 @@ export interface GradeExportOptions {
   contents: Record<GradeExportContentKey, boolean>;
 }
 
-const THRESHOLDS = { pass: 60, good: 75, excellent: 90 };
 const CONTENT_KEYS: GradeExportContentKey[] = [
   "rawScores",
   "classStats",
@@ -62,18 +63,9 @@ function getRowAverage(row: GradeRow, subjects: string[]): number | null {
   return scores.length ? round1(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null;
 }
 
-function getGradeLabel(percentValue: number | null): string {
-  if (percentValue === null) return "缺考";
-  if (percentValue >= THRESHOLDS.excellent) return "优秀";
-  if (percentValue >= THRESHOLDS.good) return "良好";
-  if (percentValue >= THRESHOLDS.pass) return "及格";
-  return "不及格";
-}
-
-function getTotalPercent(total: number | null, subjects: string[]): number | null {
-  if (total === null) return null;
-  const fullScore = Math.max(1, subjects.length * 100);
-  return round1((total / fullScore) * 100);
+function getTotalGradeLabel(total: number | null, exam: GradeExam, thresholds: GradeThresholds): string {
+  const band = getBandKey(total, getScoreBandLines(resolveThresholdRates(thresholds, "total"), getExamTotalFullScore(exam)));
+  return band ? SCORE_BAND_LABELS[band] : "缺考";
 }
 
 function getExamSortKey(exam: GradeExam, index: number): string {
@@ -173,21 +165,13 @@ function getStudentNoFromRows(student: AppStudent, examRows: Array<{ exam: Grade
   return student.studentNo || examRows.find(item => item.row?.studentNo)?.row?.studentNo || "";
 }
 
-function countBands(values: Array<number | null>, fullScore: number) {
-  const passLine = fullScore * (THRESHOLDS.pass / 100);
-  const goodLine = fullScore * (THRESHOLDS.good / 100);
-  const excellentLine = fullScore * (THRESHOLDS.excellent / 100);
-  const valid = values.filter(isNumber);
-  const missing = values.length - valid.length;
-  const excellent = valid.filter(value => value >= excellentLine).length;
-  const good = valid.filter(value => value >= goodLine && value < excellentLine).length;
-  const pass = valid.filter(value => value >= passLine && value < goodLine).length;
-  const fail = valid.filter(value => value < passLine).length;
+function countBands(values: Array<number | null>, fullScore: number, rates: ReturnType<typeof resolveThresholdRates>) {
+  const counts = countBandKeys(values, getScoreBandLines(rates, fullScore));
   const rate = (count: number) => values.length ? `${round1((count / values.length) * 100)}%` : "0%";
-  return { fail, pass, good, excellent, missing, rate };
+  return { ...counts, rate };
 }
 
-function examOverviewSheet(exams: GradeExam[]): SheetRows {
+function examOverviewSheet(exams: GradeExam[], thresholds: GradeThresholds): SheetRows {
   const rows: SheetRows = [[
     "考试名称", "考试日期", "参考人数", "科目数", "科目列表", "总分满分", "总分平均分", "总分最高分", "总分最低分",
     "及格人数", "及格率", "良好人数", "良好率", "优秀人数", "优秀率", "缺考/无成绩人数",
@@ -195,8 +179,8 @@ function examOverviewSheet(exams: GradeExam[]): SheetRows {
   exams.forEach(exam => {
     const totals = exam.rows.map(getRowTotal);
     const validTotals = totals.filter(isNumber);
-    const fullScore = Math.max(1, exam.subjects.length * 100);
-    const bands = countBands(totals, fullScore);
+    const fullScore = getExamTotalFullScore(exam);
+    const bands = countBands(totals, fullScore, resolveThresholdRates(thresholds, "total"));
     rows.push([
       exam.name,
       exam.date,
@@ -219,7 +203,7 @@ function examOverviewSheet(exams: GradeExam[]): SheetRows {
   return rows;
 }
 
-function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects: string[]): SheetRows {
+function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects: string[], thresholds: GradeThresholds): SheetRows {
   const maps = studentMaps(students);
   const subjectHeaders = subjects.flatMap(subject => [`${subject}有效成绩`, `${subject}原始分`, `${subject}赋分`, `${subject}班排`, `${subject}校排`]);
   const rows: SheetRows = [[
@@ -249,7 +233,7 @@ function allExamTableSheet(exams: GradeExam[], students: AppStudent[], subjects:
         row.rankClass ?? null,
         row.rankSchool ?? null,
         average,
-        getGradeLabel(getTotalPercent(total, exam.subjects)),
+        getTotalGradeLabel(total, exam, thresholds),
         missingCount,
       ]);
     });
@@ -333,15 +317,15 @@ function rankChangesSheet(exams: GradeExam[], students: AppStudent[]): SheetRows
   return rows;
 }
 
-function distributionSheet(exams: GradeExam[], subjects: string[]): SheetRows {
+function distributionSheet(exams: GradeExam[], subjects: string[], thresholds: GradeThresholds): SheetRows {
   const rows: SheetRows = [["考试名称", "考试日期", "统计对象", "不及格人数", "不及格率", "及格人数", "及格率", "良好人数", "良好率", "优秀人数", "优秀率", "缺考/无成绩人数"]];
   exams.forEach(exam => {
     const metrics = [
-      { label: "总分", fullScore: Math.max(1, exam.subjects.length * 100), values: exam.rows.map(getRowTotal) },
-      ...subjects.map(subject => ({ label: subject, fullScore: 100, values: exam.rows.map(row => getCellScore(row.scores[subject])) })),
+      { label: "总分", fullScore: getExamTotalFullScore(exam), rates: resolveThresholdRates(thresholds, "total"), values: exam.rows.map(getRowTotal) },
+      ...subjects.map(subject => ({ label: subject, fullScore: getSubjectFullScore(exam, subject), rates: resolveThresholdRates(thresholds, "subject"), values: exam.rows.map(row => getCellScore(row.scores[subject])) })),
     ];
     metrics.forEach(metric => {
-      const bands = countBands(metric.values, metric.fullScore);
+      const bands = countBands(metric.values, metric.fullScore, metric.rates);
       rows.push([
         exam.name,
         exam.date,
@@ -427,7 +411,7 @@ function studentSummarySheet(exams: GradeExam[], students: AppStudent[], subject
   return rows;
 }
 
-function studentPersonalSheet(student: AppStudent, exams: GradeExam[], subjects: string[]): SheetRows {
+function studentPersonalSheet(student: AppStudent, exams: GradeExam[], subjects: string[], thresholds: GradeThresholds): SheetRows {
   const summary = studentSummary(student, exams, subjects);
   const studentNo = getStudentNoFromRows(student, summary.examRows);
   const rows: SheetRows = [
@@ -454,7 +438,7 @@ function studentPersonalSheet(student: AppStudent, exams: GradeExam[], subjects:
       row ? getRowAverage(row, exam.subjects) : null,
       rank,
       row?.rankSchool ?? null,
-      getGradeLabel(getTotalPercent(total, exam.subjects)),
+      getTotalGradeLabel(total, exam, thresholds),
       previousTotal !== null && total !== null ? round1(total - previousTotal) : null,
       previousRank !== null && rank !== null ? previousRank - rank : null,
     ]);
@@ -563,7 +547,7 @@ export function getDefaultGradeExportOptions(exams: GradeExam[]): GradeExportOpt
   };
 }
 
-export async function exportGradeWorkbook(exams: GradeExam[], students: AppStudent[], options: GradeExportOptions): Promise<void> {
+export async function exportGradeWorkbook(exams: GradeExam[], students: AppStudent[], options: GradeExportOptions, thresholds: GradeThresholds = DEFAULT_GRADE_THRESHOLDS): Promise<void> {
   const { selectedExams, scopedExams, exportStudents, subjects } = getExportScope(exams, students, options);
 
   const xlsx = await loadXlsx();
@@ -571,17 +555,17 @@ export async function exportGradeWorkbook(exams: GradeExam[], students: AppStude
   const used = new Set<string>();
   const include = (key: GradeExportContentKey) => options.contents[key];
 
-  if (include("classStats")) appendSheet(workbook, xlsx, "01_班级总览", examOverviewSheet(scopedExams), used);
-  if (include("rawScores")) appendSheet(workbook, xlsx, "02_历次考试总表", allExamTableSheet(scopedExams, exportStudents, subjects), used);
+  if (include("classStats")) appendSheet(workbook, xlsx, "01_班级总览", examOverviewSheet(scopedExams, thresholds), used);
+  if (include("rawScores")) appendSheet(workbook, xlsx, "02_历次考试总表", allExamTableSheet(scopedExams, exportStudents, subjects, thresholds), used);
   if (include("rawScores") || include("missing")) appendSheet(workbook, xlsx, "03_学生科目明细", subjectDetailSheet(scopedExams, exportStudents, subjects), used);
   if (include("classTrend")) appendSheet(workbook, xlsx, "04_班级趋势", classTrendSheet(scopedExams, subjects), used);
   if (include("rankChanges")) appendSheet(workbook, xlsx, "05_排名变化", rankChangesSheet(scopedExams, exportStudents), used);
-  if (include("distribution")) appendSheet(workbook, xlsx, "06_分数段分布", distributionSheet(scopedExams, subjects), used);
+  if (include("distribution")) appendSheet(workbook, xlsx, "06_分数段分布", distributionSheet(scopedExams, subjects, thresholds), used);
   if (include("studentTrend")) appendSheet(workbook, xlsx, "07_学生个人汇总", studentSummarySheet(scopedExams, exportStudents, subjects), used);
 
   if (options.object === "students") {
     exportStudents.forEach(student => {
-      appendSheet(workbook, xlsx, `学生_${student.name}`, studentPersonalSheet(student, selectedExams, subjects), used);
+      appendSheet(workbook, xlsx, `学生_${student.name}`, studentPersonalSheet(student, selectedExams, subjects, thresholds), used);
     });
   }
 
@@ -757,7 +741,7 @@ function rankTrendChartHtml(examRows: Array<{ exam: GradeExam; row: GradeRow | n
   `;
 }
 
-function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: string[], forcePageBreak: boolean): string {
+function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: string[], forcePageBreak: boolean, thresholds: GradeThresholds): string {
   const summary = studentSummary(student, exams, subjects);
   const studentNo = getStudentNoFromRows(student, summary.examRows);
   const overviewRows: SheetRows = [["考试", "日期", "有效总分", "原始总分", "赋分总分", "平均分", "总分班排", "总分校排", "等级", "较上次总分"]];
@@ -773,7 +757,7 @@ function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: 
       row ? getRowAverage(row, exam.subjects) : null,
       row?.rankClass ?? null,
       row?.rankSchool ?? null,
-      getGradeLabel(getTotalPercent(total, exam.subjects)),
+      getTotalGradeLabel(total, exam, thresholds),
       previousTotal !== null && total !== null ? round1(total - previousTotal) : null,
     ]);
     previousTotal = total;
@@ -818,14 +802,14 @@ function studentPrintSection(student: AppStudent, exams: GradeExam[], subjects: 
   `;
 }
 
-export function buildGradePrintPreviewHtml(exams: GradeExam[], students: AppStudent[], options: GradeExportOptions): string {
+export function buildGradePrintPreviewHtml(exams: GradeExam[], students: AppStudent[], options: GradeExportOptions, thresholds: GradeThresholds = DEFAULT_GRADE_THRESHOLDS): string {
   const { selectedExams, scopedExams, exportStudents, subjects } = getExportScope(exams, students, options);
-  const overview = examOverviewSheet(scopedExams);
+  const overview = examOverviewSheet(scopedExams, thresholds);
   const trend = classTrendSheet(scopedExams, subjects);
-  const distribution = distributionSheet(scopedExams, subjects);
+  const distribution = distributionSheet(scopedExams, subjects, thresholds);
   const isStudentOnly = options.object === "students";
   const studentSections = options.object === "students"
-    ? exportStudents.map((student, index) => studentPrintSection(student, selectedExams, subjects, !isStudentOnly || index > 0)).join("")
+    ? exportStudents.map((student, index) => studentPrintSection(student, selectedExams, subjects, !isStudentOnly || index > 0, thresholds)).join("")
     : "";
   const title = `${isStudentOnly ? "学生成绩报告" : "班级成绩报告"}_${todayString()}`;
   const classSections = isStudentOnly ? "" : `

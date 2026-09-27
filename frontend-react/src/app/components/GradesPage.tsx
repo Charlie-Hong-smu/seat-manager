@@ -1,4 +1,5 @@
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { useBlendedColors } from "../hooks/useBlendedColors";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart,
@@ -20,9 +21,27 @@ import {
 
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
-import { ChartViewport, MotionSwitch, AnimatedPopover, Button, DialogPresence, NumberStepper, RollingText, SegmentedControl } from "./ui";
+import { ChartViewport, Checkbox, MotionSwitch, AnimatedPopover, Button, DialogPresence, FadeSwap, InlineStatus, MotionCollapse, NumberStepper, RollingText, SegmentedControl, ToolPopover } from "./ui";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
-import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholds } from "../state/teacherWorkbench";
+import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholdRates, type GradeThresholds } from "../state/teacherWorkbench";
+import {
+  GRADE_BAND_ORDER,
+  RANK_BAND_LABELS,
+  RANK_TIER_PERCENTS,
+  SCORE_BAND_LABELS,
+  buildScoreHistogram,
+  countBands,
+  formatScoreValue,
+  getBandKey,
+  getExamFullScores,
+  getRankTierLines,
+  getScoreBandLines,
+  pickHistogramBinWidth,
+  resolveThresholdRates,
+  type GradeBandKey,
+  type GradeBandLines,
+  type GradeBandMode,
+} from "../state/gradeBands";
 import { createCompetitionRankMap } from "../state/gradeRanking";
 import type { AppStudent, GradeExam, GradeRow } from "../state/types";
 
@@ -41,6 +60,7 @@ interface GradesPageProps {
   onOpenStudentFollowup: (student: AppStudent) => void;
   thresholds?: GradeThresholds;
   onThresholdsChange?: (next: GradeThresholds) => void;
+  onFullScoresChange?: (examId: string, fullScores: Record<string, number>) => boolean;
 }
 
 function getRowTotal(row: GradeRow): number | null {
@@ -124,20 +144,106 @@ function getTrendFollowupReason(student: AppStudent): { reason: string; score: n
   return { reason: reasons.slice(0, 2).join(" · "), score, diff: -rankDiff };
 }
 
-function getGradeLabel(avg: number | null, thresholds: GradeThresholds) {
-  if (avg === null) return "缺考";
-  if (avg >= thresholds.excellent) return "优秀";
-  if (avg >= thresholds.good) return "良好";
-  if (avg >= thresholds.pass) return "及格";
-  return "不及格";
+const GRADE_BADGE_CLASSES: Record<GradeBandKey | "missing", string> = {
+  excellent: "text-status-success-600 bg-status-success-50 border border-status-success-100",
+  good: "text-accent-600 bg-accent-50 border border-accent-100",
+  pass: "text-status-warning-600 bg-status-warning-50 border border-status-warning-100",
+  fail: "text-status-danger-500 bg-status-danger-50 border border-status-danger-100",
+  missing: "text-text-secondary bg-background-secondary-default border border-separator-border",
+};
+const SCORE_CELL_CLASSES: Record<GradeBandKey, string> = {
+  excellent: "text-status-success-600",
+  good: "text-accent-600",
+  pass: "text-text-primary",
+  fail: "text-status-danger-500",
+};
+const THRESHOLD_FIELDS: Array<[keyof GradeThresholdRates, string]> = [["pass", "及格"], ["good", "良好"], ["excellent", "优秀"]];
+const THRESHOLD_TRIGGER_ID = "grade-threshold-trigger";
+
+function ThresholdRows({ scopeLabel, rates, lines, onChange }: { scopeLabel: string; rates: GradeThresholdRates; lines: GradeBandLines | null; onChange: (key: keyof GradeThresholdRates, value: number) => void }) {
+  return (
+    <div className="space-y-2">
+      {THRESHOLD_FIELDS.map(([key, label]) => (
+        <div key={key} className="flex items-center gap-2">
+          <span className="w-10 shrink-0 text-body-medium text-text-secondary">{label}</span>
+          <NumberStepper value={rates[key]} onChange={value => onChange(key, value)} min={0} max={100} ariaLabel={`${scopeLabel}${label}得分率`} />
+          <span className="text-body-regular text-text-tertiary">%</span>
+          {lines && <span className="ml-auto text-body-regular tabular-nums text-text-primary">≥ {formatScoreValue(lines[key])} 分</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GradeBadge({ band, labels }: { band: GradeBandKey | null; labels: Record<GradeBandKey, string> }) {
+  const label = band ? labels[band] : "缺考";
+  // 分档方式切换时底色平滑过渡，新旧标签同格交叉淡化。
+  return <span className={`grade-badge inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption-1-regular ${GRADE_BADGE_CLASSES[band ?? "missing"]}`}><FadeSwap swapKey={label}>{label}</FadeSwap></span>;
 }
 
 function formatScore(value: number | null): string {
   return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value * 10) / 10) : "—";
 }
 
-function formatThresholdValue(value: number): string {
-  return String(Math.round(value * 10) / 10);
+function orderThresholdRates(current: GradeThresholdRates, key: keyof GradeThresholdRates, value: number): GradeThresholdRates {
+  const next = { pass: current.pass, good: current.good, excellent: current.excellent, [key]: Math.max(0, Math.min(100, value || 0)) };
+  if (key === "excellent" && next.excellent <= next.good) next.good = Math.max(0, next.excellent - 1);
+  if (key === "good") {
+    if (next.good >= next.excellent) next.excellent = Math.min(100, next.good + 1);
+    if (next.good <= next.pass) next.pass = Math.max(0, next.good - 1);
+  }
+  if (key === "pass" && next.pass >= next.good) next.good = Math.min(100, next.pass + 1);
+  if (next.good <= next.pass) next.pass = Math.max(0, next.good - 1);
+  return next;
+}
+
+function formatBandLines(lines: GradeBandLines): string {
+  return `及格 ${formatScoreValue(lines.pass)} · 良好 ${formatScoreValue(lines.good)} · 优秀 ${formatScoreValue(lines.excellent)}`;
+}
+
+function BandSummary({ mode, counts, lines, labels, total }: { mode: GradeBandMode; counts: Record<GradeBandKey | "missing", number>; lines: GradeBandLines; labels: Record<GradeBandKey, string>; total: number }) {
+  return (
+    <div className="grade-band-summary-host mt-3">
+    <ul aria-label="分档人数" className="grade-band-summary grid gap-2">
+      {GRADE_BAND_ORDER.map(band => (
+        <li key={band} className="min-w-0 rounded-lg bg-background-secondary-default px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: GRADE_COLORS[band] }} />
+            <FadeSwap swapKey={mode} className="min-w-0 truncate text-caption-1-medium text-text-secondary">{labels[band]}</FadeSwap>
+            <RollingText value={`${counts[band]}人`} className="ml-auto shrink-0 text-caption-1-semibold tabular-nums text-text-primary" />
+          </div>
+          <div className="mt-0.5 truncate pl-4 text-caption-1-regular tabular-nums text-text-tertiary">
+            {band === "fail" ? "<" : "≥"}<RollingText value={formatScoreValue(band === "fail" ? lines.pass : lines[band])} />
+            {total ? <> · <RollingText value={`${Math.round((counts[band] / total) * 100)}%`} /></> : null}
+          </div>
+        </li>
+      ))}
+    </ul>
+    </div>
+  );
+}
+
+function BandModeSwitch({ value, onChange }: { value: GradeBandMode; onChange: (value: GradeBandMode) => void }) {
+  return <SegmentedControl value={value} onChange={onChange} ariaLabel="分档方式" className="shrink-0" options={[{ value: "score", label: "按分数线" }, { value: "rank", label: "按名次" }]} />;
+}
+
+interface HistogramDatum {
+  label: string;
+  range: string;
+  count: number;
+  bandLabel: string;
+  fill: string;
+}
+
+function HistogramTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: HistogramDatum }> }) {
+  const datum = active ? payload?.[0]?.payload : undefined;
+  if (!datum) return null;
+  return (
+    <div className="rounded-[10px] border border-[var(--app-border)] bg-background-primary-default px-3 py-2 text-body-regular shadow-sm">
+      <div className="tabular-nums text-text-secondary">{datum.range}</div>
+      <div className="mt-0.5 text-text-primary"><span className="tabular-nums" style={{ fontWeight: 600 }}>{datum.count} 人</span> · {datum.bandLabel}</div>
+    </div>
+  );
 }
 
 function compareValues(a: string | number | null, b: string | number | null, asc: boolean): number {
@@ -153,27 +259,10 @@ function normalizeName(value: string): string {
   return value.replace(/\s+/g, "").toLocaleLowerCase("zh-Hans-CN");
 }
 
-function getBandKey(value: number | null, thresholds: GradeThresholds): "excellent" | "good" | "pass" | "fail" | "missing" {
-  if (value === null) return "missing";
-  if (value >= thresholds.excellent) return "excellent";
-  if (value >= thresholds.good) return "good";
-  if (value >= thresholds.pass) return "pass";
-  return "fail";
-}
-
-function getMetricBandValue(row: GradeRow & { totalScore: number | null }, key: string, subjects: string[]): number | null {
-  if (key !== "total") {
-    return getMetricValue(row, key);
-  }
-  const total = row.totalScore;
-  const fullScore = Math.max(1, subjects.length * 100);
-  return total === null ? null : Math.round((total / fullScore) * 1000) / 10;
-}
-
 const EMPTY_SUBJECTS: string[] = [];
 const EMPTY_ROWS: GradeExam["rows"] = [];
 
-export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFollowup, thresholds: thresholdsProp, onThresholdsChange }: GradesPageProps) {
+export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFollowup, thresholds: thresholdsProp, onThresholdsChange, onFullScoresChange }: GradesPageProps) {
   const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id || "");
   const [selectedSubject, setSelectedSubject] = useState("total");
   const [examOpen, setExamOpen] = useState(false);
@@ -183,6 +272,8 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const [sortKey, setSortKey] = useState("total");
   const [sortAsc, setSortAsc] = useState(false);
   const [thresholdOpen, setThresholdOpen] = useState(false);
+  const [bandMode, setBandMode] = useState<GradeBandMode>("score");
+  const [fullScoreError, setFullScoreError] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   // 阈值受控优先（App 持久化到切片 settings）；无外部来源时退回本地状态。
   const [localThresholds, setLocalThresholds] = useState(DEFAULT_GRADE_THRESHOLDS);
@@ -253,14 +344,14 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const rankById = useMemo(() => createCompetitionRankMap(rowsWithMetrics.map(row => ({ key: row.id, value: row.totalScore }))), [rowsWithMetrics]);
   const metricRankById = useMemo(() => createCompetitionRankMap(rowsWithMetrics.map(row => ({ key: row.id, value: getMetricValue(row, metricKey) }))), [metricKey, rowsWithMetrics]);
   const metricLabel = metricKey === "total" ? "全部" : metricKey;
-  const fullScore = Math.max(1, subjects.length * 100);
-  const totalThresholds = {
-    pass: (thresholds.pass / 100) * fullScore,
-    good: (thresholds.good / 100) * fullScore,
-    excellent: (thresholds.excellent / 100) * fullScore,
-  };
-  const totalThresholdHint = `全部阈值：及格≥${formatThresholdValue(totalThresholds.pass)} / 良好≥${formatThresholdValue(totalThresholds.good)} / 优秀≥${formatThresholdValue(totalThresholds.excellent)}`;
-  const subjectThresholdHint = `单科阈值：及格≥${thresholds.pass} / 良好≥${thresholds.good} / 优秀≥${thresholds.excellent}`;
+  const subjectFullScores = useMemo(() => getExamFullScores({ rows, subjects, fullScores: selectedExam?.fullScores }), [rows, selectedExam?.fullScores, subjects]);
+  const totalFullScore = Math.max(1, subjects.reduce((sum, subject) => sum + (subjectFullScores[subject] ?? 100), 0));
+  const metricFullScore = metricKey === "total" ? totalFullScore : subjectFullScores[metricKey] ?? 100;
+  const subjectRates = resolveThresholdRates(thresholds, "subject");
+  const totalRates = resolveThresholdRates(thresholds, "total");
+  const totalScoreLines = getScoreBandLines(totalRates, totalFullScore);
+  const subjectLinesBySubject = Object.fromEntries(subjects.map(subject => [subject, getScoreBandLines(subjectRates, subjectFullScores[subject] ?? 100)]));
+  const scoreLines = metricKey === "total" ? totalScoreLines : subjectLinesBySubject[metricKey] ?? getScoreBandLines(subjectRates, metricFullScore);
 
   const filtered = useMemo(() => [...rowsWithMetrics]
     .filter(rowMatchesSearch)
@@ -282,33 +373,35 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const avgMetric = metricValues.length ? Math.round((metricValues.reduce((a, b) => a + b, 0) / metricValues.length) * 10) / 10 : null;
   const maxMetric = metricValues.length ? Math.max(...metricValues) : null;
   const minMetric = metricValues.length ? Math.min(...metricValues) : null;
-  const passCount = rowsWithMetrics.filter(row => {
-    const value = getMetricBandValue(row, metricKey, subjects);
-    return value !== null && value >= thresholds.pass;
-  }).length;
-  const excellentCount = rowsWithMetrics.filter(row => {
-    const value = getMetricBandValue(row, metricKey, subjects);
-    return value !== null && value >= thresholds.excellent;
-  }).length;
+  const passCount = metricValues.filter(value => value >= scoreLines.pass).length;
+  const excellentCount = metricValues.filter(value => value >= scoreLines.excellent).length;
   const subjectAvgData = subjects.map((subject, index) => {
     const values = rows
       .map(row => row.scores[subject]?.score)
       .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
     const avg = values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10 : 0;
-    return { subject, avg, fill: SUBJECT_COLORS[index % SUBJECT_COLORS.length] };
+    const full = subjectFullScores[subject] ?? 100;
+    return { subject, avg, full, rate: Math.round((avg / full) * 1000) / 10, fill: SUBJECT_COLORS[index % SUBJECT_COLORS.length] };
   });
-  const bandLabels = [
-    { key: "fail" as const, label: metricKey === "total" ? `不及格 (<${formatThresholdValue(totalThresholds.pass)})` : `0-${Math.max(0, thresholds.pass - 1)}`, fill: GRADE_COLORS.fail },
-    { key: "pass" as const, label: metricKey === "total" ? `及格 (≥${formatThresholdValue(totalThresholds.pass)})` : `${thresholds.pass}-${Math.max(thresholds.pass, thresholds.good - 1)}`, fill: GRADE_COLORS.pass },
-    { key: "good" as const, label: metricKey === "total" ? `良好 (≥${formatThresholdValue(totalThresholds.good)})` : `${thresholds.good}-${Math.max(thresholds.good, thresholds.excellent - 1)}`, fill: GRADE_COLORS.good },
-    { key: "excellent" as const, label: metricKey === "total" ? `优秀 (≥${formatThresholdValue(totalThresholds.excellent)})` : `${thresholds.excellent}+`, fill: GRADE_COLORS.excellent },
-  ];
-  const distributionData = [
-    ...bandLabels.map(band => ({
-      ...band,
-      count: rowsWithMetrics.filter(row => getBandKey(getMetricBandValue(row, metricKey, subjects), thresholds) === band.key).length,
-    })),
-  ];
+  // 名次分层只改变分档方式；优秀率/及格率始终按得分率阈值统计。
+  const rankLines = getRankTierLines(metricValues);
+  const bandLines = bandMode === "rank" && rankLines ? rankLines : scoreLines;
+  const bandLabels = bandMode === "rank" ? RANK_BAND_LABELS : SCORE_BAND_LABELS;
+  const bandCounts = countBands(rowsWithMetrics.map(row => getMetricValue(row, metricKey)), bandLines);
+  const histogramBinWidth = pickHistogramBinWidth(metricFullScore);
+  // 两种分档方式的分界线都参与切分，切换时柱形不变、只换颜色。
+  const histogramBins = buildScoreHistogram(metricValues, metricFullScore, bandLines, [scoreLines, rankLines].flatMap(lines => lines ? [lines.pass, lines.good, lines.excellent] : []));
+  const histogramFills = useBlendedColors(histogramBins.map(bin => GRADE_COLORS[bin.band]), `${selectedExam?.id}-${metricKey}-${histogramBins.map(bin => bin.from).join(",")}`, reducedMotion);
+  const distributionData: HistogramDatum[] = histogramBins.map((bin, index) => ({
+    label: formatScoreValue(bin.from),
+    range: `${formatScoreValue(bin.from)} ≤ 分数 ${bin.inclusiveEnd ? "≤" : "<"} ${formatScoreValue(bin.to)}`,
+    count: bin.count,
+    bandLabel: bandLabels[bin.band],
+    fill: histogramFills[index],
+  }));
+  const distributionHint = bandMode === "rank"
+    ? `按名次：前${RANK_TIER_PERCENTS.top}% / 前${RANK_TIER_PERCENTS.upper}% / 后${RANK_TIER_PERCENTS.bottom}%，同分同层`
+    : `满分 ${formatScoreValue(metricFullScore)} · 每格 ${histogramBinWidth} 分`;
   const subjectRankingRows = useMemo(() => [...rowsWithMetrics]
     .filter(rowMatchesSearch)
     .map(row => ({
@@ -335,17 +428,21 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     }
   };
 
-  const updateThreshold = (key: keyof GradeThresholds, value: number) => {
+  const updateThreshold = (scope: "subject" | "total", key: keyof GradeThresholdRates, value: number) => {
+    setThresholds(current => scope === "total"
+      ? { ...resolveThresholdRates(current, "subject"), total: orderThresholdRates(resolveThresholdRates(current, "total"), key, value) }
+      : { ...orderThresholdRates(current, key, value), ...(current.total ? { total: current.total } : {}) });
+  };
+  const setTotalIndependent = (independent: boolean) => {
     setThresholds(current => {
-      const next = { ...current, [key]: Math.max(0, Math.min(100, value || 0)) };
-      if (key === "excellent" && next.excellent <= next.good) next.good = Math.max(0, next.excellent - 1);
-      if (key === "good") {
-        if (next.good >= next.excellent) next.excellent = Math.min(100, next.good + 1);
-        if (next.good <= next.pass) next.pass = Math.max(0, next.good - 1);
-      }
-      if (key === "pass" && next.pass >= next.good) next.good = Math.min(100, next.pass + 1);
-      return next;
+      const subjectOnly = resolveThresholdRates(current, "subject");
+      return independent ? { ...subjectOnly, total: subjectOnly } : subjectOnly;
     });
+  };
+  const updateFullScore = (subject: string, value: number) => {
+    if (!onFullScoresChange || !selectedExam) return;
+    const saved = onFullScoresChange(selectedExam.id, { ...subjectFullScores, [subject]: value });
+    setFullScoreError(saved ? "" : "这场考试来自旧版学生档案，无法单独保存满分；重新导入后即可设置。");
   };
 
   if (!selectedExam) {
@@ -408,28 +505,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           <MotionSwitch transitionKey={activeTab} direction={activeTab === "trend" ? "right" : "left"} className="shrink-0" contentClassName="flex items-center">
           {activeTab === "single" ? (
           <div className="relative shrink-0">
-            <Button size="sm" variant="secondary" aria-expanded={thresholdOpen} onClick={() => setThresholdOpen(v => !v)}>
+            <Button id={THRESHOLD_TRIGGER_ID} size="sm" variant="secondary" aria-haspopup="dialog" aria-expanded={thresholdOpen} onClick={() => setThresholdOpen(v => !v)}>
               <SlidersHorizontal className="h-3.5 w-3.5" />阈值设置
             </Button>
-
-            <AnimatedPopover
-              open={activeTab === "single" && thresholdOpen}
-              className="absolute left-0 top-full z-30 mt-2 w-56 rounded-2xl border border-separator-border bg-background-primary-default p-4 shadow-xl shadow-gray-200/70"
-            >
-                <div className="space-y-2.5">
-                  {(([
-                    ["pass", "及格"],
-                    ["good", "良好"],
-                    ["excellent", "优秀"],
-                  ]) as Array<[keyof GradeThresholds, string]>).map(([key, label]) => (
-                    <div key={key} className="flex items-center justify-between gap-3">
-                      <span className="text-body-medium text-text-secondary">{label}</span>
-                      <NumberStepper value={thresholds[key]} onChange={value => updateThreshold(key, value)} min={0} max={100} ariaLabel={`${label}阈值`} />
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-3 truncate text-caption-1-regular text-text-tertiary">{metricKey === "total" ? totalThresholdHint : subjectThresholdHint}</p>
-            </AnimatedPopover>
           </div>
           ) : (
             <span className="shrink-0 px-1 text-caption-1-regular text-text-tertiary">分数趋势展示 · 进退步按班排</span>
@@ -450,7 +528,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           </div>
         </div>
 
-        <div className="mt-2 flex min-w-0 items-center overflow-x-auto">
+        <div className="mt-2 flex min-w-0 items-center gap-3 overflow-x-auto">
           <SegmentedControl
             value={activeTab === "single" ? metricKey : trendSubject}
             ariaLabel="成绩学科切换"
@@ -469,6 +547,9 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
             }))}
             className="grade-subject-switcher shrink-0"
           />
+          <MotionSwitch transitionKey={activeTab} direction={activeTab === "trend" ? "right" : "left"} className="ml-auto shrink-0" contentClassName="flex items-center">
+            {activeTab === "single" ? <BandModeSwitch value={bandMode} onChange={setBandMode} /> : null}
+          </MotionSwitch>
         </div>
       </div>
 
@@ -478,7 +559,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
             <div className="grade-stat-grid grid grid-cols-4 divide-x divide-separator-border overflow-hidden rounded-xl border border-separator-border bg-background-primary-default">
               {[
                 { id: "count", label: "参考人数", value: `${rows.length} 人`, sub: `${subjects.length} 个科目` },
-                { id: "avg", label: metricKey === "total" ? "班级平均分" : `${metricLabel}平均分`, value: formatScore(avgMetric ?? avgTotal), sub: `满分 ${metricKey === "total" ? subjects.length * 100 : 100}` },
+                { id: "avg", label: metricKey === "total" ? "班级平均分" : `${metricLabel}平均分`, value: formatScore(avgMetric ?? avgTotal), sub: `满分 ${formatScoreValue(metricFullScore)}` },
                 { id: "range", label: "最高 / 最低分", value: `${formatScore(maxMetric ?? maxTotal)} / ${formatScore(minMetric ?? minTotal)}`, sub: `${metricLabel}区间` },
                 { id: "rate", label: "优秀率", value: `${rows.length ? Math.round((excellentCount / rows.length) * 100) : 0}%`, sub: `及格率 ${rows.length ? Math.round((passCount / rows.length) * 100) : 0}%` },
               ].map(stat => (
@@ -492,42 +573,45 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               ))}
             </div>
 
-            <MotionSwitch sharedLayout preserveContent transitionKey={`${selectedExam.id}-${metricKey}-${thresholds.pass}-${thresholds.good}-${thresholds.excellent}`} className="grade-chart-transition">
+            <MotionSwitch sharedLayout preserveContent transitionKey={`${selectedExam.id}-${metricKey}`} className="grade-chart-transition">
             <div className="grade-chart-grid grid gap-4" data-split={metricKey === "total" ? "true" : "false"}>
-              <div data-motion-surface="grade-main-chart" className="grade-main-chart min-w-0 rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
-                  <h3 className="text-text-primary mb-1">{metricKey === "total" ? "各科平均分对比" : `${metricLabel}分数分布`}</h3>
-                  <p className="text-caption-1-regular text-text-tertiary mb-4">
-                    {metricKey === "total" ? "不同科目的班级平均表现" : `共 ${rows.length} 名学生的成绩区间分布`}
-                  </p>
-                <ChartViewport height={metricKey === "total" ? 200 : 260}>{(width, height) =>
-                  <BarChart width={width} height={height} data={metricKey === "total" ? subjectAvgData : distributionData} barSize={32}>
+              <div data-motion-surface="grade-main-chart" className="grade-main-chart flex min-w-0 flex-col rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
+                <h3 className="text-text-primary mb-1">{metricKey === "total" ? "各科平均得分率" : `${metricLabel}分数分布`}</h3>
+                <p className="mb-4 text-caption-1-regular text-text-tertiary">{metricKey === "total" ? "平均分 ÷ 该科满分，满分不同的科目也能直接比较" : <FadeSwap swapKey={bandMode}>{distributionHint}</FadeSwap>}</p>
+                <ChartViewport height={metricKey === "total" ? "fill" : 240}>{(width, height) =>
+                  <BarChart width={width} height={height} data={metricKey === "total" ? subjectAvgData : distributionData} barSize={metricKey === "total" ? 32 : undefined} barCategoryGap={metricKey === "total" ? "10%" : 2}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
-                    <XAxis dataKey={metricKey === "total" ? "subject" : "label"} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={0} />
-                    <YAxis domain={metricKey === "total" ? [0, 100] : undefined} allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
-                    <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} />
-                    <Bar isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out" key="main-chart-bar" dataKey={metricKey === "total" ? "avg" : "count"} name={metricKey === "total" ? "平均分" : "人数"} radius={[5, 5, 0, 0]}>
+                    <XAxis dataKey={metricKey === "total" ? "subject" : "label"} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={metricKey === "total" ? 0 : "preserveStartEnd"} minTickGap={8} />
+                    <YAxis domain={metricKey === "total" ? [0, 100] : undefined} unit={metricKey === "total" ? "%" : undefined} allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={metricKey === "total" ? 40 : 28} />
+                    {metricKey === "total"
+                      ? <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} formatter={(value, _name, item) => [`${value}%（均分 ${item.payload.avg} / ${item.payload.full}）`, "平均得分率"]} />
+                      : <Tooltip content={<HistogramTooltip />} cursor={{ fill: "var(--app-surface-muted)" }} />}
+                    {/* 科目均值与分数分箱没有对应关系：切换时柱形原位升起，不让旧柱横向滑进新分箱。 */}
+                    <Bar isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out" key={metricKey === "total" ? "main-chart-subject-bars" : "main-chart-histogram-bars"} dataKey={metricKey === "total" ? "rate" : "count"} name={metricKey === "total" ? "平均得分率" : "人数"} radius={metricKey === "total" ? [5, 5, 0, 0] : [3, 3, 0, 0]}>
                       {(metricKey === "total" ? subjectAvgData : distributionData).map((item, index) => (
                         <Cell key={`main-cell-${index}`} fill={item.fill} />
                       ))}
                     </Bar>
                   </BarChart>
                 }</ChartViewport>
+                {metricKey !== "total" && <BandSummary mode={bandMode} counts={bandCounts} lines={bandLines} labels={bandLabels} total={metricValues.length} />}
               </div>
 
               {metricKey === "total" && <div className="grade-distribution-chart min-w-0 overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
-                <h3 className="text-text-primary mb-1">全部分布</h3>
-                <p className="text-caption-1-regular text-text-tertiary mb-4">{totalThresholdHint}</p>
+                <h3 className="text-text-primary mb-1">总分分布</h3>
+                <p className="mb-4 text-caption-1-regular text-text-tertiary"><FadeSwap swapKey={bandMode}>{distributionHint}</FadeSwap></p>
                 <ChartViewport height={200}>{(width, height) =>
-                  <BarChart width={width} height={height} data={distributionData} barSize={26}>
+                  <BarChart width={width} height={height} data={distributionData} barCategoryGap={2}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={0} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={8} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
-                    <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} />
-                    <Bar isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out" dataKey="count" name="人数" radius={[5, 5, 0, 0]}>
+                    <Tooltip content={<HistogramTooltip />} cursor={{ fill: "var(--app-surface-muted)" }} />
+                    <Bar isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out" dataKey="count" name="人数" radius={[3, 3, 0, 0]}>
                       {distributionData.map((item, index) => <Cell key={`dist-cell-${index}`} fill={item.fill} />)}
                     </Bar>
                   </BarChart>
                 }</ChartViewport>
+                <BandSummary mode={bandMode} counts={bandCounts} lines={bandLines} labels={bandLabels} total={metricValues.length} />
               </div>}
             </div>
             </MotionSwitch>
@@ -566,7 +650,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                         <th className="text-center px-4 py-3 cursor-pointer hover:text-text-secondary" onClick={() => handleSort("total")}>
                           <span className="flex items-center justify-center gap-1">全部 <ArrowUpDown className="w-3 h-3" /></span>
                         </th>
-                        <th className="w-[78px] whitespace-nowrap px-2 py-3 text-center">等级</th>
+                        <th className="w-[78px] whitespace-nowrap px-2 py-3 text-center">{bandMode === "rank" ? "层次" : "等级"}</th>
                         <th className="w-[84px] whitespace-nowrap px-2 py-3 text-center"><span className="block w-full text-center">AI</span></th>
                       </tr>
                     </thead>
@@ -574,14 +658,6 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                       {filtered.map(row => {
                         const matchedStudent = (row.studentId ? studentById.get(row.studentId) : null) || studentByName.get(normalizeName(row.name)) || null;
                         const rank = rankById.get(row.id);
-                        const grade = getGradeLabel(getMetricBandValue(row, metricKey, subjects), thresholds);
-                        const gradeColor = {
-                          优秀: "text-status-success-600 bg-status-success-50 border border-status-success-100",
-                          良好: "text-accent-600 bg-accent-50 border border-accent-100",
-                          及格: "text-status-warning-600 bg-status-warning-50 border border-status-warning-100",
-                          不及格: "text-status-danger-500 bg-status-danger-50 border border-status-danger-100",
-                          缺考: "text-text-secondary bg-background-secondary-default border border-separator-border",
-                        }[grade];
                         return (
                           <tr
                             key={row.id}
@@ -593,14 +669,15 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             <td className="px-4 py-3 text-text-primary" style={{ fontWeight: 600 }}>{row.name}</td>
                             {subjects.map(subject => {
                               const score = row.scores[subject]?.score ?? null;
-                              const color = score === null ? "text-text-tertiary" : score >= 90 ? "text-status-success-600" : score >= 75 ? "text-accent-600" : score >= 60 ? "text-text-primary" : "text-status-danger-500";
+                              const band = getBandKey(score, subjectLinesBySubject[subject]);
+                              const color = band ? SCORE_CELL_CLASSES[band] : "text-text-tertiary";
                               return (
                                 <td key={subject} className={`text-center px-4 py-3 tabular-nums ${color}`}>{formatScore(score)}</td>
                               );
                             })}
                             <td className="text-center px-4 py-3 tabular-nums text-text-primary bg-accent-50/50" style={{ fontWeight: 700 }}><RollingText value={formatScore(row.totalScore)} /></td>
                             <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
-                              <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption-1-regular ${gradeColor}`}>{grade}</span>
+                              <GradeBadge band={getBandKey(row.totalScore, bandLines)} labels={bandLabels} />
                             </td>
                             <td className="w-[84px] whitespace-nowrap px-2 py-3 text-center">
                               <button
@@ -630,20 +707,12 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                         <th className="text-left px-6 py-3 w-16">排名</th>
                         <th className="text-left px-4 py-3">姓名</th>
                         <th className="text-center px-4 py-3">{metricLabel} 成绩</th>
-                        <th className="w-[78px] whitespace-nowrap px-2 py-3 text-center">等级</th>
+                        <th className="w-[78px] whitespace-nowrap px-2 py-3 text-center">{bandMode === "rank" ? "层次" : "等级"}</th>
                         <th className="w-[84px] whitespace-nowrap px-2 py-3 text-center"><span className="block w-full text-center">AI</span></th>
                       </tr>
                     </thead>
                     <tbody>
                       {subjectRankingRows.map(item => {
-                        const grade = getGradeLabel(item.value, thresholds);
-                        const gradeColor = {
-                          优秀: "text-status-success-600 bg-status-success-50 border border-status-success-100",
-                          良好: "text-accent-600 bg-accent-50 border border-accent-100",
-                          及格: "text-status-warning-600 bg-status-warning-50 border border-status-warning-100",
-                          不及格: "text-status-danger-500 bg-status-danger-50 border border-status-danger-100",
-                          缺考: "text-text-secondary bg-background-secondary-default border border-separator-border",
-                        }[grade];
                         return (
                           <tr
                             key={item.row.id}
@@ -655,7 +724,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                             <td className="px-4 py-3 text-text-primary" style={{ fontWeight: 600 }}>{item.row.name}</td>
                             <td className="text-center px-4 py-3 tabular-nums text-accent-700" style={{ fontWeight: 700 }}><RollingText value={formatScore(item.value)} /></td>
                             <td className="w-[78px] whitespace-nowrap px-2 py-3 text-center">
-                              <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption-1-regular ${gradeColor}`}>{grade}</span>
+                              <GradeBadge band={getBandKey(item.value, bandLines)} labels={bandLabels} />
                             </td>
                             <td className="w-[84px] whitespace-nowrap px-2 py-3 text-center">
                               <button
@@ -721,11 +790,52 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
           </>
         )}
       </MotionSwitch>
+      <ToolPopover open={activeTab === "single" && thresholdOpen} title="成绩阈值" anchorId={THRESHOLD_TRIGGER_ID} onClose={() => setThresholdOpen(false)} widthClassName="w-[22rem]">
+        <div className="space-y-5">
+          <section aria-label="单科得分率">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <h3 className="text-caption-1-semibold text-text-secondary">单科得分率</h3>
+              {metricKey !== "total" && <span className="text-caption-1-regular tabular-nums text-text-tertiary">{metricKey} · 满分 {formatScoreValue(metricFullScore)}</span>}
+            </div>
+            <ThresholdRows scopeLabel="单科" rates={subjectRates} lines={metricKey === "total" ? null : scoreLines} onChange={(key, value) => updateThreshold("subject", key, value)} />
+          </section>
+          <section aria-label="总分得分率">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-caption-1-semibold text-text-secondary">总分 <span className="tabular-nums text-text-tertiary">· 满分 {formatScoreValue(totalFullScore)}</span></h3>
+              <Checkbox isSelected={Boolean(thresholds.total)} onChange={setTotalIndependent}>单独设置</Checkbox>
+            </div>
+            <MotionCollapse open={Boolean(thresholds.total)}>
+              <ThresholdRows scopeLabel="总分" rates={totalRates} lines={totalScoreLines} onChange={(key, value) => updateThreshold("total", key, value)} />
+            </MotionCollapse>
+            <MotionCollapse open={!thresholds.total}>
+              <p className="text-caption-1-regular tabular-nums text-text-tertiary">沿用单科得分率：{formatBandLines(totalScoreLines)}</p>
+            </MotionCollapse>
+          </section>
+          {onFullScoresChange && subjects.length > 0 && (
+            <section aria-label="本场各科满分">
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <h3 className="text-caption-1-semibold text-text-secondary">本场满分</h3>
+                {subjects.some(subject => !selectedExam.fullScores?.[subject]) && <span className="text-caption-1-regular text-text-tertiary">未确认的科目按最高分推断</span>}
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                {subjects.map(subject => (
+                  <div key={subject} className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-body-regular text-text-secondary">{subject}</span>
+                    <NumberStepper value={subjectFullScores[subject] ?? 100} onChange={value => updateFullScore(subject, value)} min={1} max={999} ariaLabel={`${subject}满分`} />
+                  </div>
+                ))}
+              </div>
+              {fullScoreError && <InlineStatus message={fullScoreError} tone="error" className="mt-2" />}
+            </section>
+          )}
+        </div>
+      </ToolPopover>
       <DialogPresence open={exportOpen}>
       {exportOpen && (
         <GradeExportModal
           exams={exams}
           students={students}
+          thresholds={thresholds}
           onClose={() => setExportOpen(false)}
         />
       )}
