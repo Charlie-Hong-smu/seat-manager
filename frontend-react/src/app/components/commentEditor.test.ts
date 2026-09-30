@@ -33,9 +33,10 @@ describe("shared comment editor logic", () => {
     expect(resolveCommentWordCount("short", 500)).toBe(90);
     expect(resolveCommentWordCount("standard", 500)).toBe(125);
     expect(resolveCommentWordCount("long", 500)).toBe(175);
-    expect(resolveCommentWordCount("custom", 360)).toBe(360);
-    expect(clampCommentWordCount(1)).toBe(10);
-    expect(clampCommentWordCount(1200)).toBe(999);
+    expect(resolveCommentWordCount("custom", 360)).toBe(300);
+    expect(clampCommentWordCount(1)).toBe(50);
+    expect(clampCommentWordCount(1200)).toBe(300);
+    for (const [input, expected] of [[10, 50], [49, 50], [50, 50], [300, 300], [301, 300], [999, 300]]) expect(resolveCommentWordCount("custom", input)).toBe(expected);
   });
 
   it("honors single-select criteria and manages custom material", () => {
@@ -53,7 +54,7 @@ describe("shared comment editor logic", () => {
     const rubric: CommentRubric = { version: 1, criteria: [criterion] };
     const selected = toggleCommentCriterion(profile, criterion, "active");
     const draft = buildStudentCommentDraft(rubric, selected, "评语草稿");
-    expect(draft).toMatchObject({ generatedComment: "评语草稿", targetWordCount: 360, teacherNote: "课堂表现稳定" });
+    expect(draft).toMatchObject({ generatedComment: "评语草稿", targetWordCount: 300, teacherNote: "课堂表现稳定" });
     expect(draft.criteriaSummary?.[0]?.values).toEqual(["积极"]);
   });
 });

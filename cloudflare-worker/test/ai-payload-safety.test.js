@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import worker from "../deepseek-ai-worker.js";
 import { signToken } from "../worker-auth.js";
-import { trimStudentFollowupPayload, trimAssistantContext, sanitizeWeeklyDraftResult, sanitizeScoreItemResult } from "../worker-ai-payload.js";
+import { isValidStudentCommentPayload, getStudentCommentLengthSettings, trimStudentFollowupPayload, trimAssistantContext, sanitizeWeeklyDraftResult, sanitizeScoreItemResult } from "../worker-ai-payload.js";
 
 const context = { student: { name: "学生A" }, exams: [], tags: [], strengths: [], weaknesses: [] };
 const materials = { criteriaSummary: [{ criterionId: "study", label: "学习习惯", values: ["认真订正", "主动提问"] }], customOptions: [{ criterionId: "habit", criterionLabel: "日常表现", label: "帮助同学" }] };
@@ -70,4 +70,13 @@ test("followup endpoint sends missing numbers and teacher materials intact to th
   assert.equal(sent.context.trend.classRankChange, null);
   assert.deepEqual(sent.context.commentProfile.criteriaSummary, materials.criteriaSummary);
   assert.deepEqual(sent.context.commentProfile.customOptions, materials.customOptions);
+});
+
+
+test("custom comment length accepts the documented 50–300 boundaries", () => {
+  for (const target of [10, 49, 50, 300, 301, 999]) {
+    const payload = { studentId: "synthetic", style: "warm", commentLengthMode: "custom", targetWordCount: target, context };
+    assert.equal(isValidStudentCommentPayload(payload), target >= 50 && target <= 300);
+    assert.equal(Boolean(getStudentCommentLengthSettings(payload)), target >= 50 && target <= 300);
+  }
 });

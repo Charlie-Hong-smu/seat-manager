@@ -156,7 +156,7 @@ export function closeDormitoryPeriod(dormitory: Dormitory, options: { carryOver?
     currentScore: nextBaseScore,
     events: [],
     periodStart: endDate,
-    history: [archive, ...dormitory.history].slice(0, 50),
+    history: [archive, ...dormitory.history],
   };
 }
 
@@ -187,18 +187,18 @@ export function createDormEvent(input: NewDormEventInput, students: AppStudent[]
   };
 }
 
-export function createDormStudentRecord(event: DormEvent, dormitory: Dormitory, studentId: StudentId): StudentRecord | null {
-  if (!studentId || event.score === 0) {
+export function createDormStudentRecord(event: DormEvent, dormitory: Dormitory, studentId: StudentId, includeNote = false): StudentRecord | null {
+  if (!studentId || event.score === 0 && !includeNote) {
     return null;
   }
-  const action = event.score > 0 ? "加分" : "扣分";
+  const action = event.score > 0 ? "加分" : event.score < 0 ? "扣分" : "记录";
   const noteParts = [`宿舍${action}：${event.reason}（影响 ${dormitory.name}）`];
   if (event.note) {
     noteParts.push(event.note);
   }
   return {
     id: `record-${event.id}-${studentId}`,
-    type: event.score > 0 ? "reward" : "punish",
+    type: event.score > 0 ? "reward" : event.score < 0 ? "punish" : "note",
     note: noteParts.join(" · "),
     date: event.date,
   };

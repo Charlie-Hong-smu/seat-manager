@@ -1,3 +1,4 @@
+import { COMMENT_SAVE_FAILURE } from "../state/commentPersistence";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, Clipboard, FilePlus2, Loader2, MessageSquareText, PlusCircle, Save, Sparkles, Star, Target } from "lucide-react";
 
@@ -160,10 +161,12 @@ export function AiStudentFollowupPanel({
     if (!await appDialog.confirm({ title: "加入评语补充说明？", description: `将把 AI 提炼的内容加入 ${student.name} 的评语补充说明，之后仍可继续编辑。`, confirmLabel: "确认加入", variant: "primary" })) {
       return;
     }
-    onAppendCommentMaterial(materialText);
-    setSavedMaterial(true);
-    setStatus("已加入评语补充说明。");
-    setStatusError(false);
+    try {
+      onAppendCommentMaterial(materialText);
+      setSavedMaterial(true);
+      setStatus("已加入评语补充说明。");
+      setStatusError(false);
+    } catch { setStatus(COMMENT_SAVE_FAILURE); setStatusError(true); }
   }
 
   async function createTask() {

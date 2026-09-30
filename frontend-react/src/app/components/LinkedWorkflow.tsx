@@ -10,14 +10,14 @@ export function SourceLink({ source, sourceRef, onOpen, exists = true }: { sourc
   const label = SOURCE_LABEL[sourceRef?.domain || source] || "来源";
   if (sourceRef && !exists) return <span className="rounded-md bg-background-tertiary-default px-2 py-0.5 text-[10px] font-bold text-text-tertiary" title="原始业务对象已被删除">{label} · 来源已删除</span>;
   if (!sourceRef || !onOpen) return <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${source === "ai" ? "bg-status-ai-50 text-status-ai-600" : "bg-accent-50 text-accent-600"}`}>{label}</span>;
-  return <button type="button" onClick={() => onOpen(sourceRef)} className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition-colors ${source === "ai" ? "bg-status-ai-50 text-status-ai-600 hover:bg-status-ai-100" : "bg-accent-50 text-accent-600 hover:bg-accent-100"}`} aria-label={`打开${label}来源`} title={`打开${label}来源`}><Link2 className="h-3 w-3"/>{label}<ArrowUpRight className="h-3 w-3"/></button>;
+  return <button type="button" onClick={event => { event.stopPropagation(); onOpen(sourceRef); }} className={`inline-flex min-h-11 items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition-colors sm:min-h-0 ${source === "ai" ? "bg-status-ai-50 text-status-ai-600 hover:bg-status-ai-100" : "bg-accent-50 text-accent-600 hover:bg-accent-100"}`} aria-label={`打开${label}来源`} title={`打开${label}来源`}><Link2 className="h-3 w-3"/>{label}<ArrowUpRight className="h-3 w-3"/></button>;
 }
 
 export function LinkedTaskBadge({ task, onOpen }: { task?: FollowupTask; onOpen?: (taskId: string) => void }) {
   if (!task) return null;
   const label = task.status === "completed" ? "跟进已完成" : task.status === "cancelled" ? "跟进已取消" : "已有跟进";
   const className = task.status === "completed" ? "bg-status-success-50 text-status-success-700" : task.status === "cancelled" ? "bg-background-tertiary-default text-text-secondary" : "bg-accent-50 text-accent-700";
-  return <button type="button" disabled={!onOpen} onClick={() => onOpen?.(task.id)} className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ${className}`}><CheckCircle2 className="h-3 w-3"/>{label}</button>;
+  return <button type="button" disabled={!onOpen} onClick={event => { event.stopPropagation(); onOpen?.(task.id); }} className={`inline-flex min-h-11 items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold sm:min-h-0 ${className}`}><CheckCircle2 className="h-3 w-3"/>{label}</button>;
 }
 
 export function ResolutionEditor({ task, onSave, onContinue }: { task: FollowupTask; onSave: (note: string) => void; onContinue: () => void }) {

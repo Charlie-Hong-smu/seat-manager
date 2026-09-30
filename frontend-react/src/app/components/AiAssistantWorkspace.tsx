@@ -1,3 +1,4 @@
+import { COMMENT_SAVE_FAILURE } from "../state/commentPersistence";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Bot, Check, ChevronDown, Copy, FilePlus2, Loader2, RotateCcw, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 
@@ -485,8 +486,10 @@ export function AiAssistantCompanion({
   async function appendAssistantMaterial(message: AiChatMessage, student: AppStudent) {
     if (!onAppendCommentMaterial) return;
     if (!await appDialog.confirm({ title: "加入评语素材？", description: `将把这条 AI 回复加入 ${student.name} 的评语素材，之后仍可继续编辑。`, confirmLabel: "确认加入", variant: "primary" })) return;
-    onAppendCommentMaterial(student, formatChatDisplayText(message));
-    setSavedActionKey(`${message.id}:material`);
+    try {
+      onAppendCommentMaterial(student, formatChatDisplayText(message));
+      setSavedActionKey(`${message.id}:material`);
+    } catch { setStatus(COMMENT_SAVE_FAILURE); setStatusError(true); }
   }
 
   async function sendPrompt(prompt: string) {

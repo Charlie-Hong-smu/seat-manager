@@ -269,12 +269,12 @@ function getSeatCapacity(studentCount: number, seatOrder: Array<StudentId | null
   if (customCapacity !== undefined) return Math.max(0, customCapacity);
   const lastAssignedIndex = [...seatOrder].reverse().findIndex(id => id !== null);
   const lastIndex = lastAssignedIndex === -1 ? -1 : seatOrder.length - 1 - lastAssignedIndex;
-  const minNeeded = Math.max(studentCount, lastIndex + 1);
+  const minNeeded = Math.max(studentCount, seatOrder.length, lastIndex + 1);
   return minNeeded ? Math.ceil(minNeeded / COLS) * COLS : 0;
 }
 
 function normalizeSeatOrder(students: AppStudent[], rawSeatOrder: unknown, customCapacity?: number): Array<StudentId | null> {
-  const ids = students.map(student => student.id);
+  const ids = students.filter(student => student.enrollmentStatus !== "archived").map(student => student.id);
   const idSet = new Set(ids);
   const rawOrder = Array.isArray(rawSeatOrder)
     ? rawSeatOrder.map(item => {
@@ -282,7 +282,7 @@ function normalizeSeatOrder(students: AppStudent[], rawSeatOrder: unknown, custo
         return id && idSet.has(id) ? id : null;
       })
     : [];
-  const total = getSeatCapacity(students.length, rawOrder, customCapacity);
+  const total = getSeatCapacity(ids.length, rawOrder, customCapacity);
   const order: Array<StudentId | null> = new Array(total).fill(null);
   const used = new Set<StudentId>();
 
@@ -294,7 +294,8 @@ function normalizeSeatOrder(students: AppStudent[], rawSeatOrder: unknown, custo
     order[index] = id;
   });
 
-  ids.forEach(id => {
+  // Missing legacy layouts get an initial arrangement; explicit blanks are intentional.
+  if (!Array.isArray(rawSeatOrder)) ids.forEach(id => {
     if (used.has(id)) {
       return;
     }

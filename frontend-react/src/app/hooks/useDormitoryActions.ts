@@ -50,7 +50,7 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
     const dormitory = dormitories.find((item) => item.id === input.dormId);
     if (!dormitory) return null;
     const event = createDormEvent(input, students);
-    const nextDormitory = normalizeDormitoryScore({ ...dormitory, events: [event, ...dormitory.events].slice(0, 200) });
+    const nextDormitory = normalizeDormitoryScore({ ...dormitory, events: [event, ...dormitory.events] });
     setDormitories((current) => current.map((item) => item.id === dormitory.id ? nextDormitory : item));
     const responsibleIds = event.responsibleStudentIds ?? (event.responsibleStudentId ? [event.responsibleStudentId] : []);
     if (input.recordToStudent !== false && responsibleIds.length) {
@@ -65,14 +65,21 @@ export function useDormitoryActions({ students, dormitories, setStudents, setDor
   }, [dormitories, setDormitories, setStudents, students]);
 
   const handleUpdateDormEvent = useCallback((dormId: string, eventId: string, patch: DormitoryEventPatch) => {
-    setDormitories((current) => current.map((dormitory) => dormitory.id === dormId ? updateDormitoryEventInLedger(dormitory, eventId, patch) : dormitory));
-    if (patch.date) {
-      setStudents((current) => current.map(student => ({
-        ...student,
-        records: student.records.map(record => record.id === `record-${eventId}-${student.id}` || record.id === `record-${eventId}` ? { ...record, date: patch.date || record.date } : record),
-      })));
-    }
-  }, [setDormitories, setStudents]);
+    const dormitory = dormitories.find(item => item.id === dormId);
+    if (!dormitory) return;
+    const updated = updateDormitoryEventInLedger(dormitory, eventId, patch);
+    const event = updated.events.find(item => item.id === eventId) || updated.history.flatMap(archive => archive.events).find(item => item.id === eventId);
+    if (!event) return;
+    setDormitories(current => current.map(item => item.id === dormId ? updateDormitoryEventInLedger(item, eventId, patch) : item));
+    setStudents(current => current.map(student => ({
+      ...student,
+      records: student.records.map(record => {
+        if (record.id !== `record-${eventId}-${student.id}` && record.id !== `record-${eventId}`) return record;
+        const corrected = createDormStudentRecord(event, updated, student.id, true)!;
+        return { ...record, type: corrected.type, note: corrected.note, date: corrected.date };
+      }),
+    })));
+  }, [dormitories, setDormitories, setStudents]);
 
   const handleDeleteDormEvent = useCallback((dormId: string, eventId: string) => {
     const previousDormitory = dormitories.find(dormitory => dormitory.id === dormId);

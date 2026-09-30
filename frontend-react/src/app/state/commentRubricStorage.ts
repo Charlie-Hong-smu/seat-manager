@@ -1,3 +1,5 @@
+import { clampCommentWordCount } from "./commentWordCount";
+import { cacheStudentCommentDraft } from "./commentStorage";
 import { writeStudentComment } from "./commentPersistence";
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
 import type {
@@ -10,10 +12,10 @@ import type {
   CommentRubric,
   CommentStyle,
   StudentCommentProfile,
+  StudentCommentDraft,
   StudentId,
 } from "./types";
 
-const DEFAULT_TARGET_WORD_COUNT = 120;
 const VALID_STYLES = new Set<CommentStyle>(["warm", "formal", "brief"]);
 const VALID_LENGTH_MODES = new Set<CommentLengthMode>(["short", "standard", "long", "custom"]);
 const VALID_STATUSES = new Set(["pending", "ready", "needsInfo", "generating", "generated", "edited", "failed", "skipped", "draft"]);
@@ -215,13 +217,12 @@ export function saveCommentRubric(rubric: CommentRubric): CommentRubric {
   const root = readLegacyRootState();
   const nextRoot = isRecord(root) ? root : {};
   const normalized = normalizeCommentRubric(rubric);
-  writeLegacyRootState({ ...nextRoot, commentRubric: normalized });
+  if (!writeLegacyRootState({ ...nextRoot, commentRubric: normalized })) throw new Error("comment_save_failed");
   return normalized;
 }
 
 function normalizeTargetWordCount(value: unknown): number {
-  const parsed = Number(value);
-  return Math.min(999, Math.max(10, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_TARGET_WORD_COUNT)));
+  return clampCommentWordCount(value);
 }
 
 function normalizeProfile(value: unknown): StudentCommentProfile {
@@ -363,14 +364,15 @@ function syncProfileTags(student: Record<string, unknown>, rubric: CommentRubric
   student.manualTags = Array.from(new Set(nextTags));
 }
 
-export function saveStudentCommentProfile(studentId: StudentId, rubric: CommentRubric, profile: StudentCommentProfile): StudentCommentProfile {
+export function saveStudentCommentProfile(studentId: StudentId, rubric: CommentRubric, profile: StudentCommentProfile, draft?: StudentCommentDraft): StudentCommentProfile {
+  if (draft) cacheStudentCommentDraft(studentId, draft);
   const root = readLegacyRootState();
   if (!isRecord(root) || !Array.isArray(root.students)) {
-    return profile;
+    throw new Error("comment_save_failed");
   }
   const student = root.students.find(item => isRecord(item) && String(item.id || "") === studentId);
   if (!isRecord(student)) {
-    return profile;
+    throw new Error("comment_save_failed");
   }
   const aiComments = isRecord(student.aiComments) ? student.aiComments : {};
   const previous = isRecord(aiComments.profile) ? aiComments.profile : {};
@@ -380,6 +382,7 @@ export function saveStudentCommentProfile(studentId: StudentId, rubric: CommentR
     updatedAt: new Date().toISOString(),
   };
   aiComments.profile = nextProfile;
+  if (draft) aiComments.draft = draft;
   student.aiComments = aiComments;
   const previousTags = Array.isArray(student.manualTags) ? student.manualTags.map(String) : [];
   syncProfileTags(student, rubric, nextProfile);

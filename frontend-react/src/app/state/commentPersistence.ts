@@ -3,6 +3,8 @@ import { writeLegacyRootState } from "./storage";
 import { getCurrentWorkspaceScope } from "./workspaces";
 import type { SeatManagerState } from "./types";
 
+export const COMMENT_SAVE_FAILURE = "评语未保存成功，请释放浏览器存储空间后重试。当前文字仍待保存。";
+
 type CommentWrite = { scope: string; student: Record<string, unknown>; previousTags: string[]; rubric: unknown };
 const listeners = new Set<(write: CommentWrite) => void>();
 export function subscribeStudentCommentWrites(listener: (write: CommentWrite) => void) {
@@ -14,7 +16,7 @@ export function subscribeStudentCommentWrites(listener: (write: CommentWrite) =>
 // Only the explicitly saved comment and its tag delta cross this boundary.
 export function writeStudentComment(root: Record<string, unknown>, student: Record<string, unknown>, previousTags: string[] = []) {
   const scope = getCurrentWorkspaceScope();
-  if (!writeLegacyRootState(root)) return;
+  if (!writeLegacyRootState(root)) throw new Error("comment_save_failed");
   const write = { scope, student, previousTags, rubric: root.commentRubric };
   listeners.forEach(listener => listener(write));
 }

@@ -1,10 +1,12 @@
+import { COMMENT_WORD_COUNT_MIN, COMMENT_WORD_COUNT_MAX } from "../state/commentWordCount";
 import { useScopedRequest } from "../hooks/useScopedRequest";
 import { getCurrentWorkspaceScope } from "../state/workspaces";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Copy, Plus, Save, Sparkles, X } from "lucide-react";
 
 import { generateStudentAiComment, hasStoredAiAuth } from "../state/aiCommentService";
-import { cacheStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
+import { COMMENT_SAVE_FAILURE } from "../state/commentPersistence";
+import { cacheStudentCommentDraft, readStudentCommentDraft } from "../state/commentStorage";
 import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile, summarizeCommentProfile } from "../state/commentRubricStorage";
 import type { AppStudent, CommentCriterion, StudentCommentProfile } from "../state/types";
 import {
@@ -45,6 +47,8 @@ export function AiCommentPanel({ student }: AiCommentPanelProps) {
   const [draftState, setDraftState] = useState(() => readStudentCommentDraft(student));
   const [savedText, setSavedText] = useState(() => readStudentCommentProfile(student).generatedComment);
   const [commentProfile, setCommentProfile] = useState<StudentCommentProfile>(() => readStudentCommentProfile(student));
+  const [customWordCountInput, setCustomWordCountInput] = useState(() => String(commentProfile.targetWordCount));
+  useEffect(() => { setCustomWordCountInput(String(commentProfile.targetWordCount)); }, [commentProfile.targetWordCount]);
   const [accessCode, setAccessCode] = useState("");
   const [rememberAuth, setRememberAuth] = useState(true);
   const [hasAuth, setHasAuth] = useState(() => hasStoredAiAuth());
@@ -90,28 +94,32 @@ export function AiCommentPanel({ student }: AiCommentPanelProps) {
   }
 
   function updateProfile(patch: Partial<StudentCommentProfile>) {
-    const next = persistProfile({
-      ...commentProfile,
-      ...patch,
-      targetWordCount: patch.lengthMode
-        ? resolveCommentWordCount(patch.lengthMode, patch.targetWordCount ?? commentProfile.targetWordCount)
-        : patch.targetWordCount ?? commentProfile.targetWordCount,
-      status: commentProfile.generatedComment ? "edited" : "draft",
-      updatedAt: new Date().toISOString(),
-    });
-    setDraftState(current => ({
-      ...current,
-      teacherNote: next.teacherNote,
-      style: next.style,
-      lengthMode: next.lengthMode,
-      targetWordCount: next.targetWordCount,
-    }));
-    setStatus("评语素材已更新。");
+    try {
+      const next = persistProfile({
+        ...commentProfile,
+        ...patch,
+        targetWordCount: patch.lengthMode
+          ? resolveCommentWordCount(patch.lengthMode, patch.targetWordCount ?? commentProfile.targetWordCount)
+          : patch.targetWordCount ?? commentProfile.targetWordCount,
+        status: commentProfile.generatedComment ? "edited" : "draft",
+        updatedAt: new Date().toISOString(),
+      });
+      setDraftState(current => ({
+        ...current,
+        teacherNote: next.teacherNote,
+        style: next.style,
+        lengthMode: next.lengthMode,
+        targetWordCount: next.targetWordCount,
+      }));
+      setStatus("评语素材已更新。");
+    } catch { setStatus(COMMENT_SAVE_FAILURE); setStatusError(true); }
   }
 
   function updateProfileWith(transform: (profile: StudentCommentProfile) => StudentCommentProfile) {
-    persistProfile(transform(commentProfile));
-    setStatus("评语素材已更新。");
+    try {
+      persistProfile(transform(commentProfile));
+      setStatus("评语素材已更新。");
+    } catch { setStatus(COMMENT_SAVE_FAILURE); setStatusError(true); }
   }
 
   function revealComment(text: string) {
@@ -171,16 +179,15 @@ export function AiCommentPanel({ student }: AiCommentPanelProps) {
   }
 
   function handleSave() {
-    const savedProfile = persistProfile({
-      ...commentProfile,
-      generatedComment: draftState.generatedComment,
-      status: draftState.generatedComment.trim() ? "edited" : "draft",
-      updatedAt: new Date().toISOString(),
-    });
-    const saved = saveStudentCommentDraft(student.id, buildStudentCommentDraft(rubric, savedProfile, draftState.generatedComment));
-    setDraftState(saved);
-    setSavedText(saved.generatedComment);
-    setStatus("评语草稿已保存。");
+    try {
+      const draft = buildStudentCommentDraft(rubric, commentProfile, draftState.generatedComment);
+      const savedProfile = saveStudentCommentProfile(student.id, rubric, { ...commentProfile, generatedComment: draft.generatedComment, teacherNote: draft.teacherNote, style: draft.style, lengthMode: draft.lengthMode, targetWordCount: draft.targetWordCount, updatedAt: draft.updatedAt, status: draft.generatedComment.trim() ? "edited" : "draft" }, draft);
+      setCommentProfile(savedProfile);
+      setDraftState(draft);
+      setSavedText(draft.generatedComment);
+      setStatusError(false);
+      setStatus("评语已保存。");
+    } catch { setStatus(COMMENT_SAVE_FAILURE); setStatusError(true); }
   }
 
   async function handleCopy() {
@@ -247,7 +254,7 @@ export function AiCommentPanel({ student }: AiCommentPanelProps) {
         <Textarea label="教师补充" value={commentProfile.teacherNote} onChange={value => updateProfile({ teacherNote: value })} rows={3} placeholder="补充学生近期表现、性格特点或需要强调的进步点。"  resize="none" />
 
         <section className="space-y-3 rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-4">
-          <div><span className="mb-2 block text-caption-1-semibold text-text-secondary">字数目标</span><SegmentedControl value={commentProfile.lengthMode} ariaLabel="评语字数目标" onChange={value => updateProfile({ lengthMode: value, targetWordCount: resolveCommentWordCount(value, commentProfile.targetWordCount) })} options={COMMENT_LENGTH_MODES} className="flex w-full" /><MotionCollapse open={commentProfile.lengthMode === "custom"}><input type="number" min={10} max={999} value={commentProfile.targetWordCount} onChange={event => updateProfile({ targetWordCount: clampCommentWordCount(event.target.value) })} className="mt-2 h-9 w-full rounded-[var(--app-radius-sm)] border border-border-button-default px-3 text-body-regular outline-none focus:border-accent-300" aria-label="自定义评语字数" /></MotionCollapse></div>
+          <div><span className="mb-2 block text-caption-1-semibold text-text-secondary">字数目标</span><SegmentedControl value={commentProfile.lengthMode} ariaLabel="评语字数目标" onChange={value => updateProfile({ lengthMode: value, targetWordCount: resolveCommentWordCount(value, commentProfile.targetWordCount) })} options={COMMENT_LENGTH_MODES} className="flex w-full" /><MotionCollapse open={commentProfile.lengthMode === "custom"}><input type="number" min={COMMENT_WORD_COUNT_MIN} max={COMMENT_WORD_COUNT_MAX} value={customWordCountInput} onChange={event => setCustomWordCountInput(event.target.value)} onBlur={() => { const targetWordCount = clampCommentWordCount(customWordCountInput || 120); setCustomWordCountInput(String(targetWordCount)); updateProfile({ targetWordCount }); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder="50–300 字" title="支持 50–300 字，输入完成后校验。" className="mt-2 h-9 w-full rounded-[var(--app-radius-sm)] border border-border-button-default px-3 text-body-regular outline-none focus:border-accent-300" aria-label="自定义评语字数" /></MotionCollapse></div>
           <div><span className="mb-2 block text-caption-1-semibold text-text-secondary">评语风格</span><SegmentedControl value={commentProfile.style} ariaLabel="评语风格" onChange={value => updateProfile({ style: value })} options={COMMENT_STYLES} className="flex w-full" /></div>
         </section>
 

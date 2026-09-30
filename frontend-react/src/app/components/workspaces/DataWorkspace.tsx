@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArchiveRestore, FileDown, FileUp, Trash2 } from "lucide-react";
 
 import {
@@ -46,6 +46,11 @@ export function DataWorkspace({
   onPermanentlyDeleteStudent?: (studentId: StudentId) => void;
 }) {
   const appDialog = useAppDialog();
+  const aiRosterRequest = useScopedRequest(getCurrentWorkspaceScope());
+  const rosterFileVersion = useRef(0);
+  const rosterImport = useScopedRequest(getCurrentWorkspaceScope());
+  const [rosterParsing, setRosterParsing] = useState(false);
+  const [rosterImporting, setRosterImporting] = useState(false);
   const rosterRead = useScopedRequest(getCurrentWorkspaceScope());
   const [rosterScope, setRosterScope] = useState<string | null>(null);
   useEffect(() => prefetchXlsxAsset(), []);
@@ -64,15 +69,26 @@ export function DataWorkspace({
   const [backupPreview, setBackupPreview] = useState<BackupImportPreview | null>(null);
   const [backupStatus, setBackupStatus] = useState("");
   const [lastBackupAt, setLastBackupAt] = useState(() => getLastBackupAt());
-  const rosterMappingRef = useModalFocus(rosterMappingOpen, () => setRosterMappingOpen(false));
+  const rosterMappingRef = useModalFocus(rosterMappingOpen, closeRosterMapping);
+
+  function cancelRosterAi() {
+    aiRosterRequest.cancel(); setAiRosterMappingBusy(false); setAiRosterMappingSuggestion(null);
+  }
+  function closeRosterMapping() {
+    cancelRosterAi(); setRosterMappingOpen(false);
+  }
 
   async function importRoster() {
     const workspaceScope = rosterScope ?? getCurrentWorkspaceScope();
     if (getCurrentWorkspaceScope() !== workspaceScope) { setRosterStatus("班级或学期已切换，请在目标班级重新选择名单并确认导入。"); return; }
-    if (!rosterFile) {
-      setRosterStatus("请先选择名单文件。");
+    if (!rosterFile || !rosterMapping || rosterParsing || rosterImporting) {
+      setRosterStatus("请先选择名单文件，等待解析完成并确认映射。");
       return;
     }
+    const request = rosterImport.start();
+    const fileVersion = rosterFileVersion.current;
+    const file = rosterFile;
+    const mapping = rosterMapping;
     if (replaceExisting) {
       const confirmed = await appDialog.confirm({
         title: "覆盖现有名单？",
@@ -80,14 +96,18 @@ export function DataWorkspace({
         confirmLabel: "导出备份并覆盖",
         variant: "danger",
       });
-      if (!confirmed) return;
+      if (!confirmed || !request.isCurrent()) return;
       if (getCurrentWorkspaceScope() !== workspaceScope) { setRosterStatus("班级或学期已切换，名单导入已取消，请重新确认。"); return; }
       if (!onBeforeBackupExport()) { setRosterStatus("本机保存失败，已停止导入，请先处理保存问题。"); return; }
       exportPreImportBackup();
     }
+    if (!request.isCurrent()) return;
+    cancelRosterAi();
+    setRosterImporting(true);
     setRosterStatus("正在导入名单...");
     try {
-      const result = await onImportRoster(rosterFile, { replaceExisting, keepHistory: replaceExisting ? keepHistory : true, mapping: rosterMapping || undefined, workspaceScope });
+      const result = await onImportRoster(file, { replaceExisting, keepHistory: replaceExisting ? keepHistory : true, mapping, workspaceScope, signal: request.signal });
+      if (!request.isCurrent()) return;
       setRosterFile(null);
       setRosterRows([]);
       setRosterMapping(null);
@@ -105,12 +125,25 @@ export function DataWorkspace({
         setRosterStatus(`导入完成：${parts.length ? `${parts.join("，")}，` : ""}当前在班 ${result.studentCount} 名学生。`);
       }
     } catch (error) {
+      if (!request.isCurrent()) {
+        if (fileVersion === rosterFileVersion.current && getCurrentWorkspaceScope() !== workspaceScope) {
+          setRosterStatus("班级或学期已切换，名单导入已取消，请重新确认。");
+          setRosterImporting(false);
+        }
+        return;
+      }
       const message = error instanceof Error ? error.message : "";
       setRosterStatus(message === "save_failed" ? "本机保存失败，名单未导入。请检查存储状态。" : /[\u4e00-\u9fff]/.test(message) ? message : "名单导入失败：请确认文件格式及姓名列。");
-    }
+    } finally { if (request.isCurrent()) setRosterImporting(false); }
   }
 
   async function readRosterFile(file?: File | null) {
+    rosterFileVersion.current++;
+    rosterImport.cancel(); setRosterImporting(false);
+    cancelRosterAi();
+    setRosterMappingOpen(false);
+    setRosterRows([]); setRosterMapping(null);
+    setRosterParsing(Boolean(file));
     const request = rosterRead.start();
     const scope = getCurrentWorkspaceScope();
     setRosterScope(scope);
@@ -138,10 +171,11 @@ export function DataWorkspace({
       setRosterRows([]);
       setRosterMapping(null);
       setRosterStatus("名单解析失败：请使用 .xlsx / .xls / .xlsm / .csv / .tsv。");
-    }
+    } finally { if (request.isCurrent()) setRosterParsing(false); }
   }
 
   function updateRosterMapping(updater: (mapping: RosterMapping) => RosterMapping) {
+    cancelRosterAi();
     if (!rosterMapping && rosterRows.length) {
       setRosterMapping(updater(detectRosterMapping(rosterRows)));
       return;
@@ -169,13 +203,17 @@ export function DataWorkspace({
       setRosterStatus("请先上传名单。");
       return;
     }
+    const request = aiRosterRequest.start();
+    const scope = getCurrentWorkspaceScope();
     setAiRosterMappingBusy(true);
     setRosterStatus("AI 正在识别名单列...");
     try {
       const suggestion = await suggestRosterMappingWithAi(rosterRows, {
         accessCode: aiRosterMappingAccessCode,
         remember: aiRosterMappingRemember,
+        signal: request.signal,
       });
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       setAiRosterMappingSuggestion(suggestion);
       setRosterMapping(suggestion.mapping);
       setRosterMappingOpen(true);
@@ -183,11 +221,12 @@ export function DataWorkspace({
       setHasAiRosterMappingAuth(true);
       setRosterStatus(suggestion.note);
     } catch (error) {
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       const reason = error instanceof Error ? error.message : "";
       setRosterStatus(getAiRosterMappingErrorMessage(reason));
       setHasAiRosterMappingAuth(hasStoredAiScoreMappingAuth());
     } finally {
-      setAiRosterMappingBusy(false);
+      if (request.isCurrent()) setAiRosterMappingBusy(false);
     }
   }
 
@@ -265,7 +304,7 @@ export function DataWorkspace({
                 <span className="text-caption-1-regular text-text-tertiary">{rosterMapping.nameCol >= 0 ? "已识别姓名列" : "需选择姓名列"}</span>
               </button>
             )}
-            <Button onClick={importRoster} className="w-full">导入名单</Button>
+            <Button disabled={rosterParsing || rosterImporting || !rosterFile || !rosterMapping} onClick={importRoster} className="w-full">导入名单</Button>
             {rosterStatus && <InlineStatus message={rosterStatus} className="text-body-regular" />}
           </div>
         </Panel>
@@ -304,7 +343,7 @@ export function DataWorkspace({
       {rosterMappingOpen && rosterMapping && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
           <div ref={rosterMappingRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="名单列映射" className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden outline-none">
-            <ModalHeader title="名单列映射" description="确认姓名、学号、性别和座位行列后再导入。" onClose={() => setRosterMappingOpen(false)} />
+            <ModalHeader title="名单列映射" description="确认姓名、学号、性别和座位行列后再导入。" onClose={closeRosterMapping} />
 
             <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem] overflow-hidden">
               <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">
@@ -407,7 +446,7 @@ export function DataWorkspace({
             <div className="flex items-center justify-end gap-2 border-t border-separator-border px-5 py-4">
               <button
                 type="button"
-                onClick={() => setRosterMappingOpen(false)}
+                onClick={closeRosterMapping}
                 className="rounded-xl border border-border-button-default bg-background-primary-default px-4 py-2 text-body-regular text-text-secondary hover:bg-background-secondary-default"
                 style={{ fontWeight: 800 }}
               >

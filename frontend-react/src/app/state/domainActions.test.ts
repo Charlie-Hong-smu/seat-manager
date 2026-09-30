@@ -133,3 +133,13 @@ describe("student, dormitory and fund actions", () => {
   });
 
 });
+
+
+it("closing period 51 retains every previous dormitory archive", () => {
+  const event = createDormEvent({ dormId: "d1", score: 2, reason: "本期合成记录" }, []);
+  const history = Array.from({ length: 50 }, (_, index) => ({ id: `period-${index}`, label: `周期${index}`, startDate: "2026-01-01", endDate: "2026-01-02", baseScore: 0, finalScore: 0, events: [] }));
+  const closed = closeDormitoryPeriod({ id: "d1", name: "101", memberIds: [], baseScore: 0, currentScore: 2, events: [event], periodStart: "2026-01-01", history });
+  expect(closed.history).toHaveLength(51);
+  expect(closed.history.slice(1)).toEqual(history);
+  expect(closed.history[0].events).toEqual([event]);
+});

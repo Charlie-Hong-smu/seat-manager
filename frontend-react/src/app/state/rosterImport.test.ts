@@ -104,3 +104,11 @@ describe("roster append import", () => {
     expect(result.state.seatOrder).toContain("s2");
   });
 });
+
+it("a cancelled file session cannot overwrite or archive the current roster", () => {
+  seedRoster([{ id: "s1", name: "原学生" }]);
+  const before = JSON.stringify(readCurrentSliceData());
+  const controller = new AbortController(); controller.abort();
+  expect(() => applyParsedRoster(parsedNames(["新文件学生"]), { replaceExisting: true, keepHistory: true, signal: controller.signal })).toThrow("名单文件已更换");
+  expect(JSON.stringify(readCurrentSliceData())).toBe(before);
+});

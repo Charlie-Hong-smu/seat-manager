@@ -1,14 +1,15 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useSeatManagerController } from "./seatManagerController";
 import { createSeatManagerState } from "./legacyStateAdapter";
 import { readLegacyRootState } from "./storage";
 import { ensureWorkspaceBook, writeCurrentSliceData, advanceToNextTerm, switchSlice, makeTerm } from "./workspaces";
-import { readCommentRubric, readStudentCommentProfile, saveStudentCommentProfile } from "./commentRubricStorage";
-import { saveStudentCommentDraft } from "./commentStorage";
+import { readCommentRubric, readStudentCommentProfile, saveCommentRubric, saveStudentCommentProfile } from "./commentRubricStorage";
+import { readStudentCommentDraft, saveStudentCommentDraft } from "./commentStorage";
+import { useCommentDrafts } from "../hooks/useCommentDrafts";
 import { createTestStudent } from "./testFixtures";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function setup() {
   const student = createTestStudent();
@@ -17,6 +18,34 @@ function setup() {
   return { hook, student };
 }
 describe("comment saves and pending controller writes", () => {
+  it.each([false, true])("does not mark a failed official save as saved (all storage blocked: %s), and can retry", allBlocked => {
+    const { student } = setup();
+    const hook = renderHook(() => useCommentDrafts([student], []));
+    act(() => { hook.result.current.updateComment(student.id, { text: "尚待保存的新正文" }); });
+    const setItem = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function(this: Storage, key, value) {
+      if (allBlocked || key === "seat-manager-workspaces-v1") throw new DOMException("quota", "QuotaExceededError");
+      setItem.call(this, key, value);
+    });
+    expect(() => { act(() => { hook.result.current.saveSelectedComment(); }); }).toThrow("comment_save_failed");
+    expect(hook.result.current.unsavedComments).toHaveLength(1);
+    expect(readStudentCommentProfile(createSeatManagerState(readLegacyRootState()).students[0]).generatedComment).toBe("");
+    if (!allBlocked) expect(readStudentCommentDraft(student).generatedComment).toBe("尚待保存的新正文");
+    spy.mockRestore();
+    act(() => { hook.result.current.saveSelectedComment(); });
+    expect(hook.result.current.unsavedComments).toHaveLength(0);
+    expect(readStudentCommentProfile(createSeatManagerState(readLegacyRootState()).students[0]).generatedComment).toBe("尚待保存的新正文");
+  });
+  it("reports failed rubric writes instead of accepting an unsaved configuration", () => {
+    setup(); const before = readCommentRubric();
+    const original = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function(this: Storage, key, value) {
+      if (key === "seat-manager-workspaces-v1") throw new DOMException("quota", "QuotaExceededError");
+      original.call(this, key, value);
+    });
+    expect(() => saveCommentRubric({ ...before, criteria: before.criteria.map(item => ({ ...item, label: "未保存修改" })) })).toThrow("comment_save_failed");
+    expect(readCommentRubric()).toEqual(before);
+  });
   it("leaves corrupt storage untouched so the recovery screen can mount", () => {
     localStorage.setItem("seat-manager-workspaces-v1", "{broken");
     const hook = renderHook(() => useSeatManagerController(createSeatManagerState(null)));

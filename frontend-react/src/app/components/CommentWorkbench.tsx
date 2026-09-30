@@ -1,3 +1,4 @@
+import { COMMENT_WORD_COUNT_MIN, COMMENT_WORD_COUNT_MAX, clampCommentWordCount as normalizeWordCount } from "../state/commentWordCount";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useCommentDrafts, type CommentState } from "../hooks/useCommentDrafts";
 import { useCommentBatch } from "../hooks/useCommentBatch";
@@ -30,6 +31,7 @@ import {
   COMMENT_REFINEMENT_ACTIONS,
 } from "../state/aiCommentRefinementService";
 import { AiStudentFollowupPanel } from "./AiStudentFollowupPanel";
+import { COMMENT_SAVE_FAILURE } from "../state/commentPersistence";
 import { cacheStudentCommentDraft, readStudentCommentDraft, saveStudentCommentDraft } from "../state/commentStorage";
 import {
   saveCommentRubric,
@@ -207,22 +209,26 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   }
 
   function persistRubric(next: CommentRubric) {
-    const saved = saveCommentRubric(next);
-    setRubric(saved);
-    const profiles = Object.fromEntries(Object.entries(commentProfiles).map(([studentId, profile]) => [studentId, saveStudentCommentProfile(studentId, saved, profile)]));
-    setCommentProfiles(profiles);
-    comments.forEach(comment => cacheStudentCommentDraft(comment.studentId, buildDraft(comment)));
+    try {
+      const saved = saveCommentRubric(next);
+      setRubric(saved);
+      const profiles = Object.fromEntries(Object.entries(commentProfiles).map(([studentId, profile]) => [studentId, saveStudentCommentProfile(studentId, saved, profile)]));
+      setCommentProfiles(profiles);
+      comments.forEach(comment => cacheStudentCommentDraft(comment.studentId, buildDraft(comment)));
+    } catch { setAiStatus(COMMENT_SAVE_FAILURE); }
   }
 
   function updateSelectedProfile(updater: (profile: StudentCommentProfile) => StudentCommentProfile) {
-    if (!selectedStudent || !selectedProfile) {
-      return;
-    }
-    markEdited(selectedStudent.id);
-    const nextProfile = updater({ ...selectedProfile });
-    const saved = saveStudentCommentProfile(selectedStudent.id, rubric, nextProfile);
-    setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: saved }));
-    if (selectedComment) cacheStudentCommentDraft(selectedStudent.id, { ...buildDraft(selectedComment, teacherNote), updatedAt: saved.updatedAt });
+    try {
+      if (!selectedStudent || !selectedProfile) {
+        return;
+      }
+      markEdited(selectedStudent.id);
+      const nextProfile = updater({ ...selectedProfile });
+      const saved = saveStudentCommentProfile(selectedStudent.id, rubric, nextProfile);
+      setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: saved }));
+      if (selectedComment) cacheStudentCommentDraft(selectedStudent.id, { ...buildDraft(selectedComment, teacherNote), updatedAt: saved.updatedAt });
+    } catch { setAiStatus(COMMENT_SAVE_FAILURE); }
   }
 
   function toggleBatchSelection(studentId: StudentId) {
@@ -250,8 +256,11 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   }
 
   function saveSelectedComment() {
-    const name = drafts.saveSelectedComment();
-    if (name) setAiStatus(`${name} 的评语已保存。`);
+    try {
+      const name = drafts.saveSelectedComment();
+      if (name) setAiStatus(`${name} 的评语已保存。`);
+      return Boolean(name);
+    } catch { setAiStatus(COMMENT_SAVE_FAILURE); return false; }
   }
 
   async function saveUnsavedComments() {
@@ -259,14 +268,18 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
     if (!drafts.length || !await appDialog.confirm({ title: `保存 ${drafts.length} 人的评语？`, description: "请先核对生成内容。确认后，这些草稿将成为正式保存的评语，并替换对应学生原先保存的正文。", confirmLabel: "确认保存评语", variant: "primary" })) return;
     if (getCurrentWorkspaceScope() !== currentScope) return;
     const nextProfiles = { ...commentProfiles };
+    let savedCount = 0;
     drafts.forEach(comment => {
       const draft = buildDraft(comment);
       const profile = nextProfiles[comment.studentId];
-      if (profile) nextProfiles[comment.studentId] = saveStudentCommentProfile(comment.studentId, rubric, { ...profile, generatedComment: draft.generatedComment, teacherNote: draft.teacherNote, style: draft.style, lengthMode: draft.lengthMode, targetWordCount: draft.targetWordCount, updatedAt: draft.updatedAt, status: "edited" });
-      saveStudentCommentDraft(comment.studentId, draft);
+      try {
+        if (profile) nextProfiles[comment.studentId] = saveStudentCommentProfile(comment.studentId, rubric, { ...profile, generatedComment: draft.generatedComment, teacherNote: draft.teacherNote, style: draft.style, lengthMode: draft.lengthMode, targetWordCount: draft.targetWordCount, updatedAt: draft.updatedAt, status: "edited" }, draft);
+        else saveStudentCommentDraft(comment.studentId, draft);
+        savedCount++;
+      } catch { /* Failed students keep their unsaved marker and can retry. */ }
     });
     setCommentProfiles(nextProfiles);
-    setAiStatus(`已保存 ${drafts.length} 人的评语。`);
+    setAiStatus(savedCount === drafts.length ? `已保存 ${savedCount} 人的评语。` : `已保存 ${savedCount} 人，${drafts.length - savedCount} 人未保存。${COMMENT_SAVE_FAILURE}`);
   }
 
   function selectStudent(studentId: StudentId) {
@@ -277,7 +290,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
 
   function saveAndGoNext() {
     if (!selectedStudent) return;
-    saveSelectedComment();
+    if (!saveSelectedComment()) return;
     const currentIndex = filteredStudentIds.indexOf(selectedStudent.id);
     const wrapped = currentIndex < 0 || currentIndex >= filteredStudentIds.length - 1;
     const nextId = filteredStudentIds[currentIndex + 1] || filteredStudentIds[0];
@@ -307,20 +320,22 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   }
 
   function saveSelectedTeacherNote() {
-    if (!selectedStudent || !selectedComment || !selectedProfile) return;
-    const savedProfile = saveStudentCommentProfile(selectedStudent.id, rubric, {
-      ...selectedProfile,
-      teacherNote,
-      style: selectedComment.style as "warm" | "formal" | "brief",
-      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-      status: selectedProfile.generatedComment ? "edited" : "draft",
-      updatedAt: new Date().toISOString(),
-    });
-    setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
-    updateComment(selectedStudent.id, {
-      needsInfo: savedProfile.teacherNote.trim() ? false : selectedStudent.academicTags.length === 0,
-    });
-    setAiStatus(`已暂存 ${selectedStudent.name} 的补充说明。`);
+    try {
+      if (!selectedStudent || !selectedComment || !selectedProfile) return;
+      const savedProfile = saveStudentCommentProfile(selectedStudent.id, rubric, {
+        ...selectedProfile,
+        teacherNote,
+        style: selectedComment.style as "warm" | "formal" | "brief",
+        lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
+        status: selectedProfile.generatedComment ? "edited" : "draft",
+        updatedAt: new Date().toISOString(),
+      });
+      setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
+      updateComment(selectedStudent.id, {
+        needsInfo: savedProfile.teacherNote.trim() ? false : selectedStudent.academicTags.length === 0,
+      });
+      setAiStatus(`已暂存 ${selectedStudent.name} 的补充说明。`);
+    } catch { setAiStatus(COMMENT_SAVE_FAILURE); }
   }
 
   function appendFollowupMaterialToTeacherNote(text: string) {
@@ -432,7 +447,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
   const selectedInitial = selectedStudent?.name.slice(0, 1) || "";
   const hasUnsavedTeacherNote = selectedProfile ? teacherNote !== selectedProfile.teacherNote : false;
   const selectedMaterialLabels = selectedSummary.criteriaSummary.flatMap(item => item.values);
-  const selectedLengthLabel = selectedComment?.lengthMode === "custom" ? String(Math.max(10, selectedComment.targetWordCount || 120)) : LENGTH_MODES.find(mode => mode.value === selectedComment?.lengthMode)?.label || "100～150";
+  const selectedLengthLabel = selectedComment?.lengthMode === "custom" ? String(normalizeWordCount(selectedComment.targetWordCount || 120)) : LENGTH_MODES.find(mode => mode.value === selectedComment?.lengthMode)?.label || "100～150";
   const selectedStyleLabel = STYLES.find(style => style.value === selectedComment?.style)?.label || "温和鼓励";
 
 
@@ -744,7 +759,7 @@ export function CommentWorkbench({ students, onClose, onSelectStudent }: Props) 
                       <div className="app-inline-morph mt-0.5 h-8 w-full rounded-md" data-active={selectedComment.lengthMode === "custom"}>
                         <button type="button" aria-label="自定义评语字数" aria-pressed={selectedComment.lengthMode === "custom"} aria-hidden={selectedComment.lengthMode === "custom"} tabIndex={selectedComment.lengthMode === "custom" ? -1 : 0} onClick={() => { updateComment(selectedId, { lengthMode: "custom" }); requestAnimationFrame(() => customLengthInputRef.current?.focus()); }} className="app-inline-morph-trigger rounded-md bg-segmented-control-background text-body-regular text-text-secondary hover:bg-background-primary-default/70">自定义</button>
                         <div className="app-inline-morph-editor" aria-hidden={selectedComment.lengthMode !== "custom"} inert={selectedComment.lengthMode !== "custom" ? true : undefined}>
-                          <input ref={customLengthInputRef} type="number" aria-label="自定义字数" value={selectedComment.targetWordCount || ""} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateComment(selectedId, { targetWordCount: Math.min(999, Math.max(0, Math.round(value))) }); }} onBlur={() => updateComment(selectedId, { targetWordCount: Math.max(10, selectedComment.targetWordCount || 120) })} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} min={10} max={999} placeholder="输入目标字数" className="h-full w-full rounded-md border border-accent-300 bg-background-primary-default px-3 text-body-regular outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring" />
+                          <input ref={customLengthInputRef} type="number" aria-label="自定义字数" value={selectedComment.targetWordCount || ""} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateComment(selectedId, { targetWordCount: Math.min(COMMENT_WORD_COUNT_MAX, Math.max(0, Math.round(value))) }); }} onBlur={() => updateComment(selectedId, { targetWordCount: normalizeWordCount(selectedComment.targetWordCount || 120) })} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} min={COMMENT_WORD_COUNT_MIN} max={COMMENT_WORD_COUNT_MAX} placeholder="50–300 字" title="支持 50–300 字，超出范围会在输入完成后调整。" className="h-full w-full rounded-md border border-accent-300 bg-background-primary-default px-3 text-body-regular outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring" />
                         </div>
                       </div>
                     </div>

@@ -87,7 +87,7 @@ function compactRowsForAi(rows: string[][]): string[][] {
 
 export async function suggestScoreMappingWithAi(
   rows: string[][],
-  input?: { accessCode?: string; remember?: boolean },
+  input?: { accessCode?: string; remember?: boolean; signal?: AbortSignal },
 ): Promise<AiScoreMappingSuggestion> {
   if (typeof window !== "undefined" && window.location.protocol === "file:") {
     throw new Error("ai_file_protocol");
@@ -112,6 +112,7 @@ export async function suggestScoreMappingWithAi(
       Authorization: `Bearer ${auth.token}`,
     },
     body: requestBody,
+    signal: input?.signal,
   });
   const response = await send();
   if (response.status === 401) {
@@ -147,7 +148,7 @@ export async function suggestScoreMappingWithAi(
 
 export async function suggestRosterMappingWithAi(
   rows: string[][],
-  input?: { accessCode?: string; remember?: boolean },
+  input?: { accessCode?: string; remember?: boolean; signal?: AbortSignal },
 ): Promise<AiRosterMappingSuggestion> {
   if (typeof window !== "undefined" && window.location.protocol === "file:") {
     throw new Error("ai_file_protocol");
@@ -171,6 +172,7 @@ export async function suggestRosterMappingWithAi(
       Authorization: `Bearer ${auth.token}`,
     },
     body: requestBody,
+    signal: input?.signal,
   });
   const response = await send();
   if (response.status === 401) {

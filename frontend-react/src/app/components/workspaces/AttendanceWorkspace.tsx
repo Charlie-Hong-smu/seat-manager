@@ -96,11 +96,11 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
     const undo = registration.commit(next, action, undoActivity);
     if (undo) actionToast.show({ message: action ? "出勤已保存，6 秒内再次点击可恢复" : "出勤修改已保存", actionLabel: "撤销", actionIcon: <RotateCcw className="h-3.5 w-3.5"/>, onAction: () => { undo(); }, duration: 6000 });
   }
-  function commitPeriod(next: AttendanceRecord[], id: string, label: string) {
+  function commitPeriod(next: AttendanceRecord[], id: string, label: string, recordActivity = true) {
     const before = records.find(item => item.id === id);
     const after = next.find(item => item.id === id);
     if (!after || before === after) return;
-    const undoActivity = onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "attendance", entityId: id, studentId: after.studentId, date: after.date }, studentIds: [after.studentId], title: label, detail: `${after.leaveStart || after.date} 至 ${after.leaveEnd || after.date}` }));
+    const undoActivity = recordActivity ? onActivity?.(createActivityEvent({ action: "updated", ref: { domain: "attendance", entityId: id, studentId: after.studentId, date: after.date }, studentIds: [after.studentId], title: label, detail: `${after.leaveStart || after.date} 至 ${after.leaveEnd || after.date}` })) : undefined;
     recordsRef.current = next; onChange(next);
     actionToast.show({ message: label, actionLabel: "撤销", duration: 6000, onAction: () => {
       if (recordsRef.current.find(item => item.id === id)?.updatedAt !== after.updatedAt) return;
@@ -122,6 +122,11 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
     if (statusAction && registration.tryRevert(studentId, statusAction)) { actionToast.show("已恢复上次出勤状态"); return; }
     const current = byStudent.get(studentId);
     if (patch.status && (current?.status || "normal") === patch.status && Object.keys(patch).length === 1) return;
+    if (Object.keys(patch).length === 1 && "note" in patch && current) {
+      const next = records.map(item => item.id === current.id ? { ...item, note: (patch.note || "").trim(), updatedAt: new Date().toISOString() } : item);
+      commitPeriod(next, current.id, "出勤备注已保存", false);
+      return;
+    }
     const local = records.find(item => item.studentId === studentId && item.date === date);
     const normalized = patch.status ? normalizeAttendancePatch(local, patch.status) : null;
     const next = upsertAttendance(records, { studentId, date, status: normalized?.status ?? current?.status ?? "normal", late: patch.late ?? normalized?.late ?? current?.late ?? false, earlyLeave: patch.earlyLeave ?? normalized?.earlyLeave ?? current?.earlyLeave ?? false, note: patch.note ?? current?.note ?? "", leaveStart: patch.status ? patch.leaveStart ?? normalized?.leaveStart : patch.leaveStart ?? local?.leaveStart, leaveEnd: patch.status ? patch.leaveEnd ?? normalized?.leaveEnd : patch.leaveEnd ?? local?.leaveEnd });

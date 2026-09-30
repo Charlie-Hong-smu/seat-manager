@@ -1,3 +1,4 @@
+import { clampCommentWordCount } from "./commentWordCount";
 import { getCurrentWorkspaceScope } from "./workspaces";
 import { getProductAuthToken } from "./authStorage";
 import { clearAiApiAuth, fetchAiRoute, getAiAuth, hasStoredAiApiAuth } from "./aiApiClient";
@@ -120,7 +121,7 @@ export async function generateStudentAiComment(
     throw new Error("ai_offline");
   }
 
-  const payload = buildPayload(student, draft);
+  const payload = buildPayload(student, { ...draft, targetWordCount: clampCommentWordCount(draft.targetWordCount) });
   if (!validatePayloadSize(payload)) {
     throw new Error("ai_payload_too_large");
   }

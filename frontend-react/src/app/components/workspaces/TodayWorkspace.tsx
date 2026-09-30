@@ -122,8 +122,8 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
       if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       onScheduleChange(parseScheduleRows(rows, file.name));
       setStatus("课表已导入并保存。");
-    } catch {
-      if (request.isCurrent() && getCurrentWorkspaceScope() === scope) setStatus("未识别出周一至周日和课节，请调整表头后重试。");
+    } catch (error) {
+      if (request.isCurrent() && getCurrentWorkspaceScope() === scope) setStatus(error instanceof Error && error.message === "schedule_unrecognized_column" ? "课表有未识别且非空的列，未替换原课表。请将课程列表头改为周一至周日后重试。" : "未识别出周一至周日和课节，请调整表头后重试。");
     }
   }
 

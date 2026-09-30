@@ -55,6 +55,8 @@ python3 -m http.server 4174 --directory license-admin
 
 打开 `http://127.0.0.1:4174/`。真实管理员密钥只允许保存在本机浏览器，不写入仓库、测试数据或命令参数。
 
+教师流程第二轮回归：`teacher-workflow-safety.spec.ts` 已加入两版默认浏览器集合；定向运行 `pnpm test:e2e:zhang teacher-workflow-safety.spec.ts teacher-data-safety.spec.ts` 及对应 Commercial 命令。覆盖作业只读跳转、请假跨日补备注/返校/CSV、主存储和全部存储失败下的单人及批量评语重试、宿舍第 201 条/撤销/关联纠错、映射不应用后刷新再编辑、忽略取消的晚 AI 返回、字数上下界、周日与未知课表列、班费周期分类、待排/归档/锁定空座与真实拖拽，以及换名单的追加/覆盖。合成 AI 替身只在 e2e 测试中；不能请求真实收费服务或真实数据。完整交接见 `docs/TEACHER_WORKFLOW_AUDIT_FIXES.md`。
+
 ## 自动发布
 
 - `.github/workflows/pages.yml`：前端变化时并行运行静态/单元检查、Zhang 两份浏览器验收和 Commercial 浏览器验收；全部通过后，使用 Zhang 第一份验收时生成的构建产物自动发布 Zhang 先行版。

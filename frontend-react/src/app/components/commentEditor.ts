@@ -1,3 +1,4 @@
+import { clampCommentWordCount } from "../state/commentWordCount";
 import type {
   CommentCriterion,
   CommentLengthMode,
@@ -21,10 +22,7 @@ export const COMMENT_STYLES: Array<{ value: CommentStyle; label: string }> = [
   { value: "brief", label: "简洁家长会" },
 ];
 
-export function clampCommentWordCount(value: unknown): number {
-  const parsed = Number(value);
-  return Math.min(999, Math.max(10, Math.round(Number.isFinite(parsed) ? parsed : 120)));
-}
+export { clampCommentWordCount } from "../state/commentWordCount";
 
 export function resolveCommentWordCount(mode: CommentLengthMode, customWordCount: number): number {
   if (mode === "short") return 90;

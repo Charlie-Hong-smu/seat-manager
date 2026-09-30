@@ -92,26 +92,14 @@ export function useCommentDrafts(students: AppStudent[], failedIds: StudentId[])
 
   function saveSelectedComment() {
     if (!selectedStudent || !selectedComment) return;
+    const saved = buildDraft(selectedComment, teacherNote);
     if (selectedProfile) {
       const savedProfile = saveStudentCommentProfile(selectedStudent.id, rubric, {
-        ...selectedProfile,
-        teacherNote,
-        style: selectedComment.style as "warm" | "formal" | "brief",
-        lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-        generatedComment: selectedComment.text,
-        status: selectedComment.text.trim() ? "edited" : "draft",
-        updatedAt: new Date().toISOString(),
-      });
+        ...selectedProfile, generatedComment: saved.generatedComment, teacherNote: saved.teacherNote, style: saved.style, lengthMode: saved.lengthMode, targetWordCount: saved.targetWordCount, updatedAt: saved.updatedAt,
+        status: saved.generatedComment.trim() ? "edited" : "draft",
+      }, saved);
       setCommentProfiles(prev => ({ ...prev, [selectedStudent.id]: savedProfile }));
-    }
-    const saved = saveStudentCommentDraft(selectedStudent.id, {
-      generatedComment: selectedComment.text,
-      teacherNote,
-      style: selectedComment.style as "warm" | "formal" | "brief",
-      lengthMode: selectedComment.lengthMode as "short" | "standard" | "long" | "custom",
-      targetWordCount: resolveCommentWordCount(selectedComment.lengthMode as "short" | "standard" | "long" | "custom", selectedComment.targetWordCount),
-      updatedAt: new Date().toISOString(),
-    });
+    } else saveStudentCommentDraft(selectedStudent.id, saved);
     updateComment(selectedStudent.id, { text: saved.generatedComment, generated: Boolean(saved.generatedComment) });
     return selectedStudent.name;
   }

@@ -157,7 +157,7 @@ test("shuffle preview waiting dock edits only the candidate until adoption", asy
   await page.addInitScript(() => {
     const createdAt = "2026-09-22T00:00:00Z";
     const students = Array.from({ length: 4 }, (_, index) => ({ id: `s${index}`, name: `候选学生${index}`, gender: index % 2 ? "女" : "男", manualTags: [], autoTags: [], records: [], exams: [] }));
-    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify({ version: 1, currentSliceId: "waiting-preview", slices: [{ id: "waiting-preview", classId: "waiting-preview-class", className: "候选等待区班", term: { id: "term", year: 2026, season: "autumn", label: "2026 秋", createdAt }, createdAt, updatedAt: createdAt, data: { students, seatOrder: ["s0", "s1", "s2", ...Array(61).fill(null)] } }] }));
+    localStorage.setItem("seat-manager-workspaces-v1", JSON.stringify({ version: 1, currentSliceId: "waiting-preview", slices: [{ id: "waiting-preview", classId: "waiting-preview-class", className: "候选等待区班", term: { id: "term", year: 2026, season: "autumn", label: "2026 秋", createdAt }, createdAt, updatedAt: createdAt, data: { students, seatOrder: ["s0", "s1", "s2", "s3", ...Array(60).fill(null)] } }] }));
   });
   await page.route("**/license/auth", route => route.fulfill({ json: { token: "waiting-preview", expiresAt: Date.now() + 600_000, licenseId: "waiting-preview", edition: process.env.E2E_EDITION === "commercial" ? "commercial" : "zhang" } }));
   await page.goto("./");
@@ -168,11 +168,12 @@ test("shuffle preview waiting dock edits only the candidate until adoption", asy
     const book = JSON.parse(localStorage.getItem("seat-manager-workspaces-v1") || "{}");
     return book.slices[0].data.seatOrder as Array<string | null>;
   });
-  // Loading legacy data fills unassigned students and trims spare rows before autosaving.
-  // Capture the settled baseline so that migration is not mistaken for a preview write.
-  await expect.poll(persistedOrder).toEqual(["s0", "s1", "s2", "s3", null, null, null, null]);
+  // Seed the four seated students explicitly; loading must preserve the spare rows.
+  // Candidate-only changes must not write or compact this teacher arrangement.
+  await expect.poll(persistedOrder).toEqual(["s0", "s1", "s2", "s3", ...Array(60).fill(null)]);
   const initialOrder = await persistedOrder();
   const dock = page.locator("[data-seat-board-layer] .seat-waiting-dock");
+  await expect(dock.locator(".seat-waiting-dock__count")).toHaveText("0");
   await page.getByRole("button", { name: "排座", exact: true }).click();
   // The board stays operable beside the docked rules: lock a seat before generating.
   const board = page.locator("[data-seat-board-layer]");

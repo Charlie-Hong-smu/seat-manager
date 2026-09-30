@@ -85,14 +85,16 @@ export function ScoresWorkspace({
 }) {
   const actionToast = useActionToast();
   const scoreRead = useScopedRequest(getCurrentWorkspaceScope());
+  const aiMappingRequest = useScopedRequest(getCurrentWorkspaceScope());
   const [scoreScope, setScoreScope] = useState<string | null>(null);
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
   const [sourceDraft, setSourceDraft] = useState<ScoreImportDraft | null>(null);
   const [scoreRows, setScoreRows] = useState<string[][]>([]);
   const [scoreFilename, setScoreFilename] = useState("");
   const [manualMapping, setManualMapping] = useState<ScoreMapping | null>(null);
+  const [appliedMapping, setAppliedMapping] = useState<ScoreMapping | null>(null);
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
-  const mappingModalRef = useModalFocus(mappingModalOpen, () => setMappingModalOpen(false));
+  const mappingModalRef = useModalFocus(mappingModalOpen, closeMapping);
   const [rankChoice, setRankChoice] = useState<"pending" | "auto" | "source">("pending");
   const [rankDialogOpen, setRankDialogOpen] = useState(false);
   const [scoreStatus, setScoreStatus] = useState("");
@@ -124,8 +126,21 @@ export function ScoresWorkspace({
     if (initialTarget?.entityId && initialTarget.subEntityId) setScoreView("items");
   }, onInitialTargetConsumed);
 
+  function cancelAiMapping() {
+    aiMappingRequest.cancel();
+    setAiMappingBusy(false);
+    setAiMappingSuggestion(null);
+  }
+  function closeMapping() {
+    cancelAiMapping();
+    setManualMapping(appliedMapping || (scoreRows.length ? detectScoreMapping(scoreRows) : null));
+    setMappingModalOpen(false);
+  }
+
   async function readScoreFile(file?: File) {
     if (!file) return;
+    cancelAiMapping();
+    setMappingModalOpen(false);
     const request = scoreRead.start();
     const scope = getCurrentWorkspaceScope();
     setScoreScope(scope);
@@ -133,6 +148,7 @@ export function ScoresWorkspace({
     setSourceDraft(null);
     setScoreRows([]);
     setManualMapping(null);
+    setAppliedMapping(null);
     setRankDialogOpen(false);
     setScoreStatus("正在解析成绩表...");
     setAiMappingSuggestion(null);
@@ -149,6 +165,7 @@ export function ScoresWorkspace({
       setScoreFilename(file.name);
       setDraft(nextDraft);
       setSourceDraft(nextDraft);
+      setAppliedMapping(mapping);
       const missingRanks = getMissingClassRankSummary(nextDraft);
       setRankChoice(missingRanks.missingCellCount ? "pending" : "source");
       setRankDialogOpen(missingRanks.missingCellCount > 0);
@@ -174,6 +191,7 @@ export function ScoresWorkspace({
         setScoreRows([]);
         setScoreFilename("");
         setManualMapping(null);
+        setAppliedMapping(null);
       }
       setDraft(null);
       setSourceDraft(null);
@@ -190,6 +208,7 @@ export function ScoresWorkspace({
   }
 
   function updateManualMapping(updater: (mapping: ScoreMapping) => ScoreMapping) {
+    cancelAiMapping();
     if (!manualMapping && scoreRows.length) {
       setManualMapping(updater(detectScoreMapping(scoreRows)));
       return;
@@ -206,6 +225,8 @@ export function ScoresWorkspace({
     }
     try {
       const nextDraft = buildScoreImportDraftFromRows(scoreRows, scoreFilename, manualMapping);
+      cancelAiMapping();
+      setAppliedMapping(manualMapping);
       setSourceDraft(nextDraft);
       setDraft(rankChoice === "auto" ? applyAutomaticClassRanks(nextDraft) : nextDraft);
       setMappingModalOpen(false);
@@ -247,13 +268,17 @@ export function ScoresWorkspace({
       setScoreStatus("请先上传成绩表。");
       return;
     }
+    const request = aiMappingRequest.start();
+    const scope = getCurrentWorkspaceScope();
     setAiMappingBusy(true);
     setScoreStatus("AI 正在识别成绩表列...");
     try {
       const suggestion = await suggestScoreMappingWithAi(scoreRows, {
         accessCode: aiMappingAccessCode,
         remember: aiMappingRemember,
+        signal: request.signal,
       });
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       setAiMappingSuggestion(suggestion);
       setManualMapping(suggestion.mapping);
       setMappingModalOpen(true);
@@ -261,11 +286,12 @@ export function ScoresWorkspace({
       setHasAiMappingAuth(true);
       setScoreStatus(suggestion.note);
     } catch (error) {
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       const reason = error instanceof Error ? error.message : "";
       setScoreStatus(getAiMappingErrorMessage(reason));
       setHasAiMappingAuth(hasStoredAiScoreMappingAuth());
     } finally {
-      setAiMappingBusy(false);
+      if (request.isCurrent()) setAiMappingBusy(false);
     }
   }
 
@@ -285,7 +311,7 @@ export function ScoresWorkspace({
       name: examName,
       date: examDate,
       rows: scoreRows,
-      mapping: manualMapping || undefined,
+      mapping: appliedMapping || undefined,
       rankConfig: { autoClassRank: rankChoice === "auto", scoreBasis: "effective" },
       fullScores: remappingExamId ? exams.find(exam => exam.id === remappingExamId)?.fullScores : undefined,
     }));
@@ -293,11 +319,13 @@ export function ScoresWorkspace({
       setScoreStatus("保存失败，当前导入内容已保留，请检查存储空间后重试。");
       return;
     }
+    cancelAiMapping();
     setDraft(null);
     setSourceDraft(null);
     setScoreRows([]);
     setScoreFilename("");
     setManualMapping(null);
+    setAppliedMapping(null);
     setRemappingExamId("");
     setEditingExamId("");
     setRankChoice("pending");
@@ -309,11 +337,14 @@ export function ScoresWorkspace({
   }
 
   function resetImportDraft() {
+    scoreRead.cancel();
+    cancelAiMapping();
     setDraft(null);
     setSourceDraft(null);
     setScoreRows([]);
     setScoreFilename("");
     setManualMapping(null);
+    setAppliedMapping(null);
     setRemappingExamId("");
     setRankChoice("pending");
     setRankDialogOpen(false);
@@ -324,12 +355,15 @@ export function ScoresWorkspace({
   }
 
   function editExam(exam: GradeExam) {
+    scoreRead.cancel();
+    cancelAiMapping();
     if (!exam.importSource) {
       setDraft(null);
       setSourceDraft(null);
       setScoreRows([]);
       setScoreFilename("");
       setManualMapping(null);
+      setAppliedMapping(null);
       setRankChoice("pending");
       setRankDialogOpen(false);
       setExamName(exam.name);
@@ -368,6 +402,7 @@ export function ScoresWorkspace({
       setScoreRows(rows);
       setScoreFilename(exam.importSource.filename || nextSourceDraft.filename);
       setManualMapping(mapping);
+      setAppliedMapping(mapping);
       setExamName(exam.name);
       setExamDate(exam.date || toLocalDateKey());
       setRemappingExamId(exam.id);
@@ -597,7 +632,7 @@ export function ScoresWorkspace({
       {mappingModalOpen && manualMapping && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-[70] flex items-center justify-center p-5">
           <div ref={mappingModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="成绩列映射" className="score-mapping-panel modal-panel-enter app-modal-panel flex max-h-[88vh] w-full max-w-[88rem] flex-col overflow-hidden outline-none">
-            <ModalHeader title="成绩列映射" onClose={() => setMappingModalOpen(false)} actions={<Button variant="ai" size="sm" disabled={aiMappingBusy} onClick={() => void generateAiMapping()}>{aiMappingBusy ? "识别中…" : "AI 识别"}</Button>} />
+            <ModalHeader title="成绩列映射" onClose={closeMapping} actions={<Button variant="ai" size="sm" disabled={aiMappingBusy} onClick={() => void generateAiMapping()}>{aiMappingBusy ? "识别中…" : "AI 识别"}</Button>} />
 
             <div className="score-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem] gap-3 overflow-hidden bg-background-secondary-default p-4">
               <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
@@ -703,7 +738,7 @@ export function ScoresWorkspace({
             </div>
 
             <div className="app-modal-footer flex items-center justify-end gap-2 px-5 py-4">
-              <Button variant="secondary" onClick={() => setMappingModalOpen(false)}>先不应用</Button>
+              <Button variant="secondary" onClick={closeMapping}>先不应用</Button>
               <Button onClick={applyManualMapping}>应用映射</Button>
             </div>
           </div>

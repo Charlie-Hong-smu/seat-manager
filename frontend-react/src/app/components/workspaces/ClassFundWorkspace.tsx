@@ -3,7 +3,7 @@ import type { TimelineTarget } from "../../state/dataInsights";
 import type { FundCollection } from "../../state/fundCollections";
 import type { FollowupTask } from "../../state/types";
 import { useWorkspaceDraftState } from "../../hooks/useWorkspaceDraftState";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Pencil, RotateCcw, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 
 import { calcBalance, calcExpenseTotal, calcIncomeTotal, filterFundTransactionsByPeriod, getFundPeriodRange, shiftFundPeriod, summarizeStudentFundCollection, type FundPeriodMode, type NewFundTxInput } from "../../state/classFundActions";
@@ -83,7 +83,11 @@ export function ClassFundWorkspace({
   // 收缴视图：按学生汇总当前周期内关联到该学生的有效收入。
   const activeIncome = useMemo(() => periodTransactions.filter(tx => tx.type === "income" && tx.status !== "void"), [periodTransactions]);
   const incomeCategories = useMemo(() => Array.from(new Set(activeIncome.map(tx => tx.category || "未分类"))), [activeIncome]);
-  const collectionIncome = collectionCategory === "all" ? activeIncome : activeIncome.filter(tx => (tx.category || "未分类") === collectionCategory);
+  const effectiveCategory = incomeCategories.includes(collectionCategory) ? collectionCategory : "all";
+  useEffect(() => {
+    if (collectionCategory !== "all" && effectiveCategory === "all") setCollectionCategory("all");
+  }, [collectionCategory, effectiveCategory]);
+  const collectionIncome = effectiveCategory === "all" ? activeIncome : activeIncome.filter(tx => (tx.category || "未分类") === effectiveCategory);
   const collectionRows = useMemo(() => students
     .map(student => {
       const summary = summarizeStudentFundCollection(collectionIncome, student);
@@ -94,7 +98,7 @@ export function ClassFundWorkspace({
     })
     .sort((a, b) => (a.count === 0 ? 0 : 1) - (b.count === 0 ? 0 : 1) || a.student.name.localeCompare(b.student.name, "zh-Hans-CN")), [collectionIncome, students]);
   const unpaidStudents = collectionRows.filter(row => row.count === 0).map(row => row.student);
-  const collectionCategoryLabel = collectionCategory === "all" ? "关联收入" : collectionCategory;
+  const collectionCategoryLabel = effectiveCategory === "all" ? "关联收入" : effectiveCategory;
 
   function exportLedgerCsv() {
     const rows = [
@@ -203,7 +207,7 @@ export function ClassFundWorkspace({
           {view === "collection" && (
             <Card className="surface-enter" title="收入登记汇总" action={
               <div className="flex items-center gap-2">
-                {incomeCategories.length > 1 && <SelectMenu value={collectionCategory} onChange={value => setCollectionCategory(String(value))} ariaLabel="收缴分类" options={[{ value: "all", label: "全部收入分类" }, ...incomeCategories.map(category => ({ value: category, label: category }))]} />}
+                {incomeCategories.length > 1 && <SelectMenu value={effectiveCategory} onChange={value => setCollectionCategory(String(value))} ariaLabel="收缴分类" options={[{ value: "all", label: "全部收入分类" }, ...incomeCategories.map(category => ({ value: category, label: category }))]} />}
 
               </div>
             }>

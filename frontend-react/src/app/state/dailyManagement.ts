@@ -46,7 +46,7 @@ export function upsertAttendance(records: AttendanceRecord[], input: Omit<Attend
   const overridesLeave = records.some(item => item !== existing && item.studentId === input.studentId && leaveCoversDate(item, input.date));
   if (isDefault && !overridesLeave) return records.filter(item => item !== existing);
   const now = new Date().toISOString();
-  const next: AttendanceRecord = { ...existing, ...input, leaveTracking: input.status === "leave" ? input.leaveTracking ?? existing?.leaveTracking : undefined, leaveReturnedAt: input.status === "leave" ? input.leaveReturnedAt : undefined, note: input.note.trim(), id: existing?.id || id("attendance"), createdAt: existing?.createdAt || now, updatedAt: now };
+  const next: AttendanceRecord = { ...existing, ...input, leaveTracking: input.status === "leave" ? input.leaveTracking ?? existing?.leaveTracking : undefined, leaveReturnedAt: input.status === "leave" ? ("leaveReturnedAt" in input ? input.leaveReturnedAt : existing?.leaveReturnedAt) : undefined, note: input.note.trim(), id: existing?.id || id("attendance"), createdAt: existing?.createdAt || now, updatedAt: now };
   return existing ? records.map(item => item === existing ? next : item) : [next, ...records];
 }
 

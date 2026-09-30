@@ -1,3 +1,4 @@
+import { clampCommentWordCount } from "./commentWordCount";
 import { writeStudentComment } from "./commentPersistence";
 import type { AppStudent, CommentLengthMode, CommentStyle, StudentCommentDraft, StudentId } from "./types";
 import { readLegacyRootState } from "./storage";
@@ -33,8 +34,7 @@ function normalizeStyle(value: unknown): CommentStyle {
 }
 
 function normalizeTargetWordCount(value: unknown): number {
-  const parsed = Number(value);
-  return Math.min(999, Math.max(10, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_TARGET_WORD_COUNT)));
+  return clampCommentWordCount(value);
 }
 
 export function normalizeStudentCommentDraft(value: unknown): StudentCommentDraft | null {
@@ -92,13 +92,13 @@ function isNewerDraft(candidate: StudentCommentDraft | null, current: StudentCom
 function saveDraftToLegacyStudent(studentId: StudentId, draft: StudentCommentDraft): void {
   const root = readLegacyRootState();
   if (!root || typeof root !== "object" || !Array.isArray((root as { students?: unknown }).students)) {
-    return;
+    throw new Error("comment_save_failed");
   }
 
   const nextRoot = root as { students: Array<Record<string, unknown>> };
   const student = nextRoot.students.find(item => String(item.id || "") === studentId);
   if (!student) {
-    return;
+    throw new Error("comment_save_failed");
   }
 
   const aiComments = student.aiComments && typeof student.aiComments === "object" && !Array.isArray(student.aiComments)

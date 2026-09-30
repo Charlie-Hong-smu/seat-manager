@@ -33,3 +33,13 @@ describe("comment candidate persistence boundary", () => {
     expect(readStudentCommentDraft(student).generatedComment).toBe("未保存草稿");
   });
 });
+
+describe("custom comment length request contract", () => {
+  it.each([[10, 50], [49, 50], [50, 50], [300, 300], [301, 300], [999, 300]])("sends target %s as supported %s without a real model", async (input, expected) => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ comment: "合成建议" })); vi.stubGlobal("fetch", fetchMock);
+    await generateStudentAiComment(createTestStudent(), { ...draft, targetWordCount: input }, { force: true });
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(payload.targetWordCount).toBe(expected);
+    expect(payload.lengthInstruction).toContain(String(expected));
+  });
+});

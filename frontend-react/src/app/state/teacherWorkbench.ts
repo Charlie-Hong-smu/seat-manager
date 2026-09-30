@@ -158,13 +158,16 @@ export function normalizeCommunicationDrafts(value: unknown): CommunicationDraft
 export function parseScheduleRows(rows: string[][], filename = "课表"): ClassScheduleV1 {
   const clean = rows.filter(row => row.some(cell => text(cell)));
   if (clean.length < 2) throw new Error("schedule_empty");
-  const headerIndex = clean.findIndex(row => row.some(cell => /周一|星期一|礼拜一/.test(text(cell))));
+  const headerIndex = clean.findIndex(row => row.some(cell => /(?:周|星期|礼拜)[一二三四五六日天]/.test(text(cell))));
   const start = headerIndex >= 0 ? headerIndex : 0;
   const headers = clean[start].map(text);
   const weekdays = headers.map(header => {
     const labels = ["一", "二", "三", "四", "五", "六", "日"];
+    if (/(?:周|星期|礼拜)天/.test(header)) return 7;
     return labels.findIndex(label => header.includes(`周${label}`) || header.includes(`星期${label}`) || header.includes(`礼拜${label}`)) + 1;
   });
+  const unknownColumn = clean.slice(start + 1).some(row => row.some((cell, index) => index > 0 && !weekdays[index] && text(cell)));
+  if (unknownColumn) throw new Error("schedule_unrecognized_column");
   const periods = clean.slice(start + 1).map((row, index) => ({ id: `period-${index + 1}`, label: text(row[0]) || `第${index + 1}节` }));
   const entries = clean.slice(start + 1).flatMap((row, rowIndex) => row.flatMap((cell, columnIndex) => {
     const weekday = weekdays[columnIndex];

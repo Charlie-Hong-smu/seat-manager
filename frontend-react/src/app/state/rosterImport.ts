@@ -13,6 +13,7 @@ export interface RosterImportOptions {
   keepHistory: boolean;
   mapping?: RosterMapping;
   workspaceScope?: string;
+  signal?: AbortSignal;
 }
 
 export interface RosterImportResult {
@@ -308,6 +309,7 @@ function applyRosterImport(parsed: ParsedRoster, options: RosterImportOptions): 
 }
 
 export function applyParsedRoster(parsed: ParsedRoster, options: RosterImportOptions): RosterImportResult {
+  if (options.signal?.aborted) throw new Error("名单文件已更换，导入已取消，请重新确认。");
   if (!parsed.names.length && !parsed.hasPlacement) {
     throw new Error("empty_roster");
   }
@@ -342,6 +344,7 @@ export function applyParsedRoster(parsed: ParsedRoster, options: RosterImportOpt
 export async function importRosterFile(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
   const scope = options.workspaceScope ?? getCurrentWorkspaceScope();
   if (getCurrentWorkspaceScope() !== scope) throw new Error("班级或学期已切换，名单导入已取消，请在目标班级重新确认。");
+  if (options.signal?.aborted) throw new Error("名单文件已更换，导入已取消，请重新确认。");
   const rows = prepareRosterRows(await readRowsFromFile(file));
   if (getCurrentWorkspaceScope() !== scope) throw new Error("班级或学期已切换，名单导入已取消，请在目标班级重新确认。");
   return applyParsedRoster(parseRosterRows(rows, options.mapping), options);
