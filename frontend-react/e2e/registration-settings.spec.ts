@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const edition = process.env.E2E_EDITION === "commercial" ? "commercial" : "zhang";
 test.use({ timezoneId: "Asia/Shanghai" });
@@ -25,17 +25,39 @@ async function data(page: Page) {
 }
 const nav = (page: Page, name: RegExp) => page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name }).click();
 
+async function openTaskTypes(scope: Page | Locator) {
+  await scope.getByRole("button", { name: "编辑类型", exact: true }).click();
+  const catalog = scope.getByRole("textbox", { name: "可选任务类型", exact: true });
+  // fill() does not wait for stability. Finish the two-frame collapse opening
+  // before focusing the controlled field and clicking its moving save button.
+  await expect.poll(() => catalog.evaluate(node => node.closest<HTMLElement>(".app-motion-collapse")?.dataset.open)).toBe("true");
+  await catalog.evaluate(async node => {
+    await Promise.all(node.closest(".app-motion-collapse")!.getAnimations().map(animation => animation.finished.catch(() => undefined)));
+  });
+  return catalog;
+}
+
+async function fillTaskTypes(catalog: Locator, text: string) {
+  await catalog.fill(text);
+  await expect(catalog).toHaveValue(text);
+  // Verify the input handler committed the draft before exercising validation.
+  await expect.poll(() => catalog.evaluate(() => {
+    const entry = Object.entries(localStorage).find(([key]) => key.endsWith(":followup:type-catalog"));
+    return entry ? (JSON.parse(entry[1]) as { text: string }).text : undefined;
+  })).toBe(text);
+}
+
 test("task type editing is shared, persistent and keeps historical task types", async ({ page }) => {
   await login(page); await nav(page, /^任务与作业/);
-  await page.getByRole("button", { name: "编辑类型", exact: true }).click();
-  const catalog = page.getByRole("textbox", { name: "可选任务类型", exact: true });
-  await catalog.fill("常规跟进\n阅读跟进\n阅读跟进");
+  await expect(page.locator('.app-motion-switch[data-moving]')).toHaveCount(0);
+  const catalog = await openTaskTypes(page);
+  await fillTaskTypes(catalog, "常规跟进\n阅读跟进\n阅读跟进");
   await page.getByRole("button", { name: "保存类型", exact: true }).click();
   await expect(page.getByText("类型名称不能重复。", { exact: true })).toBeVisible();
-  await catalog.fill("常规跟进\n阅读跟进");
+  await fillTaskTypes(catalog, "常规跟进\n阅读跟进");
   await page.screenshot({ path: `/tmp/registration-${edition}-types.png` });
   await page.getByRole("button", { name: "收起类型编辑", exact: true }).click();
-  await page.getByRole("button", { name: "编辑类型", exact: true }).click();
+  await openTaskTypes(page);
   await expect(catalog).toHaveValue("常规跟进\n阅读跟进");
   await page.getByRole("button", { name: "保存类型", exact: true }).click();
   await expect.poll(async () => (await data(page)).settings?.followupTypes).toEqual(["常规跟进", "阅读跟进"]);
@@ -46,13 +68,13 @@ test("task type editing is shared, persistent and keeps historical task types", 
   const card = page.locator("[data-followup-task-id]").filter({ hasText: "阅读检查" });
   await card.getByRole("button", { name: "编辑任务", exact: true }).click();
   const drawer = page.getByRole("complementary", { name: "编辑跟进任务" });
-  await drawer.getByRole("button", { name: "编辑类型", exact: true }).click();
-  await drawer.getByRole("textbox", { name: "可选任务类型", exact: true }).fill("常规跟进\n阅读反馈");
+  const drawerCatalog = await openTaskTypes(drawer);
+  await fillTaskTypes(drawerCatalog, "常规跟进\n阅读反馈");
   await drawer.getByRole("button", { name: "保存类型", exact: true }).click();
   await expect.poll(async () => (await data(page)).settings?.followupTypes).toEqual(["常规跟进", "阅读反馈"]);
   await expect(drawer.getByRole("button", { name: /跟进类型/ })).toContainText("阅读跟进（原类型）");
   await drawer.getByRole("button", { name: "关闭工具面板" }).click();
-  await page.getByRole("button", { name: "编辑类型", exact: true }).click();
+  await openTaskTypes(page);
   await expect(catalog).toHaveValue("常规跟进\n阅读反馈");
   await page.reload(); await nav(page, /^任务与作业/);
   await expect(card).toContainText("阅读跟进");

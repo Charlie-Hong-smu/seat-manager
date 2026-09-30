@@ -58,6 +58,7 @@ python3 -m http.server 4174 --directory license-admin
 ## 自动发布
 
 - `.github/workflows/pages.yml`：前端变化时并行运行静态/单元检查、Zhang 两份浏览器验收和 Commercial 浏览器验收；全部通过后，使用 Zhang 第一份验收时生成的构建产物自动发布 Zhang 先行版。
+- 每个 CI runner 使用一个浏览器 worker，Zhang 的两个分片仍在不同 runner 并行，避免逐帧动效采样与其他浏览器竞争。浏览器失败时上传相应 `*-browser-failure*` artifact（trace、错误上下文及 HTML 报告，保留 7 天）；这些测试只使用合成数据与测试授权替身。失败仍阻止发布。
 - `.github/workflows/cloudflare-commercial.yml`：只按目录变化自动发布共享 Worker 或授权管理页，不再自动发布 Commercial 前端。
 - `.github/workflows/promote-commercial.yml`：用户明确说“上线商用版”后，由 Codex传入已在 Zhang 验证的完整 commit SHA；同一入口传入上一稳定 SHA 即为回滚。
 

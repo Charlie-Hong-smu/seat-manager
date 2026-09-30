@@ -96,6 +96,17 @@ jobs:
         working-directory: frontend-react
         run: E2E_EDITION=zhang pnpm exec playwright test --shard=${{ matrix.shard }}/2
 
+      - name: Upload failed Zhang browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhang-browser-failure-${{ matrix.shard }}
+          path: |
+            frontend-react/test-results
+            frontend-react/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Check Zhang bundle size
         if: matrix.shard == 1
         working-directory: frontend-react
@@ -137,6 +148,17 @@ jobs:
       - name: Validate Commercial in Chromium
         working-directory: frontend-react
         run: pnpm run test:e2e:commercial
+
+      - name: Upload failed Commercial browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-browser-failure
+          path: |
+            frontend-react/test-results
+            frontend-react/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
 
   deploy:
     environment:
