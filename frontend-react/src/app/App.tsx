@@ -990,8 +990,11 @@ export default function App() {
   }
 
   async function handleImportRoster(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
+    const scope = options.workspaceScope ?? getCurrentWorkspaceScope();
+    if (getCurrentWorkspaceScope() !== scope) throw new Error("班级或学期已切换，名单导入已取消，请重新确认。");
     if (!saveCurrentLegacySnapshot()) throw new Error("本机保存失败，已停止导入。");
-    const result = await importRosterFile(file, options);
+    const result = await importRosterFile(file, { ...options, workspaceScope: scope });
+    if (getCurrentWorkspaceScope() !== scope) throw new Error("班级或学期已切换，名单导入已取消，请重新确认。");
     replaceState(result.state);
     setSeatHistory([]);
     setSelectedStudentInitialTab("records");

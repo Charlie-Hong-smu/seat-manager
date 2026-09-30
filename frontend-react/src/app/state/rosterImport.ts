@@ -1,6 +1,7 @@
 import { createSeatManagerState } from "./legacyStateAdapter";
 import { readRowsFromFile } from "./scoreImport";
 import { readLegacyRootState, writeLegacyRootState } from "./storage";
+import { getCurrentWorkspaceScope } from "./workspaces";
 import type { SeatManagerState } from "./types";
 
 import { findStudentCandidates, normalizeStudentName, normalizeStudentNo } from "./studentIdentity";
@@ -11,6 +12,7 @@ export interface RosterImportOptions {
   replaceExisting: boolean;
   keepHistory: boolean;
   mapping?: RosterMapping;
+  workspaceScope?: string;
 }
 
 export interface RosterImportResult {
@@ -338,6 +340,9 @@ export function applyParsedRoster(parsed: ParsedRoster, options: RosterImportOpt
 }
 
 export async function importRosterFile(file: File, options: RosterImportOptions): Promise<RosterImportResult> {
+  const scope = options.workspaceScope ?? getCurrentWorkspaceScope();
+  if (getCurrentWorkspaceScope() !== scope) throw new Error("班级或学期已切换，名单导入已取消，请在目标班级重新确认。");
   const rows = prepareRosterRows(await readRowsFromFile(file));
+  if (getCurrentWorkspaceScope() !== scope) throw new Error("班级或学期已切换，名单导入已取消，请在目标班级重新确认。");
   return applyParsedRoster(parseRosterRows(rows, options.mapping), options);
 }

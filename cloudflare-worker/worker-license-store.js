@@ -15,6 +15,8 @@ export async function loadLicenseRecord(codeHash, env) {
     if (license) {
       return license;
     }
+    const retainedId = await readLicenseIdentityByKey(key, env);
+    if (retainedId) return null;
   }
 
   let allowed = false;
@@ -48,7 +50,7 @@ export async function loadLicenseRecordByKey(key, env) {
     return null;
   }
   const record = env.ACCOUNT_COORDINATOR ? await env.ACCOUNT_COORDINATOR.getByName(key).readLicense(key) : await env.SEAT_MANAGER_KV.get(key, { type: "json" });
-  if (!record) {
+  if (!record || record.revoked) {
     return null;
   }
   const licenseId = sanitizeLicenseId(record.licenseId || record.id);
@@ -59,6 +61,7 @@ export async function loadLicenseRecordByKey(key, env) {
     storageKey: key,
     legacyEnv: false,
     licenseId,
+    displayName: toText(record.displayName || licenseId).slice(0, 80),
     acquisitionChannel: normalizeAcquisitionChannel(record.acquisitionChannel, licenseId),
     acquisitionDetail: normalizeAcquisitionDetail(record.acquisitionDetail),
     allowedEditions: normalizeAllowedEditions(record.allowedEditions),
@@ -75,9 +78,15 @@ export async function loadLicenseRecordByKey(key, env) {
   };
 }
 
+export async function readLicenseIdentityByKey(key, env) {
+  if (env.ACCOUNT_COORDINATOR) return env.ACCOUNT_COORDINATOR.getByName(key).readLicenseIdentity(key);
+  const record = await env.SEAT_MANAGER_KV.get(key, { type: "json" });
+  return record ? sanitizeLicenseId(record.licenseId || record.id) : "";
+}
+
 export async function bindLicenseDevice(license, deviceId, deviceName, env, edition) {
   if (env.ACCOUNT_COORDINATOR && license.storageKey) {
-    const result = await env.ACCOUNT_COORDINATOR.getByName(license.storageKey).mutateLicense(license.storageKey, { type: "bind", deviceId, deviceName, edition, maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES });
+    const result = await env.ACCOUNT_COORDINATOR.getByName(license.storageKey).mutateLicense(license.storageKey, { type: "bind", deviceId, deviceName, edition, maxDevices: license.maxDevices || DEFAULT_MAX_DEVICES, ...(license.legacyEnv ? { initialRecord: serializeLicenseForStorage(license) } : {}) });
     if (result.ok) Object.assign(license, result.license);
     return result;
   }
@@ -88,6 +97,7 @@ export async function bindLicenseDevice(license, deviceId, deviceName, env, edit
   if (existingIndex >= 0) {
     devices[existingIndex] = {
       ...devices[existingIndex],
+      sessionId: devices[existingIndex].sessionId || crypto.randomUUID(),
       name: deviceName,
       lastSeenAt: now,
     };
@@ -95,17 +105,18 @@ export async function bindLicenseDevice(license, deviceId, deviceName, env, edit
     if (devices.length >= maxDevices) {
       return { ok: false, maxDevices };
     }
-    devices.push({ id: deviceId, name: deviceName, firstSeenAt: now, lastSeenAt: now });
+    devices.push({ id: deviceId, sessionId: crypto.randomUUID(), name: deviceName, firstSeenAt: now, lastSeenAt: now });
   }
 
   if (env.SEAT_MANAGER_KV && license.storageKey) {
     await persistLicenseRecord(license, env, { maxDevices, devices, updatedAt: now });
   }
+  Object.assign(license, { maxDevices, devices, updatedAt: now });
   return { ok: true, maxDevices };
 }
 
-export async function unbindLicenseDevice(license, deviceId, env) {
-  if (env.ACCOUNT_COORDINATOR && license.storageKey) return (await env.ACCOUNT_COORDINATOR.getByName(license.storageKey).mutateLicense(license.storageKey, { type: "unbind", deviceId })).removed;
+export async function unbindLicenseDevice(license, deviceId, env, expectedSessionId = "") {
+  if (env.ACCOUNT_COORDINATOR && license.storageKey) return (await env.ACCOUNT_COORDINATOR.getByName(license.storageKey).mutateLicense(license.storageKey, { type: "unbind", deviceId, expectedSessionId })).removed;
   const now = new Date().toISOString();
   const devices = license.devices.filter((device) => device.id !== deviceId);
   const removed = devices.length !== license.devices.length;
@@ -143,17 +154,18 @@ export function getAdminLicenseKeyFromExisting(input) {
 export function normalizeAdminLicenseInput(input, existing, fallback) {
   return {
     licenseId: fallback.licenseId,
+    displayName: toText(input.displayName ?? existing?.displayName ?? input.licenseId ?? fallback.licenseId).slice(0, 80),
     acquisitionChannel: fallback.acquisitionChannel,
     acquisitionDetail: fallback.acquisitionDetail,
     allowedEditions: normalizeAllowedEditions(input.allowedEditions ?? existing?.allowedEditions),
     status: ["active", "disabled"].includes(input.status) ? input.status : existing?.status || "active",
-    expiresAt: normalizeIsoDateInput(input.expiresAt),
+    expiresAt: normalizeIsoDateInput(input.expiresAt ?? existing?.expiresAt),
     maxDevices: normalizeMaxDevices(input.maxDevices ?? existing?.maxDevices),
     aiEnabled: parseBoolean(input.aiEnabled, Boolean(existing?.aiEnabled)),
-    aiExpiresAt: normalizeIsoDateInput(input.aiExpiresAt),
+    aiExpiresAt: normalizeIsoDateInput(input.aiExpiresAt ?? existing?.aiExpiresAt),
     aiDailyLimit: normalizeAiDailyLimit(input.aiDailyLimit ?? existing?.aiDailyLimit),
     productCodeSecret: normalizeProductCodeSecret(input.productCodeSecret) || existing?.productCodeSecret || "",
-    devices: fallback.devices,
+    devices: input.status === "disabled" && existing?.status !== "disabled" ? fallback.devices.map(device => ({ ...device, sessionId: crypto.randomUUID() })) : fallback.devices,
     createdAt: fallback.createdAt,
     updatedAt: fallback.updatedAt,
   };
@@ -207,6 +219,7 @@ export function serializeLicenseForStorage(license, overrides = {}) {
   const value = { ...license, ...overrides };
   return {
     licenseId: value.licenseId,
+    displayName: toText(value.displayName || value.licenseId).slice(0, 80),
     acquisitionChannel: normalizeAcquisitionChannel(value.acquisitionChannel, value.licenseId),
     acquisitionDetail: normalizeAcquisitionDetail(value.acquisitionDetail),
     allowedEditions: normalizeAllowedEditions(value.allowedEditions),
@@ -238,6 +251,7 @@ export function serializeLicenseForAdmin(license) {
     licenseKey: license.storageKey,
     codeHash: license.storageKey.replace(LICENSE_KEY_PREFIX, ""),
     licenseId: license.licenseId,
+    displayName: license.displayName || license.licenseId,
     acquisitionChannel: license.acquisitionChannel,
     acquisitionDetail: license.acquisitionDetail,
     allowedEditions: license.allowedEditions,
@@ -334,6 +348,7 @@ function normalizeLicenseDevices(value) {
       }
       return {
         id,
+        sessionId: toText(device.sessionId || "").slice(0, 80),
         name: toText(device.name || "").slice(0, 80) || "未知设备",
         firstSeenAt: toText(device.firstSeenAt || ""),
         lastSeenAt: toText(device.lastSeenAt || ""),

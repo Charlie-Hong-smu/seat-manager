@@ -45,6 +45,8 @@ npx wrangler deploy --dry-run
 
 Worker 检查会自动扫描根目录与 `routes/` 下的 JavaScript，并运行本地 Miniflare/workerd 集成测试。集成测试通过真实 Durable Object RPC 检查设备名额和 AI 日额度的并发边界，以及授权删除、旧镜像和重建；测试使用本地 KV、测试专用凭证与上游替身，无需线上 secret，不会请求真实 AI。CI 的 `npm ci` 会安装锁定的运行时开发依赖。
 
+后端与教师操作闭环定向回归：Worker 的 `license-security.test.js` / `account-runtime.test.js` 覆盖停用、到期、删除、解绑、清空及重新绑定的旧凭证拒绝和空间唯一不可变；`ai-payload-safety.test.js` 覆盖可空数字、结构化素材、信息充分性及长周报。前端运行 `pnpm test teacherDataSafety.test.tsx`，然后依次运行两版 `pnpm test:e2e:zhang teacher-data-safety.spec.ts cloud-sync.spec.ts` / `pnpm test:e2e:commercial teacher-data-safety.spec.ts cloud-sync.spec.ts`，检查空班级往返、延迟文件读取切班和恢复时间键配额故障。替身只存在于测试；不得为验证请求真实收费 AI 或真实学生数据。
+
 授权后台保持无构建静态页面。其搜索、筛选、分页和看板计算测试已包含在 Worker 的 `npm run check` 中；本地视觉检查可从仓库根目录启动：
 
 ```bash
@@ -128,5 +130,9 @@ netlify deploy --prod
 Worker 发布入口为 `worker-entry.js`，`wrangler.toml` 包含 `ACCOUNT_COORDINATOR` 绑定及 `v1-account-coordinator` SQLite migration；现有 shared-services workflow 会一起部署配置和入口，代理无新公共路由。
 
 首次晋升前应备份授权 KV，确认旧 Worker 写入已结束并给 KV 留足传播时间，再从原键初始化协调器。既有 KV 仍按原键和格式镜像；后续授权修改必须通过管理员接口，不能直接改 KV 并期待覆盖协调器。回滚 Worker 到不使用协调器的版本会恢复旧 KV 写入；再向前升级前必须校准协调器与 KV，不能直接复用期间已过期的对象状态。协调器不可用时 AI 返回 503，避免在无法计数时继续付费请求。开发检查可设置 `WRANGLER_LOG_PATH` 指向临时目录，避免本机日志目录权限影响 dry-run 输出。
+
+云空间不可变修复发布前，另行取得线上操作授权后只读核实旧 ID 归一化冲突；本地修复授权不允许直接清空或修改线上授权记录。冲突空间拒绝登录/同步/AI，不静默选定老师或移动备份，处理须先备份并明确设计数据与会话迁移。新空间以完整产品码散列生成，删除后所有者保留；旧环境产品码首次登录也需持久 KV 记录以执行设备撤权。没有 KV 的环境回退登录返回 503。已部署协调器的环境继续使用原绑定，无新 migration 或 secret。
+
+发布顺序为共享 Worker、授权管理静态页、按版本治理晋升前端。管理页的新 `displayName` 和只读空间 ID 依赖新 Worker；旧管理页编辑旧 ID 只允许原值，新建时旧代号作为显示名而非存储空间。未触碰的旧设备 token 有兼容窗口，重新登录升级后旧会话失效；教师可能需要重新登录，但本机文件柜不删除。以上是发布准备说明，运行本地回归或 dry-run 不代表已上线。
 
 BoardUI 并行本地验证时，可用 `E2E_PORT=4193 pnpm exec playwright test app-motion.spec.ts` 指定独立端口；商业版同时设置 `E2E_EDITION=commercial` 并另选端口。默认 4173/4174 不变，避免复用另一任务的旧预览产物。

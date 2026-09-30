@@ -79,7 +79,11 @@ React event
 
 授权记录存放在 `seat-manager:license:*` KV 键中。产品认证字段保持既有语义；管理员专用元数据包括 `acquisitionChannel`、`acquisitionDetail`、`createdAt` 和 `updatedAt`。缺少渠道的旧 `xhs-` 代号读取为小红书，其他旧记录读取为待补充；缺少创建时间时保持为空，不用更新时间倒推。所有设备绑定、解绑和清空操作必须通过统一的授权记录序列化边界，避免重写 KV 时丢失管理员元数据。
 
-已绑定 AccountCoordinator 时，授权删除与设备/管理员写入经过同一串行入口；删除先保存空记录标记，再删除 KV 镜像，避免后续读取从旧镜像恢复已删除授权。管理员显式重建仍可覆盖此标记。未绑定协调器的旧部署继续使用 KV 路径。
+已绑定 AccountCoordinator 时，授权删除与设备/管理员写入经过同一串行入口；删除先保存空记录标记及不可变云空间 ID，再删除 KV 镜像，避免后续读取从旧镜像恢复已删除授权。管理员显式重建可覆盖空记录标记，但保留同一云空间 ID。未绑定协调器的旧部署继续使用 KV 路径，删除在原授权键保留 `revoked` 标记，列表与登录忽略该记录，避免环境产品码回退复活授权。
+
+产品同步、AI 和自助解绑共用 `worker-license-access.js`：验证签名、期限、当前有效授权、版本权益、云空间 ID、绑定设备及设备会话 UUID。新签发凭证不得晚于授权到期；停用会轮换会话 UUID，解绑/清空后重新绑定生成新 UUID，因此重新启用或绑定同一设备不会恢复旧凭证。旧 token 仅在旧设备记录尚无 UUID 时兼容，下一次登录升级该绑定并使旧 token 失效。旧独立 `seat-sync` / `ai-trend` token 保留原边界；本地离线状态不参与服务端撤权判断。
+
+新授权云空间 ID 由完整产品码散列生成 `tenant-<sha256>`，管理员输入只用于 `displayName`，不能选择其他客户的云空间。旧 ID 归一化后保留且不可编辑，客户改名仅编辑 `displayName`。`license-identity:<id>` 命名的同一 AccountCoordinator 类对象串行保留唯一所有者，删除后不释放；第一次认领检查旧 KV 全部分页记录并拒绝历史归一化冲突。未绑定协调器时使用全散列新 ID 与旧 KV 冲突检查，仍受 KV 传播/并发边界限制；正式运行使用仓库既有协调器绑定。原 KV 键、备份定位、路由与 secret 名称不变；空间迁移必须另行显式设计，不能通过 upsert 改 ID。
 
 `POST /admin/licenses/list` 只接受管理员 Bearer token，并使用可选 `cursor` 分页返回授权记录；授权后台会逐页加载完整列表后在浏览器内计算看板和筛选。渠道和来源明细只存在于管理员接口，不进入产品登录响应或产品 token。
 
@@ -121,6 +125,8 @@ React event
 
 ## AI 与网络链路
 
+AI 可空数值经 `toNullableNumber` 保留 null/缺失/空串，真实零仍为 0；跟进请求按真实评语结构保留有限 `label` / `values` / 自定义素材。生成评语的信息充分性同时接受课堂记录、评价素材及教师备注，完全无依据时不调用上游。周报正文使用字符串专用 6000 字符上限，题目分析概述使用 1600 字符上限，不经过通用 800 字符裁剪。
+
 ```text
 UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
                          -> direct workers.dev fallback
@@ -153,6 +159,10 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 独立预览分支通过 `ui.tsx` 包装 `src/components/base/` 下的 BoardUI 按钮与分段控件源码，继续保留应用原有 props 和状态边界。`src/utils/cx.ts` 使用 tailwind-merge；分段控件使用 react-aria-components。React 保持18，按钮使用 forwardRef。BoardUI 主题与字体合并到现有 `src/styles/theme.css`，没有第二套主题入口。迁移范围和实际验证记录见 `docs/BOARDUI_PREVIEW.md`。
 
 ## 2026-09 审计修复边界
+
+真实存储对象的空学生名单也完整规范化待办、班费、宿舍和考试等领域，不以学生人数判断首次使用。名单导入捕获班级/学期范围，在异步文件读取前后及 App 完成回调检查；名单和成绩预览、课表导入复用 `useScopedRequest`，跨范围的旧预览不得保存到新班级。整柜备份恢复（含旧单班包装）仍按明确确认覆盖整个文件柜，不套用单班导入规则。
+
+彻底删除学生同时清理成绩 `entries`、题目行和可靠匹配的原始导入行；原始行无法可靠归属时取消该场考试的重新映射来源，保留其他学生已保存成绩。云恢复完成整柜提交后，同步时间等附属键采用尽力保存，失败单独提示，仍刷新控制器；上传和状态查询同样不因附属时间写入失败而假报主操作失败。
 
 本机编辑使用 `useWorkspaceWriteAccess` 获取同一 origin 文件柜的 Web Lock；其他窗口提示关闭编辑窗口后重试。缺少 Web Locks 的环境保留存储版本核验。`writeBook` 在写入前核对本窗口接受的原始文件柜版本，外部修改后暂停保存并允许先导出当前未保存内容，再由老师确认读取最新数据。导出、手动上传、切换学期及退出必须检查保存结果，保存失败时停止后续动作。文件柜及备份版本、键、载荷保持兼容。
 

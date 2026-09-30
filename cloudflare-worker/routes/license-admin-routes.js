@@ -1,8 +1,9 @@
 import { jsonResponse } from "../worker-response.js";
 import { getBearerToken, sha256Hex, timingSafeEqual } from "../worker-auth.js";
 import { readJsonBody, toText } from "../worker-input.js";
-import { LICENSE_KEY_PREFIX, LICENSE_SYNC_STATE_SUFFIX, sanitizeLicenseId, getLicensedSyncStateKey } from "../worker-license-keys.js";
-import { loadLicenseRecordByKey, unbindAllLicenseDevices, getAdminLicenseKey, getAdminLicenseKeyFromExisting, normalizeAdminLicenseInput, normalizeAdminAcquisitionInput, serializeLicenseForStorage, serializeLicenseForAdmin } from "../worker-license-store.js";
+import { LICENSE_KEY_PREFIX, LICENSE_SYNC_STATE_SUFFIX, getLicensedSyncStateKey } from "../worker-license-keys.js";
+import { loadLicenseRecordByKey, unbindAllLicenseDevices, getAdminLicenseKey, getAdminLicenseKeyFromExisting, normalizeAdminLicenseInput, normalizeAdminAcquisitionInput, serializeLicenseForStorage, serializeLicenseForAdmin, readLicenseIdentityByKey } from "../worker-license-store.js";
+import { claimLicenseIdentity, generateLicenseId } from "../worker-license-identity.js";
 
 export async function handleLicenseAdminRoute(request, env, corsHeaders, pathname) {
   if (request.method !== "POST") {
@@ -81,14 +82,22 @@ async function handleLicenseAdminUpsert(request, env, corsHeaders) {
   }
   const input = body.value || {};
   const licenseKey = await getAdminLicenseKey(input);
-  const licenseId = sanitizeLicenseId(input.licenseId);
-  if (!licenseKey || !licenseId) {
+  if (!licenseKey) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
   }
   const existing = await loadLicenseRecordByKey(licenseKey, env);
+  const retainedId = await readLicenseIdentityByKey(licenseKey, env);
+  const licenseId = existing?.licenseId || retainedId || generateLicenseId(licenseKey);
+  if (!licenseId) return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  if ((existing || retainedId) && input.licenseId !== undefined && input.licenseId !== licenseId) {
+    return jsonResponse({ error: "license_id_immutable" }, 409, corsHeaders);
+  }
   const acquisition = normalizeAdminAcquisitionInput(input, existing, licenseId);
   if (!acquisition.ok) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+  }
+  if (!await claimLicenseIdentity({ licenseId, storageKey: licenseKey }, env)) {
+    return jsonResponse({ error: "license_id_conflict" }, 409, corsHeaders);
   }
   const clearDevices = Boolean(input.clearDevices);
   const now = new Date().toISOString();
@@ -100,7 +109,10 @@ async function handleLicenseAdminUpsert(request, env, corsHeaders) {
     devices: clearDevices ? [] : existing?.devices || [],
     updatedAt: now,
   });
-  if (env.ACCOUNT_COORDINATOR) await env.ACCOUNT_COORDINATOR.getByName(licenseKey).mutateLicense(licenseKey, { type: "upsert", record: serializeLicenseForStorage(record), clearDevices });
+  if (env.ACCOUNT_COORDINATOR) {
+    const result = await env.ACCOUNT_COORDINATOR.getByName(licenseKey).mutateLicense(licenseKey, { type: "upsert", record: serializeLicenseForStorage(record), clearDevices });
+    if (!result.ok) return jsonResponse({ error: result.error }, 409, corsHeaders);
+  }
   else await env.SEAT_MANAGER_KV.put(licenseKey, JSON.stringify(serializeLicenseForStorage(record)));
   const saved = await loadLicenseRecordByKey(licenseKey, env);
   return jsonResponse({ license: serializeLicenseForAdmin(saved) }, 200, corsHeaders);
@@ -130,13 +142,14 @@ async function handleLicenseAdminDelete(request, env, corsHeaders) {
   if (!licenseKey) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
   }
+  const license = await loadLicenseRecordByKey(licenseKey, env);
   if (env.ACCOUNT_COORDINATOR) {
     await env.ACCOUNT_COORDINATOR.getByName(licenseKey).mutateLicense(licenseKey, { type: "delete" });
   } else {
-    await env.SEAT_MANAGER_KV.delete(licenseKey);
+    if (license) await env.SEAT_MANAGER_KV.put(licenseKey, JSON.stringify({ ...serializeLicenseForStorage(license), status: "disabled", devices: [], revoked: true }));
   }
   if (body.value?.deleteState) {
-    const licenseId = sanitizeLicenseId(body.value.licenseId);
+    const licenseId = license?.licenseId;
     if (licenseId) {
       await env.SEAT_MANAGER_KV.delete(getLicensedSyncStateKey(licenseId));
     }

@@ -1,4 +1,4 @@
-import { toText } from "./worker-input.js";
+import { toText, toStringText, toNullableNumber } from "./worker-input.js";
 
 export function isValidTrendPayload(payload) {
   return (
@@ -152,6 +152,29 @@ export function getStudentCommentLengthSettings(payload) {
   return null;
 }
 
+function trimCommentMaterials(value, kind) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(item => {
+    if (typeof item === "string") return toStringText(item, 120) ? [toStringText(item, 120)] : [];
+    if (!item || typeof item !== "object") return [];
+    const label = toStringText(item.label, 120);
+    if (!label) return [];
+    const criterionId = toStringText(item.criterionId, 80);
+    if (kind === "custom") return [{ criterionId, criterionLabel: toStringText(item.criterionLabel, 80), label }];
+    const values = Array.isArray(item.values) ? item.values.map(value => toStringText(value, 120)).filter(Boolean).slice(0, 8) : [];
+    return values.length ? [{ criterionId, label, values }] : [];
+  }).slice(0, 8);
+}
+
+export function hasStudentCommentEvidence(context) {
+  return Boolean(context?.latestExam || Number(context?.trend?.examCount) >= 2
+    || (Array.isArray(context?.tags) && context.tags.some(item => toStringText(item)))
+    || toStringText(context?.teacherNote) || toStringText(context?.commentProfile?.teacherNote)
+    || (Array.isArray(context?.records) && context.records.some(item => toStringText(item)))
+    || trimCommentMaterials(context?.commentProfile?.criteriaSummary, "criteria").length
+    || trimCommentMaterials(context?.commentProfile?.customOptions, "custom").length);
+}
+
 export function getStudentCommentMissingInfo(context) {
   const missing = [];
   if (!context?.latestExam) {
@@ -163,9 +186,11 @@ export function getStudentCommentMissingInfo(context) {
   if (!Array.isArray(context?.tags) || !context.tags.length) {
     missing.push("学生标签");
   }
-  if (!toText(context?.teacherNote)) {
+  if (!toStringText(context?.teacherNote) && !toStringText(context?.commentProfile?.teacherNote)) {
     missing.push("教师补充评价");
   }
+  if (!Array.isArray(context?.records) || !context.records.some(item => toStringText(item))) missing.push("课堂记录");
+  if (!trimCommentMaterials(context?.commentProfile?.criteriaSummary, "criteria").length && !trimCommentMaterials(context?.commentProfile?.customOptions, "custom").length) missing.push("评语素材");
   return missing;
 }
 
@@ -241,7 +266,7 @@ export function sanitizeStudentFollowupResult(result) {
 
 export function sanitizeWeeklyDraftResult(result) {
   const list = (value, max = 6) => Array.isArray(value) ? value.map(toText).filter(Boolean).slice(0, max) : [];
-  return { title: toText(result.title).slice(0, 80) || "周报", content: toText(result.content).slice(0, 6000), highlights: list(result.highlights), cautions: list(result.cautions), disclaimer: toText(result.disclaimer).slice(0, 300) || "AI 内容仅供教师确认后使用。" };
+  return { title: toText(result.title).slice(0, 80) || "周报", content: toStringText(result.content, 6000), highlights: list(result.highlights), cautions: list(result.cautions), disclaimer: toText(result.disclaimer).slice(0, 300) || "AI 内容仅供教师确认后使用。" };
 }
 
 export function sanitizeScoreItemResult(result, payload) {
@@ -251,7 +276,7 @@ export function sanitizeScoreItemResult(result, payload) {
     const studentId = toText(item?.studentId);
     return studentId && allowedIds.has(studentId) ? [{ studentId, reason: toText(item?.reason).slice(0, 240) || "题目分析建议跟进" }] : [];
   }).slice(0, 12) : [];
-  return { overview: toText(result.overview).slice(0, 1600), weakPoints: list(result.weakPoints), teachingSuggestions: list(result.teachingSuggestions), followupCandidates, disclaimer: toText(result.disclaimer).slice(0, 300) || "AI 分析仅供教师参考。" };
+  return { overview: toStringText(result.overview, 1600), weakPoints: list(result.weakPoints), teachingSuggestions: list(result.teachingSuggestions), followupCandidates, disclaimer: toText(result.disclaimer).slice(0, 300) || "AI 分析仅供教师参考。" };
 }
 
 export function sanitizeScoreMappingResult(result, payload) {
@@ -356,7 +381,7 @@ function trimAssistantComparisonContext(context) {
               summary: toAssistantText(item?.summary, 220),
               current: toAssistantText(item?.current, 220),
               compare: toAssistantText(item?.compare, 220),
-              trend: Number.isFinite(Number(item?.trend)) ? Number(item.trend) : null,
+              trend: toNullableNumber(item?.trend),
               subjects: Array.isArray(item?.subjects) ? item.subjects.map((value) => toAssistantText(value, 60)).filter(Boolean).slice(0, 10) : [],
               exams: Array.isArray(item?.exams) ? item.exams.map((value) => toAssistantText(value, 160)).filter(Boolean).slice(0, 12) : []
             })).slice(0, pack?.kind === "candidate_students" ? 30 : 8)
@@ -383,12 +408,12 @@ export function trimStudentFollowupPayload(payload) {
     name: toAssistantText(exam?.name, 80),
     date: toAssistantText(exam?.date, 40),
     period: ["oldest", "middle", "latest"].includes(exam?.period) ? exam.period : "",
-    totalScore: Number.isFinite(Number(exam?.totalScore)) ? Number(exam.totalScore) : null,
-    classRank: Number.isFinite(Number(exam?.classRank)) ? Number(exam.classRank) : null,
+    totalScore: toNullableNumber(exam?.totalScore),
+    classRank: toNullableNumber(exam?.classRank),
     subjects: Array.isArray(exam?.subjects)
       ? exam.subjects.map((item) => ({
           subject: toAssistantText(item?.subject, 30),
-          score: Number.isFinite(Number(item?.score)) ? Number(item.score) : null
+          score: toNullableNumber(item?.score)
         })).filter((item) => item.subject).slice(0, 12)
       : [],
     zeroSubjects: Array.isArray(exam?.zeroSubjects) ? exam.zeroSubjects.map((item) => toAssistantText(item, 30)).filter(Boolean).slice(0, 8) : []
@@ -403,12 +428,12 @@ export function trimStudentFollowupPayload(payload) {
       exams: Array.isArray(context.exams) ? context.exams.map(trimExam).slice(-12) : [],
       trend: {
         examCount: Number(context.trend?.examCount) || 0,
-        totalScoreChange: Number.isFinite(Number(context.trend?.totalScoreChange)) ? Number(context.trend.totalScoreChange) : null,
-        classRankChange: Number.isFinite(Number(context.trend?.classRankChange)) ? Number(context.trend.classRankChange) : null,
+        totalScoreChange: toNullableNumber(context.trend?.totalScoreChange),
+        classRankChange: toNullableNumber(context.trend?.classRankChange),
         changedSubjects: Array.isArray(context.trend?.changedSubjects)
           ? context.trend.changedSubjects.map((item) => ({
               subject: toAssistantText(item?.subject, 30),
-              diff: Number.isFinite(Number(item?.diff)) ? Number(item.diff) : null
+              diff: toNullableNumber(item?.diff)
             })).filter((item) => item.subject).slice(0, 8)
           : [],
         summary: toAssistantText(context.trend?.summary, 260)
@@ -419,8 +444,8 @@ export function trimStudentFollowupPayload(payload) {
       records: Array.isArray(context.records) ? context.records.map((item) => toAssistantText(item, 160)).filter(Boolean).slice(0, 10) : [],
       dormitory: toAssistantText(context.dormitory, 160),
       commentProfile: {
-        criteriaSummary: Array.isArray(context.commentProfile?.criteriaSummary) ? context.commentProfile.criteriaSummary.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
-        customOptions: Array.isArray(context.commentProfile?.customOptions) ? context.commentProfile.customOptions.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
+        criteriaSummary: trimCommentMaterials(context.commentProfile?.criteriaSummary, "criteria"),
+        customOptions: trimCommentMaterials(context.commentProfile?.customOptions, "custom"),
         teacherNote: toAssistantText(context.commentProfile?.teacherNote || payload.teacherNote, 240)
       }
     },
@@ -446,7 +471,7 @@ export function trimAssistantContext(context) {
         date: toAssistantText(base.latestExam.date, 40),
         studentCount: Number(base.latestExam.studentCount) || 0,
         subjectCount: Number(base.latestExam.subjectCount) || 0,
-        averageTotal: Number.isFinite(Number(base.latestExam.averageTotal)) ? Number(base.latestExam.averageTotal) : null
+        averageTotal: toNullableNumber(base.latestExam.averageTotal)
       } : null,
       examInsights: Array.isArray(base.examInsights) ? base.examInsights.map((item) => toAssistantText(item, 180)).filter(Boolean).slice(0, 8) : [],
       gradeTrend: Array.isArray(base.gradeTrend) ? base.gradeTrend.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 8) : [],
@@ -454,7 +479,7 @@ export function trimAssistantContext(context) {
         ? base.focusStudents.map((student) => ({
             name: toAssistantText(student?.name, 40),
             category: toAssistantText(student?.category, 40),
-            latestTotal: Number.isFinite(Number(student?.latestTotal)) ? Number(student.latestTotal) : null,
+            latestTotal: toNullableNumber(student?.latestTotal),
             reasons: Array.isArray(student?.reasons) ? student.reasons.map((item) => toAssistantText(item, 120)).filter(Boolean).slice(0, 3) : [],
             tags: Array.isArray(student?.tags) ? student.tags.map((item) => toAssistantText(item, 40)).filter(Boolean).slice(0, 6) : []
           })).filter((student) => student.name).slice(0, 14)
@@ -476,9 +501,9 @@ export function trimAssistantContext(context) {
                 category: toAssistantText(item?.category, 40),
                 summary: toAssistantText(item?.summary, 180),
                 latestExam: toAssistantText(item?.latestExam, 80),
-                latestTotal: Number.isFinite(Number(item?.latestTotal)) ? Number(item.latestTotal) : null,
-                previousTotal: Number.isFinite(Number(item?.previousTotal)) ? Number(item.previousTotal) : null,
-                trend: Number.isFinite(Number(item?.trend)) ? Number(item.trend) : null,
+                latestTotal: toNullableNumber(item?.latestTotal),
+                previousTotal: toNullableNumber(item?.previousTotal),
+                trend: toNullableNumber(item?.trend),
                 latestScores: Array.isArray(item?.latestScores) ? item.latestScores.map((value) => toAssistantText(value, 40)).filter(Boolean).slice(0, 10) : [],
                 weakSubjects: Array.isArray(item?.weakSubjects) ? item.weakSubjects.map((value) => toAssistantText(value, 60)).filter(Boolean).slice(0, 3) : [],
                 exams: Array.isArray(item?.exams) ? item.exams.map((value) => toAssistantText(value, 180)).filter(Boolean).slice(0, 40) : [],

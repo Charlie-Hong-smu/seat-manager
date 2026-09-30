@@ -22,6 +22,7 @@ export interface SyncStatus {
   deviceName?: string;
   version?: number;
   sizeBytes?: number;
+  metadataWarning?: boolean;
 }
 
 interface SyncAuth {
@@ -31,6 +32,15 @@ interface SyncAuth {
 
 function hasBrowserStorage(): boolean {
   return typeof window !== "undefined" && Boolean(window.localStorage) && Boolean(window.sessionStorage);
+}
+
+function storeSyncMetadata(entries: Array<[string, string]>): boolean {
+  let saved = true;
+  for (const [key, value] of entries) {
+    try { if (hasBrowserStorage()) window.localStorage.setItem(key, value); }
+    catch { saved = false; }
+  }
+  return saved;
 }
 
 export function getSyncDeviceName(): string {
@@ -43,7 +53,7 @@ export function getSyncDeviceName(): string {
 export function setSyncDeviceName(name: string): string {
   const next = name.trim().slice(0, 30) || getSyncDeviceName();
   if (hasBrowserStorage()) {
-    window.localStorage.setItem(SYNC_DEVICE_NAME_KEY, next);
+    storeSyncMetadata([[SYNC_DEVICE_NAME_KEY, next]]);
   }
   return next;
 }
@@ -137,10 +147,8 @@ async function fetchSyncEndpoint<T>(path: string, options: RequestInit = {}): Pr
 
 export async function fetchCloudStatus(): Promise<SyncStatus> {
   const status = await fetchSyncEndpoint<SyncStatus>("/sync/status");
-  if (hasBrowserStorage() && status.updatedAt) {
-    window.localStorage.setItem(SYNC_LAST_CLOUD_UPDATED_AT_KEY, status.updatedAt);
-  }
-  return status;
+  const saved = !status.updatedAt || storeSyncMetadata([[SYNC_LAST_CLOUD_UPDATED_AT_KEY, status.updatedAt]]);
+  return { ...status, ...(!saved ? { metadataWarning: true } : {}) };
 }
 
 export async function uploadCurrentStateToCloud(deviceName: string): Promise<SyncStatus> {
@@ -167,11 +175,8 @@ export async function uploadCurrentStateToCloud(deviceName: string): Promise<Syn
     body: JSON.stringify(payload),
   });
   const uploadedAt = result.updatedAt || new Date().toISOString();
-  if (hasBrowserStorage()) {
-    window.localStorage.setItem(SYNC_LAST_UPLOAD_AT_KEY, uploadedAt);
-    window.localStorage.setItem(SYNC_LAST_CLOUD_UPDATED_AT_KEY, uploadedAt);
-  }
-  return { ...result, updatedAt: uploadedAt, exists: true };
+  const saved = storeSyncMetadata([[SYNC_LAST_UPLOAD_AT_KEY, uploadedAt], [SYNC_LAST_CLOUD_UPDATED_AT_KEY, uploadedAt]]);
+  return { ...result, updatedAt: uploadedAt, exists: true, metadataWarning: !saved };
 }
 
 export async function restoreStateFromCloud(): Promise<SyncStatus> {
@@ -193,11 +198,9 @@ export async function restoreStateFromCloud(): Promise<SyncStatus> {
   if (!importPreparedWorkspace(prepared)) throw new Error("sync_invalid_data");
 
   const restoredAt = new Date().toISOString();
-  if (hasBrowserStorage()) {
-    window.localStorage.setItem(SYNC_LAST_RESTORE_AT_KEY, restoredAt);
-    window.localStorage.setItem(SYNC_LAST_CLOUD_UPDATED_AT_KEY, cloud.updatedAt || "");
-  }
+  const saved = storeSyncMetadata([[SYNC_LAST_RESTORE_AT_KEY, restoredAt], [SYNC_LAST_CLOUD_UPDATED_AT_KEY, cloud.updatedAt || ""]]);
   return {
+    metadataWarning: !saved,
     exists: true,
     updatedAt: cloud.updatedAt || restoredAt,
     deviceName: cloud.deviceName || "",

@@ -2,7 +2,7 @@ import { jsonResponse } from "../worker-response.js";
 import { getBearerToken } from "../worker-auth.js";
 import { MAX_BODY_BYTES, readJsonBody, toText } from "../worker-input.js";
 import { verifyAiRequest, getAiLimitResponse, handleAuth } from "../worker-ai-access.js";
-import { isValidTrendPayload, isValidClassPayload, isValidAssistantPayload, isValidScoreMappingPayload, isValidRosterMappingPayload, isValidStudentCommentPayload, isValidCommentRefinementPayload, isValidStudentFollowupPayload, isValidWeeklyDraftPayload, isValidScoreItemPayload, getStudentCommentLengthSettings, getStudentCommentMissingInfo, parseModelJson, sanitizeAiResult, sanitizeClassAiResult, sanitizeAssistantResult, sanitizeStudentFollowupResult, sanitizeWeeklyDraftResult, sanitizeScoreItemResult, sanitizeScoreMappingResult, sanitizeRosterMappingResult, sanitizeStudentCommentResult, sanitizeCommentRefinementResult, toAssistantText, trimStudentFollowupPayload, trimAssistantContext } from "../worker-ai-payload.js";
+import { isValidTrendPayload, isValidClassPayload, isValidAssistantPayload, isValidScoreMappingPayload, isValidRosterMappingPayload, isValidStudentCommentPayload, isValidCommentRefinementPayload, isValidStudentFollowupPayload, isValidWeeklyDraftPayload, isValidScoreItemPayload, getStudentCommentLengthSettings, getStudentCommentMissingInfo, hasStudentCommentEvidence, parseModelJson, sanitizeAiResult, sanitizeClassAiResult, sanitizeAssistantResult, sanitizeStudentFollowupResult, sanitizeWeeklyDraftResult, sanitizeScoreItemResult, sanitizeScoreMappingResult, sanitizeRosterMappingResult, sanitizeStudentCommentResult, sanitizeCommentRefinementResult, toAssistantText, trimStudentFollowupPayload, trimAssistantContext } from "../worker-ai-payload.js";
 
 const ASSISTANT_MAX_BODY_BYTES = 96 * 1024;
 
@@ -419,7 +419,7 @@ async function handleGenerateStudentComment(request, env, corsHeaders) {
   }
 
   const missingInfo = getStudentCommentMissingInfo(body.value.context);
-  if (missingInfo.length >= 3 && !toText(body.value.context.teacherNote)) {
+  if (!hasStudentCommentEvidence(body.value.context)) {
     return jsonResponse({ comment: "", needsMoreInfo: true, missingInfo }, 200, corsHeaders);
   }
   const commentLength = getStudentCommentLengthSettings(body.value);

@@ -1,8 +1,9 @@
 import { SESSION_TOKEN_TTL_MS, getBearerToken, sha256Hex, signToken, timingSafeEqual, verifyToken } from "../worker-auth.js";
 import { readJsonBody, toText } from "../worker-input.js";
-import { getLicensedSyncStateKey, sanitizeLicenseId } from "../worker-license-keys.js";
+import { getLicensedSyncStateKey } from "../worker-license-keys.js";
 import { jsonResponse } from "../worker-response.js";
 import { allowAuthAttempt } from "../worker-usage.js";
+import { verifyProductRequest } from "../worker-license-access.js";
 
 const SYNC_MAX_BODY_BYTES = 5 * 1024 * 1024;
 const SYNC_STATE_KEY = "seat-manager:single-teacher:state";
@@ -79,21 +80,14 @@ async function verifySyncRequest(request, env) {
   const token = getBearerToken(request);
   const productSecret = env.PRODUCT_TOKEN_SECRET || env.TOKEN_SECRET;
   if (productSecret) {
-    const productToken = token ? await verifyToken(token, productSecret) : null;
-    if (
-      productToken &&
-      productToken.exp > Date.now() &&
-      productToken.scope === "product-access" &&
-      productToken.licenseId
-    ) {
-      const licenseId = sanitizeLicenseId(productToken.licenseId);
-      if (licenseId) {
+    const verified = await verifyProductRequest(token, env);
+    if (verified) {
+      const licenseId = verified.license.licenseId;
         return {
           ok: true,
           key: getLicensedSyncStateKey(licenseId),
           licenseId,
         };
-      }
     }
   }
   if (env.SYNC_TOKEN_SECRET) {

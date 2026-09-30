@@ -84,7 +84,8 @@
         <div class="drawer-header"><div><h2 id="editorTitle">新建授权</h2><div class="muted" id="editorSubtitle">填写授权与渠道信息</div></div><button class="button ghost small" type="button" id="closeEditorBtn" aria-label="关闭编辑面板">关闭</button></div>
         <div class="form-grid">
           <input id="licenseKey" type="hidden">
-          <label class="field">老师/客户代号<input id="licenseId" autocomplete="off" placeholder="例如 xhs-123456-20260713" required></label>
+          <label class="field wide">云空间 ID<input id="licenseId" readonly placeholder="保存后由系统分配"></label>
+          <label class="field">老师/客户名称<input id="displayName" autocomplete="off" maxlength="80" placeholder="例如 xhs-123456-20260713" required></label>
           <label class="field">授权码<input id="productCode" autocomplete="off" placeholder="新建时填写或自动生成"></label>
           <div class="button-row wide"><button class="button secondary small" type="button" id="generateCodeBtn">生成新授权码</button><button class="button ghost small" type="button" id="copyCodeBtn">复制授权码</button></div>
           <div class="code-box wide" id="newCodeBox" hidden></div>
@@ -113,6 +114,6 @@
     </section>
   </div>
 
-  <script type="module" src="./app.js?v=20260713-2"></script>
+  <script type="module" src="./app.js?v=20260930-1"></script>
 </body>
 </html>

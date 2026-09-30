@@ -1,3 +1,5 @@
+import { useScopedRequest } from "../../hooks/useScopedRequest";
+import { getCurrentWorkspaceScope } from "../../state/workspaces";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useEffect, useMemo, useState } from "react";
 import { FileUp, ListOrdered, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RotateCcw, Sparkles, Table, Trash2 } from "lucide-react";
@@ -82,6 +84,8 @@ export function ScoresWorkspace({
   onUpdateExamFullScores?: (examId: string, fullScores: Record<string, number>) => boolean;
 }) {
   const actionToast = useActionToast();
+  const scoreRead = useScopedRequest(getCurrentWorkspaceScope());
+  const [scoreScope, setScoreScope] = useState<string | null>(null);
   const [draft, setDraft] = useState<ScoreImportDraft | null>(null);
   const [sourceDraft, setSourceDraft] = useState<ScoreImportDraft | null>(null);
   const [scoreRows, setScoreRows] = useState<string[][]>([]);
@@ -122,10 +126,19 @@ export function ScoresWorkspace({
 
   async function readScoreFile(file?: File) {
     if (!file) return;
+    const request = scoreRead.start();
+    const scope = getCurrentWorkspaceScope();
+    setScoreScope(scope);
+    setDraft(null);
+    setSourceDraft(null);
+    setScoreRows([]);
+    setManualMapping(null);
+    setRankDialogOpen(false);
     setScoreStatus("正在解析成绩表...");
     setAiMappingSuggestion(null);
     try {
       const rows = prepareScoreRows(await readRowsFromFile(file));
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       const mapping = detectScoreMapping(rows);
       setManualMapping(mapping);
       const nextDraft = {
@@ -145,8 +158,10 @@ export function ScoresWorkspace({
       }
       setScoreStatus(`已解析 ${nextDraft.entries.length} 名学生、${nextDraft.subjects.length} 个科目。${nextDraft.warnings.length ? " 可打开映射设置进一步确认。" : ""}`);
     } catch (error) {
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       try {
         const rows = prepareScoreRows(await readRowsFromFile(file));
+        if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
         setManualMapping(detectScoreMapping(rows));
         setScoreRows(rows);
         setScoreFilename(file.name);
@@ -155,6 +170,7 @@ export function ScoresWorkspace({
           setExamDate(toLocalDateKey());
         }
       } catch {
+        if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
         setScoreRows([]);
         setScoreFilename("");
         setManualMapping(null);
@@ -254,6 +270,7 @@ export function ScoresWorkspace({
   }
 
   function saveDraft() {
+    if (scoreScope && getCurrentWorkspaceScope() !== scoreScope) { setScoreStatus("班级或学期已切换，请重新选择成绩表并确认导入。"); return; }
     if (!draft || !sourceDraft || !examName.trim()) {
       setScoreStatus("请先上传成绩表并填写考试名称。");
       return;
@@ -324,6 +341,7 @@ export function ScoresWorkspace({
       setScoreStatus(`「${exam.name}」没有保存原始表格，请重新选择原成绩文件，确认映射后会覆盖原考试。`);
       return;
     }
+    setScoreScope(getCurrentWorkspaceScope());
     const rows = exam.importSource.rows;
     const mapping: ScoreMapping = {
       ...exam.importSource.mapping,

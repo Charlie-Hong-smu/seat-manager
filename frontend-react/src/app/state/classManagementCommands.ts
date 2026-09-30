@@ -99,6 +99,7 @@ export function restoreStudent(state: SeatManagerState, studentId: StudentId): S
 
 export function permanentlyDeleteStudent(state: SeatManagerState, studentId: StudentId): SeatManagerState {
   const remove = (ids?: StudentId[]) => ids?.filter(id => id !== studentId);
+  const savedExams = removeStudentFromSavedGradeExams(state.savedExams, studentId, state.students);
   return {
     ...state,
     settings: { ...state.settings, fundCollections: readFundCollections(state.settings).map(collection => {
@@ -116,8 +117,16 @@ export function permanentlyDeleteStudent(state: SeatManagerState, studentId: Stu
     drawSessions: state.drawSessions.map(session => ({ ...session, studentIds: session.studentIds.filter(id => id !== studentId) })).filter(session => session.studentIds.length > 0),
     fundTransactions: state.fundTransactions.map(tx => ({ ...tx, relatedStudentIds: remove(tx.relatedStudentIds), relatedStudentId: tx.relatedStudentId === studentId ? undefined : tx.relatedStudentId })),
     dormitories: state.dormitories.map(dorm => ({ ...dorm, memberIds: dorm.memberIds.filter(id => id !== studentId), events: dorm.events.map(event => ({ ...event, responsibleStudentIds: remove(event.responsibleStudentIds), responsibleStudentId: event.responsibleStudentId === studentId ? undefined : event.responsibleStudentId })), history: dorm.history.map(archive => ({ ...archive, events: archive.events.map(event => ({ ...event, responsibleStudentIds: remove(event.responsibleStudentIds), responsibleStudentId: event.responsibleStudentId === studentId ? undefined : event.responsibleStudentId })) })) })),
-    gradeExams: state.gradeExams.map(exam => ({ ...exam, rows: exam.rows.filter(row => row.studentId !== studentId), itemAnalysis: exam.itemAnalysis ? { ...exam.itemAnalysis, rows: exam.itemAnalysis.rows.filter(row => row.studentId !== studentId) } : undefined })),
-    savedExams: removeStudentFromSavedGradeExams(state.savedExams, studentId, state.students),
+    gradeExams: state.gradeExams.map(exam => {
+      const saved = savedExams.find(record => record && typeof record === "object" && "id" in record && record.id === exam.id) as { importSource?: typeof exam.importSource } | undefined;
+      return {
+        ...exam,
+        importSource: saved ? saved.importSource : exam.rows.some(row => row.studentId === studentId) ? undefined : exam.importSource,
+        rows: exam.rows.filter(row => row.studentId !== studentId),
+        itemAnalysis: exam.itemAnalysis ? { ...exam.itemAnalysis, rows: exam.itemAnalysis.rows.filter(row => row.studentId !== studentId) } : undefined,
+      };
+    }),
+    savedExams,
     activityEvents: state.activityEvents.flatMap(event => {
       if (event.ref.domain === "student" && event.ref.entityId === studentId) return [];
       const remainingStudentIds = event.studentIds.filter(id => id !== studentId);

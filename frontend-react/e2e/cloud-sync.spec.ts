@@ -34,6 +34,7 @@ test("manual cloud sync preserves every class and term through the real Worker h
   const env = {
     PRODUCT_TOKEN_SECRET: "test-only-signing-secret",
     SEAT_MANAGER_KV: {
+      async list({ prefix }: { prefix: string }) { return { keys: [...values.keys()].filter(key => key.startsWith(prefix)).map(name => ({ name })), list_complete: true }; },
       async get(key: string) { return values.get(key) ?? null; },
       async put(key: string, value: string) { values.set(key, JSON.parse(value)); },
     },

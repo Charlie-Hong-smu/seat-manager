@@ -1,4 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
+import { hasConflictingLicenseId } from "./worker-license-identity.js";
+import { sanitizeLicenseId } from "./worker-license-keys.js";
 
 const TTL_SECONDS = 3 * 24 * 60 * 60;
 
@@ -24,22 +26,46 @@ export class AccountCoordinator extends DurableObject {
     return this.enqueue(() => this.load(key));
   }
 
+  readLicenseIdentity(key) {
+    return this.enqueue(async () => {
+      const current = await this.load(key);
+      return sanitizeLicenseId(current?.licenseId || current?.id) || await this.ctx.storage.get("licenseId") || "";
+    });
+  }
+
+  claimLicenseId(licenseId, licenseKey) {
+    return this.enqueue(async () => {
+      const owner = await this.ctx.storage.get("owner");
+      if (owner) return owner === licenseKey;
+      if (await hasConflictingLicenseId(licenseId, licenseKey, this.env.SEAT_MANAGER_KV)) return false;
+      // Retained after deletion: a cloud space can never be reassigned.
+      await this.ctx.storage.put("owner", licenseKey);
+      return true;
+    });
+  }
+
   mutateLicense(key, operation) {
     return this.enqueue(async () => {
       if (operation.type === "delete") {
         // Retain a tombstone so a later read cannot rehydrate a stale KV mirror.
-        await this.ctx.storage.put("record", { value: null });
+        const current = await this.load(key);
+        const licenseId = sanitizeLicenseId(current?.licenseId || current?.id);
+        await this.ctx.storage.put({ record: { value: null }, ...(licenseId ? { licenseId } : {}) });
         await this.env.SEAT_MANAGER_KV.delete(key);
         return { ok: true, license: null };
       }
-      const current = await this.load(key);
+      let current = await this.load(key);
+      if (!current && operation.type === "bind" && operation.initialRecord && !await this.ctx.storage.get("licenseId")) current = operation.initialRecord;
       const now = new Date().toISOString();
       let next;
       let removed = false;
       if (operation.type === "upsert") {
-        next = { ...current, ...operation.record, devices: operation.clearDevices ? [] : current?.devices || [], createdAt: current?.createdAt || operation.record.createdAt, updatedAt: now };
+        const licenseId = sanitizeLicenseId(current?.licenseId || current?.id) || await this.ctx.storage.get("licenseId");
+        if (licenseId && licenseId !== operation.record.licenseId) return { ok: false, error: "license_id_immutable" };
+        const devices = operation.clearDevices ? [] : current?.devices || [];
+        next = { ...current, ...operation.record, revoked: false, devices: operation.record.status === "disabled" && current?.status !== "disabled" ? devices.map(device => ({ ...device, sessionId: crypto.randomUUID() })) : devices, createdAt: current?.createdAt || operation.record.createdAt, updatedAt: now };
       } else {
-        if (!current) throw new Error("license_missing");
+        if (!current || current.revoked) return { ok: false, error: "license_missing" };
         const devices = Array.isArray(current.devices) ? [...current.devices] : [];
         const configuredLimit = Number(current.maxDevices);
         const maxDevices = Number.isFinite(configuredLimit) && configuredLimit > 0 ? Math.max(1, Math.min(10, Math.trunc(configuredLimit))) : operation.maxDevices;
@@ -49,10 +75,11 @@ export class AccountCoordinator extends DurableObject {
           if (!(current.allowedEditions || ["commercial"]).includes(operation.edition)) return { ok: false, error: "edition_forbidden" };
           const index = devices.findIndex(device => device.id === operation.deviceId);
           if (index < 0 && devices.length >= maxDevices) return { ok: false, maxDevices };
-          if (index >= 0) devices[index] = { ...devices[index], name: operation.deviceName, lastSeenAt: now };
-          else devices.push({ id: operation.deviceId, name: operation.deviceName, firstSeenAt: now, lastSeenAt: now });
+          if (index >= 0) devices[index] = { ...devices[index], sessionId: devices[index].sessionId || crypto.randomUUID(), name: operation.deviceName, lastSeenAt: now };
+          else devices.push({ id: operation.deviceId, sessionId: crypto.randomUUID(), name: operation.deviceName, firstSeenAt: now, lastSeenAt: now });
           next = { ...current, devices, maxDevices, updatedAt: now };
         } else if (operation.type === "unbind" || operation.type === "clear") {
+          if (operation.type === "unbind" && (devices.find(device => device.id === operation.deviceId)?.sessionId || "") !== operation.expectedSessionId) return { ok: true, removed: false, license: current };
           const kept = operation.type === "clear" ? [] : devices.filter(device => device.id !== operation.deviceId);
           removed = kept.length !== devices.length;
           next = { ...current, devices: kept, updatedAt: now };

@@ -15,6 +15,8 @@ import {
 import { hasStoredAiScoreMappingAuth, suggestRosterMappingWithAi, type AiRosterMappingSuggestion } from "../../state/aiScoreMappingService";
 import { prefetchXlsxAsset, readRowsFromFile } from "../../state/scoreImport";
 import { detectRosterMapping, parseRosterRows, prepareRosterRows, type RosterImportOptions, type RosterImportResult, type RosterMapping } from "../../state/rosterImport";
+import { useScopedRequest } from "../../hooks/useScopedRequest";
+import { getCurrentWorkspaceScope } from "../../state/workspaces";
 import type { AppStudent, SeatLayoutV1, StudentId } from "../../state/types";
 import type { HealthIssue } from "../../state/dataInsights";
 import { Button, DialogPresence, FileDropZone, InlineStatus, ModalHeader, SelectMenu, useAppDialog, useModalFocus } from "../ui";
@@ -44,6 +46,8 @@ export function DataWorkspace({
   onPermanentlyDeleteStudent?: (studentId: StudentId) => void;
 }) {
   const appDialog = useAppDialog();
+  const rosterRead = useScopedRequest(getCurrentWorkspaceScope());
+  const [rosterScope, setRosterScope] = useState<string | null>(null);
   useEffect(() => prefetchXlsxAsset(), []);
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [keepHistory, setKeepHistory] = useState(true);
@@ -63,6 +67,8 @@ export function DataWorkspace({
   const rosterMappingRef = useModalFocus(rosterMappingOpen, () => setRosterMappingOpen(false));
 
   async function importRoster() {
+    const workspaceScope = rosterScope ?? getCurrentWorkspaceScope();
+    if (getCurrentWorkspaceScope() !== workspaceScope) { setRosterStatus("班级或学期已切换，请在目标班级重新选择名单并确认导入。"); return; }
     if (!rosterFile) {
       setRosterStatus("请先选择名单文件。");
       return;
@@ -75,12 +81,13 @@ export function DataWorkspace({
         variant: "danger",
       });
       if (!confirmed) return;
+      if (getCurrentWorkspaceScope() !== workspaceScope) { setRosterStatus("班级或学期已切换，名单导入已取消，请重新确认。"); return; }
       if (!onBeforeBackupExport()) { setRosterStatus("本机保存失败，已停止导入，请先处理保存问题。"); return; }
       exportPreImportBackup();
     }
     setRosterStatus("正在导入名单...");
     try {
-      const result = await onImportRoster(rosterFile, { replaceExisting, keepHistory: replaceExisting ? keepHistory : true, mapping: rosterMapping || undefined });
+      const result = await onImportRoster(rosterFile, { replaceExisting, keepHistory: replaceExisting ? keepHistory : true, mapping: rosterMapping || undefined, workspaceScope });
       setRosterFile(null);
       setRosterRows([]);
       setRosterMapping(null);
@@ -104,6 +111,9 @@ export function DataWorkspace({
   }
 
   async function readRosterFile(file?: File | null) {
+    const request = rosterRead.start();
+    const scope = getCurrentWorkspaceScope();
+    setRosterScope(scope);
     if (!file) {
       setRosterFile(null);
       setRosterRows([]);
@@ -116,6 +126,7 @@ export function DataWorkspace({
     setAiRosterMappingSuggestion(null);
     try {
       const rows = prepareRosterRows(await readRowsFromFile(file));
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       const mapping = detectRosterMapping(rows);
       setRosterRows(rows);
       setRosterMapping(mapping);
@@ -123,6 +134,7 @@ export function DataWorkspace({
       mapping.warnings.push(...placementWarnings);
       setRosterStatus(mapping.warnings.length ? `${mapping.warnings.join(" ")} 可打开映射设置调整。` : `已读取 ${Math.max(rows.length - (mapping.hasHeader ? 1 : 0), 0)} 行名单，可直接导入或调整映射。`);
     } catch {
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
       setRosterRows([]);
       setRosterMapping(null);
       setRosterStatus("名单解析失败：请使用 .xlsx / .xls / .xlsm / .csv / .tsv。");

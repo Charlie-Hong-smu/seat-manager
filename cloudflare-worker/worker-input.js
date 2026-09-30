@@ -29,3 +29,14 @@ export function toText(value) {
   }
   return String(value || "").trim().slice(0, 800);
 }
+
+// Strict output fields must not inherit the legacy recursive/list conversion.
+export function toStringText(value, limit = 800) {
+  return typeof value === "string" ? value.replace(/\r\n/g, "\n").trim().slice(0, limit) : "";
+}
+
+export function toNullableNumber(value) {
+  if (value === null || value === undefined || (typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim())) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}

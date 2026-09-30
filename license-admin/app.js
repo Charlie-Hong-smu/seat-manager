@@ -9,7 +9,7 @@ import {
   isAiValid,
   paginate,
   upcomingExpiries,
-} from "./admin-model.js?v=20260713-2";
+} from "./admin-model.js?v=20260930-1";
 
 const state = {
   licenses: [],
@@ -23,7 +23,7 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const fields = {
-  workerUrl: $("workerUrl"), adminToken: $("adminToken"), licenseKey: $("licenseKey"), licenseId: $("licenseId"),
+  workerUrl: $("workerUrl"), adminToken: $("adminToken"), licenseKey: $("licenseKey"), licenseId: $("licenseId"), displayName: $("displayName"),
   productCode: $("productCode"), acquisitionChannel: $("acquisitionChannel"), acquisitionDetail: $("acquisitionDetail"),
   status: $("status"), allowedEditions: $("allowedEditions"), maxDevices: $("maxDevices"), expiresAt: $("expiresAt"),
   aiEnabled: $("aiEnabled"), aiExpiresAt: $("aiExpiresAt"), aiDailyLimit: $("aiDailyLimit"), clearDevices: $("clearDevices"),
@@ -52,6 +52,8 @@ async function api(path, body = {}) {
 }
 
 function errorMessage(error, status) {
+  if (error === "license_id_immutable") return "云空间 ID 不能修改，请修改客户名称；空间迁移需要单独处理";
+  if (error === "license_id_conflict") return "云空间存在授权冲突，已停止保存，请核对授权记录";
   if (error === "unauthorized") return "管理员密钥无效";
   if (error === "bad_request") return "提交内容无效，请检查渠道、日期和授权信息";
   return error || `请求失败 ${status}`;
@@ -162,7 +164,7 @@ function renderTable() {
     const status = effectiveStatus(license);
     const channel = license.acquisitionChannel || "unknown";
     return `<tr>
-      <td><div class="primary-text">${escapeHtml(license.licenseId)}</div><div class="muted mono">${escapeHtml((license.codeHash || "").slice(0, 12))}…</div><div class="muted">创建：${formatDateTime(license.createdAt)}</div></td>
+      <td><div class="primary-text">${escapeHtml(license.displayName || license.licenseId)}</div><div class="muted mono">${escapeHtml(license.licenseId)}</div><div class="muted mono">${escapeHtml((license.codeHash || "").slice(0, 12))}…</div><div class="muted">创建：${formatDateTime(license.createdAt)}</div></td>
       <td><span class="pill ${status}">${statusLabel(status)}</span></td>
       <td><span class="pill ${channel === "unknown" ? "unknown" : ""}">${escapeHtml(channelLabel(channel))}</span>${license.acquisitionDetail ? `<div class="muted">${escapeHtml(license.acquisitionDetail)}</div>` : ""}</td>
       <td>${formatAllowedEditions(license.allowedEditions)}</td>
@@ -177,6 +179,7 @@ function renderTable() {
 function resetForm() {
   fields.licenseKey.value = "";
   fields.licenseId.value = "";
+  fields.displayName.value = "";
   fields.productCode.value = "";
   fields.acquisitionChannel.value = "";
   fields.acquisitionDetail.value = "";
@@ -204,6 +207,7 @@ function editLicense(license, trigger) {
   resetForm();
   fields.licenseKey.value = license.licenseKey;
   fields.licenseId.value = license.licenseId;
+  fields.displayName.value = license.displayName || license.licenseId;
   fields.productCode.value = license.productCode || "";
   fields.acquisitionChannel.value = license.acquisitionChannel === "unknown" ? "" : license.acquisitionChannel;
   fields.acquisitionDetail.value = license.acquisitionDetail || "";
@@ -227,7 +231,7 @@ function openEditor(trigger) {
   overlay.removeAttribute("inert");
   overlay.setAttribute("aria-hidden", "false");
   requestAnimationFrame(() => overlay.classList.add("open"));
-  queueMicrotask(() => fields.licenseId.focus());
+  queueMicrotask(() => fields.displayName.focus());
 }
 
 function closeEditor() {
@@ -317,7 +321,8 @@ $("licenseForm").addEventListener("submit", async (event) => {
   try {
     await api("/admin/licenses/upsert", {
       licenseKey: fields.licenseKey.value,
-      licenseId: fields.licenseId.value.trim(),
+      ...(fields.licenseKey.value ? { licenseId: fields.licenseId.value } : {}),
+      displayName: fields.displayName.value.trim(),
       productCode: fields.productCode.value.trim(),
       productCodeSecret: await encryptProductCode(fields.productCode.value),
       acquisitionChannel: channel,

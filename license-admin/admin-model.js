@@ -95,7 +95,7 @@ export function upcomingExpiries(licenses, now = new Date(), days = 30) {
 export function filterAndSortLicenses(licenses, filters = {}, now = new Date()) {
   const query = String(filters.query || "").trim().toLocaleLowerCase("zh-CN");
   const filtered = licenses.filter((license) => {
-    const searchable = [license.licenseId, license.productCode, license.acquisitionDetail]
+    const searchable = [license.displayName, license.licenseId, license.productCode, license.acquisitionDetail]
       .map((value) => String(value || "").toLocaleLowerCase("zh-CN"));
     if (query && !searchable.some((value) => value.includes(query))) return false;
     if (filters.channel && filters.channel !== "all" && license.acquisitionChannel !== filters.channel) return false;

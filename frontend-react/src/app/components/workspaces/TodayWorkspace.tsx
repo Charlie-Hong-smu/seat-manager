@@ -6,6 +6,8 @@ import { ArrowRight, Clock3, Plus, BookOpenCheck, CalendarDays, CheckCircle2, Cl
 import { useMemo, useState } from "react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
+import { useScopedRequest } from "../../hooks/useScopedRequest";
+import { getCurrentWorkspaceScope } from "../../state/workspaces";
 import { buildTodayWorkItems, buildWeeklyFacts, getWeekRange, parseScheduleRows } from "../../state/teacherWorkbench";
 import { readRowsFromFile } from "../../state/scoreImport";
 import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, CommunicationDraft, Dormitory, FollowupTask, GradeExam, HomeworkAssignment } from "../../state/types";
@@ -36,6 +38,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   initialDraftId?: string;
   onInitialDraftConsumed?: () => void;
 }) {
+  const scheduleRead = useScopedRequest(getCurrentWorkspaceScope());
   const today = new Date().toLocaleDateString("sv-SE");
   const weekday = new Date().getDay() || 7;
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -111,9 +114,17 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
 
   async function importSchedule(file: File | null) {
     if (!file) return;
+    const request = scheduleRead.start();
+    const scope = getCurrentWorkspaceScope();
     setStatus("正在解析课表...");
-    try { onScheduleChange(parseScheduleRows(await readRowsFromFile(file), file.name)); setStatus("课表已导入并保存。"); }
-    catch { setStatus("未识别出周一至周日和课节，请调整表头后重试。"); }
+    try {
+      const rows = await readRowsFromFile(file);
+      if (!request.isCurrent() || getCurrentWorkspaceScope() !== scope) return;
+      onScheduleChange(parseScheduleRows(rows, file.name));
+      setStatus("课表已导入并保存。");
+    } catch {
+      if (request.isCurrent() && getCurrentWorkspaceScope() === scope) setStatus("未识别出周一至周日和课节，请调整表头后重试。");
+    }
   }
 
   return <div className="h-full overflow-y-auto bg-background-primary-default" data-today-workspace>

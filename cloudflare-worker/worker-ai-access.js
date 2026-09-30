@@ -2,7 +2,8 @@ import { jsonResponse } from "./worker-response.js";
 import { allowAuthAttempt, consumeAiUsage } from "./worker-usage.js";
 import { SESSION_TOKEN_TTL_MS, sha256Hex, signToken, timingSafeEqual, verifyToken } from "./worker-auth.js";
 import { readJsonBody } from "./worker-input.js";
-import { DEFAULT_AI_DAILY_LIMIT, loadLicenseRecordByKey } from "./worker-license-store.js";
+import { DEFAULT_AI_DAILY_LIMIT } from "./worker-license-store.js";
+import { verifyProductRequest } from "./worker-license-access.js";
 
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -22,23 +23,11 @@ export async function verifyAiRequest(token, env) {
   if (!productSecret || !env.SEAT_MANAGER_KV) {
     return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT, actorKey: "" };
   }
-  const productToken = await verifyToken(token, productSecret);
-  if (
-    !productToken ||
-    productToken.exp <= Date.now() ||
-    productToken.scope !== "product-access" ||
-    !productToken.licenseKey
-  ) {
+  const verified = await verifyProductRequest(token, env);
+  if (!verified) {
     return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT, actorKey: "" };
   }
-
-  const license = await loadLicenseRecordByKey(productToken.licenseKey, env);
-  if (!license || license.status !== "active") {
-    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT, actorKey: "" };
-  }
-  if (license.expiresAt && Date.parse(license.expiresAt) <= Date.now()) {
-    return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT, actorKey: "" };
-  }
+  const { license } = verified;
   if (!license.aiEnabled) {
     return { ok: false, dailyLimit: DEFAULT_AI_DAILY_LIMIT, actorKey: "" };
   }

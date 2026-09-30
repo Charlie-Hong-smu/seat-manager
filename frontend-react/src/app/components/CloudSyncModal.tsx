@@ -61,14 +61,14 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
       if (action === "status") {
         const next = await fetchCloudStatus();
         setStatus(next);
-        setMessage(next.exists ? `云端备份时间：${formatTime(next.updatedAt)}` : "云端暂无备份。");
+        setMessage(`${next.exists ? `云端备份时间：${formatTime(next.updatedAt)}` : "云端暂无备份。"}${next.metadataWarning ? "本机同步时间未能保存。" : ""}`);
         return;
       }
       if (action === "upload") {
         if (!onBeforeUpload()) { setMessage("本机保存失败，已停止上传，请先处理保存问题。"); return; }
         const next = await uploadCurrentStateToCloud(deviceName);
         setStatus(next);
-        setMessage(`已上传到云端：${formatTime(next.updatedAt)}。`);
+        setMessage(`已上传到云端：${formatTime(next.updatedAt)}。${next.metadataWarning ? "本机同步时间未能保存，请检查存储空间。" : ""}`);
         return;
       }
       if (action === "restore") {
@@ -80,7 +80,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored }: Cl
         const next = await restoreStateFromCloud();
         setStatus(next);
         onRestored();
-        setMessage(`已从云端恢复：${formatTime(next.updatedAt)}。`);
+        setMessage(`已从云端恢复：${formatTime(next.updatedAt)}。${next.metadataWarning ? "本机恢复时间未能保存，恢复数据已生效。" : ""}`);
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";

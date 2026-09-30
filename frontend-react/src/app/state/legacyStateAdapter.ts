@@ -798,14 +798,6 @@ function createSeatManagerStateBase(raw: unknown): SeatManagerState {
     .filter((item): item is AppStudent => Boolean(item))
     .map(student => ({ ...student, exams: student.exams.filter(exam => !deletedExamIds.has(exam.id)) }));
 
-  if (!students.length) {
-    // raw 是一个真实存在的对象(哪怕是空班级/新学期),就返回空状态,不塞演示数据。
-    // 只有 raw 完全不是对象(见上面 isRecord 判断)才回退演示数据 = 真正的首次使用。
-    const empty = createEmptySeatManagerState();
-    const settings = isRecord(raw.settings) ? raw.settings : {};
-    return { ...empty, settings, seatSettings: normalizeSeatSettings(settings, []), seatHistory: normalizeSeatHistory(raw.seatHistory), schedule: normalizeSchedule(raw.schedule), homeworkAssignments: normalizeHomeworkAssignments(raw.homeworkAssignments), quickRecordPresets: normalizeQuickRecordPresets(raw.quickRecordPresets), communicationDrafts: normalizeCommunicationDrafts(raw.communicationDrafts), activityEvents: normalizeActivityEvents(raw.activityEvents) };
-  }
-
   const studentIds = new Set(students.map(student => student.id));
   const dormitories = normalizeDormitories(raw.dormitories, studentIds);
   const validDormIds = new Set(dormitories.map(dormitory => dormitory.id));

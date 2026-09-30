@@ -14,6 +14,7 @@ const now = new Date("2026-07-13T00:00:00.000Z");
 const licenses = [
   {
     licenseId: "xhs-new",
+    displayName: "合成客户名",
     productCode: "SM-SEARCHME",
     acquisitionChannel: "xiaohongshu",
     acquisitionDetail: "笔记 909",
@@ -63,6 +64,7 @@ test("dashboard metrics use effective expiry and AI validity", () => {
 });
 
 test("search and combined filters cover code, channel, edition and devices", () => {
+  assert.equal(filterAndSortLicenses(licenses, { query: "合成客户名" }, now)[0].licenseId, "xhs-new");
   assert.equal(filterAndSortLicenses(licenses, { query: "searchme" }, now)[0].licenseId, "xhs-new");
   assert.equal(filterAndSortLicenses(licenses, { query: "笔记", channel: "xiaohongshu", edition: "commercial", devices: "used" }, now).length, 1);
   assert.equal(filterAndSortLicenses(licenses, { status: "expired" }, now)[0].licenseId, "wechat-expired");

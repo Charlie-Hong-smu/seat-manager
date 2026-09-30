@@ -31,6 +31,15 @@ async function token(scope = "seat-sync", secret = "sync-secret", extra = {}) {
   return signToken({ scope, exp: Date.now() + 60_000, ...extra }, secret);
 }
 
+async function productToken(kv, licenseId, secret = "product-secret", edition = "commercial") {
+  const productCode = `TEST-${licenseId}`;
+  const licenseKey = `seat-manager:license:${await sha256Hex(productCode)}`;
+  await kv.put(licenseKey, JSON.stringify({ licenseId, status: "active", allowedEditions: [edition], devices: [] }));
+  const response = await worker.fetch(request("/license/auth", { method: "POST", body: { productCode, deviceId: `device-${licenseId}`, edition } }), { SEAT_MANAGER_KV: kv, PRODUCT_TOKEN_SECRET: secret });
+  assert.equal(response.status, 200);
+  return (await response.json()).token;
+}
+
 async function expectError(response, status, error) {
   assert.equal(response.status, status);
   assert.equal(response.headers.get("Access-Control-Allow-Origin"), ORIGIN);
@@ -97,7 +106,7 @@ test("invalid, expired and wrong-scope tokens never access sync storage", async 
 test("product accounts and legacy sync keep separate keys and preserve backup metadata", async () => {
   const kv = createKv();
   const env = { SEAT_MANAGER_KV: kv, PRODUCT_TOKEN_SECRET: "product-secret", SYNC_TOKEN_SECRET: "sync-secret" };
-  const credentials = [await token(), await token("product-access", "product-secret", { licenseId: "teacher-a", edition: "zhang" }), await token("product-access", "product-secret", { licenseId: "teacher-b", edition: "commercial" })];
+  const credentials = [await token(), await productToken(kv, "teacher-a", "product-secret", "zhang"), await productToken(kv, "teacher-b")];
   for (const [index, credential] of credentials.entries()) {
     const response = await worker.fetch(request("/sync/save", { method: "POST", token: credential, body: { version: 1, deviceName: `  Mac-${index}  `, data: { ...data, marker: index } } }), env);
     assert.equal(response.status, 200);
@@ -112,12 +121,12 @@ test("product accounts and legacy sync keep separate keys and preserve backup me
     assert.ok(sizeBytes > 0);
     assert.deepEqual(await loaded.json(), { ...loadMetadata, data: { ...data, marker: index } });
   }
-  assert.deepEqual([...kv.values.keys()], [LEGACY_KEY, "seat-manager:license:teacher-a:state", "seat-manager:license:teacher-b:state"]);
-  const fallback = await token("product-access", "fallback-secret", { licenseId: " teacher-a! " });
+  assert.deepEqual([...kv.values.keys()].filter(key => key === LEGACY_KEY || key.endsWith(":state")), [LEGACY_KEY, "seat-manager:license:teacher-a:state", "seat-manager:license:teacher-b:state"]);
+  const fallback = await productToken(kv, "teacher-a", "fallback-secret", "zhang");
   const response = await worker.fetch(request("/sync/load", { token: fallback }), { SEAT_MANAGER_KV: kv, TOKEN_SECRET: "fallback-secret" });
   assert.equal((await response.json()).data.marker, 1);
   const listed = await worker.fetch(request("/admin/licenses/list", { method: "POST", token: "admin", body: {} }), { ...env, LICENSE_ADMIN_TOKEN: "admin" });
-  assert.deepEqual((await listed.json()).licenses, []);
+  assert.equal((await listed.json()).licenses.length, 2);
 });
 
 test("legacy saved records keep their response defaults", async () => {
@@ -178,7 +187,7 @@ test("whole-workspace backups survive save and load alongside the legacy active 
   };
   const kv = createKv();
   const env = { SEAT_MANAGER_KV: kv, PRODUCT_TOKEN_SECRET: "product-secret" };
-  const credential = await token("product-access", "product-secret", { licenseId: "whole-book" });
+  const credential = await productToken(kv, "whole-book");
   const response = await worker.fetch(request("/sync/save", { method: "POST", token: credential, body: { version: 1, deviceName: "Mac", data, workspaceBook } }), env);
   assert.equal(response.status, 200);
   const saved = kv.values.get("seat-manager:license:whole-book:state");
@@ -199,7 +208,7 @@ test("Commercial proxy passes authorization and complete sync payloads to the Wo
     else delete globalThis.Netlify;
   });
   const env = { PRODUCT_TOKEN_SECRET: "product-secret", SEAT_MANAGER_KV: createKv() };
-  const credential = await token("product-access", "product-secret", { licenseId: "proxy-teacher" });
+  const credential = await productToken(env.SEAT_MANAGER_KV, "proxy-teacher");
   t.mock.method(globalThis, "fetch", async (url, options) => {
     assert.equal(url.origin, "https://worker.test");
     assert.equal(options.headers.get("Authorization"), `Bearer ${credential}`);
