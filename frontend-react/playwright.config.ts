@@ -6,7 +6,9 @@ const basePath = commercial ? "/" : "/seat-manager/";
 
 export default defineConfig({
   fullyParallel: Boolean(process.env.CI),
-  workers: process.env.CI ? 2 : 1,
+  // Frame-by-frame motion assertions need an uncontended browser per runner.
+  // The two Zhang matrix shards still run concurrently on separate runners.
+  workers: 1,
   testDir: "./e2e",
   testMatch: commercial ? ["license-admin-safety.spec.ts", "teacher-data-safety.spec.ts", "cloud-sync.spec.ts", "lazy-workspaces.spec.ts", "commercial.spec.ts", "auth-persistence.spec.ts", "followup-grouping.spec.ts", "seat-rotation-history.spec.ts", "seat-mode-transition.spec.ts", "functional-state.spec.ts", "registration-settings.spec.ts", "workbench-safety.spec.ts", "class-duties.spec.ts", "app-motion.spec.ts", "mobile-usability.spec.ts"] : ["license-admin-safety.spec.ts", "teacher-data-safety.spec.ts", "cloud-sync.spec.ts", "lazy-workspaces.spec.ts", "app-state.spec.ts", "pwa.spec.ts", "auth-persistence.spec.ts", "followup-grouping.spec.ts", "seat-rotation-history.spec.ts", "seat-mode-transition.spec.ts", "functional-state.spec.ts", "registration-settings.spec.ts", "workbench-safety.spec.ts", "class-duties.spec.ts", "app-motion.spec.ts", "mobile-usability.spec.ts"],
   outputDir: "./test-results",
