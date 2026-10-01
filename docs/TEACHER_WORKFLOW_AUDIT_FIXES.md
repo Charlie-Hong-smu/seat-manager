@@ -1,6 +1,6 @@
 # 班主任实际使用流程：12 项修复交接
 
-审查基线：`9c5e3f8067de3e8aff126590d3689a1bc12bfad5`。本轮在最新本地主线 `b2738778a5dab4fa4c49cc9a233f701e5409e6b6` 上逐项重新核实，独立分支为 `codex/teacher-workflow-audit-12`。12 项在该版本仍存在，现已修复并加入回归。本批仅获修复和测试授权，未合并、推送或部署；Space 由父任务更新。
+审查基线：`9c5e3f8067de3e8aff126590d3689a1bc12bfad5`。本轮在最新本地主线 `b2738778a5dab4fa4c49cc9a233f701e5409e6b6` 上逐项重新核实，独立分支为 `codex/teacher-workflow-audit-12`。12 项在该版本仍存在，现已修复并加入回归。初始阶段仅获修复和测试授权，完成本地提交 `69ba61d287651aac1c5b170412bb6442f66e19e3`，当时未合并、推送或部署。用户后续已批准两版发布，授权与执行边界见末节；Space 由父任务更新。
 
 ## 逐项修改和证据
 
@@ -46,7 +46,7 @@
 
 本机证据保存在 `/tmp/seat-manager-teacher-12-final-checks.log`、`/tmp/seat-manager-teacher-12-worker-final.log`、`/tmp/seat-manager-teacher-12-{zhang|commercial}-final.log` 和相应 `.exit`。完整浏览器报告分别为 `/tmp/seat-manager-teacher-12-zhang-report/index.html`、`/tmp/seat-manager-teacher-12-commercial-report/index.html`。这些是本地测试证据，不是远端 CI 或线上发布结果。
 
-未执行：新批次 CI、推送、合并、部署、Commercial 晋升、线上数据或授权迁移、收费 AI、真实资料验收。修复只有在获发布授权并按版本治理发布对应前端后才对线上老师生效；本批 Worker 生产逻辑未改，不需要为字数契约发布新后端。
+初始本地交接时未执行：新批次 CI、推送、合并、部署、Commercial 晋升、线上数据或授权迁移、收费 AI、真实资料验收。后续发布已获用户授权，执行范围见末节。修复只有在对应前端实际发布后才对线上老师生效；本批 Worker 生产逻辑未改，不需要为字数契约新增后端逻辑。
 
 ## UI 与共享模式验收
 
@@ -84,4 +84,6 @@ E2E_PORT=4274 pnpm test:e2e:commercial
 
 ## 交接状态
 
-修复基线和只读远端 main 核对结果均为 `b2738778a5dab4fa4c49cc9a233f701e5409e6b6`；本批成果仅保存在独立本地分支，最终本地提交 SHA 随交接回复提供。没有改动线上授权、备份、Worker 安全配置或 Space。新批次前端修复尚未对线上生效；后续发布需要用户授权，并先发布 Zhang，再按版本治理单独批准 Commercial 晋升。
+初始交接时，修复基线和只读远端 main 核对结果均为 `b2738778a5dab4fa4c49cc9a233f701e5409e6b6`，成果保存在上述独立本地提交。没有改动线上授权、备份、Worker 安全配置或 Space。
+
+2026-10-01，用户明确批准合并推送并将小张版和 Commercial 一并发布。重新 fetch 后远端 main 仍为 `b2738778a5dab4fa4c49cc9a233f701e5409e6b6`，无新提交或冲突，原有 output 目录不进入提交。先发布并核验包含治理记录的最终 main SHA，再通过既有 `promote-commercial.yml` 晋升同一 SHA；本地测试不替代该 SHA 的 CI。Commercial 先前发布 SHA 为 `43da148e31ce7bf4828075185506f12c40e0e2e5`，此次也包含第一批前端数据修复，授权兼容说明见 `BACKEND_TEACHER_AUDIT_FIXES.md`。共享 Worker 的第一批修复已在工作流 `36731259651` 发布；本批只增加契约测试，目录触发器会重新部署相同生产逻辑，管理页无新增变更。此次授权不包含线上授权/备份迁移或凭据安全配置更改。最终发布 SHA、工作流与线上核验结果随发布交接提供；授权记录不代表发布已成功。

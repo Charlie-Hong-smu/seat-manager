@@ -99,3 +99,5 @@
 2026-09-22（手机适配）：用户明确要求将 `codex/mobile-usability` 合并推送 main，并追加授权 Commercial 同步发布。本轮业务提交为 `386dd06`；先确认包含本记录的 main 完整 SHA 的 Zhang 检查和部署成功，再以该 SHA 晋升 Commercial。主目录其他任务的未提交改动不进入本次发布。验证记录见 `MOBILE_USABILITY.md`，实际部署状态以两条对应 SHA 的工作流为准。
 
 2026-09-27（成绩阈值与分布）：用户在本地预览验收后明确要求提交推送并同步发布两版。本轮包含得分率阈值与各科满分、总分独立阈值、细分直方图与名次分层、表格/导出阈值一致性、图表卡片自适应填充、滚动内容不越过吸附页签的层叠修复，以及 `MotionSwitch` 快照/`FadeSwap`/`RollingText`/`useBlendedColors` 的过渡规则更新。数据兼容：新增 `fullScores` 与总分阈值字段均为可选，旧考试记录与备份格式不变。验收证据以本 SHA 的 Zhang 检查与部署成功为准，再以同一完整 SHA 晋升 Commercial。
+
+2026-10-01（教师流程 12 项修复）：用户明确要求合并、推送，并将小张版与 Commercial 一并发布。业务修复提交为 `69ba61d287651aac1c5b170412bb6442f66e19e3`；本地最终验收为 Zhang 129/129、Commercial 102/102，不能替代最终 main 提交的 CI。先等待包含本记录的完整 main SHA 的静态/单元检查、双版浏览器检查及 Zhang 部署成功，再以该同一完整 SHA 触发 Commercial 晋升。此次 Commercial 从 `43da148e31ce7bf4828075185506f12c40e0e2e5` 升级，也包含 `9c5e3f8067de3e8aff126590d3689a1bc12bfad5` 的第一批前端修复；其共享 Worker 和管理页此前已成功发布。新批次仅修改 Worker 契约测试，既有目录触发器会重新验证并发布相同生产逻辑，管理页没有新增修改。保持原存储键、备份格式、路由、绑定和 secret，不进行线上授权或备份迁移。旧产品凭证兼容和租户冲突边界见 `BACKEND_TEACHER_AUDIT_FIXES.md`；本批自身不新增强制重新登录要求。发布成功以对应 SHA 的实际工作流终态及线上核验为准，Space 由父任务更新。
