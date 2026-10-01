@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "frontend-react/src/**"
+      - "shared/**"
       - "frontend-react/public/**"
       - "frontend-react/e2e/**"
       - "frontend-react/scripts/**"
@@ -52,7 +53,12 @@ jobs:
         working-directory: frontend-react
         run: pnpm install --frozen-lockfile
 
+      - name: Install Worker test runtime
+        working-directory: cloudflare-worker
+        run: npm ci
+
       - name: Validate React frontend
+        # Snapshot state-machine tests use the same pinned workerd/SQLite runtime as the backend.
         working-directory: frontend-react
         run: pnpm run check:design && pnpm run lint && pnpm run typecheck && pnpm run test:coverage
 
@@ -87,6 +93,10 @@ jobs:
       - name: Install dependencies
         working-directory: frontend-react
         run: pnpm install --frozen-lockfile
+
+      - name: Install Worker browser test runtime
+        working-directory: cloudflare-worker
+        run: npm ci
 
       - name: Install Chromium
         working-directory: frontend-react
@@ -140,6 +150,10 @@ jobs:
       - name: Install dependencies
         working-directory: frontend-react
         run: pnpm install --frozen-lockfile
+
+      - name: Install Worker browser test runtime
+        working-directory: cloudflare-worker
+        run: npm ci
 
       - name: Install Chromium
         working-directory: frontend-react

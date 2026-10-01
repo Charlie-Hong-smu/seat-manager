@@ -1,5 +1,6 @@
 import { COMMENT_SAVE_FAILURE } from "../state/commentPersistence";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cacheGenerationSuffix } from "../state/workspaceSyncEvents";
 import { ArrowRight, Bot, Check, ChevronDown, Copy, FilePlus2, Loader2, RotateCcw, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 
 import {
@@ -69,7 +70,7 @@ function hasBrowserStorage(): boolean {
 function getStorageKey(): string {
   try {
     const slice = getCurrentSlice();
-    return `seat-manager-ai-assistant-chat:${slice.id}`;
+    return `seat-manager-ai-assistant-chat:${slice.id}${cacheGenerationSuffix()}`;
   } catch {
     return "seat-manager-ai-assistant-chat:default";
   }

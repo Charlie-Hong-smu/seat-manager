@@ -18,6 +18,8 @@ pnpm dev --host 127.0.0.1
 ```bash
 cd frontend-react
 pnpm install --frozen-lockfile
+# 同步状态机联合测试复用 Worker 锁定的本地运行时
+(cd ../cloudflare-worker && npm ci)
 pnpm check:design
 pnpm lint
 pnpm typecheck
@@ -139,3 +141,16 @@ Worker 发布入口为 `worker-entry.js`，`wrangler.toml` 包含 `ACCOUNT_COORD
 发布顺序为共享 Worker、授权管理静态页、按版本治理晋升前端。管理页的新 `displayName` 和只读空间 ID 依赖新 Worker；旧管理页编辑旧 ID 只允许原值，新建时旧代号作为显示名而非存储空间。未触碰的旧设备 token 有兼容窗口，重新登录升级后旧会话失效；教师可能需要重新登录，但本机文件柜不删除。以上是发布准备说明，运行本地回归或 dry-run 不代表已上线。
 
 BoardUI 并行本地验证时，可用 `E2E_PORT=4193 pnpm exec playwright test app-motion.spec.ts` 指定独立端口；商业版同时设置 `E2E_EDITION=commercial` 并另选端口。默认 4173/4174 不变，避免复用另一任务的旧预览产物。
+
+
+## 安全快照同步门禁与回滚
+
+本次 main 只发布 Zhang 前端和共享 Worker；没有 Commercial 晋升授权。`SYNC_MIGRATION_ENABLED=false`、`SYNC_AUTOMATIC_ENABLED=false`、`SYNC_COMMERCIAL_PROTOCOL_READY=false` 及前端 `AUTOMATIC_SYNC_RELEASE_ENABLED=false` 是发布初态，不替老师启用或传送数据。未迁移空间旧 Commercial 的手动 save/load 不变；新一键同步显示迁移未就绪。已经建立 SQLite head 的空间即使关闭迁移门禁也仍用 DO，不能以关闭开关退回 KV。
+
+后续迁移必须先单独批准真实数据操作，完成可验证备份、旧 Worker 在途写入收口和 KV 传播核对，再以受控测试空间打开迁移门禁验证一次导入、回滚及镜像。禁止在本次验收中使用真实授权/学生/备份。strict 启用还需 Commercial 前端明确晋升、所有可能盲写客户端的安全退役条件，不能仅凭客户端版本登记声称已升级；新授权记录也不能通过改版别绕过已 strict 空间保护。自动模式未来开放前还需补齐教师 opt-in UI、同空间重开偏好恢复和真机挂起验收；当前只发布关闭的自动调度代码。
+
+定向证据：`node --test test/sync-runtime.test.js` 在真实本地 workerd/SQLite 中检查并发 CAS、响应丢失回执、重启、中文近 5 MiB 分块和事务回滚、KV 一次迁移/镜像故障、删除与授权重建、旧手动合同、混版 strict 拒绝。前端 `pnpm test syncProtocol.test.ts syncGeneration.test.tsx syncRuntime.test.ts` 覆盖编辑/草稿/AI/撤销代际、离线双改、换码、quota 与错误分流；两版 `safe-sync.spec.ts` 验证真实浏览器 IndexedDB 待发送重开、双版本导出/确认、手机 320/390px 与关闭门禁。完整原断言继续运行，不用新定向检查替代。
+
+回滚优先撤回 Zhang UI 或关闭能力门禁，保留 SyncCoordinator binding/migration、权威 head、epoch 与 strict 拒绝逻辑。已经迁移/strict 的空间不得部署只会 KV 盲写的旧 Worker；若需后端修复，应提交保留新协议的向前修复。兼容镜像不能当作无条件权威恢复源。删除失败会先撤销授权并返回错误，可依保留的授权身份重试 tombstone；不得手工清空 DO head 使旧 KV 再导入。SQLite 历史不是无限备份，老师仍应手动导出 JSON。
+
+`syncRuntime.test.ts` 将实际前端 SnapshotSync 直接连接本地 workerd/SQLite，检查两设备同基线 CAS、丢响应/运行时重启、上传继续编辑、干净拉取期间新草稿、班级选择/不循环、删除 epoch、存储失败与换码回执隔离。运行前须安装 `cloudflare-worker/` 的 npm 锁定依赖；Pages 静态验收及旧版 Commercial 完整验证分支已加入该安装步骤，复用成功证据时仍按原规则跳过完整验证。

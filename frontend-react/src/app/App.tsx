@@ -4,6 +4,9 @@ import { captureSeatChange, restoreSeatChange, restoreSeatSnapshot, type SeatUnd
 import { normalizeFollowupTypes } from "./state/followupTypes";
 import { getDutyGroups, readClassDuties, type ClassDutiesBinding } from "./state/classDuties";
 import { useWorkspaceWriteAccess } from "./hooks/useWorkspaceWriteAccess";
+import { useCloudSync } from "./hooks/useCloudSync";
+import { getRemoteGeneration, useRemoteGeneration } from "./state/workspaceSyncEvents";
+import { SyncStatusBar } from "./components/SyncStatusBar";
 import { exportUnsavedClassBackup } from "./state/backupStorage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw } from "lucide-react";
@@ -424,6 +427,17 @@ export default function App() {
   }, [loggedIn]);
   const hasMounted = useRef(false);
   const studentAdviceRunning = useRef(false);
+  const remoteGeneration = useRemoteGeneration();
+  const cloudSync = useCloudSync({
+    enabled: loggedIn, writable: writeAccess.status === "ready" && workspaceStorage.status !== "corrupt",
+    flush: () => flushPersistRef.current(),
+    editing: () => Boolean(selectedStudent || followupDraft || quickRecordOpen || shufflePreview || showCommentWorkbench || aiCompanionOpen),
+    onApplied: () => {
+      reloadFromLegacyState(); setShufflePreview(null); setFollowupDraft(null); setQuickRecordOpen(false);
+      setAiCompanionMounted(false); setAiCompanionOpen(false); actionToast.dismiss(); setSelectedHistorySnapshot(null);
+      setStudentAdviceProgress({ busy: false, status: "", generated: 0, failed: 0, skipped: 0, total: 0 });
+    },
+  });
 
   // 400ms 防抖：连续输入合并为一次整柜写入。关页、隐藏、切换班级或登出前
   // 必须先经 flushPersistRef 同步落盘；flush 时校验切片未变，旧切片状态不得写进新切片。
@@ -944,6 +958,7 @@ export default function App() {
     });
 
     for (const student of students) {
+      if (remoteGeneration !== getRemoteGeneration()) break;
       if (student.exams.length < 2) {
         skipped += 1;
         continue;
@@ -967,6 +982,7 @@ export default function App() {
       } catch {
         failed += 1;
       }
+      if (remoteGeneration !== getRemoteGeneration()) break;
       setStudentAdviceProgress({
         busy: true,
         status: `正在生成学生趋势分析：${generated + failed} / ${eligible.length}`,
@@ -977,7 +993,7 @@ export default function App() {
       });
     }
 
-    setStudentAdviceProgress({
+    if (remoteGeneration === getRemoteGeneration()) setStudentAdviceProgress({
       busy: false,
       status: `已生成 ${generated} 人，跳过 ${skipped} 人，失败 ${failed} 人。`,
       generated,
@@ -1117,6 +1133,7 @@ export default function App() {
       onCloseMobileNavigation={() => setMobileNavigationOpen(false)}
       sidebarCollapsed={sidebarCollapsed}
       header={
+        <>
         <TopHeader
           students={students}
           sidebarCollapsed={isMobile ? !mobileNavigationOpen : sidebarCollapsed}
@@ -1139,6 +1156,8 @@ export default function App() {
             setLoggedIn(false);
           }}
         />
+        <SyncStatusBar view={cloudSync.view} saveStatus={saveStatus} onOpen={() => setShowCloudSync(true)} onRetrySave={() => { setSaveStatus(persistState() ? "saved" : "failed"); }} />
+        </>
       }
       sidebar={
         <Sidebar
@@ -1256,6 +1275,8 @@ export default function App() {
               onClose={() => setShowCloudSync(false)}
               onBeforeUpload={saveCurrentLegacySnapshot}
               onRestored={reloadFromLegacyState}
+              engine={cloudSync.engine}
+              syncView={cloudSync.view}
             />
           <FollowupTaskDrawer taskTypes={taskTypes} onTaskTypesChange={onTaskTypesChange} open={Boolean(followupDraft)} students={students} draft={followupDraft} onClose={() => { followupAfterSave.current = null; setFollowupDraft(null); }} onConfirm={confirmFollowupTask} />
           <QuickRecordDrawer open={quickRecordOpen} students={students} presets={quickRecordPresets} onClose={() => setQuickRecordOpen(false)} onApply={applyQuickRecord} onPresetsChange={setQuickRecordPresets} />
@@ -1276,7 +1297,7 @@ export default function App() {
         </>
       }
     >
-      <MotionSwitch transitionKey={sidebarTab} navigationIndex={Object.keys(APP_TAB_LABELS).indexOf(sidebarTab)} fixed className="h-full">
+      <MotionSwitch key={remoteGeneration} transitionKey={sidebarTab} navigationIndex={Object.keys(APP_TAB_LABELS).indexOf(sidebarTab)} fixed className="h-full">
         {showCommentWorkbench && (
           CommentWorkbenchComponent
             ? <CommentWorkbenchComponent students={students} onClose={closeCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />

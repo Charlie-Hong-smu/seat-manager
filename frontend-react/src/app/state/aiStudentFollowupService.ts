@@ -3,6 +3,7 @@ import { getProductAuthToken } from "./authStorage";
 import { buildStudentAiContext, compactStudentContextForToken } from "./aiStudentContext";
 import type { AppStudent, Dormitory, StudentCommentDraft } from "./types";
 import { getCurrentWorkspaceScope } from "./workspaces";
+import { cacheGenerationSuffix } from "./workspaceSyncEvents";
 
 const AI_RESULT_CACHE_KEY = "seat-manager-ai-result-cache-v1";
 const AI_STUDENT_FOLLOWUP_LAST_KEY = "seat-manager-ai-student-followup-last-v1";
@@ -49,7 +50,7 @@ function stableStringify(value: unknown): string {
 }
 
 function getCacheSignature(payload: unknown): string {
-  return `${AI_FOLLOWUP_CACHE_SCOPE}:${stableStringify(payload)}`;
+  return `${cacheGenerationSuffix()}${AI_FOLLOWUP_CACHE_SCOPE}:${stableStringify(payload)}`;
 }
 
 function getCachedFollowup(signature: string): AiStudentFollowupResult | null {
@@ -87,7 +88,7 @@ export function readLastStudentFollowup(studentId: string): AiStudentFollowupRes
   }
   try {
     const cache = JSON.parse(window.localStorage.getItem(AI_STUDENT_FOLLOWUP_LAST_KEY) || "{}") as Record<string, AiStudentFollowupResult>;
-    const key = `${getCurrentWorkspaceScope()}:${studentId}`;
+    const key = `${getCurrentWorkspaceScope()}:${studentId}${cacheGenerationSuffix()}`;
     const cached = cache[key] ? normalizeResult(cache[key]) : null;
     return hasUsefulFollowup(cached) ? cached : null;
   } catch {
@@ -95,13 +96,12 @@ export function readLastStudentFollowup(studentId: string): AiStudentFollowupRes
   }
 }
 
-function storeLastStudentFollowup(studentId: string, result: AiStudentFollowupResult): void {
+function storeLastStudentFollowup(key: string, result: AiStudentFollowupResult): void {
   if (!hasBrowserStorage()) {
     return;
   }
   try {
     const cache = JSON.parse(window.localStorage.getItem(AI_STUDENT_FOLLOWUP_LAST_KEY) || "{}") as Record<string, AiStudentFollowupResult>;
-    const key = `${getCurrentWorkspaceScope()}:${studentId}`;
     const next = Object.fromEntries(Object.entries({ ...cache, [key]: result }).slice(-120));
     window.localStorage.setItem(AI_STUDENT_FOLLOWUP_LAST_KEY, JSON.stringify(next));
   } catch {
@@ -189,10 +189,11 @@ export async function generateStudentFollowup(
     throw new Error("ai_payload_too_large");
   }
   const signature = getCacheSignature({ studentId: student.id, payload });
+  const lastKey = `${getCurrentWorkspaceScope()}:${student.id}${cacheGenerationSuffix()}`;
   if (!input?.force) {
     const cached = getCachedFollowup(signature);
     if (hasUsefulFollowup(cached)) {
-      storeLastStudentFollowup(student.id, cached);
+      storeLastStudentFollowup(lastKey, cached);
       return cached;
     }
   }
@@ -231,6 +232,6 @@ export async function generateStudentFollowup(
     throw new Error("ai_failed");
   }
   storeCachedFollowup(signature, normalized);
-  storeLastStudentFollowup(student.id, normalized);
+  storeLastStudentFollowup(lastKey, normalized);
   return normalized;
 }

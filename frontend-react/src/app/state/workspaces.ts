@@ -24,6 +24,7 @@ import {
   type WorkspaceValidationIssue,
 } from "./workspaceValidation";
 import { toLocalDateKey } from "./dateKey";
+import { notifyRemoteApplied, prepareRemoteGeneration } from "./workspaceSyncEvents";
 
 const LEGACY_STORAGE_KEY = "homeroom-seat-manager-v1";
 export const WORKSPACES_KEY = "seat-manager-workspaces-v1";
@@ -276,7 +277,7 @@ function readBookRaw(): WorkspaceBook | null {
   return null;
 }
 
-function writeBook(book: WorkspaceBook): boolean {
+function writeBook(book: WorkspaceBook, source: "local" | "remote" | "replacement" = "local"): boolean {
   if (!hasStorage()) {
     return false;
   }
@@ -288,13 +289,18 @@ function writeBook(book: WorkspaceBook): boolean {
     }
     if (!writeEnabled) return false;
     const raw = JSON.stringify(book);
-    window.localStorage.setItem(WORKSPACES_KEY, raw);
+    const rollbackGeneration = source === "local" ? undefined : prepareRemoteGeneration();
+    try { window.localStorage.setItem(WORKSPACES_KEY, raw); }
+    catch (error) { rollbackGeneration?.(); throw error; }
     if (acceptedRevision !== undefined) acceptedRevision = raw;
     bookCache = { raw, book: structuredClone(book) };
+    if (source !== "local") notifyRemoteApplied();
+    window.dispatchEvent(new CustomEvent("workspace-book-written", { detail: { book, source } }));
     return true;
   } catch (error) {
     bookCache = null;
     console.warn("无法保存文件柜数据", error);
+    window.dispatchEvent(new Event("workspace-book-write-failed"));
     return false;
   }
 }
@@ -385,8 +391,8 @@ export function prepareWorkspaceImport(payload: unknown): PreparedWorkspaceImpor
 }
 
 /** 已完成校验的数据只执行一次原子 localStorage 写入。 */
-export function importPreparedWorkspace(prepared: PreparedWorkspaceImport): boolean {
-  return writeBook(prepared.book);
+export function importPreparedWorkspace(prepared: PreparedWorkspaceImport, source: "remote" | "replacement" = "replacement"): boolean {
+  return writeBook(prepared.book, source);
 }
 
 /** 仅供损坏数据恢复界面在用户明确确认后创建一个新空柜。 */

@@ -15,6 +15,7 @@ export const PUBLIC_POST_ROUTES = Object.freeze([
 ]);
 
 export const PUBLIC_ROUTE_PREFIXES = Object.freeze(["/sync/"]);
+export const PUBLIC_SYNC_ROUTES = Object.freeze(["/sync/auth", "/sync/status", "/sync/save", "/sync/load", "/sync/mode"]);
 export const PRIVATE_ROUTE_PREFIXES = Object.freeze(["/admin/licenses/"]);
 
 export function isPublicProxyRoute(pathname) {

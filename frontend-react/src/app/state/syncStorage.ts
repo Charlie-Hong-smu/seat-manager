@@ -1,8 +1,9 @@
-import { readLegacyRootState } from "./storage";
 import { exportWholeBook, importPreparedWorkspace, prepareWorkspaceImport } from "./workspaces";
 import { exportPreImportBackup } from "./backupStorage";
 import { getProductAuthToken } from "./authStorage";
 import { getWorkerBaseUrl } from "./workerEndpoint";
+import { contentHash, snapshotOf, SyncProtocolError } from "./syncProtocol";
+import { getEditVersion, getRemoteGeneration, hasUnsavedController } from "./workspaceSyncEvents";
 
 const SYNC_AUTH_TOKEN_KEY = "seat-manager-sync-token";
 const SYNC_AUTH_EXPIRES_KEY = "seat-manager-sync-expires";
@@ -133,6 +134,7 @@ async function fetchSyncEndpoint<T>(path: string, options: RequestInit = {}): Pr
       Authorization: `Bearer ${token}`,
     },
   });
+  if (token !== (getProductAuthToken() || getStoredSyncAuth()?.token || "")) throw new Error("sync_auth_required");
   if (response.status === 401) {
     if (!productToken) {
       clearSyncAuth();
@@ -145,6 +147,25 @@ async function fetchSyncEndpoint<T>(path: string, options: RequestInit = {}): Pr
   return response.json() as Promise<T>;
 }
 
+export async function fetchSyncProtocol<T>(path: string, token: string, body?: unknown): Promise<T> {
+  if (!token || token === "local-preview-session") throw new SyncProtocolError("sync_auth_required", 401);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch(`${getWorkerBaseUrl()}${path}`, {
+      method: body === undefined ? "GET" : "POST", signal: controller.signal,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const value = await response.json() as T & { error?: string };
+    if (!response.ok) throw new SyncProtocolError(value.error || "sync_unavailable", response.status);
+    return value;
+  } catch (error) {
+    if (error instanceof SyncProtocolError) throw error;
+    throw new SyncProtocolError("sync_network_failed");
+  } finally { window.clearTimeout(timer); }
+}
+
 export async function fetchCloudStatus(): Promise<SyncStatus> {
   const status = await fetchSyncEndpoint<SyncStatus>("/sync/status");
   const saved = !status.updatedAt || storeSyncMetadata([[SYNC_LAST_CLOUD_UPDATED_AT_KEY, status.updatedAt]]);
@@ -155,7 +176,7 @@ export async function uploadCurrentStateToCloud(deviceName: string): Promise<Syn
   // 上传整个文件柜（所有班级、所有学期）。
   // 同时把当前切片也写进 data 字段，兼容不支持多班级的旧版客户端读取。
   const book = exportWholeBook();
-  const legacyData = readLegacyRootState();
+  const legacyData = snapshotOf(book, deviceName).data;
   const payload = {
     version: SYNC_VERSION,
     updatedAt: new Date().toISOString(),
@@ -180,6 +201,8 @@ export async function uploadCurrentStateToCloud(deviceName: string): Promise<Syn
 }
 
 export async function restoreStateFromCloud(): Promise<SyncStatus> {
+  const localHash = await contentHash(snapshotOf(exportWholeBook(), getSyncDeviceName()));
+  const editVersion = getEditVersion(); const generation = getRemoteGeneration();
   const cloud = await fetchSyncEndpoint<{
     updatedAt?: string;
     deviceName?: string;
@@ -194,8 +217,10 @@ export async function restoreStateFromCloud(): Promise<SyncStatus> {
   } catch {
     throw new Error("sync_invalid_data");
   }
+  const currentHash = await contentHash(snapshotOf(exportWholeBook(), getSyncDeviceName()));
+  if (currentHash !== localHash || editVersion !== getEditVersion() || generation !== getRemoteGeneration() || hasUnsavedController()) throw new Error("sync_changed_during_request");
   exportPreImportBackup();
-  if (!importPreparedWorkspace(prepared)) throw new Error("sync_invalid_data");
+  if (!importPreparedWorkspace(prepared, "remote")) throw new Error("sync_invalid_data");
 
   const restoredAt = new Date().toISOString();
   const saved = storeSyncMetadata([[SYNC_LAST_RESTORE_AT_KEY, restoredAt], [SYNC_LAST_CLOUD_UPDATED_AT_KEY, cloud.updatedAt || ""]]);

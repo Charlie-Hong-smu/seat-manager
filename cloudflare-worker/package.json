@@ -10,6 +10,7 @@
     "check": "node scripts/check.mjs && node --test test/*.test.js"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "4.20260702.1",
     "miniflare": "4.20260625.0",
     "wrangler": "^4.0.0"
   }

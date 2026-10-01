@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { getCurrentWorkspaceScope } from "../state/workspaces";
+import { cacheGenerationSuffix, getRemoteGeneration } from "../state/workspaceSyncEvents";
 
 export const RECLICK_UNDO_MS = 6000;
 type Entries<T> = Record<string, T | undefined>;
@@ -9,7 +10,8 @@ const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b
 
 /** Each undo owns only its changed entries; later edits and other scopes are never overwritten. */
 export function useRegistrationUndo<T>({ scope, entries, onRestore }: { scope: string; entries: Entries<T>; onRestore: (values: Entries<T>) => void }) {
-  const fullScope = `${getCurrentWorkspaceScope()}:${scope}`;
+  const generation = getRemoteGeneration();
+  const fullScope = `${getCurrentWorkspaceScope()}:${scope}${cacheGenerationSuffix()}`;
   const latest = useRef({ scope: fullScope, entries, onRestore });
   const recent = useRef(new Map<string, Registration<T>>());
   if (latest.current.scope !== fullScope) {
@@ -20,7 +22,7 @@ export function useRegistrationUndo<T>({ scope, entries, onRestore }: { scope: s
   const [last, setLast] = useState<Registration<T> | null>(null);
 
   function valid(item: Registration<T>) {
-    return item.active && item.scope === latest.current.scope && item.changes.every(change => equal(latest.current.entries[change.key], change.after));
+    return generation === getRemoteGeneration() && item.active && item.scope === latest.current.scope && item.changes.every(change => equal(latest.current.entries[change.key], change.after));
   }
   function undo(item: Registration<T>) {
     if (!valid(item)) return false;

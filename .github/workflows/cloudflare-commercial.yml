@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "cloudflare-worker/**"
+      - "shared/**"
       - "license-admin/**"
       - ".github/workflows/cloudflare-commercial.yml"
       - "!frontend-react/**/*.md"
@@ -69,7 +70,7 @@ jobs:
           git diff --name-only "$BEFORE" "${{ github.sha }}" > /tmp/changed-files.txt
           grep -Ev '\.md$' /tmp/changed-files.txt > /tmp/deploy-files.txt || true
 
-          if grep -Eq '^(cloudflare-worker/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/deploy-files.txt; then
+          if grep -Eq '^(cloudflare-worker/|shared/|\.github/workflows/cloudflare-commercial\.yml$)' /tmp/deploy-files.txt; then
             echo "worker=true" >> "$GITHUB_OUTPUT"
           else
             echo "worker=false" >> "$GITHUB_OUTPUT"

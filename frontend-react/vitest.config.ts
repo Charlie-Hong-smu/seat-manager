@@ -13,7 +13,7 @@ export default defineConfig({
       reporter: ["text", "json-summary"],
       reportsDirectory: "./coverage",
       include: [
-        "src/app/state/{backupStorage,classDuties,classFundActions,dormitoryActions,studentActions,aiStudentContext,aiAssistantPayload,aiAssistantResult,commentStorage,commentPersistence,seatWorkflow,seatActions}.ts",
+        "src/app/state/{backupStorage,classDuties,classFundActions,dormitoryActions,studentActions,aiStudentContext,aiAssistantPayload,aiAssistantResult,commentStorage,commentPersistence,seatWorkflow,seatActions,syncProtocol,workspaceSyncEvents}.ts",
       ],
       thresholds: {
         statements: 70,

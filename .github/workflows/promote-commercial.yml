@@ -69,6 +69,11 @@ jobs:
           APPROVED_SHA: ${{ inputs.commit_sha }}
         run: node .release-tools/.github/scripts/verify-zhang-release.mjs
 
+      - name: Install Worker test runtime
+        if: steps.zhang.outputs.reuse_validation != 'true'
+        working-directory: cloudflare-worker
+        run: npm ci
+
       - name: Install dependencies
         working-directory: frontend-react
         run: pnpm install --frozen-lockfile

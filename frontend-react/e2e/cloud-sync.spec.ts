@@ -40,12 +40,14 @@ test("manual cloud sync preserves every class and term through the real Worker h
     },
   };
   const syncRequests: string[] = [];
+  const protocolRequests: string[] = [];
   // Only storage and transport are local test doubles; auth and sync execute production handlers.
-  await page.route(/\/(license\/auth|sync\/(status|save|load))$/, async route => {
+  await page.route(/\/(license\/auth|sync\/(status|save|load))(\?.*)?$/, async route => {
     const incoming = route.request();
     const path = new URL(incoming.url()).pathname.replace(/^\/api/, "");
-    if (path.startsWith("/sync/")) syncRequests.push(path);
-    const response = await worker.fetch(new Request(`https://worker.test${path}`, {
+    const query = new URL(incoming.url()).search;
+    if (path.startsWith("/sync/")) (query ? protocolRequests : syncRequests).push(path);
+    const response = await worker.fetch(new Request(`https://worker.test${path}${query}`, {
       method: incoming.method(), headers: incoming.headers(),
       ...(incoming.method() === "POST" ? { body: incoming.postData() } : {}),
     }), env);
@@ -98,6 +100,7 @@ test("manual cloud sync preserves every class and term through the real Worker h
   expect(restored.slices.map(slice => [slice.id, slice.data.futureField])).toEqual(initial.slices.map(slice => [slice.id, slice.data.futureField]));
   expect(restored.slices.slice(1)).toEqual(saved.workspaceBook.slices.slice(1));
   expect(syncRequests).toEqual(["/sync/save", "/sync/load"]);
+  expect(protocolRequests).toContain("/sync/status");
   await page.reload();
   await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
   expect((await readBook()).slices).toHaveLength(3);

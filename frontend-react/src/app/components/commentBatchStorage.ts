@@ -1,5 +1,6 @@
 import type { AppStudent, StudentId } from "../state/types";
 import { getCurrentWorkspaceScope } from "../state/workspaces";
+import { cacheGenerationSuffix } from "../state/workspaceSyncEvents";
 
 export interface CommentBatchState {
   queue: StudentId[];
@@ -11,7 +12,7 @@ export interface CommentBatchState {
 }
 
 export const COMMENT_BATCH_STATE_KEY = "seat-manager-ai-comment-batch-state-v1";
-function scopedKey(): string { return `${COMMENT_BATCH_STATE_KEY}:${getCurrentWorkspaceScope()}`; }
+function scopedKey(): string { return `${COMMENT_BATCH_STATE_KEY}:${getCurrentWorkspaceScope()}${cacheGenerationSuffix()}`; }
 
 export function emptyCommentBatchState(): CommentBatchState {
   return { queue: [], failed: [], done: 0, total: 0, status: "idle", updatedAt: "" };
@@ -26,7 +27,7 @@ export function loadCommentBatchState(students: AppStudent[]): CommentBatchState
   try {
     const validIds = new Set(students.map((student) => student.id));
     const scoped = window.localStorage.getItem(scopedKey());
-    const legacy = scoped === null ? window.localStorage.getItem(COMMENT_BATCH_STATE_KEY) : null;
+    const legacy = scoped === null && !cacheGenerationSuffix() ? window.localStorage.getItem(COMMENT_BATCH_STATE_KEY) : null;
     const raw = JSON.parse(scoped ?? legacy ?? "null") as Partial<CommentBatchState> | null;
     if (legacy !== null) { window.localStorage.setItem(scopedKey(), legacy); window.localStorage.removeItem(COMMENT_BATCH_STATE_KEY); }
     if (!raw || typeof raw !== "object") return emptyCommentBatchState();

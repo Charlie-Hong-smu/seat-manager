@@ -1,5 +1,6 @@
 import { applyStudentCommentWrite, subscribeStudentCommentWrites } from "./commentPersistence";
 import { getCurrentWorkspaceScope } from "./workspaces";
+import { getRemoteGeneration, markControllerSaved, markWorkspaceEdited, useRemoteGeneration } from "./workspaceSyncEvents";
 import { reconcileClassDuties } from "./classDuties";
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
@@ -42,15 +43,18 @@ function readControllerScope(): string | null {
 }
 
 export function useSeatManagerController(initialState: SeatManagerState): SeatManagerController {
+  const generation = useRemoteGeneration();
   const [state, setRawState] = useState(() => reconcileClassDuties(initialState));
   const currentState = useRef(state);
   const stateScope = useRef<string | null>();
   if (stateScope.current === undefined) stateScope.current = readControllerScope();
   const setState = useCallback<SeatManagerController["replace"]>(update => {
+    if (generation !== getRemoteGeneration()) return;
     const next = reconcileClassDuties(resolveUpdate(currentState.current, update));
+    markWorkspaceEdited();
     currentState.current = next;
     setRawState(next);
-  }, []);
+  }, [generation]);
   useEffect(() => {
     return subscribeStudentCommentWrites(write => {
       if (write.scope === stateScope.current && readControllerScope() === stateScope.current) setState(current => applyStudentCommentWrite(current, write));
@@ -61,14 +65,17 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
   const reload = useCallback(() => {
     stateScope.current = readControllerScope();
     const next = createSeatManagerState(readLegacyRootState());
-    setState(next);
+    currentState.current = next;
+    setRawState(next);
+    markControllerSaved();
     return next;
-  }, [setState]);
+  }, []);
 
   const persist = useCallback(() => {
+    if (generation !== getRemoteGeneration()) return false;
     if (!stateScope.current || readControllerScope() !== stateScope.current) return false;
     const state = currentState.current;
-    return saveLegacySnapshot({
+    const saved = saveLegacySnapshot({
     students: state.students,
     seatOrder: state.seatOrder,
     lockedSeats: state.lockedSeats,
@@ -88,7 +95,9 @@ export function useSeatManagerController(initialState: SeatManagerState): SeatMa
     savedExams: state.savedExams,
     exams: state.exams,
     });
-  }, []);
+    if (saved) markControllerSaved();
+    return saved;
+  }, [generation]);
 
   const setStudents = useCallback<SeatManagerController["setStudents"]>(update => {
     setState(current => ({ ...current, students: resolveUpdate(current.students, update) }));

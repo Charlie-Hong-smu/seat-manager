@@ -3,6 +3,7 @@ import { writeStudentComment } from "./commentPersistence";
 import type { AppStudent, CommentLengthMode, CommentStyle, StudentCommentDraft, StudentId } from "./types";
 import { readLegacyRootState } from "./storage";
 import { getCurrentWorkspaceScope } from "./workspaces";
+import { cacheGenerationSuffix } from "./workspaceSyncEvents";
 
 const AI_COMMENT_DRAFT_KEY_PREFIX = "seat-manager-ai-comment-draft";
 const DEFAULT_LENGTH_MODE: CommentLengthMode = "standard";
@@ -15,7 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function getStudentCommentCacheKey(studentId: StudentId, scope = getCurrentWorkspaceScope()): string {
-  return `${AI_COMMENT_DRAFT_KEY_PREFIX}:${scope}:${studentId || "unknown"}`;
+  return `${AI_COMMENT_DRAFT_KEY_PREFIX}:${scope}:${studentId || "unknown"}${cacheGenerationSuffix()}`;
 }
 
 export function deleteStudentCommentDraft(studentId: StudentId): void {

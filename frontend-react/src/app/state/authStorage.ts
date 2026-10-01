@@ -56,6 +56,7 @@ export function clearAuth(): void {
   window.localStorage.removeItem(PRODUCT_AUTH_EXPIRES_KEY);
   window.sessionStorage.removeItem(PRODUCT_AUTH_SESSION_TOKEN_KEY);
   window.sessionStorage.removeItem(PRODUCT_AUTH_SESSION_EXPIRES_KEY);
+  window.dispatchEvent(new Event("product-auth-changed"));
 }
 
 function clearProductDeviceId(): void {
@@ -175,6 +176,7 @@ function storeProductAuth(auth: ProductAuth, remember: boolean): void {
   const storage = remember ? window.localStorage : window.sessionStorage;
   storage.setItem(remember ? PRODUCT_AUTH_TOKEN_KEY : PRODUCT_AUTH_SESSION_TOKEN_KEY, auth.token);
   storage.setItem(remember ? PRODUCT_AUTH_EXPIRES_KEY : PRODUCT_AUTH_SESSION_EXPIRES_KEY, String(auth.expiresAt));
+  window.dispatchEvent(new Event("product-auth-changed"));
 }
 
 export function getProductAuthToken(): string {

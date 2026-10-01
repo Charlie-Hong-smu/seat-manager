@@ -68,6 +68,7 @@ for (const replace of [false, true]) test(`slow roster ${replace ? "replace" : "
 
 test("restore timestamp quota failure still refreshes teacher state before subsequent edits", async ({ page }) => {
   await login(page);
+  await page.route(/\/sync\/status\?protocol=2$/, route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ready: false, automaticAvailable: false }) }));
   const cloud = book();
   cloud.slices[0].data.students[0].name = "云端合成新学生";
   await page.route(/\/sync\/load$/, route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ workspaceBook: cloud, updatedAt: "2026-09-30T00:00:00Z" }) }));

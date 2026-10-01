@@ -172,7 +172,7 @@ UI service -> AiApiClient -> VITE_WORKER_URL(Netlify /api，可选)
 
 任务页与今日共用 App 的跟进创建、完成、结果与撤销入口，字段级撤销保留后续无关修改，作业联动仅撤回该生的登记。默认座位与自定义座位共用 SeatLayoutSurface，继续使用同一拖动实现。抽签增加可选 roundId，重开一轮必须确认；当日完整历史用于去重，旧日历史仍只保留 50 条。今日计数直接来自队列，归档学生出勤不进入当前待处理队列。
 
-Worker 的 `worker-entry.js` 导出稳定应用及 `AccountCoordinator`。`ACCOUNT_COORDINATOR` 为 SQLite Durable Object，按既有授权键或额度日键分片；每个对象串行处理读改写。首次读取从原 KV 迁移，之后对象存储为授权及计数的权威值，原 KV 保留相同键和形状的镜像。设备绑定、解绑、清空和管理员更新经同一对象处理，管理员普通修改保留最新设备列表。公共 HTTP 路由、Netlify allowlist 和全部 secret 名称不变；手动云端班级数据仍沿原 KV 存储，不进入协调器。
+Worker 的 `worker-entry.js` 导出稳定应用、`AccountCoordinator` 与 `SyncCoordinator`。`ACCOUNT_COORDINATOR` 为 SQLite Durable Object，按既有授权键或额度日键分片；每个对象串行处理读改写。首次读取从原 KV 迁移，之后对象存储为授权及计数的权威值，原 KV 保留相同键和形状的镜像。设备绑定、解绑、清空和管理员更新经同一对象处理，管理员普通修改保留最新设备列表。公共 HTTP 路由、Netlify allowlist 和全部 secret 名称不变；云端班级快照由独立 `SyncCoordinator` 负责，未迁移空间仍保持原 KV 手动行为；迁移后的空间只以 SQLite 为权威，KV 是兼容镜像。
 
 ## BoardUI 功能一致性修复（2026-09-22）
 
@@ -217,3 +217,18 @@ Worker 的 `worker-entry.js` 导出稳定应用及 `AccountCoordinator`。`ACCOU
 成绩预览和正式来源使用已应用映射，编辑中的映射只在「应用映射」后晋升；关闭/先不应用恢复已接受映射。成绩和名单 AI 映射各自通过 `useScopedRequest` 绑定当前文件/工作区；换文件、编辑其他考试、手改映射、关闭或卸载取消请求，忽略仍晚返回的结果。名单选新文件立即清空旧预览和映射，解析完成前禁止导入，导入任务携带取消信号，在直接写存储之前复核。
 
 跨日请假备注更新有效记录的原 ID，不另建请假；缺省返校字段保持原值，显式重新登记时可清空。宿舍事件和历史周期不再按 200/50 静默截断；明确关联的个人记录同步类型、原因/备注与日期，纠正为零分保留普通记录及关联，不给曾选择不联动的学生新增记录。课表接受周日/星期天/周天/礼拜天；含非空未识别列时拒绝替换。班费分类不适用于当前周期时回到全部收入，仅改变查看筛选。
+
+
+## 安全快照同步（2026-10-01，Zhang 先行）
+
+`shared/sync-content.mjs` 定义浏览器和 Worker 共用的排序 JSON 内容 hash、5 MiB 上限和快照校验。整柜业务内容含未知字段；只排除 `currentSliceId` 和切片 `updatedAt`，业务日期保留。载荷继续同时含完整 `workspaceBook` 和同次捕获的当前切片 `data`，不改变原键、JSON 备份或旧 save/load 响应。
+
+`SYNC_COORDINATOR` 按授权空间既有 state key 分片；SQLite `head` 保存服务端 epoch/revision/hash，`chunks` 按不超过 512 KiB 保存 UTF-8 二进制，`receipts` 保存 mutation 指纹与回执。单对象串行队列及 `transactionSync` 原子提交全部分块、head、回执和历史裁剪。只保留当前及前两版快照、最近 256 revision 回执；超出回执窗口的过期请求由 CAS 拒绝。原始字节 integrity hash 校验读取，内容 hash 判定业务等价。删除清空快照、历史和回执，换 epoch 并留下 tombstone；先撤销授权，再将旧设备会话加入删除屏障，防止在途旧写入复活。KV 镜像失败不否定已提交结果，alarm 重试最新权威值。首次迁移只读一次旧 KV；故障不回退到 KV 写入。
+
+新客户端通过 `/sync/status?protocol=2`、`/sync/load?protocol=2` 与带 `protocol:2/baseRevision/epoch/clientMutationId/hash` 的 `/sync/save` 使用同一权威。`/sync/mode` 仅在发布门禁、授权空间兼容条件和教师整柜确认均满足后设 strict；strict 空间永久拒绝无 revision 盲写。产品期限、版别、租户、设备及会话仍经原鉴权，保存队列内再次核对；请求频率受 `SYNC_RATE_LIMITER` 限制。Netlify 仍使用 `/sync/` 公共前缀，新 mode 路由加入契约测试。
+
+所有正式写入都从 `workspaces.ts/writeBook` 成功后通知客户端。`SnapshotSync` 单飞核对服务端基线及本机内容 hash：本机单改创建持久 mutation 后 CAS 上传；本机干净且无活动/缓存草稿才拉取；双改、未绑定或 epoch 变化先保存两份并请老师明确选择。上传回执只确认捕获的 hash，期间后续修改仍待同步。IndexedDB `seat-manager-sync-journal-v2` 按空间保存 pending/conflict/recovery/discarded-pending 有限槽位；checkpoint 与绑定使用新独立元数据键，不修改文件柜格式。恢复点可从云同步弹窗导出，两份 `workspaceBook` 均可经原整柜导入恢复。旧单班云数据仍可显式采用，下一次安全上传将其转为整柜格式。
+
+远端应用或整柜导入先存新 `seat-manager-workspace-generation-v2`、再原子写主柜，主柜失败回滚代际。控制器、`useScopedRequest`、草稿、AI 对话/评语队列及撤销回调检查代际，旧缓存保留在旧代际，不会回写新柜；本机当前班级选择尽量保留。Web Lock 与原始柜版本检查继续拦截多窗口修改。存储/配额失败暂停、换码/退出/解绑失效在途回执，不自动绑定新空间。手机状态条沿用共享 Button 与 theme tokens，常驻区分本机保存和云端状态。
+
+发布初态：迁移、前后端自动能力、Commercial strict readiness 全部关闭。新界面保留旧手动上传/恢复，未迁移空间的一键同步只说明待启用条件。自动调度实现保留防抖/退避与教师确认接口，但当前未开放自动入口，也未声明自动重开恢复已验收。启用和回滚步骤见 `OPERATIONS.md` 与 `SAFE_SNAPSHOT_SYNC.md`。

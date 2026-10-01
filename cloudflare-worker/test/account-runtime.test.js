@@ -7,7 +7,7 @@ import { sha256Hex } from "../worker-auth.js";
 test("real Worker runtime serializes device and AI limits and removes deleted authorizations", async t => {
   const mf = new Miniflare({
     scriptPath: fileURLToPath(new URL("../worker-entry.js", import.meta.url)),
-    modules: true, modulesRules: [{ type: "ESModule", include: ["**/*.js"] }], compatibilityDate: "2026-06-25",
+    modules: true, modulesRoot: fileURLToPath(new URL("../../", import.meta.url)), modulesRules: [{ type: "ESModule", include: ["**/*.js", "**/*.mjs"] }], compatibilityDate: "2026-06-25",
     log: new Log(LogLevel.ERROR),
     kvNamespaces: ["SEAT_MANAGER_KV"],
     durableObjects: { ACCOUNT_COORDINATOR: { className: "AccountCoordinator", useSQLite: true } },

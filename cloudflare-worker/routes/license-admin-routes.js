@@ -143,15 +143,21 @@ async function handleLicenseAdminDelete(request, env, corsHeaders) {
     return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
   }
   const license = await loadLicenseRecordByKey(licenseKey, env);
+  const stateLicenseId = license?.licenseId || await readLicenseIdentityByKey(licenseKey, env);
+  const blockedActors = (license?.devices || []).map(device => `${licenseKey}:${device.id}:${device.sessionId || ""}`);
   if (env.ACCOUNT_COORDINATOR) {
     await env.ACCOUNT_COORDINATOR.getByName(licenseKey).mutateLicense(licenseKey, { type: "delete" });
   } else {
     if (license) await env.SEAT_MANAGER_KV.put(licenseKey, JSON.stringify({ ...serializeLicenseForStorage(license), status: "disabled", devices: [], revoked: true }));
   }
   if (body.value?.deleteState) {
-    const licenseId = license?.licenseId;
+    const licenseId = stateLicenseId;
     if (licenseId) {
-      await env.SEAT_MANAGER_KV.delete(getLicensedSyncStateKey(licenseId));
+      if (env.SYNC_COORDINATOR) {
+        // Fence already-authorized in-flight old requests as well as revoked tokens.
+        try { await env.SYNC_COORDINATOR.getByName(getLicensedSyncStateKey(licenseId)).deleteState(getLicensedSyncStateKey(licenseId), blockedActors); }
+        catch { return jsonResponse({ error: "sync_coordinator_unavailable" }, 503, corsHeaders); }
+      } else await env.SEAT_MANAGER_KV.delete(getLicensedSyncStateKey(licenseId));
     }
   }
   return jsonResponse({ ok: true }, 200, corsHeaders);
