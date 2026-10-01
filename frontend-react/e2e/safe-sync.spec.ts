@@ -85,6 +85,21 @@ test("explicit whole-book binding, durable lost-response retry and dual-version 
   await page.screenshot({ path: `output/playwright/safe-sync-desktop-${edition}.png` });
 });
 
+test("manual restore and upload preserve their direction and require confirmation", async ({ page }) => {
+  const h = await setup(page); await bind(page); await edit(page, "仅在本机的合成事项"); await open(page);
+  await modal(page).getByRole("button", { name: "恢复云端", exact: true }).click();
+  const restore = page.getByRole("alertdialog", { name: "采用云端全部班级学期？" });
+  await expect(restore).toBeVisible(); expect(h.attempts).toHaveLength(1);
+  expect((await stored(page)).slices[0].data.followupTasks?.[0]?.title).toBe("仅在本机的合成事项");
+  await restore.getByRole("button", { name: "确认采用云端", exact: true }).click();
+  await expect.poll(async () => (await stored(page)).slices[0].data.followupTasks?.length || 0).toBe(0); expect(h.attempts).toHaveLength(1);
+  h.changeCloud(); await modal(page).getByRole("button", { name: "上传本机", exact: true }).click();
+  const upload = page.getByRole("alertdialog", { name: "保留本机并发布到云端？" });
+  await expect(upload).toBeVisible(); expect((await stored(page)).slices[0].data.remoteMarker).toBeUndefined(); expect(h.attempts).toHaveLength(1);
+  await upload.getByRole("button", { name: "确认保留本机并发布", exact: true }).click();
+  await expect.poll(() => h.attempts.length).toBe(2); expect(h.saved()!.workspaceBook.slices[0].data.remoteMarker).toBeUndefined();
+});
+
 for (const width of [320, 390]) test(`phone ${width} save/sync status, touch target and closed migration gate`, async ({ page }) => {
   await page.setViewportSize({ width, height: 844 }); const h = await setup(page, false);
   const bar = page.locator(".app-sync-status-bar"); await expect(bar).toBeVisible(); await expect(bar).toContainText("本机已保存");

@@ -69,6 +69,28 @@ describe("local-first snapshot synchronization", () => {
     expect((await h.engine.sync()).phase).toBe("synced");
     expect(await h.engine.recovery()).toMatchObject({ space: "space-a", recovery: { local: { data: { marker: "lost-local" } }, remote: { workspaceBook: h.remote() } } });
   });
+  it("manual restore reviews dirty local data without uploading and applies only after confirmation", async () => {
+    const h = await setup(); await h.bind(); h.edit("discard-after-confirmation");
+    expect((await h.engine.reviewManual("cloud")).choice).toBe("conflict");
+    expect(h.saves).toHaveLength(0); expect(h.applyCount()).toBe(0); expect(h.local().slices[0].data.marker).toBe("discard-after-confirmation");
+    expect((await h.engine.choose("cloud")).phase).toBe("synced");
+    expect(h.saves).toHaveLength(0); expect(h.local().slices[0].data.marker).toBe("base");
+    expect(h.values.get("recovery:space-a")).toMatchObject({ local: { data: { marker: "discard-after-confirmation" } } });
+  });
+  it("manual upload reviews a newer remote without pulling and publishes only the confirmed local snapshot", async () => {
+    const h = await setup(); await h.bind(); await h.cloudEdit("newer-remote");
+    expect((await h.engine.reviewManual("local")).choice).toBe("conflict");
+    expect(h.saves).toHaveLength(0); expect(h.applyCount()).toBe(0); expect(h.local().slices[0].data.marker).toBe("base");
+    expect((await h.engine.choose("local")).phase).toBe("synced");
+    expect(h.saves[0].baseRevision).toBe(2); expect(h.remote().slices[0].data.marker).toBe("base"); expect(h.applyCount()).toBe(0);
+    expect(h.values.get("recovery:space-a")).toMatchObject({ remote: { data: { marker: "newer-remote" } } });
+  });
+  it("manual review requires migration and refuses an empty remote or edits made after review", async () => {
+    const h = await setup(); h.migration(false);
+    expect((await h.engine.reviewManual("local")).choice).toBeUndefined(); expect(h.saves).toHaveLength(0);
+    h.migration(true); h.deletion(); expect((await h.engine.reviewManual("cloud")).choice).toBeUndefined(); expect(h.applyCount()).toBe(0);
+    await h.engine.reviewManual("local"); h.edit("after-review"); expect((await h.engine.choose("local")).phase).toBe("draft"); expect(h.saves).toHaveLength(0);
+  });
   it("keeps editing during upload pending and captures book/data together", async () => {
     const h = await setup(); await h.bind(); h.edit("captured");
     const gate = deferred<void>(); h.saveWait(gate.promise);

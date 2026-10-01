@@ -133,6 +133,31 @@ export class SnapshotSync {
     });
     return this.running;
   }
+  /** Manual backup/restore reviews both versions without choosing a transfer direction. */
+  reviewManual(direction: "local" | "cloud"): Promise<SyncView> {
+    if (this.running) return this.running;
+    this.inspectionVersion++;
+    this.requestSession = this.session;
+    this.choice = null;
+    this.automatic = false;
+    clearTimeout(this.timer);
+    this.running = (async () => {
+      if (!this.ports.writable() || !this.ports.flush()) throw new SyncProtocolError("sync_local_save_failed");
+      const token = this.ports.token();
+      this.show({ phase: "checking", message: "正在核对手动操作涉及的本机与云端版本…" });
+      const head = await this.checkedHead(token);
+      if (!head.ready) return this.show({ phase: "manual", message: syncErrorMessage(new Error("migration_required")), head });
+      if (direction === "cloud" && !head.exists) return this.show({ phase: "manual", message: "云端暂无备份，已停止恢复。", head });
+      const local = snapshotOf(this.ports.book(), this.ports.device());
+      const editVersion = this.ports.editVersion(); const generation = this.ports.generation();
+      const remote = await this.remote(head, token);
+      await this.ports.journal.put(`conflict:${head.licenseId}`, { local, remote, recordedAt: new Date().toISOString() });
+      this.current(token);
+      this.choice = { head, remote, local, token, editVersion, generation };
+      return this.show({ phase: "manual", message: `已核对目标云空间 ${head.licenseId} 与全部 ${local.workspaceBook.slices.length} 个班级学期；请确认${direction === "local" ? "上传本机" : "恢复云端"}。`, head, choice: this.ports.storage.getItem(BINDING_KEY) === head.licenseId ? "conflict" : "bind" });
+    })().catch(error => this.failure(error)).finally(() => { this.running = null; });
+    return this.running;
+  }
   private async run(): Promise<SyncView> {
     if (!this.ports.writable() || !this.ports.flush()) throw new SyncProtocolError("sync_local_save_failed");
     const token = this.ports.token();

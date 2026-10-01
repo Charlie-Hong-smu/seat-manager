@@ -44,6 +44,11 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored, engi
   const cloudStatus = syncView.head?.ready ? syncView.head : status;
   useEffect(() => { if (open && productSync) void engine.inspect(); }, [open, productSync, engine]);
 
+  async function confirmChoice(local: boolean, reviewed: SyncView) {
+    const confirmed = await appDialog.confirm({ title: local ? "保留本机并发布到云端？" : "采用云端全部班级学期？", description: `目标云空间：${reviewed.head?.licenseId || "当前授权空间"}。本次涉及全部班级和学期。${local ? "将以本机整柜替换刚核对的云端版本" : "将以刚核对的云端整柜替换本机正式数据，保留本机当前班级选择"}；双版本恢复点已保留。已缓存草稿会隔离保留，不会自动写入新数据；未缓存的布局和预览草稿会丢弃。自动模式仍关闭。`, confirmLabel: local ? "确认保留本机并发布" : "确认采用云端", variant: "danger" });
+    if (confirmed) setMessage((await engine.choose(local ? "local" : "cloud")).message);
+    else setMessage("已取消选择，双版本仍保留。");
+  }
 
   async function run(action: "auth" | "status" | "upload" | "restore" | "sync" | "local" | "cloud" | "recovery") {
     if (busy) return;
@@ -61,10 +66,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored, engi
       }
       if (action === "sync") { const result = await engine.sync(); setMessage(result.message); return; }
       if (action === "local" || action === "cloud") {
-        const local = action === "local";
-        const confirmed = await appDialog.confirm({ title: local ? "保留本机并发布到云端？" : "采用云端全部班级学期？", description: `目标云空间：${syncView.head?.licenseId || "当前授权空间"}。本次涉及全部班级和学期。${local ? "将以本机整柜替换刚核对的云端版本" : "将以刚核对的云端整柜替换本机正式数据，保留本机当前班级选择"}；双版本恢复点已保留。已缓存草稿会隔离保留，不会自动写入新数据；未缓存的布局和预览草稿会丢弃。自动模式仍关闭。`, confirmLabel: local ? "确认保留本机并发布" : "确认采用云端", variant: "danger" });
-        if (confirmed) setMessage((await engine.choose(local ? "local" : "cloud")).message);
-        else setMessage("已取消选择，双版本仍保留。");
+        await confirmChoice(action === "local", syncView);
         return;
       }
       if (action === "auth") {
@@ -88,7 +90,10 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored, engi
         return;
       }
       if (action === "upload") {
-        if (syncView.head?.ready) { const result = await engine.sync(); setMessage(result.message); return; }
+        if (productSync) {
+          const result = await engine.reviewManual("local");
+          if (result.head?.ready || result.phase !== "manual" || !result.head) { setMessage(result.message); if (result.choice) await confirmChoice(true, result); return; }
+        }
         if (!onBeforeUpload()) { setMessage("本机保存失败，已停止上传，请先处理保存问题。"); return; }
         const next = await uploadCurrentStateToCloud(deviceName);
         setStatus(next);
@@ -96,7 +101,10 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored, engi
         return;
       }
       if (action === "restore") {
-        if (syncView.head?.ready) { const result = await engine.sync(); setMessage(result.message); return; }
+        if (productSync) {
+          const result = await engine.reviewManual("cloud");
+          if (result.head?.ready || result.phase !== "manual" || !result.head) { setMessage(result.message); if (result.choice) await confirmChoice(false, result); return; }
+        }
         if (!await appDialog.confirm({ title: "从云端恢复数据？", description: "云端数据将覆盖当前本机工作区。系统会先生成本机安全快照；请确认云端版本确实是需要恢复的版本。", confirmLabel: "确认恢复云端", variant: "danger" })) {
           setMessage("已取消恢复。");
           return;
