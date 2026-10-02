@@ -3,6 +3,7 @@ import { SYNC_CHUNK_BYTES, SYNC_MAX_BYTES, canonicalJson, contentHash, sha256, v
 import { loadLicenseRecordByKey } from "./worker-license-store.js";
 import { getLicensedSyncStateKey } from "./worker-license-keys.js";
 import { SyncMigration } from "./worker-sync-migration.js";
+import { automaticSpaceAllowed } from "./worker-sync-policy.js";
 
 /** One authority per authenticated state key. No KV fallback after migration. */
 export class SyncCoordinator extends DurableObject {
@@ -45,7 +46,7 @@ export class SyncCoordinator extends DurableObject {
   metadata(head) {
     return { exists: head.exists, epoch: head.epoch, revision: head.revision, hash: head.hash, strict: head.strict, ready: true, migrationReady: Boolean(head.cutoverId),
       updatedAt: head.updatedAt, deviceName: head.deviceName, version: head.version, sizeBytes: head.sizeBytes,
-      automaticAvailable: Boolean(head.cutoverId) && this.env.SYNC_AUTOMATIC_ENABLED === "true", mirrorPending: head.mirrorPending };
+      automaticAvailable: Boolean(head.cutoverId) && automaticSpaceAllowed(this.env, head.key), mirrorPending: head.mirrorPending };
   }
   async authorized(key, actor) {
     if (!actor) return true;
@@ -87,7 +88,7 @@ export class SyncCoordinator extends DurableObject {
         // Check epoch before receipt: deletion invalidates every previous mutation.
         if (protocol.epoch !== head.epoch) return { error: "epoch_changed", status: 409, ...this.metadata(head) };
         const old = this.ctx.storage.sql.exec("SELECT fingerprint, value FROM receipts WHERE mutation=?", protocol.clientMutationId).toArray()[0];
-        if (old) return old.fingerprint === fingerprint ? JSON.parse(old.value) : { error: "mutation_reused", status: 409 };
+        if (old) return old.fingerprint === fingerprint ? { ...JSON.parse(old.value), automaticAvailable: this.metadata(head).automaticAvailable } : { error: "mutation_reused", status: 409 };
         if (protocol.baseRevision !== head.revision) return { error: "conflict", status: 409, ...this.metadata(head) };
       }
       const bytes = new TextEncoder().encode(JSON.stringify(payload));
@@ -131,7 +132,7 @@ export class SyncCoordinator extends DurableObject {
       // Edition rights may change after the outer route check while this call waits.
       const license = actor ? await loadLicenseRecordByKey(actor.licenseKey, this.env) : null;
       const compatible = !actor || (license && (!license.allowedEditions.includes("commercial") || this.env.SYNC_COMMERCIAL_PROTOCOL_READY === "true"));
-      if (!head?.cutoverId || !allowed || !compatible || this.env.SYNC_AUTOMATIC_ENABLED !== "true") return { error: "automatic_disabled", status: 403 };
+      if (!head?.cutoverId || !allowed || !compatible || !automaticSpaceAllowed(this.env, key)) return { error: "automatic_disabled", status: 403 };
       if (expected.epoch !== head.epoch || expected.baseRevision !== head.revision || expected.hash !== head.hash) return { error: "conflict", status: 409 };
       this.putHead({ ...head, strict: true });
       return this.metadata(this.head());

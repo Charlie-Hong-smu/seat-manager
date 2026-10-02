@@ -21,7 +21,7 @@ it("real SQLite remote replacement isolates old AI replies, active drafts and un
   const mf = new Miniflare({ name: "sync-ai-runtime", scriptPath: resolve("../cloudflare-worker/test/fixtures/sync-runtime.js"), modules: true,
     modulesRoot: resolve(".."), modulesRules: [{ type: "ESModule", include: ["**/*.js", "**/*.mjs"] }], compatibilityDate: "2026-06-29", log: new Log(LogLevel.ERROR),
     kvNamespaces: ["SEAT_MANAGER_KV"], durableObjects: { SYNC_COORDINATOR: { className: "FaultSyncCoordinator", useSQLite: true }, ACCOUNT_COORDINATOR: { className: "AccountCoordinator", useSQLite: true } },
-    bindings: { PRODUCT_TOKEN_SECRET: "synthetic-ai-runtime-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true" },
+    bindings: { PRODUCT_TOKEN_SECRET: "synthetic-ai-runtime-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_AUTOMATIC_SPACES: JSON.stringify(["synthetic-ai-generation"]) },
   });
   let engine: SnapshotSync | undefined;
   try {

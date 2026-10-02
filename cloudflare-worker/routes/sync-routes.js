@@ -157,7 +157,7 @@ async function handleCoordinatedSync(request, env, corsHeaders, pathname, syncCo
     const result = await coordinator.save(syncContext.key, payload, v2 ? { baseRevision: input.baseRevision, epoch: input.epoch, clientMutationId: input.clientMutationId, hash: input.hash } : null, syncContext.actor || null, licenseId || "");
     if (result.error) return jsonResponse(result, result.status, corsHeaders);
     const meta = { ok: true, licenseId, updatedAt: payload.updatedAt, deviceName: payload.deviceName, version: payload.version, sizeBytes: payload.sizeBytes };
-    return jsonResponse(v2 ? { ...result, licenseId } : meta, 200, corsHeaders);
+    return jsonResponse(v2 ? { ...result, licenseId, automaticAvailable: Boolean(result.automaticAvailable && syncContext.strictAllowed) } : meta, 200, corsHeaders);
   }
   if (!["/sync/status", "/sync/load"].includes(pathname)) return jsonResponse({ error: "not_found" }, 404, corsHeaders);
   if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);

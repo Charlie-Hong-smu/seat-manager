@@ -5,6 +5,7 @@ export { AccountCoordinator } from "../../worker-account-coordinator.js";
 export class FaultSyncCoordinator extends SyncCoordinator {
   fail = false;
   expandOnStrict = false;
+  excludeOnStrict = false;
   constructor(ctx, env) {
     let broken = false; let stale = false; let oldSource = null;
     const kv = env.SEAT_MANAGER_KV;
@@ -16,7 +17,9 @@ export class FaultSyncCoordinator extends SyncCoordinator {
   staleSource(value) { this.toggleSource(value); }
   withoutCutoverProof() { const head = this.head(); delete head.cutoverId; delete head.sourceIntegrity; this.migrationState.delete(); this.putHead(head); }
   expandBeforeStrict() { this.expandOnStrict = true; }
+  excludeBeforeStrict() { this.excludeOnStrict = true; }
   async setStrict(key, expected, allowed, actor = null) {
+    if (this.excludeOnStrict) { this.excludeOnStrict = false; this.env.SYNC_AUTOMATIC_SPACES = "[]"; }
     if (this.expandOnStrict && actor) {
       this.expandOnStrict = false;
       const account = this.env.ACCOUNT_COORDINATOR.getByName(actor.licenseKey);
@@ -58,6 +61,7 @@ export default {
       if (path === "/_test/migrate") return Response.json(await stub.bootstrap(key));
       if (path === "/_test/unverified") { await stub.withoutCutoverProof(); return Response.json({ ok: true }); }
       if (path === "/_test/expand-before-strict") { await stub.expandBeforeStrict(); return Response.json({ ok: true }); }
+      if (path === "/_test/exclude-before-strict") { await stub.excludeBeforeStrict(); return Response.json({ ok: true }); }
       if (path === "/_test/strict") return Response.json(await stub.setStrict(key, await request.json(), true));
       if (path === "/_test/delete") return Response.json(await stub.deleteState(key));
     }

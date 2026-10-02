@@ -7,6 +7,7 @@ workers_dev = true
 SYNC_MIGRATION_ENABLED = "false"
 SYNC_CUTOVER_MANIFESTS = "{}"
 SYNC_AUTOMATIC_ENABLED = "false"
+SYNC_AUTOMATIC_SPACES = "[]"
 SYNC_COMMERCIAL_PROTOCOL_READY = "false"
 ALLOWED_ORIGIN = "https://charlie-hong-smu.github.io,https://seat-manager-commercial.pages.dev,https://6c245938.seat-manager-commercial.pages.dev,https://app.class-manager.cn,https://seat-manager-license-admin.pages.dev,https://bdd1a8db.seat-manager-license-admin.pages.dev"
 

@@ -157,6 +157,8 @@ BoardUI 并行本地验证时，可用 `E2E_PORT=4193 pnpm exec playwright test 
 
 strict 启用还需相应客户端盲写退役：Zhang-only 空间可在已获证明、前后端发布门禁满足且教师整柜确认后启用；包含 Commercial 权限的空间须先明确晋升 Commercial，并取得全部可能盲写客户端的安全退役证据，再开放 `SYNC_COMMERCIAL_PROTOCOL_READY`。队列执行启用时再次读取当前授权版别，不能依赖路由检查时尚未包含 Commercial 的旧判断；不能改版别绕过既有 strict 保护。本轮 opt-in/停用/明确恢复、同空间重开偏好和自动调度已经用合成公共接口验证，但真实空间、混版退役和真机挂起证据仍是生产启用条件。新客户端暂停不撤回服务端 strict，避免旧客户端再次盲覆盖。
 
+逐空间自动开放使用非秘密配置 `SYNC_AUTOMATIC_SPACES`，默认 `"[]"`。只填已明确获准的完整既有空间 ID，不填 state key、显示名、前缀或通配符；缺失/格式错误拒绝全部空间，名单中任一项格式无效也拒绝全部。全局 `SYNC_AUTOMATIC_ENABLED=false` 始终优先关闭；开启全局开关仍只有名单内、具备迁移证明并满足版别条件的空间可启用。Commercial readiness 保持原保护。移出自动名单或关闭全局开关后，活跃客户端下次核对持久暂停，strict/head/epoch 保留，手动 CAS 不停用；幂等重试也返回当前自动资格。迁移清单和自动名单独立，不能用迁移完成或客户端版本登记替代自动授权。本轮发布仅交付门禁和默认关闭配置，名单与截止清单保持空，不晋升 Commercial 或迁移空间；部署状态以精确 SHA CI 为准，后续开放仍须目标与真机验收的单独授权。
+
 定向证据：Worker 的 `npm run check` 保留全部原断言并执行真实 workerd/SQLite 公共迁移测试，覆盖冻结、固定备份、来源见证、陈旧 KV、重启/重复提交/取消、旧 head 补证、近 5 MiB 中文分块和故障回滚、删除闭环，以及实际 `/sync/mode` Zhang-only 正向与混版负向保护。前端 `pnpm test syncProtocol.test.ts syncGeneration.test.tsx syncRuntime.test.ts syncRuntimeGeneration.test.tsx` 覆盖编辑/草稿/真实 React 旧 AI 回包和撤销代际、离线双改、换码、quota、回滚失败和错误分流；两版 `safe-sync.spec.ts` 保留手机 320/390px 与关闭门禁原断言。
 
 开启路径另用 `E2E_EDITION=zhang pnpm test:e2e:sync` 和 `E2E_EDITION=commercial pnpm test:e2e:sync`，构建目录 `.sync-e2e-dist/<edition>`、端口 4295/4296、结果 `.sync-e2e-results/<edition>`，仅此合成测试构建设置 `VITE_SYNC_AUTO_RELEASE=true`。Commercial 的测试运行时 readiness=true 只为验证共享实现，不能据此声称线上混版客户端已退役。正常构建的 `dist` 不受影响，Pages 只上传正常关闭开关的 dist。完整浏览器仍必须运行，不能被开启定向测试替代；本地并行工作区可设 `E2E_ISOLATED_BUILD=true` 和独立 `E2E_PORT`，输出 `.full-e2e-dist/<edition>`。动画逐帧断言应避免同一机器并行浏览器占用。

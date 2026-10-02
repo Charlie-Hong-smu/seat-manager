@@ -31,7 +31,7 @@ async function edit(page: Page, title: string) {
   await page.getByRole("button", { name: "创建任务", exact: true }).click();
   await expect.poll(async () => (await stored(page)).slices[0].data.followupTasks?.[0]?.title).toBe(title);
 }
-async function harness() {
+async function harness(automaticSpaces = JSON.stringify([space])) {
   const directory = await mkdtemp(join(tmpdir(), "seat-enabled-browser-"));
   const source = { version: 1, data: seed().slices[0].data, workspaceBook: seed() };
   const manifest = { [space]: { cutoverId: "synthetic-cutover-browser", retiredWorkerVersion: "synthetic-retired-browser", sourceIntegrity: await sha256(canonicalJson(source)), oldWritersRetired: true, backupRetained: true, verifiedAt: new Date().toISOString() } };
@@ -40,7 +40,7 @@ async function harness() {
     kvNamespaces: ["SEAT_MANAGER_KV"], kvPersist: join(directory, "kv"), durableObjectsPersist: join(directory, "do"),
     durableObjects: { SYNC_COORDINATOR: { className: "FaultSyncCoordinator", useSQLite: true }, ACCOUNT_COORDINATOR: { className: "AccountCoordinator", useSQLite: true } },
     // Commercial readiness here belongs only to this synthetic runtime and staged build.
-    bindings: { PRODUCT_TOKEN_SECRET: "synthetic-enabled-browser-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_COMMERCIAL_PROTOCOL_READY: edition === "commercial" ? "true" : "false", SYNC_CUTOVER_MANIFESTS: JSON.stringify(manifest) },
+    bindings: { PRODUCT_TOKEN_SECRET: "synthetic-enabled-browser-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_AUTOMATIC_SPACES: automaticSpaces, SYNC_COMMERCIAL_PROTOCOL_READY: edition === "commercial" ? "true" : "false", SYNC_CUTOVER_MANIFESTS: JSON.stringify(manifest) },
   });
   let mf = make(); const kv = await mf.getKVNamespace("SEAT_MANAGER_KV");
   await kv.put(stateKey, JSON.stringify(source));
@@ -119,6 +119,21 @@ test("phone migration consent, positive public mode, saved upload and explicit d
     expect((await modal(page).getByRole("button", { name: "启用自动同步", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: `output/playwright/sync-enabled-phone-${edition}.png`, animations: "disabled" });
+  } finally { await h.close(); }
+});
+
+test("enabled frontend keeps an excluded migrated space manual", async ({ page }) => {
+  const h = await harness("[]");
+  try {
+    await h.attach(page); await h.login(page); await migrate(page);
+    expect((await h.head()).automaticAvailable).toBe(false); expect((await h.head()).strict).toBe(false);
+    await expect(modal(page).getByRole("button", { name: /^(启用|恢复)自动同步$/ })).toHaveCount(0);
+    await expect(modal(page)).toContainText("自动模式关闭"); expect(h.modes()).toBe(0);
+    await page.keyboard.press("Escape"); await edit(page, "名单外仅本机修改");
+    await page.waitForTimeout(3400); expect(h.saves()).toBe(0);
+    await open(page); await modal(page).getByRole("button", { name: "立即同步", exact: true }).click();
+    await expect(modal(page).getByText("云端已同步", { exact: true }).first()).toBeVisible();
+    expect(h.saves()).toBe(1); expect(h.modes()).toBe(0); expect((await h.head()).automaticAvailable).toBe(false);
   } finally { await h.close(); }
 });
 

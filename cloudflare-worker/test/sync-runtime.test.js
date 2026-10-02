@@ -19,14 +19,23 @@ function runtime(directory, vars = {}) {
     bindings: { SYNC_TOKEN_SECRET: "synthetic-sync-secret", PRODUCT_TOKEN_SECRET: "synthetic-product-secret", LICENSE_ADMIN_TOKEN: "synthetic-admin", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "false", ...vars },
   });
 }
-async function harness(t, vars) {
+async function harness(t, vars, licensedSpace = "") {
   const directory = await mkdtemp(join(tmpdir(), "seat-sync-runtime-"));
   let mf = runtime(directory, vars);
-  const token = await signToken({ scope: "seat-sync", exp: Date.now() + 3600000 }, "synthetic-sync-secret");
+  let token = await signToken({ scope: "seat-sync", exp: Date.now() + 3600000 }, "synthetic-sync-secret");
+  if (licensedSpace) {
+    const productCode = `SYNTHETIC-${licensedSpace}`;
+    await (await mf.getKVNamespace("SEAT_MANAGER_KV")).put(`seat-manager:license:${await sha256Hex(productCode)}`, JSON.stringify({ licenseId: licensedSpace, status: "active", allowedEditions: ["zhang"], maxDevices: 3, devices: [] }));
+    token = (await (await mf.dispatchFetch("https://worker.test/license/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productCode, edition: "zhang", deviceId: "synthetic-gate-device" }) })).json()).token;
+  }
   t.after(async () => { await mf.dispose(); await rm(directory, { recursive: true, force: true }); });
   return {
     kv: () => mf.getKVNamespace("SEAT_MANAGER_KV"),
-    call: (path, body, auth = token) => mf.dispatchFetch(`https://worker.test${path}`, { method: body === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${auth}`, "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
+    call: (path, body, auth = token) => {
+      const url = new URL(path, "https://worker.test");
+      if (licensedSpace && url.pathname.startsWith("/_test/")) url.searchParams.set("key", `seat-manager:license:${licensedSpace}:state`);
+      return mf.dispatchFetch(url, { method: body === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${auth}`, "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    },
     async restart(nextVars = vars) { await mf.dispose(); mf = runtime(directory, nextVars); },
   };
 }
@@ -98,13 +107,13 @@ test("5 MiB multibyte chunks, rollback and deletion survive real runtime restart
 });
 
 test("migration and automatic release gates preserve old clients and protect strict spaces", async t => {
-  const h = await harness(t, { SYNC_MIGRATION_ENABLED: "false" });
+  const h = await harness(t, { SYNC_MIGRATION_ENABLED: "false" }, "synthetic-gated");
   assert.equal((await h.call("/sync/save", { version: 1, data: data("old-commercial") })).status, 200);
   assert.equal((await (await h.call("/sync/load")).json()).data.marker, "old-commercial");
   const cold = await (await h.call("/sync/status?protocol=2")).json(); assert.equal(cold.ready, false);
   assert.equal((await h.call("/sync/save", { ...await payload({ epoch: "pending", revision: 0 }, "new"), epoch: "pending" })).status, 503);
   assert.equal((await (await h.call("/_test/inspect")).json()).head, null);
-  await h.restart({ SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true" });
+  await h.restart({ SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_AUTOMATIC_SPACES: '["synthetic-gated"]' });
   await h.call("/_test/migrate");
   const head = await (await h.call("/sync/status?protocol=2")).json();
   const strict = await (await h.call("/_test/strict", { baseRevision: head.revision, epoch: head.epoch, hash: head.hash })).json(); assert.equal(strict.strict, true);
@@ -128,7 +137,7 @@ test("mirror failure commits authority and retries only the latest snapshot", as
 });
 
 test("mixed Commercial/Zhang licenses cannot enable strict mode and admin deletion closes every store", async t => {
-  const h = await harness(t, { SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_COMMERCIAL_PROTOCOL_READY: "false" });
+  const h = await harness(t, { SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_AUTOMATIC_SPACES: '["synthetic-mixed"]', SYNC_COMMERCIAL_PROTOCOL_READY: "false" });
   const licenseKey = `seat-manager:license:${await sha256Hex("SYNTHETIC-MIXED")}`;
   const stateKey = "seat-manager:license:synthetic-mixed:state";
   await (await h.kv()).put(licenseKey, JSON.stringify({ licenseId: "synthetic-mixed", status: "active", allowedEditions: ["zhang", "commercial"], maxDevices: 3, devices: [] }));
@@ -141,7 +150,7 @@ test("mixed Commercial/Zhang licenses cannot enable strict mode and admin deleti
   assert.equal((await h.call("/admin/licenses/delete", { licenseKey, deleteState: true }, "synthetic-admin")).status, 200);
   assert.equal((await h.call("/sync/save", cas, auth.token)).status, 401);
   await (await h.kv()).put(stateKey, JSON.stringify({ version: 1, data: data("lagging-after-delete") }));
-  await h.restart({ SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_COMMERCIAL_PROTOCOL_READY: "false" });
+  await h.restart({ SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_AUTOMATIC_SPACES: '["synthetic-mixed"]', SYNC_COMMERCIAL_PROTOCOL_READY: "false" });
   const debug = await (await h.call(`/_test/inspect?key=${encodeURIComponent(stateKey)}`)).json();
   assert.equal(debug.head.exists, false); assert.notEqual(debug.head.epoch, head.epoch); assert.equal(debug.chunks.length, 0); assert.equal(debug.receipts.length, 0);
   assert.equal((await h.call("/admin/licenses/upsert", { licenseKey, allowedEditions: ["zhang", "commercial"], acquisitionChannel: "wechat" }, "synthetic-admin")).status, 200);

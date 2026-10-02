@@ -15,7 +15,7 @@ const source = marker => ({ version: 1, data: { students: [], seatOrder: [], mar
 async function harness(t, snapshot = source("sealed"), extra = {}) {
   const directory = await mkdtemp(join(tmpdir(), "seat-migration-"));
   const manifest = await makeCutoverManifest({ space, snapshot, cutoverId: "synthetic-boundary", retiredWorkerVersion: "synthetic-retired-version", verifiedAt: new Date().toISOString(), oldWritersRetired: true, backupRetained: true });
-  const vars = { PRODUCT_TOKEN_SECRET: "synthetic-migration-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_COMMERCIAL_PROTOCOL_READY: "false", SYNC_CUTOVER_MANIFESTS: JSON.stringify(manifest), ...extra };
+  const vars = { PRODUCT_TOKEN_SECRET: "synthetic-migration-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true", SYNC_AUTOMATIC_SPACES: JSON.stringify([space]), SYNC_COMMERCIAL_PROTOCOL_READY: "false", SYNC_CUTOVER_MANIFESTS: JSON.stringify(manifest), ...extra };
   const make = () => new Miniflare({ name: "migration-runtime", scriptPath: fileURLToPath(new URL("./fixtures/sync-runtime.js", import.meta.url)), modules: true,
     modulesRoot: fileURLToPath(new URL("../../", import.meta.url)), modulesRules: [{ type: "ESModule", include: ["**/*.js", "**/*.mjs"] }], compatibilityDate: "2026-06-29", log: new Log(LogLevel.ERROR),
     kvNamespaces: ["SEAT_MANAGER_KV"], kvPersist: join(directory, "kv"), durableObjectsPersist: join(directory, "do"),

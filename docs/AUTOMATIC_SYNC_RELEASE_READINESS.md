@@ -1,6 +1,6 @@
 # 自动同步上线准备（2026-10-02）
 
-基线 `9a6d98f373938a55a6e96d3ca2946698b13b4107` 已在 main，Zhang 与共享 Worker 部署成功，Commercial 前端未晋升。后续有限发布仅包含暂停响应修复、两项回归及三份文档；精确提交、CI 与发布状态以 `output/auto-sync-readiness-2026-10-02/` 的发布记录为准，不能以本文代替成功 CI。生产开关保持关闭，未读取或修改真实教师空间。新设计原型由另一工作区处理。
+基线 `9a6d98f373938a55a6e96d3ca2946698b13b4107` 已在 main，Zhang 与共享 Worker 部署成功，Commercial 前端未晋升。暂停响应修复已发布为 `9031fddfa4efca5e521a695b8df7483b023b4b37`，同 SHA 的 [Pages CI](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36990778989) 第2次完整运行成功；证据在 `output/auto-sync-readiness-2026-10-02/`。本轮精确空间白名单补充获准正常提交推送 main，仍只发布关闭配置；精确 CI 与部署结果记录在 `output/sync-allowlist-2026-10-02/`，不能以本文代替成功 CI。生产开关保持关闭，未读取或修改真实教师空间。新设计原型由另一工作区处理。
 
 ## 剩余门槛
 
@@ -13,11 +13,11 @@
 | Commercial 权限空间 | 严格模式仍拒绝未满足兼容条件的启用 | 明确晋升已验收 Zhang SHA，并证明旧盲写客户端退役；访问 Zhang URL 不能绕过 |
 | iPhone 后台与重开 | Chromium 手机视口、持久 profile、离线重开通过 | 真机 Safari/PWA 合成两设备实测，不能用模拟代替 |
 
-当前在线 Worker 版本为 `439480d1-e603-4c2d-9953-6aab2c352083`，部署时间 2026-10-02 07:25:55 UTC，100% 流量。只读证据在 `output/auto-sync-readiness-2026-10-02/worker-deployments-read.json`。没有新建凭证、账号或服务。
+白名单补充前的在线 Worker 只读快照为版本 `439480d1-e603-4c2d-9953-6aab2c352083`，部署时间 2026-10-02 07:25:55 UTC，100% 流量；补充后的版本须与本轮精确 SHA 的共享 Worker CI 核对。只读证据在 `output/auto-sync-readiness-2026-10-02/worker-deployments-read.json`。没有新建凭证、账号或服务。
 
 ## 需要指定的范围
 
-1. 一个现有授权的合成测试空间及桌面、真实 iPhone 操作人。若没有测试授权，另行批准在现有服务创建测试授权；不擅自创建或放宽 localhost 预览鉴权。
+1. 用户已批准在现有服务签发“同步合成测试-20261002”：仅 Zhang、创建起14天、3个客户端槽位、AI关闭。签发须使用现有合法产品管理员会话；当前缺少该会话，测试空间待用户回到已有管理浏览器登录。不擅自创建新管理员凭据或放宽 localhost 预览鉴权。
 2. 后续真实试点的既有空间、负责备份/恢复及确认启用的老师。空间 ID 在现有弹窗核对，产品码、token、学生快照不贴入聊天或传到新服务。现在没有可合法代选的真实目标。
 3. 目标授权的 `allowedEditions`：只有 zhang 可走 Zhang-only；包含 commercial 即须明确晋升和退役证明。不能修改授权权益绕过门禁。
 4. 旧写退役证据负责人和准确的配置/数据操作授权。可读部署元数据不等于已批准真实数据迁移。
@@ -52,7 +52,7 @@ prepare 后下载迁移封装文件，重开后重新校验 space、operationId�
 
 当前 Pages / Commercial 正式 build **没有传入** `VITE_SYNC_AUTO_RELEASE`，只重跑原工作流仍关闭。后续须在批准通道显式调整构建配置，保留另一通道默认关闭，并验证实际产物、精确 SHA 和 CI；合成开启构建不等于生产开放。本阶段没有修改工作流、仓库变量或线上安全设置。
 
-`SYNC_AUTOMATIC_ENABLED` 是全局能力开关，迁移清单不是每空间自动 allowlist。开启前必须核实已有 cutover head 的覆盖范围：移出清单的已迁移空间仍可能具备自动资格。不能声称只影响当前清单；如果不能确认全部具备资格的空间均获准，应保持全局关闭并另行审查逐空间开放方案。每设备始终需要明确同意。
+逐空间门禁使用 `SYNC_AUTOMATIC_SPACES`，默认 `[]`，与全局 `SYNC_AUTOMATIC_ENABLED` 同时满足才开放。服务端以权威 state key 精确匹配完整空间 ID，缺失、格式错误、通配符或混入非字符串项均拒绝全部；状态/读取/保存及队列内启用统一校验，幂等回执不沿用旧自动资格。迁移清单仍只控制迁移准备，不能单独授予自动资格。本轮仅发布该门禁和空名单，迁移、自动模式及 Commercial readiness 继续关闭，截止清单保持空；没有签发测试码或迁移空间。后续开放仍须另行核实明确获准的目标、迁移证明、构建配置和真机验收，不能因门禁代码上线而开通。
 
 ## 真实 iPhone 验收清单
 
@@ -76,6 +76,12 @@ freezing/prepared 可以明确 abort；complete 不能取消迁移，strict 不�
 
 `9a6d98f` 的同 SHA CI 完整：Zhang 143项、Commercial 116项、开启路径各3项，Zhang/Worker 部署成功，线上 Zhang 32个静态文件与产物匹配。见 [Pages CI](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36978464991)、[Worker CI](https://github.com/Charlie-Hong-smu/seat-manager/actions/runs/36978465004) 与 `SYNC_MOBILE_INTEGRATION.md`。
 
-本次修复通过设计/lint/typecheck、79文件415项全量覆盖率、Worker61项、开启浏览器各3项、双构建/体积及Commercial生产包检查，保留所有原断言。证据目录为 `output/auto-sync-readiness-2026-10-02/`。准备阶段未在本机重跑关闭开关的完整143/116浏览器，不能将基线结果称为新 SHA 的结果；有限发布仍须通过原工作流中两版完整浏览器及全部必需检查，再核实精确 SHA 的部署结果。
+已发布的暂停修复通过设计/lint/typecheck、79文件415项全量覆盖率、Worker61项、开启浏览器各3项、双构建/体积及Commercial生产包检查，保留所有原断言。证据目录为 `output/auto-sync-readiness-2026-10-02/`。准备阶段未在本机重跑关闭开关的完整143/116浏览器，不能将基线结果称为新 SHA 的结果；有限发布仍须通过原工作流中两版完整浏览器及全部必需检查，再核实精确 SHA 的部署结果。
 
-有限发布范围仅为 `syncProtocol.ts`、`syncRuntime.test.ts` 与此文及架构/运营说明；不包含 Commercial 晋升、真实旧写证明签署、测试授权创建、任何空间迁移或替老师启用。
+暂停修复的有限发布范围仅为 `syncProtocol.ts`、`syncRuntime.test.ts` 与此文及架构/运营说明。本轮白名单补充通过 Worker65项、前端79文件417项、开启浏览器两版各4项、设计/lint/typecheck、双构建/体积与Commercial生产包检查及Worker dry-run；保留所有原断言，前端应用源码没有新增改动。适用本地检查复用已通过日志，必需的完整两版浏览器仍由本轮精确 SHA CI 执行。两轮均不包含 Commercial 晋升、真实旧写证明签署、测试授权创建、任何空间迁移或替老师启用。
+
+## 正式登录与签发交接
+
+试点老师使用 Zhang 正式产品授权登录页 `https://charlie-hong-smu.github.io/seat-manager/`，输入独立测试产品码。Commercial 页不作为此次 Zhang-only 试点入口。签发仍使用现有授权管理页 `https://seat-manager-license-admin.pages.dev/` 和已有管理员密钥，不创建新管理员凭据。管理员页面的 Worker 地址保持现有服务；密钥及测试码只在安全管理会话使用，不贴入聊天或日志。
+
+用户已明确批准“同步合成测试-20261002”、Zhang-only、创建起14天、3个客户端槽位、AI关闭。当前执行环境没有产品管理员会话，Cloudflare部署权限不能替代；本机只读 `GET https://seat-manager-license-admin.pages.dev/` 在页面加载阶段返回403，未发送管理员鉴权请求，尚未验证在线登录表单，不绕过访问保护。仓库 `license-admin/index.html` 的可见入口为“连接设置”，填写现有 Worker 地址和“管理员密钥”，可“记住密钥”，再用“刷新数据”连接；`app.js` 仅在密钥存在时通过 Bearer 调用管理员接口。此为源码可见证据，不能据此解释线上403原因。测试空间标为待用户回到已有管理浏览器正常登录；不继续探测或签发新管理员密钥。真实iPhone验收仍由实际设备完成。

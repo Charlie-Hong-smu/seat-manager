@@ -17,11 +17,12 @@ function gate() { let resolve!: () => void; const promise = new Promise<void>(r 
 async function runtime(enabled = false) {
   const directory = await mkdtemp(join(tmpdir(), "seat-sync-client-runtime-"));
   let automaticEnabled = enabled;
+  let automaticSpaces = JSON.stringify(["synthetic-client-space"]);
   const make = () => new Miniflare({ name: "client-sync-runtime", scriptPath: resolve("../cloudflare-worker/test/fixtures/sync-runtime.js"), modules: true,
     modulesRoot: resolve(".."), modulesRules: [{ type: "ESModule", include: ["**/*.js", "**/*.mjs"] }], compatibilityDate: "2026-06-29", log: new Log(LogLevel.ERROR),
     kvNamespaces: ["SEAT_MANAGER_KV"], kvPersist: join(directory, "kv"), durableObjectsPersist: join(directory, "do"),
     durableObjects: { SYNC_COORDINATOR: { className: "FaultSyncCoordinator", useSQLite: true }, ACCOUNT_COORDINATOR: { className: "AccountCoordinator", useSQLite: true } },
-    bindings: { PRODUCT_TOKEN_SECRET: "synthetic-client-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: automaticEnabled ? "true" : "false" },
+    bindings: { PRODUCT_TOKEN_SECRET: "synthetic-client-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: automaticEnabled ? "true" : "false", SYNC_AUTOMATIC_SPACES: automaticSpaces },
   });
   let mf = make(); cleanup.push(async () => { await mf.dispose(); await rm(directory, { recursive: true, force: true }); });
   // A synthetic license key is derived locally; no production credential is used.
@@ -59,7 +60,7 @@ async function runtime(enabled = false) {
       async bind(direction: "local" | "cloud" = "local") { expect((await engine.sync()).choice).toBe("bind"); expect((await engine.choose(direction)).phase).toBe("synced"); },
     };
   }
-  return { client, async restart() { await mf.dispose(); mf = make(); }, async automaticAvailable(value: boolean) { automaticEnabled = value; await mf.dispose(); mf = make(); }, async head() { return await (await call("/sync/status?protocol=2", auth.token)).json() as CloudHead; }, async remove() { await call("/_test/delete?key=seat-manager%3Alicense%3Asynthetic-client-space%3Astate", auth.token, {}); } };
+  return { client, async allowlist(value: string) { automaticSpaces = value; await mf.dispose(); mf = make(); }, async restart() { await mf.dispose(); mf = make(); }, async automaticAvailable(value: boolean) { automaticEnabled = value; await mf.dispose(); mf = make(); }, async head() { return await (await call("/sync/status?protocol=2", auth.token)).json() as CloudHead; }, async remove() { await call("/_test/delete?key=seat-manager%3Alicense%3Asynthetic-client-space%3Astate", auth.token, {}); } };
 }
 
 it("real SQLite authority resolves two client edits, restart receipts and editing during upload", async () => {
@@ -142,6 +143,18 @@ it("server release closure prevents an active client from applying a remote upda
   await expect.poll(() => b.engine.getSnapshot().phase).toBe("paused");
   expect(b.applied()).toBe(applied); expect(b.book().slices[0].data.marker).toBe("base"); expect(b.attempts).toHaveLength(0);
   expect((await b.reopen().start()).automatic).toBe(false);
+});
+
+it.each(["[]", "malformed"])("removed or malformed allowlist %s pauses a consented client without uploading", async list => {
+  const h = await runtime(true); const a = h.client(); await a.bind(); await a.engine.enableAutomatic(true);
+  a.edit("kept-after-space-removal"); a.engine.onSaved(); const count = a.attempts.length;
+  await h.allowlist(list); a.engine.checkAutomatic();
+  await expect.poll(() => a.engine.getSnapshot().phase).toBe("paused");
+  expect(a.engine.getSnapshot().automatic).toBe(false); expect(a.attempts).toHaveLength(count);
+  expect(a.book().slices[0].data.marker).toBe("kept-after-space-removal"); expect((await h.head()).strict).toBe(true);
+  expect((await a.reopen().start()).automatic).toBe(false);
+  expect((await a.engine.enableAutomatic(true)).phase).toBe("auth"); expect(a.attempts).toHaveLength(count);
+  expect((await a.engine.reviewManual("local")).choice).toBe("conflict"); expect((await a.engine.choose("local")).phase).toBe("synced");
 });
 
 it("enabled offline double edit pauses durably on reopen until an explicit choice and resume", async () => {

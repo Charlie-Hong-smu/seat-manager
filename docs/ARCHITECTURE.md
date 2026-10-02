@@ -231,6 +231,8 @@ GET 不隐式迁移。`worker-sync-migration.js` 将逐空间受信 `SYNC_CUTOVE
 
 新客户端通过 `/sync/status?protocol=2`、`/sync/load?protocol=2` 与带 `protocol:2/baseRevision/epoch/clientMutationId/hash` 的 `/sync/save` 使用同一权威。`/sync/migration` 处理阶段/准备/提交/取消，`/sync/migration/backup` 导出固定备份；两项均须现有产品鉴权。`/sync/mode` 仅在已验证迁移、发布门禁、授权空间兼容条件和教师整柜确认均满足后设 strict；strict 空间永久拒绝无 revision 盲写。产品期限、版别、租户、设备及会话仍经原鉴权，保存和迁移队列内再次核对；请求频率受 `SYNC_RATE_LIMITER` 限制。Netlify 仍使用 `/sync/` 公共前缀，公共路由全部加入契约测试。
 
+自动开放还须 `SYNC_AUTOMATIC_SPACES` 部署白名单：仅接受完整空间 ID 的 JSON 字符串数组，缺失、空或格式错误均默认拒绝，且必须同时满足全局自动开关、迁移证明及原版别门禁。`worker-sync-policy.js` 将空间 ID 转为既有授权 state key 与权威 head.key 精确比对，不采信请求中声明的空间或能力。status/load/save 元数据与队列内 setStrict 使用同一策略；幂等回执保留原 revision/hash/时间，只刷新当前自动能力，不能在撤回名单后返回旧资格。迁移清单只控制迁移准备，完成迁移本身不授予自动资格；名单外手动旧协议与 CAS 仍按原合同工作，已 strict 的空间不会恢复盲写。
+
 所有正式写入都从 `workspaces.ts/writeBook` 成功后通知客户端。`SnapshotSync` 单飞核对服务端基线及本机内容 hash：本机单改创建持久 mutation 后 CAS 上传；本机干净且无活动/缓存草稿才拉取；双改、未绑定或 epoch 变化先保存两份并请老师明确选择。上传回执只确认捕获的 hash，期间后续修改仍待同步。IndexedDB `seat-manager-sync-journal-v2` 按空间保存 pending/conflict/recovery/discarded-pending/migration 有限槽位；checkpoint 与绑定使用新独立元数据键，不修改文件柜格式。`seat-manager-sync-preference-v1:<space>` 单独记录教师明确同意、epoch 和暂停原因，旧 checkpoint 的 automatic 布尔不能授予启用。单一计时器管理 3 秒防抖、30 秒最长等待和网络退避；同 hash 的 flush/切班不安排查询，回执之后的新编辑或更新的云端 head 继续核对。恢复点可从云同步弹窗导出，两份 `workspaceBook` 均可经原整柜导入恢复。旧单班云数据仍可显式采用，下一次安全上传将其转为整柜格式；旧数据补齐字段后必须重新建立确认基线才能启用自动模式。
 
 远端应用或整柜导入先存新 `seat-manager-workspace-generation-v2`、再原子写主柜，主柜失败回滚代际。控制器、`useScopedRequest`、草稿、AI 对话/评语队列及撤销回调检查代际，旧缓存保留在旧代际，不会回写新柜；本机当前班级选择尽量保留。Web Lock 与原始柜版本检查继续拦截多窗口修改。存储/配额失败暂停、换码/退出/解绑失效在途回执，不自动绑定新空间。手机状态条沿用共享 Button 与 theme tokens，常驻区分本机保存和云端状态。
