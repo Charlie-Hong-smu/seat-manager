@@ -235,4 +235,4 @@ GET 不隐式迁移。`worker-sync-migration.js` 将逐空间受信 `SYNC_CUTOVE
 
 远端应用或整柜导入先存新 `seat-manager-workspace-generation-v2`、再原子写主柜，主柜失败回滚代际。控制器、`useScopedRequest`、草稿、AI 对话/评语队列及撤销回调检查代际，旧缓存保留在旧代际，不会回写新柜；本机当前班级选择尽量保留。Web Lock 与原始柜版本检查继续拦截多窗口修改。存储/配额失败暂停、换码/退出/解绑失效在途回执，不自动绑定新空间。手机状态条沿用共享 Button 与 theme tokens，常驻区分本机保存和云端状态。
 
-发布初态：迁移、前后端自动能力、Commercial strict readiness 全部关闭，截断清单为空。`VITE_SYNC_AUTO_RELEASE` 默认关闭，开启测试构建独立存放，不作为 Pages 产物。迁移和 opt-in/停用/明确恢复 UI、按空间重开恢复已经实现并经合成公共接口测试；真实空间运营收口、混版退役及真机后台冻结尚未证明。新界面保留旧手动上传/恢复，未迁移空间的一键同步只说明待启用条件。启用和回滚步骤见 `OPERATIONS.md`，本轮证据及隔离交付边界见 `SYNC_COMPLETION.md`。
+发布初态：迁移、前后端自动能力、Commercial strict readiness 全部关闭，截断清单为空。`VITE_SYNC_AUTO_RELEASE` 默认关闭，开启测试构建独立存放，不作为 Pages 产物。迁移和 opt-in/停用/明确恢复 UI、按空间重开恢复已经实现并经合成公共接口测试；真实空间运营收口、混版退役及真机后台冻结尚未证明。活跃自动客户端每次核对 head 时复查服务端能力，关闭后停止后续上传/拉取并持久暂停，重新开放仍需明确恢复；已发送 CAS 不撤销，手动 CAS 保持可用。新界面保留旧手动上传/恢复，未迁移空间的一键同步只说明待启用条件。启用和回滚步骤见 `OPERATIONS.md`，本轮证据及隔离交付边界见 `SYNC_COMPLETION.md`；上线准备与真机门槛见 `AUTOMATIC_SYNC_RELEASE_READINESS.md`。

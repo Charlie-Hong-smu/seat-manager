@@ -163,6 +163,6 @@ strict 启用还需相应客户端盲写退役：Zhang-only 空间可在已获�
 
 Pages 发布契约为 v2，复用证据还必须包含两版开启路径步骤成功；旧 v1 只允许走全量验证。Commercial 晋升的全量回退路径对支持 `test:e2e:sync` 的批准提交重跑两版开启测试，旧提交回滚保持原全量检查。没有同一精确 SHA 的成功发布证据不能声称部署完成。
 
-回滚优先撤回 Zhang UI 或关闭能力门禁，保留 SyncCoordinator binding/migration、权威 head、epoch 与 strict 拒绝逻辑。已经迁移/strict 的空间不得部署只会 KV 盲写的旧 Worker；若需后端修复，应提交保留新协议的向前修复。兼容镜像不能当作无条件权威恢复源。删除失败会先撤销授权并返回错误，可依保留的授权身份重试 tombstone；不得手工清空 DO head 使旧 KV 再导入。SQLite 历史不是无限备份，老师仍应手动导出 JSON。
+回滚优先撤回 Zhang UI 或关闭能力门禁，保留 SyncCoordinator binding/migration、权威 head、epoch 与 strict 拒绝逻辑。活跃客户端在下一次 head 核对发现自动能力关闭时持久暂停，不再排程上传/拉取，重新开放不会自动恢复；后台/离线客户端回前台才会获知，已发送 CAS 可能完成，手动 CAS 仍保留。已经迁移/strict 的空间不得部署只会 KV 盲写的旧 Worker；若需后端修复，应提交保留新协议的向前修复。兼容镜像不能当作无条件权威恢复源。删除失败会先撤销授权并返回错误，可依保留的授权身份重试 tombstone；不得手工清空 DO head 使旧 KV 再导入。SQLite 历史不是无限备份，老师仍应手动导出 JSON。具体上线准备、旧写证据与恢复步骤见 `AUTOMATIC_SYNC_RELEASE_READINESS.md`。
 
 `syncRuntime.test.ts` 将实际前端 SnapshotSync 直接连接本地 workerd/SQLite，检查两设备同基线 CAS、丢响应/运行时重启、上传继续编辑、干净拉取期间新草稿、班级选择/不循环、删除 epoch、存储失败与换码回执隔离。运行前须安装 `cloudflare-worker/` 的 npm 锁定依赖；Pages 静态验收及旧版 Commercial 完整验证分支已加入该安装步骤，复用成功证据时仍按原规则跳过完整验证。

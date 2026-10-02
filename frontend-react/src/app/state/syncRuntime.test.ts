@@ -16,11 +16,12 @@ const seed = (): WorkspaceBook => ({ version: 1, currentSliceId: "a", slices: ["
 function gate() { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return { promise, resolve }; }
 async function runtime(enabled = false) {
   const directory = await mkdtemp(join(tmpdir(), "seat-sync-client-runtime-"));
+  let automaticEnabled = enabled;
   const make = () => new Miniflare({ name: "client-sync-runtime", scriptPath: resolve("../cloudflare-worker/test/fixtures/sync-runtime.js"), modules: true,
     modulesRoot: resolve(".."), modulesRules: [{ type: "ESModule", include: ["**/*.js", "**/*.mjs"] }], compatibilityDate: "2026-06-29", log: new Log(LogLevel.ERROR),
     kvNamespaces: ["SEAT_MANAGER_KV"], kvPersist: join(directory, "kv"), durableObjectsPersist: join(directory, "do"),
     durableObjects: { SYNC_COORDINATOR: { className: "FaultSyncCoordinator", useSQLite: true }, ACCOUNT_COORDINATOR: { className: "AccountCoordinator", useSQLite: true } },
-    bindings: { PRODUCT_TOKEN_SECRET: "synthetic-client-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: enabled ? "true" : "false" },
+    bindings: { PRODUCT_TOKEN_SECRET: "synthetic-client-secret", SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: automaticEnabled ? "true" : "false" },
   });
   let mf = make(); cleanup.push(async () => { await mf.dispose(); await rm(directory, { recursive: true, force: true }); });
   // A synthetic license key is derived locally; no production credential is used.
@@ -58,7 +59,7 @@ async function runtime(enabled = false) {
       async bind(direction: "local" | "cloud" = "local") { expect((await engine.sync()).choice).toBe("bind"); expect((await engine.choose(direction)).phase).toBe("synced"); },
     };
   }
-  return { client, async restart() { await mf.dispose(); mf = make(); }, async head() { return await (await call("/sync/status?protocol=2", auth.token)).json() as CloudHead; }, async remove() { await call("/_test/delete?key=seat-manager%3Alicense%3Asynthetic-client-space%3Astate", auth.token, {}); } };
+  return { client, async restart() { await mf.dispose(); mf = make(); }, async automaticAvailable(value: boolean) { automaticEnabled = value; await mf.dispose(); mf = make(); }, async head() { return await (await call("/sync/status?protocol=2", auth.token)).json() as CloudHead; }, async remove() { await call("/_test/delete?key=seat-manager%3Alicense%3Asynthetic-client-space%3Astate", auth.token, {}); } };
 }
 
 it("real SQLite authority resolves two client edits, restart receipts and editing during upload", async () => {
@@ -116,6 +117,31 @@ it("enabled background clean pull waits for drafts, preserves selection and avoi
   b.draft(false); b.engine.checkAutomatic(); await expect.poll(() => b.book().slices[0].data.marker).toBe("remote-enabled");
   expect(b.book().currentSliceId).toBe("b"); b.engine.onSaved(); b.engine.checkAutomatic();
   await expect.poll(() => b.engine.getSnapshot().phase).toBe("synced"); expect(b.attempts).toHaveLength(0); b.engine.suspend();
+});
+
+it("server release closure pauses an active client durably while manual CAS remains available", async () => {
+  const h = await runtime(true); const a = h.client(); await a.bind(); await a.engine.enableAutomatic(true);
+  a.edit("kept-after-server-pause"); a.engine.onSaved(); const attempts = a.attempts.length;
+  await h.automaticAvailable(false);
+  const paused = await a.engine.sync();
+  expect(paused.phase).toBe("paused"); expect(paused.automatic).toBe(false); expect(paused.automaticPaused).toBe("release");
+  expect(paused.message).toContain("服务端已暂停自动同步"); expect(a.attempts).toHaveLength(attempts);
+  expect(a.book().slices[0].data.marker).toBe("kept-after-server-pause"); expect((await h.head()).revision).toBe(1);
+  expect(JSON.parse(a.values.get("seat-manager-sync-preference-v1:synthetic-client-space")!)).toMatchObject({ enabled: true, paused: "release" });
+  await h.automaticAvailable(true); expect((await a.reopen().start()).automatic).toBe(false);
+  a.engine.onSaved(); a.engine.checkAutomatic(); await new Promise(resolve => setTimeout(resolve, 3300)); expect(a.attempts).toHaveLength(attempts);
+  await h.automaticAvailable(false);
+  expect((await a.engine.reviewManual("local")).choice).toBe("conflict");
+  expect((await a.engine.choose("local")).phase).toBe("synced"); expect((await h.head()).strict).toBe(true);
+}, 15_000);
+
+it("server release closure prevents an active client from applying a remote update", async () => {
+  const h = await runtime(true); const a = h.client(); const b = h.client(); await a.bind(); await b.bind("cloud"); await b.engine.enableAutomatic(true);
+  a.edit("cloud-before-server-pause"); await a.engine.sync(); const applied = b.applied();
+  await h.automaticAvailable(false); b.engine.checkAutomatic();
+  await expect.poll(() => b.engine.getSnapshot().phase).toBe("paused");
+  expect(b.applied()).toBe(applied); expect(b.book().slices[0].data.marker).toBe("base"); expect(b.attempts).toHaveLength(0);
+  expect((await b.reopen().start()).automatic).toBe(false);
 });
 
 it("enabled offline double edit pauses durably on reopen until an explicit choice and resume", async () => {

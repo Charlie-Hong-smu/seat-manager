@@ -24,6 +24,7 @@ export const syncErrorMessage = (error: unknown): string => {
   const code = error instanceof Error ? error.message : "";
   if (["sync_auth_required", "unauthorized"].includes(code)) return "授权失效，请重新登录；本机数据仍保留。";
   if (code === "sync_space_changed") return "授权云空间已变化，已暂停自动同步；请重新核对并绑定当前空间。";
+  if (code === "automatic_paused_by_server") return "服务端已暂停自动同步；本机数据与待同步内容仍保留，可继续手动备份与恢复。";
   if (["forbidden", "automatic_disabled"].includes(code)) return "当前授权暂不能启用此同步能力。";
   if (["conflict", "epoch_changed", "upgrade_required", "mutation_reused"].includes(code)) return "云端版本已变化，请重新核对并选择；本机数据仍保留。";
   if (["sync_payload_too_large", "payload_too_large"].includes(code)) return "整柜数据超过 5 MiB，请在名单与备份页导出本机 JSON。";
@@ -148,6 +149,10 @@ export class SnapshotSync {
     const head = await this.ports.api<CloudHead>("/sync/status?protocol=2", token);
     this.current(token); validateCloudHead(head);
     if (this.automatic && this.automaticSpace && head.licenseId !== this.automaticSpace) { this.stopAutomatic("auth"); throw new SyncProtocolError("sync_space_changed", 401); }
+    if (this.automatic && (!this.releaseEnabled || !head.ready || !head.strict || !head.automaticAvailable)) {
+      this.stopAutomatic("release");
+      throw new SyncProtocolError("automatic_paused_by_server");
+    }
     return head;
   }
   private async remote(head: CloudHead, token: string): Promise<CloudSnapshot | undefined> {
@@ -185,8 +190,9 @@ export class SnapshotSync {
     if (error instanceof DOMException && ["QuotaExceededError", "SecurityError"].includes(error.name)) error = new SyncProtocolError("sync_storage_failed");
     const status = error instanceof SyncProtocolError ? error.status : 0;
     const message = syncErrorMessage(error);
-    const phase: SyncPhase = status === 401 || status === 403 ? "auth" : status === 409 ? "conflict" : error instanceof Error && error.message === "sync_changed_during_request" ? "draft" : error instanceof Error && /storage|local_save|rollback|payload|invalid|corrupt/.test(error.message) ? "paused" : navigator.onLine === false ? "offline" : "pending";
-    if (["auth", "conflict", "paused"].includes(phase)) this.stopAutomatic(phase);
+    const serverPaused = error instanceof Error && error.message === "automatic_paused_by_server";
+    const phase: SyncPhase = status === 401 || status === 403 ? "auth" : status === 409 ? "conflict" : error instanceof Error && error.message === "sync_changed_during_request" ? "draft" : serverPaused || error instanceof Error && /storage|local_save|rollback|payload|invalid|corrupt/.test(error.message) ? "paused" : navigator.onLine === false ? "offline" : "pending";
+    if (["auth", "conflict", "paused"].includes(phase) && !serverPaused) this.stopAutomatic(phase);
     else if (this.automatic && (error instanceof SyncProtocolError ? error.retryable : false)) {
       const delay = Math.min(60_000, 2000 * 2 ** this.retryAttempt++) * (0.8 + Math.random() * 0.4);
       this.schedule(delay);
