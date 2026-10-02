@@ -11,10 +11,10 @@ function fixture() {
   return {
     run: { ...success, id: 42, run_attempt: 2, head_sha: sha, head_branch: "main", path: ".github/workflows/pages.yml", event: "push" },
     jobs: [
-      job("validate", ["Validate React frontend", "Validate release verification contract v1"]),
-      job("zhang-e2e (1)", ["Validate Zhang in Chromium", "Check Zhang bundle size", "Upload Pages artifact"]),
+      job("validate", ["Validate React frontend", "Validate release verification contract v2"]),
+      job("zhang-e2e (1)", ["Validate Zhang in Chromium", "Check Zhang bundle size", "Upload Pages artifact", "Validate enabled Zhang sync in Chromium"]),
       job("zhang-e2e (2)", ["Validate Zhang in Chromium"]),
-      job("commercial-e2e", ["Validate Commercial in Chromium"]),
+      job("commercial-e2e", ["Validate Commercial in Chromium", "Validate enabled Commercial sync in Chromium"]),
       job("deploy", ["Deploy to GitHub Pages"]),
     ],
   };
@@ -74,4 +74,16 @@ test("invalid input is rejected before contacting GitHub", async () => {
   const request = () => assert.fail("must not request");
   await assert.rejects(verifyZhangRelease({ ...input, sha: "main" }, request), /40-character/);
   await assert.rejects(verifyZhangRelease({ ...input, token: "" }, request), /token/);
+});
+
+
+test("v2 evidence includes successful enabled sync checks from both editions", async () => {
+  for (const name of ["Validate enabled Zhang sync in Chromium", "Validate enabled Commercial sync in Chromium"]) {
+    const data = fixture(); data.jobs.flatMap(job => job.steps).find(step => step.name === name).conclusion = "skipped";
+    await assert.rejects(verifyZhangRelease(input, api(data)), /No successful Zhang/);
+  }
+});
+test("the old v1 contract cannot skip new enabled sync acceptance", async () => {
+  const data = fixture(); data.jobs[0].steps[1].name = "Validate release verification contract v1";
+  assert.equal((await verifyZhangRelease(input, api(data))).reuse, false);
 });

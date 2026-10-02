@@ -34,6 +34,7 @@ async function setup(page: Page, ready = true) {
     if (lose) { lose = false; await route.abort("failed"); return; }
     await route.fulfill({ json: receipt });
   });
+  await page.route("**/sync/migration", route => route.fulfill({ json: { available: false, space: "synthetic-browser-space", phase: "unprepared" } }));
   await page.goto("./");
   await page.getByPlaceholder("请输入授权码").fill("TEST-ONLY-SNAPSHOT");
   await page.getByRole("button", { name: "进入工作台", exact: true }).click();
@@ -123,6 +124,7 @@ test("phone browser restart retries its durable mutation against real SQLite wit
   });
   const kv = await mf.getKVNamespace("SEAT_MANAGER_KV");
   await kv.put(`seat-manager:license:${await sha256("SYNTHETIC-RESTART")}`, JSON.stringify({ licenseId: "synthetic-restart-space", status: "active", allowedEditions: ["zhang", "commercial"], maxDevices: 3, devices: [] }));
+  await mf.dispatchFetch("https://worker.test/_test/migrate?key=seat-manager%3Alicense%3Asynthetic-restart-space%3Astate");
   const mutations: string[] = []; let drop = false;
   const launch = () => playwright.chromium.launchPersistentContext(join(directory, "browser"), { headless: true, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });
   let context = await launch();

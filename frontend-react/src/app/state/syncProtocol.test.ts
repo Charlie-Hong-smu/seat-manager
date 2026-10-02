@@ -161,6 +161,17 @@ describe("local-first snapshot synchronization", () => {
     expect((await h.engine.sync()).phase).toBe("conflict"); expect(h.saves).toHaveLength(0); expect(h.local().slices).toHaveLength(2);
     expect((await h.engine.choose("local")).phase).toBe("synced"); expect(h.saves[0].epoch).toBe("epoch-after-delete");
   });
+  it("credential pause fences a late receipt even when both binding cleanup methods fail", async () => {
+    const h = await setup(); await h.bind(); h.edit("captured-before-switch"); const gate = deferred<void>(); h.saveWait(gate.promise);
+    const upload = h.engine.sync(); await expect.poll(() => h.saves.length).toBe(1); h.auth("other-token", "other-space");
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
+    const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
+    try {
+      expect(() => h.engine.pause()).not.toThrow(); gate.resolve(); expect((await upload).phase).toBe("auth");
+      expect(h.engine.getSnapshot().automatic).toBe(false); expect(h.values.has("pending:space-a")).toBe(true);
+      h.engine.checkAutomatic(); expect(h.saves).toHaveLength(1);
+    } finally { set.mockRestore(); remove.mockRestore(); gate.resolve(); }
+  });
   it("refuses a choice if the remote changes again or the local window is readonly", async () => {
     const h = await setup(); h.edit("local"); expect((await h.engine.sync()).choice).toBe("bind"); await h.cloudEdit("changed-again");
     expect((await h.engine.choose("local")).phase).toBe("conflict"); expect(h.saves).toHaveLength(0);

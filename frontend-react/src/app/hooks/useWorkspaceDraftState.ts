@@ -49,6 +49,14 @@ export function useWorkspaceDraftState<T>(name: string, initial: T | (() => T)):
     if (current.current.key !== key || generation !== getRemoteGeneration()) return;
     const next = typeof update === "function" ? (update as (value: T) => T)(current.current.value) : update;
     current.current = { key, value: next };
+    const initialValue = typeof initialRef.current === "function" ? (initialRef.current as () => T)() : initialRef.current;
+    if (JSON.stringify(next) === JSON.stringify(initialValue)) {
+      // Returning to the form's original value leaves no active edit to protect.
+      memory.set(key, { value: undefined, pending: true });
+      try { localStorage.removeItem(key); memory.delete(key); } catch { /* The memory tombstone suppresses an older disk draft. */ }
+      setSnapshot({ key, value: next });
+      return;
+    }
     const entry = { value: next, pending: true };
     memory.set(key, entry);
     try { localStorage.setItem(key, JSON.stringify(next)); entry.pending = false; } catch { /* 输入仍保留于当前会话。 */ }

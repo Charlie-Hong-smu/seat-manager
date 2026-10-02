@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readWorkspaceDraft, useWorkspaceDraftState } from "./useWorkspaceDraftState";
+import { hasWorkspaceDrafts, readWorkspaceDraft, useWorkspaceDraftState } from "./useWorkspaceDraftState";
 
 const workspace = vi.hoisted(() => ({ scope: "class-a" }));
 vi.mock("../state/workspaces", () => ({ getCurrentWorkspaceScope: () => workspace.scope }));
@@ -10,6 +10,25 @@ beforeEach(() => { workspace.scope = "class-a"; name = `draft-regression-${++seq
 const key = () => `seat-manager-form-draft-v1:${workspace.scope}:${name}`;
 
 describe("workspace draft recovery", () => {
+  it("returning a new form to its original value removes its active draft", () => {
+    const hook = renderHook(() => useWorkspaceDraftState(name, ""));
+    act(() => hook.result.current[1]("temporary")); expect(localStorage.getItem(key())).toBeTruthy();
+    act(() => hook.result.current[1]("")); expect(localStorage.getItem(key())).toBeNull();
+    expect(hook.result.current[0]).toBe("");
+  });
+  it("an empty edit to existing text remains protected until it returns to the original", () => {
+    const hook = renderHook(() => useWorkspaceDraftState(name, { title: "saved title" }));
+    act(() => hook.result.current[1]({ title: "" })); expect(JSON.parse(localStorage.getItem(key())!)).toEqual({ title: "" });
+    act(() => hook.result.current[1]({ title: "saved title" })); expect(localStorage.getItem(key())).toBeNull();
+  });
+  it("return-to-original remains cleared after a failed disk removal", () => {
+    const hook = renderHook(() => useWorkspaceDraftState(name, "")); act(() => hook.result.current[1]("cached"));
+    const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => { throw new Error("denied"); });
+    act(() => hook.result.current[1]("")); hook.unmount(); remove.mockRestore();
+    expect(readWorkspaceDraft(name, "")).toBe("");
+    // Scope the shared cache query to this test's current generation.
+    localStorage.clear(); expect(hasWorkspaceDrafts()).toBe(false);
+  });
   it("keeps the latest edit after a failed write and remount", () => {
     localStorage.setItem(key(), JSON.stringify("old"));
     const first = renderHook(() => useWorkspaceDraftState(name, ""));

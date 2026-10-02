@@ -10,7 +10,7 @@ const requiredJobs = new Map([
   ["commercial-e2e", ["Validate Commercial in Chromium"]],
   ["deploy", ["Deploy to GitHub Pages"]],
 ]);
-const contractStep = "Validate release verification contract v1";
+const contractStep = "Validate release verification contract v2";
 const succeeded = value => value?.status === "completed" && value.conclusion === "success";
 
 export async function verifyZhangRelease({ repository, sha, token, apiUrl = "https://api.github.com" }, request = fetch) {
@@ -48,6 +48,7 @@ export async function verifyZhangRelease({ repository, sha, token, apiUrl = "htt
     });
     if (!complete) continue;
     const reuse = jobs.find(job => job.name === "validate").steps.some(step => step.name === contractStep && succeeded(step));
+    if (reuse && ![["zhang-e2e (1)", "Validate enabled Zhang sync in Chromium"], ["commercial-e2e", "Validate enabled Commercial sync in Chromium"]].every(([name, step]) => jobs.find(job => job.name === name).steps.some(item => item.name === step && succeeded(item)))) continue;
     return { runId: run.id, attempt: run.run_attempt, reuse };
   }
   throw new Error("No successful Zhang deployment with all required checks exists for this exact main commit.");

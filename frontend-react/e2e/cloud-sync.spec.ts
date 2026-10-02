@@ -53,6 +53,7 @@ test("manual cloud sync preserves every class and term through the real Worker h
     }), env);
     await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: await response.text() });
   });
+  await page.route("**/sync/migration", route => route.fulfill({ json: { available: false, space: "e2e-cloud-sync", phase: "unprepared" } }));
   const initial = makeBook();
   await page.addInitScript(({ key, book }) => {
     if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(book));

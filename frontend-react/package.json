@@ -21,7 +21,8 @@
     "test:e2e:zhang": "E2E_EDITION=zhang playwright test",
     "test:e2e:commercial": "E2E_EDITION=commercial playwright test",
     "test:e2e:all": "pnpm test:e2e:zhang && pnpm test:e2e:commercial",
-    "check": "pnpm check:design && pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm check:design && pnpm lint && pnpm typecheck && pnpm test",
+    "test:e2e:sync": "playwright test --config playwright.sync.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

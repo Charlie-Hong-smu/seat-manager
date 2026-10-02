@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "node_modules/**", "public/vendor/**", "playwright-report/**", "test-results/**"],
+    ignores: ["dist/**", ".sync-e2e-dist/**", ".full-e2e-dist/**", ".sync-e2e-results/**", "node_modules/**", "public/vendor/**", "playwright-report/**", "test-results/**"],
   },
   ...tseslint.configs.recommended,
   {

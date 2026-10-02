@@ -39,6 +39,7 @@ test("SQLite CAS, lost response receipts and restart preserve one authoritative 
   const h = await harness(t);
   const kv = await h.kv();
   await kv.put(key, JSON.stringify({ version: 1, updatedAt: "old", deviceName: "旧设备", data: data("old"), workspaceBook: book("old") }));
+  await h.call("/_test/migrate");
   const initial = await Promise.all([h.call("/sync/status?protocol=2"), h.call("/sync/status?protocol=2")]);
   const [a, b] = await Promise.all(initial.map(r => r.json()));
   assert.equal(a.revision, 1); assert.deepEqual(a, b);
@@ -67,6 +68,7 @@ test("SQLite CAS, lost response receipts and restart preserve one authoritative 
 
 test("5 MiB multibyte chunks, rollback and deletion survive real runtime restart", async t => {
   const h = await harness(t);
+  await h.call("/_test/migrate");
   const head = await (await h.call("/sync/status?protocol=2")).json();
   const input = await payload(head, "large");
   input.workspaceBook.padding = "中".repeat(Math.floor((SYNC_MAX_BYTES - new TextEncoder().encode(JSON.stringify(input)).length - 1024) / 3));
@@ -103,6 +105,7 @@ test("migration and automatic release gates preserve old clients and protect str
   assert.equal((await h.call("/sync/save", { ...await payload({ epoch: "pending", revision: 0 }, "new"), epoch: "pending" })).status, 503);
   assert.equal((await (await h.call("/_test/inspect")).json()).head, null);
   await h.restart({ SYNC_MIGRATION_ENABLED: "true", SYNC_AUTOMATIC_ENABLED: "true" });
+  await h.call("/_test/migrate");
   const head = await (await h.call("/sync/status?protocol=2")).json();
   const strict = await (await h.call("/_test/strict", { baseRevision: head.revision, epoch: head.epoch, hash: head.hash })).json(); assert.equal(strict.strict, true);
   const rejected = await h.call("/sync/save", { version: 1, data: data("blind") }); assert.equal(rejected.status, 409); assert.equal((await rejected.json()).error, "upgrade_required");
@@ -114,7 +117,7 @@ test("migration and automatic release gates preserve old clients and protect str
 });
 
 test("mirror failure commits authority and retries only the latest snapshot", async t => {
-  const h = await harness(t); const head = await (await h.call("/sync/status?protocol=2")).json();
+  const h = await harness(t); await h.call("/_test/migrate"); const head = await (await h.call("/sync/status?protocol=2")).json();
   await h.call("/_test/mirror", { fail: true });
   const saved = await h.call("/sync/save", await payload(head, "mirror-pending")); assert.equal(saved.status, 200);
   const receipt = await saved.json(); assert.equal(receipt.mirrorPending, true);
@@ -131,6 +134,7 @@ test("mixed Commercial/Zhang licenses cannot enable strict mode and admin deleti
   await (await h.kv()).put(licenseKey, JSON.stringify({ licenseId: "synthetic-mixed", status: "active", allowedEditions: ["zhang", "commercial"], maxDevices: 3, devices: [] }));
   const auth = await (await h.call("/license/auth", { productCode: "SYNTHETIC-MIXED", deviceId: "synthetic-device", edition: "zhang" }, "")).json();
   const old = await h.call("/sync/save", { version: 1, data: data("commercial-manual") }, auth.token); assert.equal(old.status, 200);
+  await h.call(`/_test/migrate?key=${encodeURIComponent(stateKey)}`);
   const head = await (await h.call("/sync/status?protocol=2", undefined, auth.token)).json(); assert.equal(head.automaticAvailable, false);
   assert.equal((await h.call("/sync/mode", { enable: true, acknowledgeAllWorkspaces: true, epoch: head.epoch, baseRevision: head.revision, hash: head.hash }, auth.token)).status, 403);
   const cas = await payload(head, "safe-mixed"); assert.equal((await h.call("/sync/save", cas, auth.token)).status, 200);

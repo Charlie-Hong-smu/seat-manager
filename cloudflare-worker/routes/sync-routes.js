@@ -35,6 +35,7 @@ export async function handleSyncRoute(request, env, corsHeaders, pathname) {
     try { return await handleCoordinatedSync(request, env, corsHeaders, pathname, syncContext); }
     catch { return jsonResponse({ error: "sync_coordinator_unavailable" }, 503, corsHeaders); }
   }
+  if (pathname === "/sync/migration" || pathname === "/sync/migration/backup") return jsonResponse({ error: "migration_unavailable" }, 503, corsHeaders);
   // New protocol never pretends that an uncoordinated deployment offers CAS.
   if (pathname === "/sync/mode") return jsonResponse({ error: request.method === "POST" ? "automatic_disabled" : "method_not_allowed" }, request.method === "POST" ? 403 : 405, corsHeaders);
   if (new URL(request.url).searchParams.get("protocol") === "2" && ["/sync/status", "/sync/load"].includes(pathname)) {
@@ -120,6 +121,19 @@ async function handleCoordinatedSync(request, env, corsHeaders, pathname, syncCo
   const coordinator = env.SYNC_COORDINATOR.getByName(syncContext.key);
   const protocol = new URL(request.url).searchParams.get("protocol") === "2";
   const licenseId = syncContext.licenseId || undefined;
+  if (pathname === "/sync/migration" || pathname === "/sync/migration/backup") {
+    if (!licenseId || !syncContext.actor) return jsonResponse({ error: "forbidden" }, 403, corsHeaders);
+    let action = pathname.endsWith("/backup") ? "backup" : "status"; let body = {};
+    if (request.method === "POST" && pathname === "/sync/migration") {
+      const parsed = await readJsonBody(request);
+      if (!parsed.ok) return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+      body = parsed.value; action = body.action;
+      if (!["prepare", "commit", "abort"].includes(action)) return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+    } else if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
+    if (action === "backup") body.operationId = new URL(request.url).searchParams.get("operationId") || "";
+    const result = await coordinator.migration(syncContext.key, licenseId, action, body, syncContext.actor);
+    return jsonResponse(result, result.status || 200, corsHeaders);
+  }
   if (pathname === "/sync/mode") {
     if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
     const body = await readJsonBody(request);
@@ -140,7 +154,7 @@ async function handleCoordinatedSync(request, env, corsHeaders, pathname, syncCo
       ...(input.workspaceBook !== undefined ? { workspaceBook: input.workspaceBook } : {}) };
     payload.sizeBytes = new TextEncoder().encode(JSON.stringify(payload)).length;
     if (payload.sizeBytes > SYNC_MAX_BODY_BYTES) return jsonResponse({ error: "payload_too_large" }, 413, corsHeaders);
-    const result = await coordinator.save(syncContext.key, payload, v2 ? { baseRevision: input.baseRevision, epoch: input.epoch, clientMutationId: input.clientMutationId, hash: input.hash } : null, syncContext.actor || null);
+    const result = await coordinator.save(syncContext.key, payload, v2 ? { baseRevision: input.baseRevision, epoch: input.epoch, clientMutationId: input.clientMutationId, hash: input.hash } : null, syncContext.actor || null, licenseId || "");
     if (result.error) return jsonResponse(result, result.status, corsHeaders);
     const meta = { ok: true, licenseId, updatedAt: payload.updatedAt, deviceName: payload.deviceName, version: payload.version, sizeBytes: payload.sizeBytes };
     return jsonResponse(v2 ? { ...result, licenseId } : meta, 200, corsHeaders);

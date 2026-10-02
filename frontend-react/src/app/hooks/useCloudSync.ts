@@ -7,16 +7,17 @@ import { exportWholeBook, importPreparedWorkspace, prepareWorkspaceImport } from
 import { getEditVersion, getRemoteGeneration, hasUnsavedController } from "../state/workspaceSyncEvents";
 import { hasWorkspaceDrafts } from "./useWorkspaceDraftState";
 
-function hasCachedDrafts(): boolean {
-  if (hasWorkspaceDrafts() || document.querySelector("[data-seat-layout-editor]")) return true;
+export function hasCachedDrafts(): boolean {
+  const inactive = (element: Element) => Boolean(element.closest('[inert], [aria-hidden="true"], [hidden]'));
+  if (hasWorkspaceDrafts() || [...document.querySelectorAll("[data-seat-layout-editor]")].some(element => !inactive(element))) return true;
   for (const dialog of document.querySelectorAll('[role="dialog"], [role="alertdialog"]')) {
-    if (!dialog.querySelector("[data-cloud-sync]") && dialog.getAttribute("aria-hidden") !== "true") return true;
+    if (!dialog.querySelector("[data-cloud-sync]") && !inactive(dialog)) return true;
   }
   const generation = getRemoteGeneration();
   for (let index = 0; index < localStorage.length; index++) {
     const key = localStorage.key(index) || "";
     if (key.startsWith("seat-manager-ai-assistant-chat:") && key.endsWith(":draft") && localStorage.getItem(key) && (generation ? key.endsWith(`:generation-${generation}:draft`) : !key.includes(":generation-"))) return true;
-    if (!/^(seat-manager-form-draft-v1:|seat-manager-ai-comment-draft:)/.test(key)) continue;
+    if (!key.startsWith("seat-manager-ai-comment-draft:")) continue;
     if (generation ? key.endsWith(`:generation-${generation}`) : !key.includes(":generation-")) return true;
   }
   return false;
@@ -38,25 +39,34 @@ export function useCloudSync(options: { enabled: boolean; writable: boolean; flu
   useEffect(() => {
     const written = (event: Event) => { if ((event as CustomEvent<{ source: string }>).detail?.source === "local") engine.onSaved(); };
     const applied = () => current.current.onApplied();
-    const failed = () => engine.pause();
-    const authChanged = () => engine.pause();
+    const failed = () => engine.pause("storage");
+    const authChanged = () => { engine.pause(); if (AUTOMATIC_SYNC_RELEASE_ENABLED && current.current.enabled) void engine.start(); };
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key?.startsWith("seat-manager-product-auth-")) engine.pause();
+      else if (event.key === `seat-manager-sync-preference-v1:${engine.getSnapshot().head?.licenseId}`) {
+        engine.suspend(); if (AUTOMATIC_SYNC_RELEASE_ENABLED && current.current.enabled && current.current.writable) void engine.start();
+      }
+    };
     window.addEventListener("workspace-book-written", written);
     window.addEventListener("workspace-remote-applied", applied);
     window.addEventListener("workspace-book-write-failed", failed);
     window.addEventListener("product-auth-changed", authChanged);
+    window.addEventListener("storage", storageChanged);
     const visible = () => { if (AUTOMATIC_SYNC_RELEASE_ENABLED && current.current.enabled && document.visibilityState === "visible") engine.checkAutomatic(); };
     window.addEventListener("online", visible);
     document.addEventListener("visibilitychange", visible);
     const poll = AUTOMATIC_SYNC_RELEASE_ENABLED ? window.setInterval(visible, 60_000) : undefined;
     return () => {
-      engine.pause(); if (poll) window.clearInterval(poll);
+      engine.suspend(); if (poll) window.clearInterval(poll);
       window.removeEventListener("workspace-book-written", written);
       window.removeEventListener("workspace-remote-applied", applied);
       window.removeEventListener("workspace-book-write-failed", failed);
       window.removeEventListener("product-auth-changed", authChanged);
+      window.removeEventListener("storage", storageChanged);
       window.removeEventListener("online", visible);
       document.removeEventListener("visibilitychange", visible);
     };
   }, [engine]);
+  useEffect(() => { if (AUTOMATIC_SYNC_RELEASE_ENABLED && options.enabled && options.writable) void engine.start(); else engine.suspend(); }, [engine, options.enabled, options.writable]);
   return { engine, view };
 }

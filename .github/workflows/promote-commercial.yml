@@ -88,7 +88,18 @@ jobs:
         working-directory: frontend-react
         run: pnpm run check:design && pnpm run lint && pnpm run typecheck && pnpm run test:coverage && pnpm run test:e2e:all
 
+      - name: Validate enabled sync when supported by the approved commit
+        if: steps.zhang.outputs.reuse_validation != 'true'
+        working-directory: frontend-react
+        shell: bash
+        run: |
+          if node -e 'process.exit(JSON.parse(require("fs").readFileSync("package.json", "utf8")).scripts["test:e2e:sync"] ? 0 : 1)'; then
+            E2E_EDITION=zhang pnpm run test:e2e:sync
+            E2E_EDITION=commercial pnpm run test:e2e:sync
+          fi
+
       - name: Build Commercial from the approved commit
+        # Enabled-sync staging checks never replace the production artifact.
         working-directory: frontend-react
         run: VITE_EDITION=commercial VITE_BASE=/ VITE_WORKER_URL="${{ vars.COMMERCIAL_WORKER_URL }}" pnpm run build
 

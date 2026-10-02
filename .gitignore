@@ -16,3 +16,8 @@ dist/
 playwright-report/
 test-results/
 coverage/
+
+# Synthetic enabled-sync test builds never become release artifacts.
+frontend-react/.sync-e2e-dist/
+frontend-react/.sync-e2e-results/
+frontend-react/.full-e2e-dist/

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { SYNC_CHUNK_BYTES, SYNC_MAX_BYTES, canonicalJson, contentHash, sha256, validSyncBook, validSyncData } from "../shared/sync-content.mjs";
 import { loadLicenseRecordByKey } from "./worker-license-store.js";
 import { getLicensedSyncStateKey } from "./worker-license-keys.js";
+import { SyncMigration } from "./worker-sync-migration.js";
 
 /** One authority per authenticated state key. No KV fallback after migration. */
 export class SyncCoordinator extends DurableObject {
@@ -13,6 +14,7 @@ export class SyncCoordinator extends DurableObject {
       CREATE TABLE IF NOT EXISTS chunks (revision INTEGER, position INTEGER, value BLOB NOT NULL, PRIMARY KEY(revision, position));
       CREATE TABLE IF NOT EXISTS receipts (mutation TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, revision INTEGER NOT NULL, value TEXT NOT NULL);
     `);
+    this.migrationState = new SyncMigration(this);
   }
   enqueue(operation) {
     const result = this.pending.then(operation);
@@ -37,22 +39,13 @@ export class SyncCoordinator extends DurableObject {
   async initialize(key) {
     const head = this.head();
     if (head) { if (head.key !== key) throw new Error("space_mismatch"); return head; }
-    // Production starts closed: backup/cutover must precede any real KV migration.
-    if (this.env.SYNC_MIGRATION_ENABLED !== "true") return null;
-    const saved = await this.env.SEAT_MANAGER_KV.get(key, { type: "json" });
-    if (saved && (!validSyncData(saved.data) || (saved.workspaceBook !== undefined && !validSyncBook(saved.workspaceBook)))) throw new Error("legacy_snapshot_invalid");
-    const bytes = new TextEncoder().encode(JSON.stringify(saved));
-    if (bytes.length > SYNC_MAX_BYTES) throw new Error("legacy_snapshot_too_large");
-    const next = { key, epoch: crypto.randomUUID(), revision: saved ? 1 : 0, exists: Boolean(saved), strict: false,
-      hash: saved ? await contentHash(saved) : "", integrity: await sha256(bytes), bytes: bytes.length,
-      updatedAt: saved?.updatedAt || "", deviceName: saved?.deviceName || "", version: Number(saved?.version) || 1, sizeBytes: Number(saved?.sizeBytes) || 0, mirrorPending: false };
-    this.ctx.storage.transactionSync(() => { if (saved) this.putChunks(next.revision, bytes); this.putHead(next); });
-    return next;
+    // A GET or global rollout flag never migrates a teacher's cloud data.
+    return null;
   }
   metadata(head) {
-    return { exists: head.exists, epoch: head.epoch, revision: head.revision, hash: head.hash, strict: head.strict, ready: true,
+    return { exists: head.exists, epoch: head.epoch, revision: head.revision, hash: head.hash, strict: head.strict, ready: true, migrationReady: Boolean(head.cutoverId),
       updatedAt: head.updatedAt, deviceName: head.deviceName, version: head.version, sizeBytes: head.sizeBytes,
-      automaticAvailable: this.env.SYNC_AUTOMATIC_ENABLED === "true", mirrorPending: head.mirrorPending };
+      automaticAvailable: Boolean(head.cutoverId) && this.env.SYNC_AUTOMATIC_ENABLED === "true", mirrorPending: head.mirrorPending };
   }
   async authorized(key, actor) {
     if (!actor) return true;
@@ -69,16 +62,17 @@ export class SyncCoordinator extends DurableObject {
       return { ...this.metadata(head), ...(load ? { saved: await this.snapshot(head) } : {}) };
     });
   }
-  save(key, payload, protocol, actor = null) {
+  save(key, payload, protocol, actor = null, space = "") {
     return this.enqueue(async () => {
       if (actor) {
         // Recheck inside this queue so revocation/deletion cannot race a prior route check.
         if (!await this.authorized(key, actor)) return { error: "unauthorized", status: 401 };
       }
       let head = await this.initialize(key);
+      if (this.migrationState.frozen()) return { error: "migration_in_progress", status: 503 };
       if (!head) {
         if (protocol) return { error: "migration_required", status: 503 };
-        await this.env.SEAT_MANAGER_KV.put(key, JSON.stringify(payload));
+        await this.migrationState.legacySave(key, payload, space);
         return { legacy: true };
       }
       if (actor && head.blockedActors?.includes(`${actor.licenseKey}:${actor.deviceId}:${actor.sessionId}`)) return { error: "unauthorized", status: 401 };
@@ -114,12 +108,30 @@ export class SyncCoordinator extends DurableObject {
       return { ...result, mirrorPending: head.mirrorPending };
     });
   }
+  migration(key, space, action, request = {}, actor = null) {
+    return this.enqueue(async () => {
+      if (!await this.authorized(key, actor)) return { error: "unauthorized", status: 401 };
+      if (actor && this.head()?.blockedActors?.includes(`${actor.licenseKey}:${actor.deviceId}:${actor.sessionId}`)) return { error: "unauthorized", status: 401 };
+      if (action === "status") return this.migrationState.status(space);
+      if (action === "backup") return this.migrationState.backup(space, request.operationId);
+      if (action === "prepare") {
+        if (request.acknowledgeAllWorkspaces !== true) return { error: "migration_confirmation_required", status: 400 };
+        return this.migrationState.prepare(key, space, request.operationId);
+      }
+      if (action === "commit") return this.migrationState.commit(key, space, request);
+      if (action === "abort" && request.acknowledgeAllWorkspaces === true) return this.migrationState.abort(space, request.operationId);
+      return { error: "bad_request", status: 400 };
+    });
+  }
   setStrict(key, expected, allowed, actor = null) {
     return this.enqueue(async () => {
       if (!await this.authorized(key, actor)) return { error: "unauthorized", status: 401 };
       const head = await this.initialize(key);
       if (actor && head?.blockedActors?.includes(`${actor.licenseKey}:${actor.deviceId}:${actor.sessionId}`)) return { error: "unauthorized", status: 401 };
-      if (!head || !allowed || this.env.SYNC_AUTOMATIC_ENABLED !== "true") return { error: "automatic_disabled", status: 403 };
+      // Edition rights may change after the outer route check while this call waits.
+      const license = actor ? await loadLicenseRecordByKey(actor.licenseKey, this.env) : null;
+      const compatible = !actor || (license && (!license.allowedEditions.includes("commercial") || this.env.SYNC_COMMERCIAL_PROTOCOL_READY === "true"));
+      if (!head?.cutoverId || !allowed || !compatible || this.env.SYNC_AUTOMATIC_ENABLED !== "true") return { error: "automatic_disabled", status: 403 };
       if (expected.epoch !== head.epoch || expected.baseRevision !== head.revision || expected.hash !== head.hash) return { error: "conflict", status: 409 };
       this.putHead({ ...head, strict: true });
       return this.metadata(this.head());
@@ -128,9 +140,9 @@ export class SyncCoordinator extends DurableObject {
   deleteState(key, blockedActors = []) {
     return this.enqueue(async () => {
       const previous = this.head();
-      const head = { key, epoch: crypto.randomUUID(), revision: (previous?.revision || 0) + 1, exists: false, strict: previous?.strict || false, blockedActors: [...new Set([...(previous?.blockedActors || []), ...blockedActors])],
+      const head = { key, cutoverId: previous?.cutoverId, sourceIntegrity: previous?.sourceIntegrity, epoch: crypto.randomUUID(), revision: (previous?.revision || 0) + 1, exists: false, strict: previous?.strict || false, blockedActors: [...new Set([...(previous?.blockedActors || []), ...blockedActors])],
         hash: "", bytes: 0, integrity: "", updatedAt: "", deviceName: "", version: 1, sizeBytes: 0, mirrorPending: true };
-      this.ctx.storage.transactionSync(() => { this.ctx.storage.sql.exec("DELETE FROM chunks"); this.ctx.storage.sql.exec("DELETE FROM receipts"); this.putHead(head); });
+      this.ctx.storage.transactionSync(() => { this.ctx.storage.sql.exec("DELETE FROM chunks"); this.ctx.storage.sql.exec("DELETE FROM receipts"); this.migrationState.delete(); this.putHead(head); });
       await this.mirror();
       return this.metadata(this.head());
     });

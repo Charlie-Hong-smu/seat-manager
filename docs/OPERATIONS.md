@@ -145,11 +145,19 @@ BoardUI 并行本地验证时，可用 `E2E_PORT=4193 pnpm exec playwright test 
 
 ## 安全快照同步门禁与回滚
 
-本次 main 只发布 Zhang 前端和共享 Worker；没有 Commercial 晋升授权。`SYNC_MIGRATION_ENABLED=false`、`SYNC_AUTOMATIC_ENABLED=false`、`SYNC_COMMERCIAL_PROTOCOL_READY=false` 及前端 `AUTOMATIC_SYNC_RELEASE_ENABLED=false` 是发布初态，不替老师启用或传送数据。未迁移空间旧 Commercial 的手动 save/load 不变；新一键同步显示迁移未就绪。已经建立 SQLite head 的空间即使关闭迁移门禁也仍用 DO，不能以关闭开关退回 KV。
+安全同步发布范围为 Zhang 前端和共享 Worker；没有 Commercial 晋升授权。本次补完在 `codex/safe-sync-completion` 独立工作区交付；2026-10-02 用户允许验收后提交推送该任务分支，等待父任务审查与统一整合，不自行合并/推送 main 或部署。`SYNC_MIGRATION_ENABLED=false`、`SYNC_AUTOMATIC_ENABLED=false`、`SYNC_COMMERCIAL_PROTOCOL_READY=false`、`SYNC_CUTOVER_MANIFESTS="{}"` 及前端 `VITE_SYNC_AUTO_RELEASE` 默认关闭是发布初态，不替老师启用或传送数据。未迁移空间旧 Commercial 的手动 save/load 不变；新一键同步显示迁移未就绪。已经建立 SQLite head 的空间即使关闭迁移门禁也仍用 DO，不能以关闭开关退回 KV。
 
-后续迁移必须先单独批准真实数据操作，完成可验证备份、旧 Worker 在途写入收口和 KV 传播核对，再以受控测试空间打开迁移门禁验证一次导入、回滚及镜像。禁止在本次验收中使用真实授权/学生/备份。strict 启用还需 Commercial 前端明确晋升、所有可能盲写客户端的安全退役条件，不能仅凭客户端版本登记声称已升级；新授权记录也不能通过改版别绕过已 strict 空间保护。自动模式未来开放前还需补齐教师 opt-in UI、同空间重开偏好恢复和真机挂起验收；当前只发布关闭的自动调度代码。
+后续迁移必须先单独批准真实数据操作，保留旧来源备份、取得旧 Worker 版本退役和在途写结束的真实证据，再配置逐空间截断清单。`cloudflare-worker/scripts/sync-cutover-manifest.mjs` 是离线封存工具：在 Worker 目录运行 `node scripts/sync-cutover-manifest.mjs <evidence.json> <retained-backup.json> <manifest.json>`，证据包含 space/cutoverId/retiredWorkerVersion/verifiedAt 和明确的 oldWritersRetired/backupRetained；备份必须是整个原快照或 JSON null。输出文件采用新建、0600，不能覆盖旧文件，不发云请求。清单的 sourceIntegrity 是整个快照排序 JSON 的 SHA-256，包含业务 hash 排除的字段。此工具只记录运营声明，不能自行证明旧部署退役；不能以重复 KV GET、等待固定秒数、客户端版本登记或测试合成清单代替真实证据。
 
-定向证据：`node --test test/sync-runtime.test.js` 在真实本地 workerd/SQLite 中检查并发 CAS、响应丢失回执、重启、中文近 5 MiB 分块和事务回滚、KV 一次迁移/镜像故障、删除与授权重建、旧手动合同、混版 strict 拒绝。前端 `pnpm test syncProtocol.test.ts syncGeneration.test.tsx syncRuntime.test.ts` 覆盖编辑/草稿/AI/撤销代际、离线双改、换码、quota 与错误分流；两版 `safe-sync.spec.ts` 验证真实浏览器 IndexedDB 待发送重开、双版本导出/确认、手机 320/390px 与关闭门禁。完整原断言继续运行，不用新定向检查替代。
+受信部署配置 `SYNC_CUTOVER_MANIFESTS` 以既有空间 ID 为键，配合全局迁移开关只开放获准空间。产品授权教师通过 `/sync/migration` 明确确认全部班级学期，准备后该空间新旧 save 均返回 503。读取候选摘要不符时继续冻结，允许稍后同 operationId 重试或明确取消；受控新 Worker 已接收的旧写以 SQLite 来源见证为准。下载 `/sync/migration/backup` 后客户端校验快照字节摘要与整源摘要，老师确认备份已可靠保留，再提交；服务端从固定备份事务建立 head，不再读 KV。下载文件是带元数据的 JSON envelope，integrity 指 JSON.stringify(snapshot) 的 UTF-8 字节，不能拿整个缩进文件的 SHA-256 比较。重开保留阶段，界面要求重新下载校验；取消只能在迁移完成前释放冻结，完成后不能退回 KV。缺证明的旧 SQLite head 需按同流程补充权威快照备份证明，保留 epoch/revision；不得删除旧 head 后从 KV 导入。
+
+strict 启用还需相应客户端盲写退役：Zhang-only 空间可在已获证明、前后端发布门禁满足且教师整柜确认后启用；包含 Commercial 权限的空间须先明确晋升 Commercial，并取得全部可能盲写客户端的安全退役证据，再开放 `SYNC_COMMERCIAL_PROTOCOL_READY`。队列执行启用时再次读取当前授权版别，不能依赖路由检查时尚未包含 Commercial 的旧判断；不能改版别绕过既有 strict 保护。本轮 opt-in/停用/明确恢复、同空间重开偏好和自动调度已经用合成公共接口验证，但真实空间、混版退役和真机挂起证据仍是生产启用条件。新客户端暂停不撤回服务端 strict，避免旧客户端再次盲覆盖。
+
+定向证据：Worker 的 `npm run check` 保留全部原断言并执行真实 workerd/SQLite 公共迁移测试，覆盖冻结、固定备份、来源见证、陈旧 KV、重启/重复提交/取消、旧 head 补证、近 5 MiB 中文分块和故障回滚、删除闭环，以及实际 `/sync/mode` Zhang-only 正向与混版负向保护。前端 `pnpm test syncProtocol.test.ts syncGeneration.test.tsx syncRuntime.test.ts syncRuntimeGeneration.test.tsx` 覆盖编辑/草稿/真实 React 旧 AI 回包和撤销代际、离线双改、换码、quota、回滚失败和错误分流；两版 `safe-sync.spec.ts` 保留手机 320/390px 与关闭门禁原断言。
+
+开启路径另用 `E2E_EDITION=zhang pnpm test:e2e:sync` 和 `E2E_EDITION=commercial pnpm test:e2e:sync`，构建目录 `.sync-e2e-dist/<edition>`、端口 4295/4296、结果 `.sync-e2e-results/<edition>`，仅此合成测试构建设置 `VITE_SYNC_AUTO_RELEASE=true`。Commercial 的测试运行时 readiness=true 只为验证共享实现，不能据此声称线上混版客户端已退役。正常构建的 `dist` 不受影响，Pages 只上传正常关闭开关的 dist。完整浏览器仍必须运行，不能被开启定向测试替代；本地并行工作区可设 `E2E_ISOLATED_BUILD=true` 和独立 `E2E_PORT`，输出 `.full-e2e-dist/<edition>`。动画逐帧断言应避免同一机器并行浏览器占用。
+
+Pages 发布契约为 v2，复用证据还必须包含两版开启路径步骤成功；旧 v1 只允许走全量验证。Commercial 晋升的全量回退路径对支持 `test:e2e:sync` 的批准提交重跑两版开启测试，旧提交回滚保持原全量检查。没有同一精确 SHA 的成功发布证据不能声称部署完成。
 
 回滚优先撤回 Zhang UI 或关闭能力门禁，保留 SyncCoordinator binding/migration、权威 head、epoch 与 strict 拒绝逻辑。已经迁移/strict 的空间不得部署只会 KV 盲写的旧 Worker；若需后端修复，应提交保留新协议的向前修复。兼容镜像不能当作无条件权威恢复源。删除失败会先撤销授权并返回错误，可依保留的授权身份重试 tombstone；不得手工清空 DO head 使旧 KV 再导入。SQLite 历史不是无限备份，老师仍应手动导出 JSON。
 
