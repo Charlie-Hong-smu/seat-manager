@@ -162,6 +162,9 @@ export default function App() {
   const [timelineTarget, setTimelineTarget] = useState<TimelineTarget | null>(null);
   const [followupMode, setFollowupMode] = useState<"tasks" | "homework">("tasks");
   const [quickRecordOpen, setQuickRecordOpen] = useState(false);
+  const [quickRecordStudentIds, setQuickRecordStudentIds] = useState<StudentId[]>([]);
+  const todayReturnRef = useRef<{ scrollTop: number; queueOpen: boolean; queueScrollTop: number } | null>(null);
+  const [todayReturnVisible, setTodayReturnVisible] = useState(false);
   const followupAfterSave = useRef<((taskIds: string[]) => void | (() => void)) | null>(null);
   const flushPersistRef = useRef<() => boolean>(() => true);
   // 两个全量扫描只在对应页签激活时计算，且 toast/弹窗等 App 局部状态变化不再触发重算。
@@ -205,13 +208,15 @@ export default function App() {
     const records = new Map(input.studentIds.map((studentId, index) => [studentId, { id: `record-${Date.now()}-${index}-${studentId}`, type: input.type, note: input.note, date: todayKey(), score: input.score, presetId: input.presetId, createdAt: now }]));
     setStudents(current => current.map(student => records.has(student.id) ? { ...student, records: [records.get(student.id)!, ...student.records] } : student));
     const removeActivities = recordActivities(input.studentIds.map(studentId => createActivityEvent({ action: "created", ref: { domain: "student", entityId: studentId, subEntityId: records.get(studentId)?.id, studentId, date: todayKey() }, studentIds: [studentId], title: input.note, detail: "快捷记录" })));
-    return () => {
+    const rollback = () => {
       setStudents(current => current.map(student => {
         const createdRecord = records.get(student.id);
         return createdRecord ? { ...student, records: student.records.filter(record => record.id !== createdRecord.id) } : student;
       }));
       removeActivities();
     };
+    if (!persistState()) { rollback(); setSaveStatus("failed"); return false; }
+    return rollback;
   }
 
   function requestFollowupTask(draft: FollowupTaskDraft, afterSave?: (taskIds: string[]) => void | (() => void)) {
@@ -740,6 +745,11 @@ export default function App() {
 
   function reloadFromLegacyState() {
     reloadState();
+    todayReturnRef.current = null;
+    setTodayReturnVisible(false);
+    setTimelineTarget(null);
+    setQuickRecordStudentIds([]);
+    setQuickRecordOpen(false);
     setSeatHistory([]);
     setSelectedStudentInitialTab("records");
     setSelectedStudentId(null);
@@ -1279,7 +1289,7 @@ export default function App() {
               syncView={cloudSync.view}
             />
           <FollowupTaskDrawer taskTypes={taskTypes} onTaskTypesChange={onTaskTypesChange} open={Boolean(followupDraft)} students={students} draft={followupDraft} onClose={() => { followupAfterSave.current = null; setFollowupDraft(null); }} onConfirm={confirmFollowupTask} />
-          <QuickRecordDrawer open={quickRecordOpen} students={students} presets={quickRecordPresets} onClose={() => setQuickRecordOpen(false)} onApply={applyQuickRecord} onPresetsChange={setQuickRecordPresets} />
+          <QuickRecordDrawer key={`${remoteGeneration}:${getCurrentWorkspaceScope()}:${quickRecordStudentIds.join(",") || "general"}`} initialStudentIds={quickRecordStudentIds} open={quickRecordOpen} students={students} presets={quickRecordPresets} onClose={() => setQuickRecordOpen(false)} onApply={applyQuickRecord} onPresetsChange={setQuickRecordPresets} />
 
           <InstallHelpModal open={showInstallHelp} message={installMessage} onClose={() => setShowInstallHelp(false)} />
 
@@ -1297,13 +1307,14 @@ export default function App() {
         </>
       }
     >
-      <MotionSwitch key={remoteGeneration} transitionKey={sidebarTab} navigationIndex={Object.keys(APP_TAB_LABELS).indexOf(sidebarTab)} fixed className="h-full">
+      {todayReturnVisible && sidebarTab !== "today" && <div className="shrink-0 border-b border-[var(--app-border)] px-3 py-1"><Button size="sm" variant="quiet" onClick={() => { setTimelineTarget(null); setSidebarTab("today"); setTodayReturnVisible(false); }}>返回今日待处理</Button></div>}
+      <MotionSwitch key={remoteGeneration} transitionKey={sidebarTab} navigationIndex={Object.keys(APP_TAB_LABELS).indexOf(sidebarTab)} fixed className="min-h-0 flex-1">
         {showCommentWorkbench && (
           CommentWorkbenchComponent
             ? <CommentWorkbenchComponent students={students} onClose={closeCommentWorkbench} onSelectStudent={(student: AppStudent) => openStudentDetail(student)} />
             : <RetryableLazy load={loadCommentWorkbench} componentProps={{ students, onClose: closeCommentWorkbench, onSelectStudent: (student: AppStudent) => openStudentDetail(student) }} />
         )}
-        {sidebarTab === "today" && <div className="h-full"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onSaveCommunication={saveCommunication} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => setQuickRecordOpen(true)} onOpenEntity={navigateToEntity} onCompleteTask={handleCompleteTodayTask} onCompleteTasks={handleCompleteTasks} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
+        {sidebarTab === "today" && <div className="h-full"><TodayWorkspace students={allStudents} attendance={attendanceRecords} tasks={followupTasks} homework={homeworkAssignments} dormitories={dormitories} gradeExams={appState.gradeExams} schedule={schedule} drafts={communicationDrafts} onSaveCommunication={saveCommunication} onScheduleChange={setSchedule} onOpenSeats={() => setSidebarTab("daily")} onOpenAttendance={() => setSidebarTab("attendance")} onOpenTasks={() => { setFollowupMode("tasks"); setSidebarTab("followups"); }} onOpenHomework={() => { setFollowupMode("homework"); setSidebarTab("followups"); }} onOpenQuickRecord={() => { setQuickRecordStudentIds([]); setQuickRecordOpen(true); }} initialContext={todayReturnRef.current || undefined} onInitialContextConsumed={() => { todayReturnRef.current = null; }} onOpenEntity={(ref, context) => { if (!businessEntityExists(appState, ref)) { navigateToEntity(ref); return; } todayReturnRef.current = context; setTodayReturnVisible(true); navigateToEntity(ref); }} onCompleteTask={handleCompleteTodayTask} onCompleteTasks={handleCompleteTasks} onSaveTaskResolution={handleSaveTodayTaskResolution} onContinueTask={handleContinueTodayTask} initialDraftId={timelineTarget?.workspace === "today" ? timelineTarget.entityId : undefined} onInitialDraftConsumed={consumeTimelineTarget} /></div>}
         {sidebarTab === "daily" && (
           <div className="h-full">
             <DailyWorkspace
@@ -1323,6 +1334,7 @@ export default function App() {
               onUpdateSeatSettings={updateSeatSettings}
               onApplySeatLayout={applySeatLayout}
               onAddStudent={handleAddStudent}
+              onQuickRecord={student => { setQuickRecordStudentIds([student.id]); setQuickRecordOpen(true); }}
               onSelectStudent={student => openStudentDetail(student)}
               onOpenStudentFollowup={student => openStudentDetail(student, "followup")}
               onMoveSeat={handleMoveSeat}

@@ -148,7 +148,7 @@ export function MetricStrip({ items, size = "md", className = "" }: {
   className?: string;
 }) {
   const compact = size === "sm";
-  return <div className={cx("flex flex-wrap items-center gap-x-1 gap-y-1", className)}>
+  return <div className={cx("app-metric-strip flex flex-wrap items-center gap-x-1 gap-y-1", className)}>
     {items.map(item => {
       const content = <>
         {item.dot && <span aria-hidden="true" className={cx("size-2 shrink-0 self-center rounded-full", item.dot)} />}
@@ -184,7 +184,7 @@ export function useModalFocus(open: boolean, onEscape: () => void) {
     // React 的 autoFocus 不会输出 autofocus 属性；保留已在弹窗内的输入焦点。
     const focusTimer = window.setTimeout(() => { if (!panel?.contains(document.activeElement)) first?.focus(); }, 0);
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || panel?.closest(".dialog-presence[data-phase='closing']")) return;
       if (event.key === "Escape") {
         // Only the top-most open dialog answers Escape; stacked dialogs close one layer at a time.
         const openOverlays = [...document.querySelectorAll(".app-modal-overlay")].filter(overlay => !overlay.closest(".dialog-presence[data-phase='closing']"));
@@ -210,7 +210,11 @@ export function useModalFocus(open: boolean, onEscape: () => void) {
     return () => {
       window.clearTimeout(focusTimer);
       window.removeEventListener("keydown", handleKeyDown);
-      restoreRef.current?.focus();
+      // A retained exit can finish after another dialog or its trigger has taken focus.
+      const active = document.activeElement;
+      if (!active || active === document.body || active === document.documentElement || panel?.contains(active)) {
+        restoreRef.current?.focus({ preventScroll: true });
+      }
     };
   }, [open]);
   return panelRef;
@@ -250,14 +254,15 @@ export function ModalHeader({ title, titleId, eyebrow, description, descriptionI
   className?: string;
 }) {
   return <header className={cx("app-modal-header", className)}>
-    <div className="flex items-start gap-3">
+    <div className="app-modal-header__row">
+      <div className="app-modal-header__identity min-w-0">
       {icon && <span aria-hidden className="app-modal-header__icon">{icon}</span>}
-      <div className="min-w-0 flex-1 self-center">
         {eyebrow && <div className="mb-0.5 text-caption-1-medium text-text-tertiary">{eyebrow}</div>}
         <h2 id={titleId} className="truncate text-title-3-semibold text-text-primary">{title}</h2>
         {description && <p id={descriptionId} className="mt-0.5 text-caption-1-regular leading-5 text-text-secondary">{description}</p>}
       </div>
-      {(actions || onClose) && <div className="flex shrink-0 items-center gap-1">{actions}{onClose && <IconButton label={closeLabel} size="sm" variant="quiet" onClick={onClose}><X className="h-4 w-4" /></IconButton>}</div>}
+      {actions && <div className="app-modal-header__actions flex items-center gap-1">{actions}</div>}
+      {onClose && <IconButton className="app-modal-header__close" label={closeLabel} size="sm" variant="quiet" onClick={onClose}><X className="h-4 w-4" /></IconButton>}
     </div>
     {children}
   </header>;
@@ -360,17 +365,17 @@ type AppDialogRequest = AppDialogOptions & {
   resolve: (confirmed: boolean) => void;
 };
 
-type AppPromptOptions = AppDialogOptions & { defaultValue?: string; inputLabel?: string; validate?: (value: string) => string | undefined };
+type AppPromptOptions = AppDialogOptions & { inputMode?: "decimal" | "text"; defaultValue?: string; inputLabel?: string; validate?: (value: string) => string | undefined };
 
-function PromptDialog({ open, title, description, defaultValue = "", inputLabel = "名称", confirmLabel = "保存", validate, onCancel, onConfirm }: {
-  open: boolean; title: string; description: string; defaultValue?: string; inputLabel?: string; confirmLabel?: string; validate?: AppPromptOptions["validate"];
+function PromptDialog({ open, title, description, defaultValue = "", inputLabel = "名称", inputMode, confirmLabel = "保存", validate, onCancel, onConfirm }: {
+  open: boolean; title: string; description: string; defaultValue?: string; inputLabel?: string; inputMode?: AppPromptOptions["inputMode"]; confirmLabel?: string; validate?: AppPromptOptions["validate"];
   onCancel: () => void; onConfirm: (value: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue);
   useEffect(() => { if (open) setValue(defaultValue); }, [defaultValue, open]);
   const error = validate?.(value);
   return <ModalShell open={open} title={title} description={description} onClose={onCancel} className="max-w-sm" footer={<><Button variant="ghost" onClick={onCancel}>取消</Button><Button disabled={Boolean(error)} onClick={() => onConfirm(value)}>{confirmLabel}</Button></>}>
-    <Input label={inputLabel} autoFocus value={value} isInvalid={Boolean(error)} onChange={setValue} onKeyDown={event => {
+    <Input label={inputLabel} inputMode={inputMode} autoFocus value={value} isInvalid={Boolean(error)} onChange={setValue} onKeyDown={event => {
       if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
       // Prevent Enter from activating the trigger after focus is restored.
       event.preventDefault();
@@ -397,7 +402,7 @@ export function useAppDialog() {
     confirm: useCallback((options: AppDialogOptions) => open("confirm", options), [open]),
     notice: useCallback((options: AppDialogOptions) => open("notice", options).then(() => undefined), [open]),
     prompt: useCallback((options: AppPromptOptions) => new Promise<string | null>(resolve => setPromptRequest({ ...options, resolve })), []),
-    dialog: <><ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} /><PromptDialog open={Boolean(promptRequest)} title={promptRequest?.title || "请输入"} description={promptRequest?.description || ""} defaultValue={promptRequest?.defaultValue} inputLabel={promptRequest?.inputLabel} confirmLabel={promptRequest?.confirmLabel} validate={promptRequest?.validate} onCancel={() => { promptRequest?.resolve(null); setPromptRequest(null); }} onConfirm={value => { promptRequest?.resolve(value); setPromptRequest(null); }} /></>,
+    dialog: <><ConfirmDialog open={Boolean(request)} title={request?.title || "提示"} description={request?.description || ""} confirmLabel={request?.confirmLabel || (request?.mode === "notice" ? "知道了" : "确认")} variant={request?.variant || "primary"} showCancel={request?.mode !== "notice"} onCancel={() => close(false)} onConfirm={() => close(true)} /><PromptDialog open={Boolean(promptRequest)} title={promptRequest?.title || "请输入"} description={promptRequest?.description || ""} defaultValue={promptRequest?.defaultValue} inputLabel={promptRequest?.inputLabel} inputMode={promptRequest?.inputMode} confirmLabel={promptRequest?.confirmLabel} validate={promptRequest?.validate} onCancel={() => { promptRequest?.resolve(null); setPromptRequest(null); }} onConfirm={value => { promptRequest?.resolve(value); setPromptRequest(null); }} /></>,
   };
 }
 
@@ -845,7 +850,7 @@ export function SelectMenu(props: SelectMenuProps) {
   const { value, options, onChange, ariaLabel, placeholder = "请选择", className = "", searchable } = props;
   if (searchable ?? options.length > 8) return <SearchableSelectMenu {...props} />;
   // Prefix keys so an intentional empty-string choice stays selectable.
-  return <BoardSelect aria-label={ariaLabel} selectedKey={`value:${value}`} onSelectionChange={key => { if (key !== null) onChange(String(key).slice(6)); }} placeholder={placeholder} className={className} popoverClassName="z-[125] min-w-[var(--trigger-width)] w-auto" disabledKeys={options.filter(option => option.disabled).map(option => `value:${option.value}`)}>
+  return <BoardSelect aria-label={ariaLabel} selectedKey={`value:${value}`} onSelectionChange={key => { if (key !== null) onChange(String(key).slice(6)); }} placeholder={placeholder} className={cx("app-select-menu", className)} popoverClassName="app-select-popover z-[125] min-w-[var(--trigger-width)] w-auto" disabledKeys={options.filter(option => option.disabled).map(option => `value:${option.value}`)}>
     {options.map(option => <SelectItem key={`value:${option.value}`} id={`value:${option.value}`} textValue={option.label}>{option.label}</SelectItem>)}
   </BoardSelect>;
 }
@@ -904,7 +909,7 @@ function SearchableSelectMenu({ value, options, onChange, ariaLabel, placeholder
   }, [open]);
 
   return <>
-    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={cx("flex min-w-0 items-center gap-1.5 rounded-2lg border border-border-button-default bg-background-primary-default px-2.5 py-2 text-left text-body-medium text-text-primary shadow-xs transition-colors hover:bg-background-primary-hover hover:border-border-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring", className)}>
+    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)} className={cx("app-touch-target flex min-w-0 items-center gap-1.5 rounded-2lg border border-border-button-default bg-background-primary-default px-2.5 py-2 text-left text-body-medium text-text-primary shadow-xs transition-colors hover:bg-background-primary-hover hover:border-border-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring", className)}>
       <span className={`min-w-0 flex-1 truncate ${selected ? "" : "text-[var(--app-text-muted)]"}`}>{selected?.label || placeholder}</span>
       <ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
     </button>
@@ -912,7 +917,7 @@ function SearchableSelectMenu({ value, options, onChange, ariaLabel, placeholder
       {showSearch && <Input autoFocus value={search} onChange={setSearch} leadingIcon={Search} placeholder="搜索选项" className="mb-2" />}
       <div role="listbox" aria-label={ariaLabel} className="max-h-[min(16rem,var(--select-menu-max-height,16rem))] space-y-1 overflow-y-auto">{filtered.map(option => {
         const active = String(option.value) === String(value);
-        return <button key={String(option.value)} type="button" role="option" aria-selected={active} disabled={option.disabled} onClick={() => { onChange(String(option.value)); setOpen(false); setSearch(""); triggerRef.current?.focus(); }} className={cx(MENU_ITEM, "flex w-full items-center text-body-medium disabled:opacity-40", active && MENU_ITEM_ACTIVE)}><span className="min-w-0 flex-1 truncate text-left">{option.label}</span>{active && <Check className="h-4 w-4 shrink-0"/>}</button>;
+        return <button key={String(option.value)} type="button" role="option" aria-selected={active} disabled={option.disabled} onClick={() => { onChange(String(option.value)); setOpen(false); setSearch(""); triggerRef.current?.focus(); }} className={cx(MENU_ITEM, "app-touch-target flex w-full items-center text-body-medium disabled:opacity-40", active && MENU_ITEM_ACTIVE)}><span className="min-w-0 flex-1 truncate text-left">{option.label}</span>{active && <Check className="h-4 w-4 shrink-0"/>}</button>;
       })}{!filtered.length && <div className="py-6 text-center text-body-regular text-[var(--app-text-muted)]">没有匹配选项</div>}</div>
     </div></AnimatedPopover>, document.body)}
   </>;
@@ -946,17 +951,27 @@ export function DatePicker({ value, onChange, ariaLabel, className = "", min, ma
     const update = () => {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const panelWidth = 304;
-      const panelHeight = 350;
+      const mobile = window.matchMedia("(max-width: 767px), (max-height: 500px) and (pointer: coarse)").matches;
+      const viewport = window.visualViewport;
+      const viewportLeft = viewport?.offsetLeft || 0;
+      const viewportTop = viewport?.offsetTop || 0;
+      const viewportWidth = viewport?.width || window.innerWidth;
+      const viewportHeight = viewport?.height || window.innerHeight;
+      const panelWidth = Math.min(mobile ? 344 : 304, viewportWidth - 16);
+      const panelHeight = Math.min((panelRef.current?.offsetHeight || (mobile ? 446 : 326)) + 24, viewportHeight - 16);
       setPosition({
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8)),
-        top: window.innerHeight - rect.bottom >= panelHeight ? rect.bottom + 8 : Math.max(8, rect.top - panelHeight - 8),
+        left: Math.max(viewportLeft + 8, Math.min(rect.left, viewportLeft + viewportWidth - panelWidth - 8)),
+        top: Math.max(viewportTop + 8, Math.min(rect.bottom + 8, viewportTop + viewportHeight - panelHeight - 8)),
       });
     };
     update();
+    const frame = requestAnimationFrame(update);
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
-    return () => { window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
+    return () => { cancelAnimationFrame(frame); viewport?.removeEventListener("resize", update); viewport?.removeEventListener("scroll", update); window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
   }, [open]);
 
   useEffect(() => {
@@ -981,11 +996,11 @@ export function DatePicker({ value, onChange, ariaLabel, className = "", min, ma
   const label = selected ? `${selected.getFullYear()}年${selected.getMonth() + 1}月${selected.getDate()}日` : "请选择日期";
 
   return <>
-    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default px-3 text-left text-body-regular transition-colors hover:border-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20 ${className}`}><CalendarDays className="h-4 w-4 shrink-0 text-accent-500"/><span className="min-w-0 flex-1 truncate text-[var(--app-text)]">{label}</span><ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}/></button>
-    {createPortal(<AnimatedPopover open={open} className="fixed z-[125] w-[304px] rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-3 shadow-[var(--app-shadow-float)]" style={position}><div ref={panelRef} role="dialog" aria-label={ariaLabel}>
+    <button ref={triggerRef} type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)} className={`app-date-trigger flex h-10 min-w-0 items-center gap-2 rounded-[var(--app-radius-sm)] border border-[var(--app-border)] bg-background-primary-default px-3 text-left text-body-regular transition-colors hover:border-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20 ${className}`}><CalendarDays className="h-4 w-4 shrink-0 text-accent-500"/><span className="min-w-0 flex-1 truncate text-[var(--app-text)]">{label}</span><ChevronDown className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}/></button>
+    {createPortal(<AnimatedPopover open={open} className="app-date-popover fixed z-[125] w-[304px] rounded-[var(--app-radius-md)] border border-[var(--app-border)] bg-background-primary-default p-3 shadow-[var(--app-shadow-float)]" style={position}><div ref={panelRef} role="dialog" aria-label={ariaLabel}>
       <div className="mb-3 flex items-center justify-between"><IconButton size="sm" label="上个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4"/></IconButton><strong className="text-body-regular text-[var(--app-text)]">{visibleMonth.getFullYear()}年 {visibleMonth.getMonth() + 1}月</strong><IconButton size="sm" label="下个月" onClick={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4"/></IconButton></div>
       <div className="grid grid-cols-7 text-center text-[11px] font-bold text-[var(--app-text-muted)]">{"日一二三四五六".split("").map(day => <span key={day} className="py-1">{day}</span>)}</div>
-      <MotionSwitch transitionKey={`${visibleMonth.getFullYear()}-${visibleMonth.getMonth()}`} contentClassName="mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-caption-1-regular transition-colors disabled:opacity-25 ${active ? "bg-accent-600 font-bold text-text-white" : dayValue === today ? "bg-accent-50 font-bold text-accent-700" : currentMonth ? "text-text-primary hover:bg-background-tertiary-default" : "text-text-tertiary hover:bg-background-secondary-default"}`}>{day.getDate()}</button>; })}</MotionSwitch>
+      <MotionSwitch transitionKey={`${visibleMonth.getFullYear()}-${visibleMonth.getMonth()}`} contentClassName="app-date-days mt-1 grid grid-cols-7 gap-0.5">{days.map(day => { const dayValue = formatDateValue(day); const active = dayValue === value; const currentMonth = day.getMonth() === visibleMonth.getMonth(); const disabled = Boolean((min && dayValue < min) || (max && dayValue > max)); return <button key={dayValue} type="button" disabled={disabled} aria-label={dayValue} aria-pressed={active} onClick={() => { onChange(dayValue); setOpen(false); triggerRef.current?.focus(); }} className={`grid h-9 place-items-center rounded-[var(--app-radius-sm)] text-caption-1-regular transition-colors disabled:opacity-25 ${active ? "bg-accent-600 font-bold text-text-white" : dayValue === today ? "bg-accent-50 font-bold text-accent-700" : currentMonth ? "text-text-primary hover:bg-background-tertiary-default" : "text-text-tertiary hover:bg-background-secondary-default"}`}>{day.getDate()}</button>; })}</MotionSwitch>
       <div className="mt-3 flex justify-between border-t border-separator-border pt-2"><Button size="sm" variant="ghost" disabled={required} onClick={() => { if (!required) onChange(""); setOpen(false); }}>清除</Button><Button size="sm" variant="secondary" disabled={Boolean((min && today < min) || (max && today > max))} onClick={() => { onChange(today); setOpen(false); }}>今天</Button></div>
     </div></AnimatedPopover>, document.body)}
   </>;
@@ -1033,11 +1048,13 @@ export function ToolDrawer({
   panelLayerClassName = "z-[60]",
   footer,
   children,
+  bodyRef,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   returnFocusId?: string;
+  bodyRef?: React.RefObject<HTMLDivElement>;
   widthClassName?: string;
   bodyClassName?: string;
   positionClassName?: "absolute" | "fixed";
@@ -1106,12 +1123,12 @@ export function ToolDrawer({
         aria-label="关闭工具面板"
         title="关闭工具面板"
         onClick={onClose}
-        className="grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
+        className="app-icon-button grid h-8 w-8 place-items-center rounded-[var(--app-radius-sm)] text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30"
       >
         <X className="h-4 w-4" />
       </button>
     </div>
-    <div className={cx("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{view.children}</div>
+    <div ref={bodyRef} className={cx("tool-drawer-body min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{view.children}</div>
     {view.footer && <div className="shrink-0 border-t border-separator-border p-3">{view.footer}</div>}
   </>;
   const dockSlot = docked && typeof document !== "undefined" ? document.getElementById(DRAWER_DOCK_ID) : null;

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalHeader, ModalShell, NumberStepper, PanelSection, SegmentedControl, SelectMenu, ToolDrawer, ToolPopover, useAppDialog } from "./ui";
+import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalHeader, ModalShell, NumberStepper, PanelSection, SegmentedControl, SelectMenu, ToolDrawer, ToolPopover, useAppDialog, useModalFocus } from "./ui";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -128,6 +128,45 @@ describe("ToolDrawer presence", () => {
 });
 
 describe("shared modal exit motion", () => {
+  function RetainedPanel({ name }: { name: string }) {
+    const panelRef = useModalFocus(true, () => {});
+    return <div ref={panelRef} tabIndex={-1}><button>{name}</button></div>;
+  }
+
+  it("releases Tab while an exiting dialog's listener is retained", async () => {
+    const { rerender } = render(<div className="dialog-presence"><RetainedPanel name="退出弹窗" /></div>);
+    await waitFor(() => expect(screen.getByRole("button", { name: "退出弹窗" })).toHaveFocus());
+    rerender(<div className="dialog-presence" data-phase="closing"><RetainedPanel name="退出弹窗" /></div>);
+    const nextTrigger = document.createElement("button");
+    document.body.append(nextTrigger);
+    nextTrigger.focus();
+    const event = new KeyboardEvent("keydown", { key: "Tab", cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(nextTrigger).toHaveFocus();
+    nextTrigger.remove();
+  });
+
+  it.each(["panel", "trigger"])("does not steal newer %s focus when an older retained dialog unmounts", async target => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    trigger.focus();
+    const oldPanel = render(<RetainedPanel name="旧弹窗" />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "旧弹窗" })).toHaveFocus());
+    const nextTrigger = document.createElement("button");
+    document.body.append(nextTrigger);
+    nextTrigger.focus();
+    const newPanel = render(<RetainedPanel name="新弹窗" />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "新弹窗" })).toHaveFocus());
+    if (target === "trigger") newPanel.unmount();
+    const expected = target === "trigger" ? nextTrigger : screen.getByRole("button", { name: "新弹窗" });
+    oldPanel.unmount();
+    expect(expected).toHaveFocus();
+    newPanel.unmount();
+    trigger.remove();
+    nextTrigger.remove();
+  });
+
   it.each(["modal", "confirm"])("retains %s content while closing, blocks interaction and cancels stale exit timers", async kind => {
     const trigger = document.createElement("button");
     document.body.append(trigger);

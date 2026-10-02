@@ -345,7 +345,7 @@ export function DataWorkspace({
           <div ref={rosterMappingRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="名单列映射" className="modal-panel-enter app-modal-panel flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden outline-none">
             <ModalHeader title="名单列映射" description="确认姓名、学号、性别和座位行列后再导入。" onClose={closeRosterMapping} />
 
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem] overflow-hidden">
+            <div className="roster-mapping-grid grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_22rem] overflow-hidden">
               <div className="min-h-0 border-r border-separator-border bg-background-secondary-default p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>

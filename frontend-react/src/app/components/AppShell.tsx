@@ -30,7 +30,7 @@ export function AppShell({ header, sidebar, mainTabs, children, overlays, sideba
 
         <div className="app-work-surface flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
           {mainTabs}
-          <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden">{children}</div>
         </div>
         {!isMobile && <DrawerDock />}
       </div>

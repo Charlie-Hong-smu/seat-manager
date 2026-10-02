@@ -467,7 +467,7 @@ export function ScoresWorkspace({
 
   return (
     <div className="flex h-full flex-col bg-background-primary-default">
-      <div className="score-mobile-controls"><Button variant="secondary" onClick={() => setManagementOpen(open => !open)} aria-expanded={managementOpen}>{managementOpen ? "返回成绩分析" : "考试与导入"}</Button></div>
+      {isMobile && managementOpen && <div className="score-mobile-controls"><Button variant="secondary" onClick={() => setManagementOpen(open => !open)} aria-expanded={managementOpen}>{managementOpen ? "返回成绩分析" : "考试与导入"}</Button></div>}
       <div className="score-workspace-grid relative grid min-h-0 flex-1 overflow-hidden p-4" data-management-open={managementOpen}>
         <IconButton
           label={managementOpen ? "收起成绩管理" : "展开成绩管理"}
@@ -624,7 +624,10 @@ export function ScoresWorkspace({
         </aside>
 
         <main hidden={isMobile && managementOpen} className="min-h-0 min-w-0 overflow-y-auto rounded-2xl border border-separator-border bg-background-primary-default shadow-sm">
-          <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`sticky top-0 z-10 bg-background-primary-default pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
+          <div className="score-analysis-tabs sticky top-0 z-10 flex items-center bg-background-primary-default">
+          <UnderlineTabs value={scoreView} onChange={setScoreView} ariaLabel="成绩分析视图" className={`min-w-0 flex-1 bg-background-primary-default pr-3 transition-[padding] duration-[440ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${managementOpen ? "pl-3" : "pl-12"}`} options={[{ value: "overview", label: "成绩概览" }, { value: "items", label: "题目分析" }]} />
+          {isMobile && <IconButton label="考试与导入" variant="quiet" onClick={() => setManagementOpen(true)}><ListOrdered className="size-4"/></IconButton>}
+          </div>
           <MotionSwitch transitionKey={scoreView} order={scoreView === "items" ? 1 : 0}>{scoreView === "overview" ? <GradesPage exams={exams} students={students} onSelectStudent={onSelectStudent} onOpenStudentFollowup={onOpenStudentFollowup} thresholds={gradeThresholds} onThresholdsChange={onGradeThresholdsChange} onFullScoresChange={onUpdateExamFullScores} /> : <ScoreItemAnalysisPanel exams={exams} students={students} tasks={tasks} onSave={onSaveItemAnalysis} onCreateFollowup={onCreateScoreFollowup} onCreateQuestionFollowups={onCreateQuestionFollowups} onOpenTask={onOpenTask} initialExamId={analysisTarget?.entityId} initialQuestionId={analysisTarget?.subEntityId}/>}</MotionSwitch>
         </main>
       </div>

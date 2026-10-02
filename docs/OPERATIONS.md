@@ -36,6 +36,10 @@ pnpm test:e2e:all
 
 `check:design` 验证 `AGENTS.md` 的设计规范入口、`docs/DESIGN_SYSTEM.md`、共享 UI primitives 与核心 CSS tokens 同步存在。它用于防止重构后设计系统入口或基础组件静默丢失；视觉验收仍按设计规范清单和浏览器 smoke test 执行。
 
+手机课堂定向回归：依次运行 `pnpm test:e2e:zhang mobile-classroom.spec.ts` 与 `pnpm test:e2e:commercial mobile-classroom.spec.ts`；两版已加入默认完整集合。用 360/390/430px 合成班级验证等待区原生触摸横滑、名单映射、班费汇总、考试标题/搜索与焦点恢复、课堂记录的草稿隔离/重复保存/撤销、作业连续登记与筛选下稳定学生身份、今日来源往返与切班清空、布局纯点选/覆盖取消、空名单/横屏日期，以及 25 场考试和长学科图表。原始指针事件不能代替原生触摸手势，本用例使用 Chromium CDP touchStart/touchMove/touchEnd。完整验收与真机边界见 `MOBILE_CLASSROOM_WORKFLOW.md`。
+
+开发预览截图可在 `frontend-react/` 运行 `CAPTURE_ORIGIN=http://127.0.0.1:5173 node e2e/mobile-visual-capture.mjs`，把端口替换为开发服务器实际输出；它只使用“进入本地预览”和独立浏览器的合成数据，默认输出 360/390/430px 与 1440px 截图到 `output/playwright/mobile-workflow/`。这是 Chromium 手机仿真；实体 Safari/Android 软键盘、系统文件选择/下载/打印与硬件安全区仍须真机验证。截图与构建产物不进入源码提交。
+
 Worker 使用 npm：
 
 ```bash

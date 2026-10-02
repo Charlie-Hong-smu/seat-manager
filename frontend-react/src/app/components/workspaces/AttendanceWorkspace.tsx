@@ -2,6 +2,7 @@ import { LeavePeriodEditor } from "../LeavePeriodEditor";
 import { confirmLeaveReturn, getAttendanceForDate, isAwaitingReturn } from "../../state/attendancePeriods";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useRegistrationRetention } from "../../hooks/useRegistrationRetention";
 import { useAttendanceUndo } from "../../hooks/useAttendanceUndo";
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 import { Check, Download, LayoutGrid, List, ListPlus, RotateCcw, Search, Settings2 } from "lucide-react";
@@ -59,6 +60,7 @@ function downloadRangeCsv(students: AppStudent[], records: AttendanceRecord[], f
 export function AttendanceWorkspace({ students, records, tasks = [], onChange, onRequestTask, onActivity, onOpenTask, initialTarget, onInitialTargetConsumed }: { students: AppStudent[]; records: AttendanceRecord[]; tasks?: FollowupTask[]; onChange: (records: AttendanceRecord[]) => void; onRequestTask: (draft: FollowupTaskDraft) => void; onActivity?: (event: ActivityEvent) => void | (() => void); onOpenTask?: (taskId: string) => void; initialTarget?: TimelineTarget; onInitialTargetConsumed?: () => void }) {
   const appDialog = useAppDialog();
   const [date, setDate] = useState(todayKey()); const [search, setSearch] = useState(""); const [filter, setFilter] = useState("all");
+  const { retainedIds, retainStudent, clearRetention } = useRegistrationRetention(`${date}:${filter}:${search}`);
   const [selected, setSelected] = useState<Set<StudentId>>(new Set()); const [editingId, setEditingId] = useState("");
   const [viewMode, setViewMode] = useState<"quick" | "detail">("quick");
   const [quickStatus, setQuickStatus] = useState<AttendanceQuickStatus>("leave");
@@ -89,7 +91,7 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
     const matchesSearch = matchesStudentSearch(student, search);
     const matchesFilter = filter === "all"
       || (filter === "abnormal" ? Boolean(record) : filter === "late" ? Boolean(record?.late) : filter === "earlyLeave" ? Boolean(record?.earlyLeave) : (record?.status || "normal") === filter);
-    return matchesSearch && matchesFilter;
+    return matchesSearch && (matchesFilter || retainedIds.has(student.id));
   });
   const counts = students.reduce((map, student) => { const record = byStudent.get(student.id); const status = record?.status || "normal"; map[status] += 1; if (record?.late) map.late += 1; if (record?.earlyLeave) map.earlyLeave += 1; return map; }, { normal: 0, leave: 0, absent: 0, late: 0, earlyLeave: 0 });
   function commit(next: AttendanceRecord[], action?: string, undoActivity?: void | (() => void)) {
@@ -161,6 +163,7 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
   }
 
   function markStudent(student: AppStudent) {
+    if (filter !== "all") retainStudent(student.id);
     const current = byStudent.get(student.id);
     const action = `quick:${quickStatus}`;
     if (registration.tryRevert(student.id, action)) { actionToast.show("已恢复上次出勤状态"); setRecentUpdate(null); return; }
@@ -181,14 +184,14 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
   return <div className="h-full overflow-y-auto bg-background-primary-default p-4"><div className="mx-auto max-w-6xl space-y-4">
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <MetricStrip size="sm" items={[
-        { key: "all", label: "全部", value: students.length, selected: filter === "all", onOpen: () => setFilter("all") },
-        { key: "normal", label: "正常", value: counts.normal, dot: "bg-status-success-500", selected: filter === "normal", onOpen: () => setFilter("normal") },
-        { key: "leave", label: "请假", value: counts.leave, dot: "bg-status-warning-500", selected: filter === "leave", onOpen: () => setFilter("leave") },
-        { key: "absent", label: "缺勤", value: counts.absent, dot: "bg-status-rose-500", selected: filter === "absent", onOpen: () => setFilter("absent") },
-        { key: "late", label: "迟到", value: counts.late, dot: "bg-accent-500", selected: filter === "late", onOpen: () => setFilter("late") },
-        { key: "earlyLeave", label: "早退", value: counts.earlyLeave, dot: "bg-status-warning-500", selected: filter === "earlyLeave", onOpen: () => setFilter("earlyLeave") },
+        { key: "all", label: "全部", value: students.length, selected: filter === "all", onOpen: () => { clearRetention(); setFilter("all"); } },
+        { key: "normal", label: "正常", value: counts.normal, dot: "bg-status-success-500", selected: filter === "normal", onOpen: () => { clearRetention(); setFilter("normal"); } },
+        { key: "leave", label: "请假", value: counts.leave, dot: "bg-status-warning-500", selected: filter === "leave", onOpen: () => { clearRetention(); setFilter("leave"); } },
+        { key: "absent", label: "缺勤", value: counts.absent, dot: "bg-status-rose-500", selected: filter === "absent", onOpen: () => { clearRetention(); setFilter("absent"); } },
+        { key: "late", label: "迟到", value: counts.late, dot: "bg-accent-500", selected: filter === "late", onOpen: () => { clearRetention(); setFilter("late"); } },
+        { key: "earlyLeave", label: "早退", value: counts.earlyLeave, dot: "bg-status-warning-500", selected: filter === "earlyLeave", onOpen: () => { clearRetention(); setFilter("earlyLeave"); } },
       ]} />
-      <div className="ml-auto flex items-center gap-2">
+      <div className="attendance-search-tools ml-auto flex items-center gap-2">
         <Input value={search} onChange={setSearch} leadingIcon={Search} placeholder="搜索学生" className="min-w-40 flex-1 sm:max-w-56" />
         <SegmentedControl value={viewMode} onChange={value => { setViewMode(value as "quick" | "detail"); setSelected(new Set()); }} ariaLabel="出勤登记视图" options={[{ value: "quick", label: "快速", icon: <LayoutGrid className="h-4 w-4"/> }, { value: "detail", label: "详细", icon: <List className="h-4 w-4"/> }]}/>
       </div>
@@ -232,7 +235,7 @@ export function AttendanceWorkspace({ students, records, tasks = [], onChange, o
         </button>;
       })}</MotionList> : <>
         <MotionCollapse open={selected.size > 0}><div className="mb-3 flex flex-wrap items-center gap-2 rounded-[var(--app-radius-sm)] border border-accent-100 bg-accent-50 p-2.5"><span className="mr-auto text-caption-1-semibold text-accent-700">已选 {selected.size} 人</span><Button size="sm" variant="secondary" onClick={() => batch(normalizeAttendancePatch(undefined,"normal"),"正常")}>正常</Button><Button size="sm" variant="secondary" onClick={() => batch(normalizeAttendancePatch(undefined,"leave"),"请假")}>请假</Button><Button size="sm" variant="danger" onClick={() => batch(normalizeAttendancePatch(undefined,"absent"),"缺勤")}>缺勤</Button><Button size="sm" variant="secondary" onClick={() => batch({late:true},"迟到")}>迟到</Button><Button size="sm" variant="secondary" onClick={() => batch({earlyLeave:true},"早退")}>早退</Button><Button size="sm" onClick={()=>onRequestTask({studentId:[...selected][0],studentIds:[...selected],title:"出勤异常跟进",type:"出勤关注",description:`${date} 出勤批量跟进`,plannedDate:date,dueDate:date,source:"attendance",sourceRef:{domain:"attendance",entityId:`${date}-batch`,date}})}><ListPlus className="h-3.5 w-3.5"/>创建任务</Button></div></MotionCollapse>
-        <MotionList className="space-y-2">{rows.map(student => { const record=byStudent.get(student.id); const status=record?.status||"normal"; const editing=editingId===student.id; return <div key={student.id} data-attendance-student-id={student.id} data-motion-surface={student.id} className={`registration-tile border px-4 py-3 ${focusedStudentId === student.id ? "entity-focus-highlight" : ""}`}><div className="grid grid-cols-[auto_minmax(7rem,1fr)_auto] items-center gap-3"><Checkbox isSelected={selected.has(student.id)} onChange={() => toggle(student.id)} aria-label={`选择 ${student.name}`} /><div><div className="font-bold text-text-primary">{student.name}</div><div className="text-caption-1-regular text-text-tertiary">{attendanceSummary(record)}{record?.note ? ` · ${record.note}` : ""}</div></div><div className="flex items-center gap-2"><AttendanceStatusControl compact value={status} late={record?.late||false} earlyLeave={record?.earlyLeave||false} onChange={patch => patchStudent(student.id, patch)}/><button onClick={() => setEditingId(editing ? "" : student.id)} className="rounded-lg bg-background-secondary-default p-2 text-text-secondary" aria-label={`编辑 ${student.name} 详情`}><Settings2 className="h-4 w-4"/></button></div></div><MotionCollapse open={editing}><div className="mt-3 grid gap-2 rounded-xl bg-background-secondary-default p-3 sm:grid-cols-3"><Input value={record?.note||""} onChange={value => patchStudent(student.id,{note:value})} placeholder="备注" /><LeavePeriodEditor studentId={student.id} date={date} source={records.find(item => item.id === record?.id)} onSave={(start, end) => savePeriod(student.id, start, end)} onReturn={() => { if (record) commitPeriod(confirmLeaveReturn(records, record.id, date), record.id, "已确认返校"); }}/>
+        <MotionList className="space-y-2">{rows.map(student => { const record=byStudent.get(student.id); const status=record?.status||"normal"; const editing=editingId===student.id; return <div key={student.id} data-attendance-student-id={student.id} data-motion-surface={student.id} className={`registration-tile border px-4 py-3 ${focusedStudentId === student.id ? "entity-focus-highlight" : ""}`}><div className="attendance-detail-row grid grid-cols-[auto_minmax(7rem,1fr)_auto] items-center gap-3"><Checkbox isSelected={selected.has(student.id)} onChange={() => toggle(student.id)} aria-label={`选择 ${student.name}`} /><div><div className="font-bold text-text-primary">{student.name}</div><div className="text-caption-1-regular text-text-tertiary">{attendanceSummary(record)}{record?.note ? ` · ${record.note}` : ""}</div></div><div className="attendance-detail-actions flex items-center gap-2"><AttendanceStatusControl compact value={status} late={record?.late||false} earlyLeave={record?.earlyLeave||false} onChange={patch => patchStudent(student.id, patch)}/><button onClick={() => setEditingId(editing ? "" : student.id)} className="app-icon-button rounded-lg bg-background-secondary-default p-2 text-text-secondary" aria-label={`编辑 ${student.name} 详情`}><Settings2 className="h-4 w-4"/></button></div></div><MotionCollapse open={editing}><div className="mt-3 grid gap-2 rounded-xl bg-background-secondary-default p-3 sm:grid-cols-3"><Input value={record?.note||""} onChange={value => patchStudent(student.id,{note:value})} placeholder="备注" /><LeavePeriodEditor studentId={student.id} date={date} source={records.find(item => item.id === record?.id)} onSave={(start, end) => savePeriod(student.id, start, end)} onReturn={() => { if (record) commitPeriod(confirmLeaveReturn(records, record.id, date), record.id, "已确认返校"); }}/>
 {record && <button onClick={() => onRequestTask({studentId:student.id,title:`出勤跟进：${record.status==="leave"?"请假":record.status==="absent"?"缺勤":record.late?"迟到":"早退"}`,type:"出勤关注",description:`${date}${record.note?` · ${record.note}`:""}`,plannedDate:date,dueDate:date,source:"attendance",sourceRef:{domain:"attendance",entityId:record.id,studentId:student.id,date}})} className="sm:col-span-3 flex items-center justify-center gap-1 rounded-lg bg-accent-50 py-2 text-caption-1-semibold text-accent-700"><ListPlus className="h-3.5 w-3.5"/>创建跟进任务</button>}</div></MotionCollapse></div>})}</MotionList>
       </>}</MotionSwitch>
       {!rows.length && <div className="py-12 text-center text-body-regular text-text-tertiary">没有符合条件的学生</div>}

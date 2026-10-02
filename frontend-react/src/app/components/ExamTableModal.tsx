@@ -53,7 +53,7 @@ export function ExamTableModal({ exam, onClose }: ExamTableModalProps) {
           actions={<Input value={query} onChange={setQuery} leadingIcon={Search} placeholder="搜索学生姓名" aria-label="搜索学生姓名" className="mr-1 w-56" />} />
 
         <div className="min-h-0 flex-1 overflow-auto">
-          <table className="min-w-full text-body-regular">
+          <table className="exam-student-table min-w-full text-body-regular">
             <thead className="sticky top-0 z-10 bg-background-primary-default shadow-sm">
               <tr className="text-caption-1-regular text-text-tertiary">
                 <th rowSpan={2} className="px-4 py-3 text-left font-semibold w-14">#</th>
