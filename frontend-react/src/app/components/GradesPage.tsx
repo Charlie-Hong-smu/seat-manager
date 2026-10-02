@@ -1,3 +1,4 @@
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { useBlendedColors } from "../hooks/useBlendedColors";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -12,8 +13,8 @@ import {
 } from "recharts";
 import {
   Search,
+  MoreHorizontal,
   ArrowUpDown,
-  ChevronDown,
   SlidersHorizontal,
   Download,
   Sparkles,
@@ -21,7 +22,7 @@ import {
 
 import { TrendDashboard } from "./TrendDashboard";
 import { GradeExportModal } from "./GradeExportModal";
-import { ChartViewport, Checkbox, MotionSwitch, AnimatedPopover, Button, DialogPresence, FadeSwap, InlineStatus, MotionCollapse, NumberStepper, RollingText, SegmentedControl, ToolPopover } from "./ui";
+import { ActionMenu, ChartViewport, Checkbox, MotionSwitch, SelectMenu, Button, DialogPresence, FadeSwap, InlineStatus, MotionCollapse, NumberStepper, RollingText, SegmentedControl, ToolPopover } from "./ui";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import { DEFAULT_GRADE_THRESHOLDS, type GradeThresholdRates, type GradeThresholds } from "../state/teacherWorkbench";
 import {
@@ -263,9 +264,9 @@ const EMPTY_SUBJECTS: string[] = [];
 const EMPTY_ROWS: GradeExam["rows"] = [];
 
 export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFollowup, thresholds: thresholdsProp, onThresholdsChange, onFullScoresChange }: GradesPageProps) {
+  const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
   const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id || "");
   const [selectedSubject, setSelectedSubject] = useState("total");
-  const [examOpen, setExamOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"single" | "trend">("single");
   const [trendSubject, setTrendSubject] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -324,7 +325,6 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
   useEffect(() => {
     if (activeTab === "trend") {
-      setExamOpen(false);
       setThresholdOpen(false);
     }
   }, [activeTab]);
@@ -459,50 +459,13 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     <div className="grade-dashboard flex min-h-full flex-col bg-background-primary-default">
       <div className="grade-toolbar bg-background-primary-default border-b border-separator-border px-4 py-2.5" data-mode={activeTab}>
         <div className="flex min-w-0 items-center gap-2">
-          <div className="relative min-w-0 shrink basis-[240px]">
-            <button
-              type="button"
-              aria-disabled={activeTab === "trend"}
-              aria-haspopup={activeTab === "single" ? "listbox" : undefined}
-              aria-expanded={activeTab === "single" ? examOpen : undefined}
-              onClick={() => { if (activeTab === "single") setExamOpen(v => !v); }}
-              className={`flex h-9 w-full min-w-0 items-center gap-2 rounded-xl border px-3 text-body-regular text-text-primary transition-[background-color,border-color,box-shadow] duration-300 ${
-                activeTab === "single"
-                  ? "cursor-pointer border-border-button-default bg-background-primary-default hover:border-accent-200 hover:shadow-sm"
-                  : "cursor-default border-accent-100 bg-accent-50/50"
-              }`}
-              style={{ fontWeight: 600 }}
-            >
-              <MotionSwitch transitionKey={`${activeTab}-${selectedExam.id}`} direction={activeTab === "trend" ? "right" : "left"} className="min-w-0 flex-1 text-left [--motion-surface:transparent]" contentClassName="truncate">
-                {activeTab === "single"
-                  ? `${selectedExam.name} · ${selectedExam.date || "未填写日期"}`
-                  : `全部考试 · ${exams.length} 场趋势`}
-              </MotionSwitch>
-              <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-tertiary transition-[opacity,transform] duration-300 ${activeTab === "single" ? "opacity-100" : "-translate-y-0.5 opacity-0"}`} />
-            </button>
-            <AnimatedPopover
-              open={activeTab === "single" && examOpen}
-              className="absolute left-0 top-full z-20 mt-1 min-w-72 max-w-96 overflow-hidden rounded-xl border border-separator-border bg-background-primary-default shadow-lg"
-            >
-                {exams.map(exam => (
-                  <button
-                    key={exam.id}
-                    onClick={() => {
-                      setSelectedExamId(exam.id);
-                      setExamOpen(false);
-                      setSelectedSubject("total");
-                      setSortKey("total");
-                    }}
-                    className={`w-full truncate text-left px-4 py-2.5 text-body-regular hover:bg-background-secondary-default transition-colors ${exam.id === selectedExam.id ? "text-accent-600 bg-accent-50" : "text-text-primary"}`}
-                  >
-                    {exam.name} · {exam.date || "未填写日期"}
-                  </button>
-                ))}
-            </AnimatedPopover>
+          <div className="grade-exam-select min-w-0 shrink basis-[240px]">
+            {activeTab === "single" ? <SelectMenu value={selectedExam.id} ariaLabel="选择考试" searchable className="w-full" options={exams.map(exam => ({ value: exam.id, label: `${exam.name} · ${exam.date || "未填写日期"}` }))} onChange={id => { setSelectedExamId(String(id)); setSelectedSubject("total"); setSortKey("total"); }} /> : <div className="px-3 py-2 text-body-semibold text-text-primary">全部考试 · {exams.length} 场趋势</div>}
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
-          <MotionSwitch transitionKey={activeTab} direction={activeTab === "trend" ? "right" : "left"} className="shrink-0" contentClassName="flex items-center">
+          {isMobile && <ActionMenu triggerId={THRESHOLD_TRIGGER_ID} label="成绩操作" icon={<MoreHorizontal className="size-4"/>} iconOnly items={[...(activeTab === "single" ? [{ key: "threshold", label: "阈值设置", onSelect: () => setThresholdOpen(true) }] : []), { key: "export", label: "导出成绩", disabled: !exams.length, onSelect: () => setExportOpen(true) }]} />}
+          <div className="grade-analysis-tools ml-auto flex items-center gap-2">
+          {!isMobile && <><MotionSwitch transitionKey={activeTab} direction={activeTab === "trend" ? "right" : "left"} className="shrink-0" contentClassName="flex items-center">
           {activeTab === "single" ? (
           <div className="relative shrink-0">
             <Button id={THRESHOLD_TRIGGER_ID} size="sm" variant="secondary" aria-haspopup="dialog" aria-expanded={thresholdOpen} onClick={() => setThresholdOpen(v => !v)}>
@@ -516,7 +479,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
 
           <Button size="sm" variant="secondary" disabled={!exams.length} onClick={() => setExportOpen(true)} className="shrink-0">
             <Download className="h-3.5 w-3.5" />导出成绩
-          </Button>
+          </Button></>}
 
             <SegmentedControl
               value={activeTab}
@@ -578,7 +541,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               <div data-motion-surface="grade-main-chart" className="grade-main-chart flex min-w-0 flex-col rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
                 <h3 className="text-text-primary mb-1">{metricKey === "total" ? "各科平均得分率" : `${metricLabel}分数分布`}</h3>
                 <p className="mb-4 text-caption-1-regular text-text-tertiary">{metricKey === "total" ? "平均分 ÷ 该科满分，满分不同的科目也能直接比较" : <FadeSwap swapKey={bandMode}>{distributionHint}</FadeSwap>}</p>
-                <ChartViewport height={metricKey === "total" ? "fill" : 240}>{(width, height) =>
+                <ChartViewport minWidth={metricKey === "total" ? subjectAvgData.length * 56 + 40 : 0} height={metricKey === "total" ? "fill" : 240}>{(width, height) =>
                   <BarChart width={width} height={height} data={metricKey === "total" ? subjectAvgData : distributionData} barSize={metricKey === "total" ? 32 : undefined} barCategoryGap={metricKey === "total" ? "10%" : 2}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
                     <XAxis dataKey={metricKey === "total" ? "subject" : "label"} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={metricKey === "total" ? 0 : "preserveStartEnd"} minTickGap={8} />
@@ -633,7 +596,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="grade-table-scroll overflow-x-auto">
                 {metricKey === "total" ? (
                   <table className="w-full min-w-[940px] table-fixed text-body-regular">
                     <thead>

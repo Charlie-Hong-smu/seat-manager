@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   BookOpen,
   ChevronDown,
@@ -10,13 +10,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  X,
   UserRound,
 } from "lucide-react";
 
 import { APP_NAME } from "../config";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
 import type { AppStudent } from "../state/types";
-import { AnimatedPopover, DialogPresence, IconButton } from "./ui";
+import { AnimatedPopover, DialogPresence, IconButton, useModalFocus } from "./ui";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 interface TopHeaderProps {
@@ -69,6 +70,7 @@ export function TopHeader({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const searchPanelRef = useModalFocus(searchOpen, () => setSearchOpen(false));
   const normalizedQuery = normalizeStudentSearch(query);
   const results = useMemo(() => {
     if (!normalizedQuery) return students.slice(0, 6);
@@ -106,7 +108,8 @@ export function TopHeader({
     { key: "logout", icon: <LogOut className="h-4 w-4" />, label: "退出登录", danger: true },
   ];
 
-  function openSearch() {
+  function openSearch(event: MouseEvent<HTMLButtonElement>) {
+    event.currentTarget.focus({ preventScroll: true });
     setSearchOpen(true);
   }
 
@@ -197,7 +200,7 @@ export function TopHeader({
       <DialogPresence open={searchOpen}>
       {searchOpen && (
         <div className="soft-backdrop-enter app-modal-overlay fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]" onMouseDown={event => event.currentTarget === event.target && closeSearch()}>
-          <div className="modal-panel-enter app-modal-panel w-full max-w-xl overflow-hidden" role="dialog" aria-label="搜索学生">
+          <div ref={searchPanelRef} tabIndex={-1} className="modal-panel-enter app-modal-panel flex w-full max-w-xl flex-col overflow-hidden outline-none" role="dialog" aria-modal="true" aria-label="搜索学生">
             <div className="flex items-center gap-3 border-b border-[var(--app-border)] px-4">
               <Search className="h-5 w-5 text-text-tertiary" />
               <input
@@ -226,9 +229,9 @@ export function TopHeader({
                 className="h-14 min-w-0 flex-1 bg-transparent text-headline-regular text-text-primary outline-none placeholder:text-text-tertiary"
                 placeholder="输入学生姓名或别名"
               />
-              <button type="button" onClick={closeSearch} aria-label="关闭搜索" className="shrink-0 rounded-md border border-separator-border bg-background-secondary-default px-1.5 py-0.5 text-[11px] font-medium tracking-wide text-text-tertiary transition-colors hover:text-text-secondary">ESC</button>
+              <IconButton label="关闭搜索" variant="quiet" onClick={closeSearch}><X className="h-4 w-4" /></IconButton>
             </div>
-            <div id="global-student-search-results" role="listbox" aria-label="学生搜索结果" className="max-h-80 overflow-y-auto p-2">
+            <div id="global-student-search-results" role="listbox" aria-label="学生搜索结果" className="min-h-0 max-h-80 overflow-y-auto p-2">
               {results.map((student, index) => (
                 <button
                   key={student.id}

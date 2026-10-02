@@ -3,7 +3,7 @@ import { getTaskUrgency } from "../../state/dailyManagement";
 import { groupFollowupTasks } from "../../state/followupStudents";
 import { CommunicationEditor, type SaveCommunication } from "../CommunicationEditor";
 import { ArrowRight, Clock3, Plus, BookOpenCheck, CalendarDays, CheckCircle2, ClipboardList, FileSpreadsheet, LayoutGrid, UserRoundCheck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useInitialTargetEffect } from "../../hooks/useInitialTargetEffect";
 import { useScopedRequest } from "../../hooks/useScopedRequest";
@@ -14,7 +14,7 @@ import type { AppStudent, AttendanceRecord, BusinessEntityRef, ClassScheduleV1, 
 import { MotionList, Button, Card, Chip, FileDropZone, IconButton, InlineStatus, MetricStrip, ToolDrawer } from "../ui";
 import { ResolutionEditor } from "../LinkedWorkflow";
 
-export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onSaveCommunication, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, onOpenEntity, onCompleteTask, onCompleteTasks, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
+export function TodayWorkspace({ students, attendance, tasks, homework, dormitories = [], gradeExams = [], schedule, drafts, onSaveCommunication, onScheduleChange, onOpenSeats, onOpenAttendance, onOpenTasks, onOpenHomework, onOpenQuickRecord, initialContext, onInitialContextConsumed, onOpenEntity, onCompleteTask, onCompleteTasks, onSaveTaskResolution, onContinueTask, initialDraftId, onInitialDraftConsumed }: {
   students: AppStudent[];
   attendance: AttendanceRecord[];
   tasks: FollowupTask[];
@@ -30,7 +30,9 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   onOpenTasks: () => void;
   onOpenHomework: () => void;
   onOpenQuickRecord: () => void;
-  onOpenEntity?: (ref: BusinessEntityRef) => void;
+  initialContext?: { scrollTop: number; queueOpen: boolean; queueScrollTop: number };
+  onInitialContextConsumed?: () => void;
+  onOpenEntity?: (ref: BusinessEntityRef, context: { scrollTop: number; queueOpen: boolean; queueScrollTop: number }) => void;
   onCompleteTask?: (taskId: string) => boolean | Promise<boolean>;
   onCompleteTasks?: (taskIds: string[]) => boolean | Promise<boolean>;
   onSaveTaskResolution?: (taskId: string, note: string) => void;
@@ -45,7 +47,17 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [weeklyDraftId, setWeeklyDraftId] = useState("");
-  const [queueOpen, setQueueOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(initialContext?.queueOpen || false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const queueBodyRef = useRef<HTMLDivElement>(null);
+  const [returnContext] = useState(initialContext);
+  const consumeContextRef = useRef(onInitialContextConsumed);
+  useLayoutEffect(() => {
+    if (!returnContext) return;
+    if (scrollRef.current) scrollRef.current.scrollTop = returnContext.scrollTop;
+    if (queueBodyRef.current) queueBodyRef.current.scrollTop = returnContext.queueScrollTop;
+    consumeContextRef.current?.();
+  }, [returnContext]);
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const [resolutionTaskId, setResolutionTaskId] = useState("");
   const items = useMemo(() => buildTodayWorkItems({ date: today, students, attendance, tasks, homework }), [attendance, homework, students, tasks, today]);
@@ -71,9 +83,9 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
     setWeeklyDraftId(initialDraftId || ""); setWeeklyOpen(true);
   }, onInitialDraftConsumed);
 
-  function openItem(item: ReturnType<typeof buildTodayWorkItems>[number]) {
+  function openItem(item: ReturnType<typeof buildTodayWorkItems>[number], fromQueue = false) {
     if (onOpenEntity) {
-      onOpenEntity({ domain: item.kind === "task" ? "followup" : item.kind, entityId: item.entityId, studentId: item.studentId, date: item.kind === "attendance" ? today : undefined });
+      onOpenEntity({ domain: item.kind === "task" ? "followup" : item.kind, entityId: item.entityId, studentId: item.studentId, date: item.kind === "attendance" ? today : undefined }, { scrollTop: scrollRef.current?.scrollTop || 0, queueOpen: fromQueue, queueScrollTop: queueBodyRef.current?.scrollTop || 0 });
       return;
     }
     (item.kind === "attendance" ? onOpenAttendance : item.kind === "homework" ? onOpenHomework : onOpenTasks)();
@@ -102,8 +114,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
       <div className="group flex items-center gap-2 rounded-xl px-2 transition-colors duration-150 hover:bg-background-secondary-default">
         <button type="button" aria-label={`${item.title} ${item.detail}`} onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border-button-default bg-background-primary-default text-foreground-icon-secondary"><Icon className="size-4"/></span>
-          <span className="min-w-0 flex-1"><strong className="block truncate text-body-medium text-text-primary">{item.title}</strong><span className="mt-1 block text-caption-1-regular text-text-secondary">{item.detail.replace(/ · (今日截止|已逾期)$/, "")}</span></span>
-          <Chip variant="caption" color={item.urgency === 0 ? "rose" : "soft"} className="hidden sm:inline-flex">{item.urgency === 0 ? "已逾期" : item.kind === "attendance" ? "需关注" : item.urgency === 3 ? "计划处理" : "今日截止"}</Chip>
+          <span className="min-w-0 flex-1"><strong className="block truncate text-body-medium text-text-primary">{item.title}</strong><span className="mt-1 flex flex-wrap items-center gap-2 text-caption-1-regular text-text-secondary"><Chip variant="caption" color={item.urgency === 0 ? "rose" : "soft"} className="shrink-0">{item.urgency === 0 ? "已逾期" : item.kind === "attendance" ? "需关注" : item.urgency === 3 ? "计划处理" : "今日截止"}</Chip><span>{item.detail.replace(/ · (今日截止|已逾期)$/, "")}</span></span></span>
         </button>
         {item.kind === "task" && ((item.taskIds?.length || 0) > 1 ? onCompleteTasks : onCompleteTask) ? <IconButton label={`${(item.taskIds?.length || 0) > 1 ? "完成全部跟进" : "完成跟进"}：${item.title}`} size="sm" disabled={completingIds.has(item.id)} onClick={() => void completeItem(item)}><CheckCircle2 className="size-4"/></IconButton> : <ArrowRight aria-hidden="true" className="mx-2 size-4 shrink-0 text-foreground-icon-tertiary"/>}
       </div>
@@ -127,7 +138,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
     }
   }
 
-  return <div className="h-full overflow-y-auto bg-background-primary-default" data-today-workspace>
+  return <div ref={scrollRef} className="h-full overflow-y-auto bg-background-primary-default" data-today-workspace>
     <div className="mx-auto flex max-w-[1440px] flex-col gap-6 p-5 sm:p-6 lg:p-8">
       <header className="flex flex-wrap items-center gap-x-8 gap-y-3">
         <div className="flex flex-col gap-1"><h1 className="text-title-2-medium text-text-primary">今日班务</h1><p className="text-body-regular text-text-secondary">{new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })} · {students.length} 位学生</p></div>
@@ -165,7 +176,7 @@ export function TodayWorkspace({ students, attendance, tasks, homework, dormitor
     <ToolDrawer open={weeklyOpen} title={openedDraft?.scope === "student" ? "学生沟通记录" : "本周班级复盘"} widthClassName="w-[560px]" onClose={() => setWeeklyOpen(false)}>
       <CommunicationEditor key={weeklyDraftId || range.startDate} scope={openedDraft?.scope || "class"} studentId={openedDraft?.studentId} subjectName={openedDraft?.studentId ? students.find(student => student.id === openedDraft.studentId)?.name || "学生" : "班级"} startDate={openedDraft?.startDate || range.startDate} endDate={openedDraft?.endDate || range.endDate} facts={openedDraft?.facts || facts} saved={savedWeekly} onSave={onSaveCommunication}/>
     </ToolDrawer>
-    <ToolDrawer open={queueOpen} title={`全部待处理 · ${items.length}`} widthClassName="w-[520px]" onClose={() => setQueueOpen(false)}><MotionList className="divide-y divide-separator-border">{items.map(item => renderQueueItem(item, () => { setQueueOpen(false); openItem(item); }))}{!items.length && <p className="py-12 text-center text-body-regular text-text-secondary">今天没有待处理事项</p>}</MotionList></ToolDrawer>
+    <ToolDrawer bodyRef={queueBodyRef} open={queueOpen} title={`全部待处理 · ${items.length}`} widthClassName="w-[520px]" onClose={() => setQueueOpen(false)}><MotionList className="divide-y divide-separator-border">{items.map(item => renderQueueItem(item, () => { setQueueOpen(false); openItem(item, true); }))}{!items.length && <p className="py-12 text-center text-body-regular text-text-secondary">今天没有待处理事项</p>}</MotionList></ToolDrawer>
     <ToolDrawer open={Boolean(resolutionTaskId)} title="补充处理结果" onClose={() => setResolutionTaskId("")}>{(() => { const task = tasks.find(item => item.id === resolutionTaskId); return task ? <ResolutionEditor task={task} onSave={note => { onSaveTaskResolution?.(task.id, note); setResolutionTaskId(""); }} onContinue={() => { onContinueTask?.(task.id); setResolutionTaskId(""); }}/> : null; })()}</ToolDrawer>
   </div>;
 }

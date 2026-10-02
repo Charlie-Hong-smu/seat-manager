@@ -1,6 +1,6 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Grid2X2, Link2, Presentation, RotateCcw, Save, Trash2, UsersRound, X } from "lucide-react";
+import { Grid2X2, Link2, MoreHorizontal, Presentation, RotateCcw, Save, Trash2, UsersRound, X } from "lucide-react";
 
 import {
   getSeatLayoutFrontEdgeForPoint,
@@ -14,7 +14,7 @@ import {
   type SeatLayoutSlot,
 } from "../state/seatLayout";
 import type { SeatLayoutGroup, SeatLayoutV1 } from "../state/types";
-import { Button, useAppDialog } from "./ui";
+import { ActionMenu, Button, useAppDialog } from "./ui";
 import { changeSeatGridAxis, getSeatGridCells, getSeatGroupCollisions, getSeatGroupGridBounds, getSeatGroupOutlinePath, getSeatGroupResizeBounds, prepareSeatLayoutGrid, resizeSeatLayoutGroup, type SeatGridAxis, type SeatGroupBounds, type SeatGroupEdge } from "../state/seatLayoutGrid";
 import { SeatGroupOverlay } from "./SeatGroupOverlay";
 import { SeatGridAxisControls, type SeatGridAxisTarget } from "./SeatGridAxisControls";
@@ -95,6 +95,8 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel, tool
   const grid = useMemo(() => getSeatGridCells(draft), [draft]);
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [focusedSlot, setFocusedSlot] = useState<SeatLayoutSlot | null>(null);
   const [rangeMode, setRangeMode] = useState(false);
   const [rangePreview, setRangePreview] = useState<SeatLayoutSlot | null>(null);
   const [groupMode, setGroupMode] = useState(false);
@@ -309,10 +311,11 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel, tool
       return;
     }
     const existing = seatBySlot.get(slot.key);
-    if (additive && existing) {
+    if ((additive || selectionMode) && existing) {
       toggleSelection(existing.id);
       return;
     }
+    if (selectionMode) return;
     if (existing) {
       setDraft(currentDraft => removeSeatFromLayout(currentDraft, existing.id));
       setSelected(currentSelection => {
@@ -479,13 +482,14 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel, tool
         {groupDrag && groupMode && <span aria-live="polite" className="rounded-full bg-status-warning-100 px-2 py-0.5 text-[11px] font-bold text-status-warning-900">{groupPreviewSeatIds.size} 个座位</span>}
       </div>
     </div>
-    <Button size="sm" variant={rangeMode ? "secondary" : "ghost"} aria-pressed={rangeMode} onClick={() => { setRangeMode(value => !value); setRangePreview(null); setGroupMode(false); setGroupDrag(null); }}>
+    <Button size="sm" variant={selectionMode ? "secondary" : "ghost"} aria-pressed={selectionMode} onClick={() => { setSelectionMode(value => !value); setRangeMode(false); setGroupMode(false); setGroupDrag(null); setRangePreview(null); }}>选择座位</Button>
+    <Button size="sm" variant={rangeMode ? "secondary" : "ghost"} aria-pressed={rangeMode} onClick={() => { setRangeMode(value => !value); setSelectionMode(false); setRangePreview(null); setGroupMode(false); setGroupDrag(null); }}>
       <Grid2X2 className="h-4 w-4" />{rangeMode ? "批量框选中" : "批量框选"}
     </Button>
-    <Button size="sm" variant={groupMode ? "secondary" : "ghost"} aria-pressed={groupMode} onClick={() => { setGroupMode(value => !value); setGroupDrag(null); setRangeMode(false); setRangePreview(null); }}>
+    <Button size="sm" variant={groupMode ? "secondary" : "ghost"} aria-pressed={groupMode} onClick={() => { setGroupMode(value => !value); setSelectionMode(false); setGroupDrag(null); setRangeMode(false); setRangePreview(null); }}>
       <UsersRound className="h-4 w-4" />{groupMode ? "框选成组中" : "框选成组"}
     </Button>
-    <Button size="sm" variant="ghost" onClick={() => { setDraft(cloneLayout(resolvedCurrent)); setSelected(new Set()); setRangeMode(false); setGroupMode(false); setGroupDrag(null); }}>
+    <Button size="sm" variant="ghost" onClick={() => { setDraft(cloneLayout(resolvedCurrent)); setSelected(new Set()); setFocusedSlot(null); setSelectionMode(false); setRangeMode(false); setGroupMode(false); setGroupDrag(null); }}>
       <RotateCcw className="h-4 w-4" />恢复进入时布局
     </Button>
     <Button size="sm" variant="ghost" onClick={onCancel}><X className="h-4 w-4" />取消</Button>
@@ -528,12 +532,12 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel, tool
                   <div key={seat ? `seat:${seat.id}` : podium ? "podium" : `empty:${slot.key}`} className="group seat-layout-editor-cell" data-seat-layout-slot={slot.key} data-seat-grid-seat={seat?.id} data-axis-target={axisTarget && slot[axisTarget.axis] === axisTarget.index ? "true" : undefined} data-active={active ? "true" : "false"} data-podium={podium ? "true" : "false"} data-group-id={seat?.groupId || undefined} data-group-hovered={!groupDrag && !rangePreview && seat?.groupId && hoveredGroup === seat.groupId ? "true" : "false"} onPointerEnter={() => { if (!groupDragRef.current) setHoveredGroup(seat?.groupId || null); }}>
                     <button
                       type="button"
-                      aria-pressed={active}
+                      aria-pressed={selectionMode ? selectedSlot : active}
                       aria-label={`第 ${slot.row + 1} 行第 ${slot.column + 1} 列，${podium ? "讲台" : active ? "已启用" : "未启用"}`}
                       onPointerEnter={() => { if (rangeMode) setRangePreview(slot); }}
                       onMouseEnter={() => moveGroupDragTo(slot)}
                       onMouseDown={event => { beginGroupDrag(event, slot); }}
-                      onClick={event => { if (!groupMode) toggleSlot(slot, event.shiftKey || event.metaKey); }}
+                      onClick={event => { setFocusedSlot(slot); if (!groupMode) toggleSlot(slot, event.shiftKey || event.metaKey); }}
                       className={`seat-layout-slot__face grid h-full w-full place-items-center rounded-lg border text-[11px] font-bold outline-none transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:ring-2 focus-visible:ring-accent-500/30 motion-reduce:transition-none ${podium ? "border-accent-400 bg-accent-50 text-accent-700" : active ? "seat-layout-slot--active border-accent-500 bg-accent-600 text-text-white" : preview ? "scale-[0.98] border-accent-300 bg-accent-200 text-accent-700" : "border-border-button-default bg-background-tertiary-default text-text-tertiary hover:border-accent-200 hover:bg-accent-50 hover:text-accent-400"} ${selectedSlot || (seat && groupPreviewSeatIds.has(seat.id)) ? "ring-2 ring-status-warning-500 ring-offset-1" : ""}`}
                       style={{ animationDelay: `${Math.min(index, 24) * 8}ms` }}
                     >
@@ -553,7 +557,20 @@ export function SeatLayoutDesigner({ current, seatCount, onApply, onCancel, tool
             </div>
           </div>
 
-          <div data-designer-status className="flex shrink-0 items-center gap-2 text-caption-1-regular">
+          <div data-designer-status className="flex shrink-0 flex-wrap items-center gap-2 text-caption-1-regular">
+            {focusedSlot && <div className="seat-touch-layout-actions flex w-full flex-wrap items-center gap-2">
+              <span>第 {focusedSlot.row + 1} 行 · 第 {focusedSlot.column + 1} 列</span>
+              <ActionMenu label="座位操作" icon={<MoreHorizontal className="size-4"/>} items={[
+                { key: "podium", label: podiumSlot?.key === focusedSlot.key ? "取消讲台" : "设为讲台", onSelect: () => setPodium(focusedSlot) },
+                ...(seatBySlot.get(focusedSlot.key)?.groupId ? [{ key: "rename", label: "编辑组名", onSelect: () => { const group = draft.groups.find(item => item.id === seatBySlot.get(focusedSlot.key)?.groupId); if (group) void renameGroup(group.id); } }, { key: "ungroup", label: "解除所在组", onSelect: () => ungroup(seatBySlot.get(focusedSlot.key)!.groupId!) }] : []),
+                { key: "addrow", label: "在此后加行", onSelect: () => void changeAxis("row", focusedSlot.row + 1, "insert") },
+                { key: "addcolumn", label: "在此后加列", onSelect: () => void changeAxis("column", focusedSlot.column + 1, "insert") },
+                { key: "delrow", label: "删除此行", tone: "danger", onSelect: () => void changeAxis("row", focusedSlot.row, "delete") },
+                { key: "delcolumn", label: "删除此列", tone: "danger", onSelect: () => void changeAxis("column", focusedSlot.column, "delete") },
+              ]}/>
+
+            </div>}
+            {selectionMode && !selected.size && <span>点选已启用的座位，可累计选择；成组沿用矩形范围。</span>}
             {selected.size > 0 ? <>
               <span>已选 {selected.size} 座</span>
               <Button size="sm" variant="ghost" disabled={selected.size < 2} onClick={groupSelected}><UsersRound className="h-4 w-4" />组成小组</Button>

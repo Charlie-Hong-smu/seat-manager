@@ -14,6 +14,7 @@ interface Props {
   students: AppStudent[];
   seatOrder: Array<StudentId | null>;
   onSelectStudent: (student: AppStudent) => void;
+  onQuickRecord?: (student: AppStudent) => void;
   onOpenStudentFollowup?: (student: AppStudent) => void;
   onMoveSeat: (fromIndex: number, toIndex: number) => void;
   onMoveStudentToWaiting: (fromIndex: number) => void;
@@ -208,12 +209,14 @@ const SeatCard = memo(function SeatCard({
   );
 });
 
-export function SeatBoard({ footerAccessory, cardMode, previewMode = false, students, seatOrder, seatSettings, onSelectStudent, onMoveSeat, onMoveStudentToWaiting, onAssignStudentToSeat, lockedSeats, onToggleLock }: Props) {
+export function SeatBoard({ footerAccessory, cardMode, previewMode = false, students, seatOrder, seatSettings, onSelectStudent, onQuickRecord, onMoveSeat, onMoveStudentToWaiting, onAssignStudentToSeat, lockedSeats, onToggleLock }: Props) {
   const isMobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (pointer: coarse)");
   const hasCoarsePointer = useMediaQuery("(any-pointer: coarse)");
   const touchControls = isMobile || hasCoarsePointer;
+  const [recordMode, setRecordMode] = useState(false);
   const [touchMoveMode, setTouchMoveMode] = useState(false);
   const [touchSourceId, setTouchSourceId] = useState<StudentId | null>(null);
+  const [touchFocusedIndex, setTouchFocusedIndex] = useState<number | null>(null);
   const [touchStatus, setTouchStatus] = useState("");
   const touchFlights = useRef<Animation[]>([]);
   useEffect(() => () => touchFlights.current.forEach(animation => animation.cancel()), []);
@@ -228,6 +231,7 @@ export function SeatBoard({ footerAccessory, cardMode, previewMode = false, stud
     setDraggingSeat(null);
     setPendingStudentId(null);
     setTouchSourceId(null);
+    setTouchFocusedIndex(null);
     setTouchStatus("");
   }, [previewMode]);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -262,6 +266,7 @@ export function SeatBoard({ footerAccessory, cardMode, previewMode = false, stud
   const [pendingStudentId, setPendingStudentId] = useState<StudentId | null>(null);
 
   function chooseTouchSeat(index: number) {
+    setTouchFocusedIndex(index);
     if (lockedSeats.has(index)) { setTouchStatus("该座位已锁定，请先解锁。"); return; }
     if (pendingStudentId) { assignWaitingStudentToSeat(pendingStudentId, index); setTouchSourceId(null); return; }
     const from = touchSourceId ? seatOrder.indexOf(touchSourceId) : -1;
@@ -270,13 +275,13 @@ export function SeatBoard({ footerAccessory, cardMode, previewMode = false, stud
       setTouchStatus(seatOrder[index] ? "再点目标座位；点原位可取消。" : "先点需要调整的学生。");
       return;
     }
-    if (from === index) { setTouchSourceId(null); setTouchStatus(""); return; }
+    if (from === index) { setTouchSourceId(null); setTouchFocusedIndex(null); setTouchStatus(""); return; }
     if (lockedSeats.has(from)) { setTouchSourceId(null); setTouchStatus("原座位已锁定，请重新选择。"); return; }
     const ids = [seatOrder[from], seatOrder[index]].filter((id): id is string => Boolean(id));
     const cards = () => Array.from(boardRef.current?.querySelectorAll<HTMLElement>("[data-student-id]") || []).filter(node => ids.includes(node.dataset.studentId!));
     const previous = new Map(cards().map(node => [node.dataset.studentId, node.getBoundingClientRect()]));
     touchFlights.current.forEach(animation => animation.cancel());
-    flushSync(() => { onMoveSeat(from, index); setTouchSourceId(null); setTouchStatus(previewMode ? "方案已调整，采用前不会改当前座位。" : "座位已调整，可在工具栏撤销。"); });
+    flushSync(() => { onMoveSeat(from, index); setTouchSourceId(null); setTouchFocusedIndex(null); setTouchStatus(previewMode ? "方案已调整，采用前不会改当前座位。" : "座位已调整，可在工具栏撤销。"); });
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     touchFlights.current = cards().flatMap(node => {
       const before = previous.get(node.dataset.studentId), after = node.getBoundingClientRect();
@@ -464,6 +469,7 @@ export function SeatBoard({ footerAccessory, cardMode, previewMode = false, stud
     event: ReactPointerEvent<HTMLElement>,
     source: { sourceType: "seat" | "waiting"; studentId: StudentId; fromIndex: number | null },
   ) {
+    if (recordMode) return;
     if (event.pointerType === "touch" && touchControls) return; // Touch scrolls the board; explicit tap-to-move avoids accidental rearrangement.
     if (event.button !== 0 || dragVisual && dragVisual.phase !== "dragging" || (source.fromIndex !== null && lockedSeats.has(source.fromIndex))) return;
     dragCleanupRef.current?.();
@@ -761,7 +767,7 @@ export function SeatBoard({ footerAccessory, cardMode, previewMode = false, stud
               <UserRoundPlus className="h-4 w-4" />
             </span>
             <div className="min-w-0 truncate text-[11px] font-bold text-[var(--app-text)]">
-              {dragVisual?.waitingTarget ? "松开移入，原座位留空" : pendingStudent ? `为 ${pendingStudent.name} 选座位` : waitingStudents.length > 0 ? `${waitingStudents.length} 人等待，可拖回座位` : "把未锁定学生拖到这里"}
+              {dragVisual?.waitingTarget ? "松开移入，原座位留空" : pendingStudent ? `为 ${pendingStudent.name} 选座位` : waitingStudents.length > 0 ? touchControls ? "点选学生，再点座位；名单可横滑" : `${waitingStudents.length} 人等待，可拖回座位` : touchControls ? "调座时可将学生移入等待区" : "把未锁定学生拖到这里"}
             </div>
           </div>
           {waitingStudents.length > 0 && (
@@ -772,18 +778,21 @@ export function SeatBoard({ footerAccessory, cardMode, previewMode = false, stud
                   type="button"
                   data-waiting-student-id={student.id}
                   aria-pressed={pendingStudentId === student.id}
-                  aria-label={`等待学生 ${student.name}，拖至座位或点击选择座位`}
+                  aria-label={`等待学生 ${student.name}，${recordMode ? "点击课堂记录" : touchControls ? "点击选择座位" : "拖至座位或点击选择座位"}`}
                   onPointerDown={event => handleWaitingPointerDrag(event, student.id)}
                   onClick={event => {
                     if (suppressWaitingClickRef.current === student.id || dragVisual?.studentId === student.id) {
                       event.preventDefault();
                       return;
                     }
+                    if (recordMode) { onQuickRecord?.(student); return; }
+                    setTouchSourceId(null);
+                    setTouchFocusedIndex(null);
                     setPendingStudentId(current => current === student.id ? null : student.id);
                   }}
                   className={`seat-waiting-person shrink-0 border text-center text-caption-1-regular transition-[background-color,border-color,box-shadow] ${pendingStudentId === student.id ? "border-accent-400 bg-accent-50 text-accent-800 shadow-[0_0_0_3px_rgba(59,130,246,0.10)]" : "border-[var(--app-border)] bg-[var(--app-surface-muted)] text-[var(--app-text)] hover:border-border-button-hover hover:bg-background-primary-default"} ${dragVisual?.studentId === student.id ? "pointer-events-none invisible" : ""}`}
                 >
-                  {compactWaitingName(student.name).map(line => <span key={line}>{line}</span>)}
+                  <span className="seat-waiting-person__compact">{compactWaitingName(student.name).map(line => <span className="block" key={line}>{line}</span>)}</span><span className="seat-waiting-person__full">{student.name}</span>
                 </button>
               ))}
             </div>
@@ -794,22 +803,30 @@ export function SeatBoard({ footerAccessory, cardMode, previewMode = false, stud
   );
 
   return <div className="flex h-full min-h-0 flex-col gap-3">
-      {touchControls && <div className="seat-touch-tools flex shrink-0 flex-wrap items-center gap-2">
-        <Button size="sm" variant={touchMoving ? "primary" : "secondary"} aria-pressed={touchMoving} onClick={() => { setTouchMoveMode(value => !value); setTouchSourceId(null); setTouchStatus(""); setPendingStudentId(null); }}>{touchMoving ? "完成调座" : "点选调座"}</Button>
+      {(touchControls || onQuickRecord && !previewMode) && <div className="seat-touch-tools flex shrink-0 flex-wrap items-center gap-2">
+        {onQuickRecord && !previewMode && <Button size="sm" variant={recordMode ? "primary" : "secondary"} aria-pressed={recordMode} onClick={() => { setRecordMode(value => !value); setTouchMoveMode(false); setTouchSourceId(null); setTouchFocusedIndex(null); setPendingStudentId(null); }}>{recordMode ? "结束课堂记录" : "课堂记录"}</Button>}
+        {touchControls && <Button size="sm" variant={touchMoving ? "primary" : "secondary"} aria-pressed={touchMoving} onClick={() => { setTouchMoveMode(value => !value); setRecordMode(false); setTouchSourceId(null); setTouchFocusedIndex(null); setTouchStatus(""); setPendingStudentId(null); }}>{touchMoving ? "完成调座" : "点选调座"}</Button>}
+        {touchMoving && !previewMode && touchFocusedIndex !== null && touchFocusedIndex < seatOrder.length && <Button size="sm" variant="secondary" aria-label={`${lockedSeats.has(touchFocusedIndex) ? "解锁" : "锁定"}当前座位`} onClick={() => {
+          onToggleLock(touchFocusedIndex);
+          setTouchSourceId(null);
+          setTouchStatus(lockedSeats.has(touchFocusedIndex) ? "当前座位已解锁。" : "当前座位已锁定。");
+        }}>{lockedSeats.has(touchFocusedIndex) ? "解锁当前座位" : "锁定当前座位"}</Button>}
+        {recordMode && <span className="text-caption-1-regular text-text-secondary">点学生记录课堂事实，保存前可核对。</span>}
         {touchMoving && touchSourceId && <Button size="sm" variant="secondary" onClick={() => {
           const fromIndex = seatOrder.indexOf(touchSourceId);
           if (fromIndex < 0 || lockedSeats.has(fromIndex)) return;
           onMoveStudentToWaiting(fromIndex);
           setTouchSourceId(null);
+          setTouchFocusedIndex(null);
           setTouchStatus(previewMode ? "已移入候选等待区，采用前不会改当前座位。" : "已移入等待区，可在工具栏撤销。");
           setWaitingDockOpen(true);
         }}>移入等待区</Button>}
         {touchMoving && <span role="status" className="min-w-0 flex-1 text-caption-1-regular text-text-secondary">{touchStatus || "点选学生，再点目标座位。"}</span>}
       </div>}
-      <div ref={boardRef} className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
+      <div ref={boardRef} data-seat-scroll-surface className={`min-h-0 flex-1 overflow-auto ${dragVisual ? "select-none" : ""}`}>
         <SeatLayoutSurface layout={layout} detail={cardMode === "detail"} renderSeat={(seat, seatIndex) =>
           <div className="seat-card-enter h-full min-h-0" data-touch-selected={touchMoving && touchSourceId === seatOrder[seatIndex] ? "true" : undefined} onClickCapture={event => { if (touchMoving && !(event.target as HTMLElement).closest("button")) { event.stopPropagation(); chooseTouchSeat(seatIndex); } }} onKeyDownCapture={event => { if (touchMoving && (event.key === "Enter" || event.key === " ") && !(event.target as HTMLElement).closest("button")) { event.preventDefault(); event.stopPropagation(); chooseTouchSeat(seatIndex); } }} style={{ animationDelay: `${Math.min(seatIndex, 12) * 10}ms` }} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={event => { event.preventDefault(); const studentId = event.dataTransfer.getData("text/seat-student-id"); if (studentId) assignWaitingStudentToSeat(studentId, seatIndex); }} onClick={() => { if (pendingStudentId) assignWaitingStudentToSeat(pendingStudentId, seatIndex); }}>
-            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isConcealed={dragVisual?.phase === "settling" && dragVisual.studentId === seatOrder[seatIndex]} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} interactiveEmpty={touchMoving || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} positionLabel={seat.label} cardMode={cardMode} onSelect={onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} previewMode={previewMode} />
+            <SeatCard studentId={seatOrder[seatIndex] ?? null} studentById={studentById} seatIndex={seatIndex} isLocked={lockedSeats.has(seatIndex)} isDragging={draggingSeat === seatIndex} isConcealed={dragVisual?.phase === "settling" && dragVisual.studentId === seatOrder[seatIndex]} isDropTarget={dragVisual?.targetIndex === seatIndex} dragActive={Boolean(dragVisual) || pendingStudentId !== null} interactiveEmpty={touchMoving || pendingStudentId !== null} visualTransform={seatVisualTransform(seatIndex)} positionLabel={seat.label} cardMode={cardMode} onSelect={recordMode && onQuickRecord ? onQuickRecord : onSelectStudent} onPointerDragStart={handleSeatPointerDrag} onToggleLock={onToggleLock} previewMode={previewMode || recordMode} />
           </div>
         } />
       </div>

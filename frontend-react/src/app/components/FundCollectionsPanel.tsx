@@ -37,7 +37,7 @@ export function FundCollectionsPanel({ collections, students, transactions, task
   async function payment(studentId: string, refund = false) {
     if (!collection) return;
     const balance = collectionBalance(collection, studentId, transactions);
-    const entered = await dialog.prompt({ title: `${refund ? "登记退款" : "登记收款"}：${collection.studentNames[studentId] || "学生"}`, description: collection.title, inputLabel: "金额（元）", defaultValue: String(refund ? Math.max(0, balance.paid) : balance.remaining), confirmLabel: "保存流水" });
+    const entered = await dialog.prompt({ title: `${refund ? "登记退款" : "登记收款"}：${collection.studentNames[studentId] || "学生"}`, description: collection.title, inputLabel: "金额（元）", inputMode: "decimal", defaultValue: String(refund ? Math.max(0, balance.paid) : balance.remaining), confirmLabel: "保存流水" });
     if (entered === null) return;
     const value = money(Number(entered));
     if (!Number.isFinite(value) || value <= 0 || refund && value > balance.paid || !refund && value > balance.remaining) { await dialog.notice({ title: "金额无效", description: refund ? "退款金额须大于零且不能超过实收金额。" : "收款金额须大于零且不能超过尚欠金额；如应交额有变化，请先调整。" }); return; }
@@ -45,7 +45,7 @@ export function FundCollectionsPanel({ collections, students, transactions, task
   }
   async function adjust(studentId: string) {
     if (!collection) return;
-    const entered = await dialog.prompt({ title: "调整个人应交金额", description: "填写 0 表示免交；已登记流水会保留。", inputLabel: "应交金额（元）", defaultValue: String(collection.targets[studentId]), confirmLabel: "下一步" });
+    const entered = await dialog.prompt({ title: "调整个人应交金额", description: "填写 0 表示免交；已登记流水会保留。", inputLabel: "应交金额（元）", inputMode: "decimal", defaultValue: String(collection.targets[studentId]), confirmLabel: "下一步" });
     if (entered === null || !entered.trim() || !Number.isFinite(Number(entered)) || Number(entered) < 0) return;
     const reason = await dialog.prompt({ title: "调整说明", description: "记录减免或金额调整原因。", inputLabel: "调整原因", confirmLabel: "保存调整" });
     if (reason === null) return;
@@ -92,14 +92,13 @@ export function FundCollectionsPanel({ collections, students, transactions, task
         })}</div>
       </div> : <p className="py-8 text-center text-body-regular text-text-secondary">新建收费事项，设置应交金额和参与学生后开始登记。</p>}
     </Card>
-    <ToolDrawer open={creating} title="新建收费事项" onClose={() => setCreating(false)}>
+    <ToolDrawer open={creating} title="新建收费事项" onClose={() => setCreating(false)} footer={<Button className="w-full" disabled={!title.trim() || !ids.length || !Number.isFinite(Number(amount)) || Number(amount) <= 0} onClick={create}>创建收费事项</Button>}>
       <div className="space-y-4">
         <Input aria-label="收费事项名称" placeholder="例如：秋季班费" value={title} onChange={setTitle}/>
-        <Input aria-label="每人应交金额" placeholder="每人应交金额（元）" value={amount} onChange={setAmount}/>
+        <Input inputMode="decimal" aria-label="每人应交金额" placeholder="每人应交金额（元）" value={amount} onChange={setAmount}/>
         <DatePicker value={dueDate} onChange={setDueDate} ariaLabel="收缴截止日期"/>
         <Button size="sm" variant="secondary" onClick={() => setIds(students.map(student => student.id))}>选择全班</Button>
         <StudentMultiPicker students={students} values={ids} onChange={setIds} label="参与学生" emptyLabel="请选择学生"/>
-        <Button disabled={!title.trim() || !ids.length || !Number.isFinite(Number(amount)) || Number(amount) <= 0} onClick={create}>创建收费事项</Button>
       </div>
     </ToolDrawer>
     {dialog.dialog}

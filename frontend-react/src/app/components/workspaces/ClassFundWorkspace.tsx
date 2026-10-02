@@ -162,7 +162,7 @@ export function ClassFundWorkspace({
   return (
     <div className="flex h-full flex-col bg-background-primary-default">
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="fund-workspace-content min-h-0 flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-5xl space-y-5">
           <Card className="surface-enter" bodyClassName="flex flex-wrap items-center gap-3 p-3">
             <SegmentedControl value={periodMode} onChange={setPeriodMode} ariaLabel="班费统计周期" options={[{ value: "all", label: "全部" }, { value: "week", label: "本周" }, { value: "month", label: "本月" }]} />
@@ -170,7 +170,7 @@ export function ClassFundWorkspace({
             <SegmentedControl className="ml-auto" value={view} onChange={value => setView(value as "ledger" | "collection" | "projects")} ariaLabel="班费视图" options={[{ value: "ledger", label: "收支流水" }, { value: "projects", label: "收费事项" }, { value: "collection", label: "登记汇总" }]} />
           </Card>
           {/* 统计卡：左大余额 + 右两小卡 */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem_12rem]">
+          <div className="fund-stat-grid grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem_12rem]">
             <Card className="surface-enter" bodyClassName="p-5">
               <div className="text-caption-1-regular text-text-tertiary">{periodMode === "all" ? "全部结余" : periodMode === "week" ? "本周收支差额" : "本月收支差额"}</div>
               <div className={`mt-1 text-3xl ${balance >= 0 ? "text-text-primary" : "text-status-danger-500"}`} style={{ fontWeight: 900 }}>
@@ -224,21 +224,21 @@ export function ClassFundWorkspace({
                     <span className="text-[var(--app-text-muted)]">多人流水仅记笔数，金额不作均摊</span>
                   </div>
                   <div className="overflow-hidden rounded-xl border border-separator-border">
-                    <div className="grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] gap-2 border-b border-separator-border bg-background-secondary-default px-4 py-2 text-caption-1-semibold text-text-secondary">
+                    <div className="fund-summary-heading grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] gap-2 border-b border-separator-border bg-background-secondary-default px-4 py-2 text-caption-1-semibold text-text-secondary">
                       <span>学生</span><span>状态</span><span className="text-right">笔数</span><span className="text-right">个人金额 / 多人流水</span><span className="text-right">最近登记</span>
                     </div>
                     {collectionRows.map(row => (
-                      <div key={row.student.id} className="grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] items-center gap-2 border-b border-separator-border px-4 py-2.5 text-body-regular last:border-0">
+                      <div key={row.student.id} data-fund-summary-student={row.student.id} className="fund-summary-row grid grid-cols-[minmax(6rem,1.2fr)_5rem_5rem_minmax(5rem,1fr)_minmax(6rem,1fr)] items-center gap-2 border-b border-separator-border px-4 py-2.5 text-body-regular last:border-0">
                         <span className="truncate font-bold text-text-primary">{row.student.name}</span>
                         <span>{row.count ? <span className="rounded-md bg-status-success-50 px-1.5 py-0.5 text-[11px] font-bold text-status-success-600">有登记</span> : <span className="rounded-md bg-status-danger-50 px-1.5 py-0.5 text-[11px] font-bold text-status-danger-500">无登记</span>}</span>
-                        <span className="text-right tabular-nums text-text-secondary">{row.count || "—"}</span>
-                        <span className="text-right tabular-nums text-text-primary">{row.count
+                        <span className="text-right tabular-nums text-text-secondary"><span className="fund-summary-mobile-label">笔数 </span>{row.count || "—"}</span>
+                        <span className="text-right tabular-nums text-text-primary"><span className="fund-summary-mobile-label">金额 / 多人 </span>{row.count
                           ? [
                               row.individualTotal > 0 ? `¥${formatCurrency(row.individualTotal)}` : "",
                               row.sharedCount > 0 ? `${row.sharedCount} 笔多人` : "",
                             ].filter(Boolean).join(" + ")
                           : "—"}</span>
-                        <span className="text-right text-caption-1-regular text-text-tertiary">{row.latest || "—"}</span>
+                        <span className="text-right text-caption-1-regular text-text-tertiary"><span className="fund-summary-mobile-label">最近登记 </span>{row.latest || "—"}</span>
                       </div>
                     ))}
                   </div>
@@ -357,7 +357,7 @@ export function ClassFundWorkspace({
                           </span>
                           {/* 内容 */}
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline gap-2">
+                            <div className="flex flex-wrap items-baseline gap-2">
                               <span className="text-body-regular text-text-primary" style={{ fontWeight: 700 }}>
                                 {tx.category || "未分类"}{tx.status === "void" ? "（已作废）" : ""}
                               </span>
@@ -381,14 +381,14 @@ export function ClassFundWorkspace({
                             <button
                               aria-label={`编辑流水：${tx.category || "未分类"}`}
                               onClick={() => startEdit(tx)}
-                              className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-background-tertiary-default hover:text-text-secondary"
+                              className="app-icon-button rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-background-tertiary-default hover:text-text-secondary"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => setPendingVoidTransaction(tx)}
                               aria-label={`作废流水 ${tx.category}`}
-                              className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-status-danger-50 hover:text-status-danger-500"
+                              className="app-icon-button rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-status-danger-50 hover:text-status-danger-500"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
