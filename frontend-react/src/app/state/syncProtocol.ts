@@ -8,7 +8,7 @@ export const AUTOMATIC_SYNC_RELEASE_ENABLED = import.meta.env.VITE_SYNC_AUTO_REL
 export { contentHash };
 export interface CloudHead {
   ready: boolean; exists: boolean; licenseId: string; epoch: string; revision: number; hash: string;
-  strict: boolean; automaticAvailable: boolean; migrationReady?: boolean; updatedAt?: string; deviceName?: string; sizeBytes?: number;
+  strict: boolean; automaticAvailable: boolean; migrationReady?: boolean; initializationReady?: boolean; authoritySource?: "verified-cutover" | "fresh-test-initialization" | "unverified"; updatedAt?: string; deviceName?: string; sizeBytes?: number;
 }
 export interface CloudSnapshot extends CloudHead { workspaceBook?: WorkspaceBook; data?: Record<string, unknown>; }
 export interface SnapshotPayload { version: 1; workspaceBook: WorkspaceBook; data: Record<string, unknown>; deviceName: string; }
@@ -37,6 +37,10 @@ export const syncErrorMessage = (error: unknown): string => {
   if (["migration_backup_corrupt", "migration_operation_changed", "migration_boundary_changed"].includes(code)) return "迁移备份或阶段已变化，已停止提交；请重新核对备份。";
   if (code === "migration_source_not_settled") return "旧云端数据尚未与截断备份一致；迁移已冻结，稍后可继续核对或取消。";
   if (code === "migration_in_progress") return "此空间正在迁移，旧上传已暂停；请完成迁移或取消后再上传。";
+  if (code === "initialization_unavailable") return "此空间未获准空初始化，或新建合成测试许可已过期；本机数据仍保留。";
+  if (["initialization_existing_head", "initialization_existing_source"].includes(code)) return "检测到既有云端状态，已拒绝空初始化；请取消未完成的初始化并核对原空间。";
+  if (code === "initialization_operation_changed") return "初始化许可或阶段已变化，请重新核对；本机数据仍保留。";
+  if (code === "initialization_in_progress") return "此测试空间正在空初始化，旧上传已冻结；请继续初始化或明确取消。";
   if (code === "sync_invalid_data") return "云端协议或数据格式异常，已停止应用。";
   return "云同步暂时不可用；本机数据与待同步内容仍保留。";
 };
@@ -166,8 +170,9 @@ export class SnapshotSync {
     if (this.running) return this.running;
     if (this.choice && this.view.choice) return this.view;
     const version = ++this.inspectionVersion;
+    const token = this.ports.token();
     try {
-      const head = await this.checkedHead(this.ports.token());
+      const head = await this.checkedHead(token);
       if (version !== this.inspectionVersion || this.running) return this.view;
       if (!head.ready) {
         let migration: MigrationStatus | undefined;
@@ -176,7 +181,7 @@ export class SnapshotSync {
         return this.show({ phase: "manual", message: syncErrorMessage(new Error("migration_required")), head, migration });
       }
       let migration: MigrationStatus | undefined;
-      if (head.migrationReady === false) migration = await this.ports.api<MigrationStatus>("/sync/migration", this.ports.token());
+      if (head.migrationReady === false && !head.initializationReady) migration = await this.ports.api<MigrationStatus>("/sync/migration", this.ports.token());
       const checkpoint = this.readCheckpoint(head.licenseId);
       const hash = await contentHash(snapshotOf(this.ports.book(), this.ports.device()));
       if (version !== this.inspectionVersion || this.running) return this.view;
@@ -184,7 +189,22 @@ export class SnapshotSync {
       const same = hash === head.hash && !this.ports.unsaved();
       if (!same && checkpoint.hash === hash && checkpoint.epoch === head.epoch && head.revision !== checkpoint.revision && this.ports.editing()) return this.show({ phase: "draft", message: "有未保存的编辑或草稿，请先处理后同步。", head, migration });
       return this.show({ phase: same ? "synced" : checkpoint.hash === hash && checkpoint.epoch === head.epoch ? "pending" : checkpoint.revision !== head.revision || checkpoint.epoch !== head.epoch ? "conflict" : "pending", message: same ? "云端已同步" : "有版本待核对，点击立即同步。", head, migration });
-    } catch (error) { return this.failure(error); }
+    } catch (error) {
+      if (version !== this.inspectionVersion || this.running) return this.view;
+      const migration = await this.pendingFreshStatus(token);
+      if (version !== this.inspectionVersion || this.running) return this.view;
+      if (migration) this.show({ ...this.view, migration });
+      return this.failure(error);
+    }
+  }
+  /** A malformed legacy source must not hide a durable initialization's cancel action. */
+  private async pendingFreshStatus(token: string, expectedSpace?: string): Promise<MigrationStatus | undefined> {
+    try {
+      this.current(token);
+      const status = await this.ports.api<MigrationStatus>("/sync/migration", token);
+      this.current(token);
+      if (status.freshInitialization?.phase === "checking" && (!expectedSpace || status.space === expectedSpace)) return status;
+    } catch { /* Original error remains; never infer a cloud head from a source failure. */ }
   }
   private failure(error: unknown): SyncView {
     if (error instanceof DOMException && ["QuotaExceededError", "SecurityError"].includes(error.name)) error = new SyncProtocolError("sync_storage_failed");
@@ -402,6 +422,42 @@ export class SnapshotSync {
     this.current(token);
     this.show({ ...this.view, migration: status });
     return backup;
+  }
+  initializeFresh(action: "initialize" | "cancel-initialization", confirmed: boolean, expectedSpace = this.view.head?.licenseId): Promise<SyncView> {
+    if (this.running || !confirmed) return this.running || Promise.resolve(this.view);
+    this.requestSession = this.session; this.inspectionVersion++; this.stopAutomatic("initialization"); this.transferring = true;
+    const token = this.ports.token();
+    this.running = (async () => {
+      if (action === "initialize" && (!this.ports.writable() || !this.ports.flush())) throw new SyncProtocolError("sync_local_save_failed");
+      const status = await this.ports.api<MigrationStatus>("/sync/migration", token);
+      this.current(token);
+      if (!expectedSpace || status.space !== expectedSpace) throw new SyncProtocolError("sync_space_changed", 401);
+      const key = `initialization:${status.space}`;
+      const retained = action === "initialize" ? await this.ports.journal.get<{ operationId: string }>(key) : undefined;
+      if (action === "initialize" && !status.freshInitialization?.available && !(status.freshInitialization?.phase === "complete" && retained?.operationId === status.freshInitialization.receipt?.operationId)) throw new SyncProtocolError("initialization_unavailable", 403);
+      const operationId = action === "cancel-initialization" || status.freshInitialization?.phase === "checking" ? status.freshInitialization?.operationId : retained?.operationId || crypto.randomUUID();
+      if (!operationId) throw new SyncProtocolError("initialization_operation_changed", 409);
+      if (action === "initialize") await this.ports.journal.put(key, { operationId });
+      this.current(token);
+      const next = await this.ports.api<MigrationStatus>("/sync/migration", token, { action, operationId, acknowledgeAllWorkspaces: true, acknowledgeSyntheticTestOnly: true, acknowledgeIgnoreLateLegacy: true });
+      this.current(token);
+      if (next.space !== status.space) throw new SyncProtocolError("sync_space_changed", 401);
+      if (action === "cancel-initialization") {
+        await this.ports.journal.remove(key);
+        this.choice = null;
+        return this.show({ phase: "manual", message: "空初始化已取消，本机数据保留，旧手动上传冻结已解除。", head: this.view.head, migration: next });
+      }
+      const head = await this.checkedHead(token);
+      const receipt = next.initializationReceipt;
+      if (!receipt || receipt.source !== "fresh-test-empty-strict" || receipt.operationId !== operationId || receipt.space !== status.space || receipt.epoch !== head.epoch || receipt.revision !== 0 || !receipt.strict || !head.strict || !head.initializationReady || head.authoritySource !== "fresh-test-initialization") throw new SyncProtocolError("sync_invalid_data");
+      this.choice = null;
+      return this.show({ phase: "unbound", message: "测试空间空初始化已完成，本机整柜未上传；请立即同步并明确选择版本。自动模式仍关闭。", head, migration: next });
+    })().catch(async error => {
+      const migration = await this.pendingFreshStatus(token, expectedSpace);
+      if (migration) this.show({ ...this.view, migration });
+      return this.failure(error);
+    }).finally(() => { this.running = null; this.transferring = false; });
+    return this.running;
   }
   migrate(action: "prepare" | "commit" | "abort", confirmed: boolean, expectedSpace = this.view.migration?.space || this.view.head?.licenseId): Promise<SyncView> {
     if (this.running || !confirmed) return this.running || Promise.resolve(this.view);

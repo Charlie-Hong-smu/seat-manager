@@ -4,7 +4,7 @@ const port = Number(process.env.E2E_PORT) || (commercial ? 4296 : 4295);
 const base = commercial ? "/" : "/seat-manager/";
 const output = `.sync-e2e-dist/${commercial ? "commercial" : "zhang"}`;
 export default defineConfig({
-  testDir: "./e2e", testMatch: "sync-enabled.spec.ts", workers: 1,
+  testDir: "./e2e", testMatch: ["sync-enabled.spec.ts", "sync-fresh.spec.ts"], workers: 1,
   outputDir: `./.sync-e2e-results/${commercial ? "commercial" : "zhang"}`, reporter: [["list"]], timeout: 45_000,
   use: { baseURL: `http://127.0.0.1:${port}${base}`, trace: "retain-on-failure", serviceWorkers: "block" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

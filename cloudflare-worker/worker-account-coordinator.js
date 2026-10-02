@@ -25,6 +25,12 @@ export class AccountCoordinator extends DurableObject {
   readLicense(key) {
     return this.enqueue(() => this.load(key));
   }
+  isFirstLicenseLifetime(key, createdAt) {
+    return this.enqueue(async () => {
+      const current = await this.load(key);
+      return Boolean(current && current.createdAt === createdAt && !await this.ctx.storage.get("licenseId"));
+    });
+  }
 
   readLicenseIdentity(key) {
     return this.enqueue(async () => {

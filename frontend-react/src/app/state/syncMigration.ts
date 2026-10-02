@@ -3,7 +3,10 @@ import { canonicalJson, contentHash, sha256, SYNC_MAX_BYTES, validSyncBook, vali
 export interface MigrationStatus {
   available: boolean; space: string; phase: "unprepared" | "freezing" | "prepared" | "complete" | "aborted";
   operationId?: string; cutoverId?: string; backupIntegrity?: string; sourceIntegrity?: string; hash?: string; exists?: boolean; bytes?: number;
+  freshInitialization?: { available: boolean; phase: "unprepared" | "checking" | "complete" | "cancelled"; operationId?: string; receipt?: FreshInitializationReceipt };
+  initializationReceipt?: FreshInitializationReceipt;
 }
+export interface FreshInitializationReceipt { source: "fresh-test-empty-strict"; space: string; operationId: string; epoch: string; revision: 0; strict: true; createdAt: string; licenseCreatedAt: string; }
 export interface MigrationBackup {
   version: 1; kind: "seat-manager-migration-backup"; space: string; operationId: string; cutoverId: string;
   integrity: string; sourceIntegrity: string; hash: string; snapshot: { data: Record<string, unknown>; workspaceBook?: unknown } | null;

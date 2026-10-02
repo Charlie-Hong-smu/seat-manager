@@ -128,7 +128,7 @@ async function handleCoordinatedSync(request, env, corsHeaders, pathname, syncCo
       const parsed = await readJsonBody(request);
       if (!parsed.ok) return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
       body = parsed.value; action = body.action;
-      if (!["prepare", "commit", "abort"].includes(action)) return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
+      if (!["prepare", "commit", "abort", "initialize", "cancel-initialization"].includes(action)) return jsonResponse({ error: "bad_request" }, 400, corsHeaders);
     } else if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
     if (action === "backup") body.operationId = new URL(request.url).searchParams.get("operationId") || "";
     const result = await coordinator.migration(syncContext.key, licenseId, action, body, syncContext.actor);

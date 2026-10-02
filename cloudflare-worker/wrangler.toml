@@ -4,6 +4,8 @@ compatibility_date = "2026-06-29"
 workers_dev = true
 
 [vars]
+SYNC_FRESH_INITIALIZATION_ENABLED = "false"
+SYNC_FRESH_TEST_GRANTS = "{}"
 SYNC_MIGRATION_ENABLED = "false"
 SYNC_CUTOVER_MANIFESTS = "{}"
 SYNC_AUTOMATIC_ENABLED = "false"

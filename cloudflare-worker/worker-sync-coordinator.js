@@ -4,6 +4,7 @@ import { loadLicenseRecordByKey } from "./worker-license-store.js";
 import { getLicensedSyncStateKey } from "./worker-license-keys.js";
 import { SyncMigration } from "./worker-sync-migration.js";
 import { automaticSpaceAllowed } from "./worker-sync-policy.js";
+import { SyncFreshInitialization, hasFreshAuthority } from "./worker-sync-fresh.js";
 
 /** One authority per authenticated state key. No KV fallback after migration. */
 export class SyncCoordinator extends DurableObject {
@@ -16,6 +17,7 @@ export class SyncCoordinator extends DurableObject {
       CREATE TABLE IF NOT EXISTS receipts (mutation TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, revision INTEGER NOT NULL, value TEXT NOT NULL);
     `);
     this.migrationState = new SyncMigration(this);
+    this.freshState = new SyncFreshInitialization(this);
   }
   enqueue(operation) {
     const result = this.pending.then(operation);
@@ -40,13 +42,14 @@ export class SyncCoordinator extends DurableObject {
   async initialize(key) {
     const head = this.head();
     if (head) { if (head.key !== key) throw new Error("space_mismatch"); return head; }
+    if (this.freshState.record()?.phase === "complete") throw new Error("fresh_authority_missing");
     // A GET or global rollout flag never migrates a teacher's cloud data.
     return null;
   }
   metadata(head) {
-    return { exists: head.exists, epoch: head.epoch, revision: head.revision, hash: head.hash, strict: head.strict, ready: true, migrationReady: Boolean(head.cutoverId),
+    return { exists: head.exists, epoch: head.epoch, revision: head.revision, hash: head.hash, strict: head.strict, ready: true, migrationReady: Boolean(head.cutoverId), initializationReady: Boolean(hasFreshAuthority(head)), authoritySource: head.cutoverId ? "verified-cutover" : hasFreshAuthority(head) ? "fresh-test-initialization" : "unverified",
       updatedAt: head.updatedAt, deviceName: head.deviceName, version: head.version, sizeBytes: head.sizeBytes,
-      automaticAvailable: Boolean(head.cutoverId) && automaticSpaceAllowed(this.env, head.key), mirrorPending: head.mirrorPending };
+      automaticAvailable: Boolean(head.cutoverId || hasFreshAuthority(head)) && automaticSpaceAllowed(this.env, head.key), mirrorPending: head.mirrorPending };
   }
   async authorized(key, actor) {
     if (!actor) return true;
@@ -70,6 +73,7 @@ export class SyncCoordinator extends DurableObject {
         if (!await this.authorized(key, actor)) return { error: "unauthorized", status: 401 };
       }
       let head = await this.initialize(key);
+      if (this.freshState.frozen()) return { error: "initialization_in_progress", status: 503 };
       if (this.migrationState.frozen()) return { error: "migration_in_progress", status: 503 };
       if (!head) {
         if (protocol) return { error: "migration_required", status: 503 };
@@ -113,7 +117,16 @@ export class SyncCoordinator extends DurableObject {
     return this.enqueue(async () => {
       if (!await this.authorized(key, actor)) return { error: "unauthorized", status: 401 };
       if (actor && this.head()?.blockedActors?.includes(`${actor.licenseKey}:${actor.deviceId}:${actor.sessionId}`)) return { error: "unauthorized", status: 401 };
-      if (action === "status") return this.migrationState.status(space);
+      const license = actor ? await loadLicenseRecordByKey(actor.licenseKey, this.env) : null;
+      const firstLifetime = Boolean(await this.freshState.grant(space, actor));
+      const status = () => ({ ...this.migrationState.status(space), freshInitialization: this.freshState.status(space, license, firstLifetime) });
+      if (action === "status") return status();
+      if (action === "initialize" || action === "cancel-initialization") {
+        const result = action === "initialize" ? await this.freshState.initialize(key, space, request, actor) : this.freshState.cancel(request);
+        return result.error ? result : { ...status(), ...(result.receipt ? { initializationReceipt: result.receipt } : {}) };
+      }
+      if (this.freshState.frozen()) return { error: "initialization_in_progress", status: 503 };
+      if (hasFreshAuthority(this.head()) && action === "prepare") return { error: "initialization_existing_head", status: 409 };
       if (action === "backup") return this.migrationState.backup(space, request.operationId);
       if (action === "prepare") {
         if (request.acknowledgeAllWorkspaces !== true) return { error: "migration_confirmation_required", status: 400 };
@@ -132,7 +145,7 @@ export class SyncCoordinator extends DurableObject {
       // Edition rights may change after the outer route check while this call waits.
       const license = actor ? await loadLicenseRecordByKey(actor.licenseKey, this.env) : null;
       const compatible = !actor || (license && (!license.allowedEditions.includes("commercial") || this.env.SYNC_COMMERCIAL_PROTOCOL_READY === "true"));
-      if (!head?.cutoverId || !allowed || !compatible || !automaticSpaceAllowed(this.env, key)) return { error: "automatic_disabled", status: 403 };
+      if (!(head?.cutoverId || hasFreshAuthority(head)) || !allowed || !compatible || !automaticSpaceAllowed(this.env, key)) return { error: "automatic_disabled", status: 403 };
       if (expected.epoch !== head.epoch || expected.baseRevision !== head.revision || expected.hash !== head.hash) return { error: "conflict", status: 409 };
       this.putHead({ ...head, strict: true });
       return this.metadata(this.head());
@@ -141,9 +154,10 @@ export class SyncCoordinator extends DurableObject {
   deleteState(key, blockedActors = []) {
     return this.enqueue(async () => {
       const previous = this.head();
-      const head = { key, cutoverId: previous?.cutoverId, sourceIntegrity: previous?.sourceIntegrity, epoch: crypto.randomUUID(), revision: (previous?.revision || 0) + 1, exists: false, strict: previous?.strict || false, blockedActors: [...new Set([...(previous?.blockedActors || []), ...blockedActors])],
+      const receipt = this.freshState.record()?.receipt;
+      const head = { key, cutoverId: previous?.cutoverId, sourceIntegrity: previous?.sourceIntegrity, freshInitialization: previous?.freshInitialization || receipt, epoch: crypto.randomUUID(), revision: (previous?.revision || 0) + 1, exists: false, strict: previous?.strict || Boolean(receipt), blockedActors: [...new Set([...(previous?.blockedActors || []), ...blockedActors])],
         hash: "", bytes: 0, integrity: "", updatedAt: "", deviceName: "", version: 1, sizeBytes: 0, mirrorPending: true };
-      this.ctx.storage.transactionSync(() => { this.ctx.storage.sql.exec("DELETE FROM chunks"); this.ctx.storage.sql.exec("DELETE FROM receipts"); this.migrationState.delete(); this.putHead(head); });
+      this.ctx.storage.transactionSync(() => { this.ctx.storage.sql.exec("DELETE FROM chunks"); this.ctx.storage.sql.exec("DELETE FROM receipts"); this.migrationState.delete(); this.freshState.onDelete(); this.putHead(head); });
       await this.mirror();
       return this.metadata(this.head());
     });

@@ -6,10 +6,17 @@ export class FaultSyncCoordinator extends SyncCoordinator {
   fail = false;
   expandOnStrict = false;
   excludeOnStrict = false;
+  failFreshHead = false;
   constructor(ctx, env) {
-    let broken = false; let stale = false; let oldSource = null;
+    let broken = false; let stale = false; let oldSource = null; let freshFault = "";
     const kv = env.SEAT_MANAGER_KV;
-    super(ctx, { ...env, SEAT_MANAGER_KV: { get: (...args) => stale ? Promise.resolve(oldSource) : kv.get(...args), put: (...args) => { if (broken) throw new Error("synthetic_mirror_failure"); return kv.put(...args); }, delete: (...args) => { if (broken) throw new Error("synthetic_mirror_failure"); return kv.delete(...args); } } });
+    const runtimeEnv = { ...env, SEAT_MANAGER_KV: { get: (...args) => {
+      if (freshFault === "read") { freshFault = ""; throw new Error("synthetic_source_interruption"); }
+      if (freshFault === "close") { freshFault = ""; runtimeEnv.SYNC_FRESH_INITIALIZATION_ENABLED = "false"; }
+      return stale ? Promise.resolve(oldSource) : kv.get(...args);
+    }, put: (...args) => { if (broken) throw new Error("synthetic_mirror_failure"); return kv.put(...args); }, delete: (...args) => { if (broken) throw new Error("synthetic_mirror_failure"); return kv.delete(...args); } } };
+    super(ctx, runtimeEnv);
+    this.freshFailure = value => { freshFault = value; this.failFreshHead = value === "commit"; };
     this.toggleMirror = value => { broken = value; };
     this.toggleSource = value => { stale = value.enabled; oldSource = value.snapshot; };
   }
@@ -39,12 +46,19 @@ export class FaultSyncCoordinator extends SyncCoordinator {
   }
   retryMirror() { return this.alarm(); }
   failNext() { this.fail = true; }
+  freshFault(value) { this.freshFailure(value); }
+  loseFreshHead() { this.ctx.storage.sql.exec("DELETE FROM head"); }
+  async inspectMigrationSource() { const operation = this.migrationState.meta("operation"); return { operation, snapshot: await this.migrationState.blob("operation", operation) }; }
+  putHead(head) {
+    super.putHead(head);
+    if (this.failFreshHead && head.freshInitialization) { this.failFreshHead = false; throw new Error("synthetic_fresh_transaction_failure"); }
+  }
   putChunks(revision, bytes) {
     super.putChunks(revision, bytes);
     if (this.fail) { this.fail = false; throw new Error("synthetic_chunk_failure"); }
   }
   inspect() {
-    return { head: this.head(), chunks: this.ctx.storage.sql.exec("SELECT revision, position, length(value) AS bytes FROM chunks ORDER BY revision, position").toArray(), receipts: this.ctx.storage.sql.exec("SELECT mutation FROM receipts").toArray(), migrationChunks: this.ctx.storage.sql.exec("SELECT slot, position, length(value) AS bytes FROM migration_chunks ORDER BY slot, position").toArray() };
+    return { head: this.head(), freshInitialization: this.freshState.record(), chunks: this.ctx.storage.sql.exec("SELECT revision, position, length(value) AS bytes FROM chunks ORDER BY revision, position").toArray(), receipts: this.ctx.storage.sql.exec("SELECT mutation FROM receipts").toArray(), migrationChunks: this.ctx.storage.sql.exec("SELECT slot, position, length(value) AS bytes FROM migration_chunks ORDER BY slot, position").toArray() };
   }
 }
 export default {
@@ -53,7 +67,15 @@ export default {
     if (path.startsWith("/_test/")) {
       const key = new URL(request.url).searchParams.get("key") || "seat-manager:single-teacher:state";
       const stub = env.SYNC_COORDINATOR.getByName(key);
+      if (path === "/_test/recreate-license") {
+        const account = env.ACCOUNT_COORDINATOR.getByName(key); const record = await account.readLicense(key);
+        await account.mutateLicense(key, { type: "delete" }); await account.mutateLicense(key, { type: "upsert", record });
+        return Response.json({ ok: true });
+      }
       if (path === "/_test/fail") { await stub.failNext(); return Response.json({ ok: true }); }
+      if (path === "/_test/fresh-fault") { await stub.freshFault((await request.json()).stage); return Response.json({ ok: true }); }
+      if (path === "/_test/lose-fresh-head") { await stub.loseFreshHead(); return Response.json({ ok: true }); }
+      if (path === "/_test/migration-source") return Response.json(await stub.inspectMigrationSource());
       if (path === "/_test/mirror") { await stub.mirrorFailure((await request.json()).fail); return Response.json({ ok: true }); }
       if (path === "/_test/source") { await stub.staleSource(await request.json()); return Response.json({ ok: true }); }
       if (path === "/_test/alarm") { await stub.retryMirror(); return Response.json({ ok: true }); }

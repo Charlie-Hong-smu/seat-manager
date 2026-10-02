@@ -343,7 +343,7 @@ export function ConfirmDialog({
           {variant === "danger" && <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-status-danger-50 text-status-danger-600"><TriangleAlert className="h-4 w-4" aria-hidden /></span>}
           <div className="min-w-0">
             <h2 id={titleId} className="text-title-3-semibold text-[var(--app-text)]">{title}</h2>
-            <p id={descriptionId} className="mt-1.5 text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>
+            <p id={descriptionId} className="mt-1.5 [overflow-wrap:anywhere] text-body-regular leading-6 text-[var(--app-text-muted)]">{description}</p>
           </div>
         </div>
         {error && <p role="alert" className="mt-3 rounded-[var(--app-radius-sm)] bg-status-danger-50 px-3 py-2 text-caption-1-semibold text-status-danger-600">{error}</p>}

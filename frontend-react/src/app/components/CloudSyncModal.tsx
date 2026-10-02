@@ -53,11 +53,16 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored, engi
     else setMessage("已取消选择，双版本仍保留。");
   }
 
-  async function run(action: "auth" | "status" | "upload" | "restore" | "sync" | "local" | "cloud" | "recovery" | "enable" | "disable" | "prepare" | "commit" | "abort" | "migration-backup") {
+  async function run(action: "auth" | "status" | "upload" | "restore" | "sync" | "local" | "cloud" | "recovery" | "enable" | "disable" | "prepare" | "commit" | "abort" | "migration-backup" | "initialize" | "cancel-initialization") {
     if (busy) return;
     try {
       setBusy(true);
       setMessage("正在处理...");
+      if (action === "initialize" || action === "cancel-initialization") {
+        const confirmed = await appDialog.confirm({ title: action === "initialize" ? "初始化这个新建合成测试空间？" : "取消未完成的空初始化？", description: `目标云空间：${syncView.head?.licenseId || syncView.migration?.space}。${action === "initialize" ? "仅用于新建合成测试授权。确认本机全部班级和学期只有虚构数据。云端将建立空的严格同步空间，本机数据保持保存且不会上传，自动模式保持关闭。初始化后永久拒绝旧客户端盲写；未知或迟到的旧云端写入不会进入此空间，可能被舍弃。此操作不能替代已有教师空间的数据迁移。" : "解除此空间未完成初始化的上传冻结；本机数据保留。已经完成的严格初始化不能撤销。"}`, confirmLabel: action === "initialize" ? "确认合成测试并初始化" : "确认取消空初始化", variant: "danger" });
+        if (confirmed) setMessage((await engine.initializeFresh(action, true, syncView.head?.licenseId || syncView.migration?.space)).message);
+        return;
+      }
       if (["sync", "upload", "local", "cloud"].includes(action)) setSyncDeviceName(deviceName);
       if (action === "enable") {
         const confirmed = await appDialog.confirm({ title: syncView.automaticPaused ? "恢复自动同步？" : "启用自动同步？", description: `目标云空间：${syncView.head?.licenseId || "当前授权空间"}。将同步本机全部班级和学期：正式保存后上传，进入、回前台或联网时核对云端；仅本机干净且没有活动草稿时获取更新。两端修改会保留双版本并暂停。启用后此空间会拒绝旧客户端盲写；可随时停用自动发送。`, confirmLabel: "确认启用全部班级学期", variant: "danger" });
@@ -166,7 +171,13 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored, engi
     </>}>
         <div className="space-y-4" data-cloud-sync>
           <p className="text-body-regular text-text-secondary" role="status">{syncView.message}</p>
-          {productSync && (!syncView.head?.ready || syncView.head.migrationReady === false) && syncView.migration && <div className="border-t border-separator-border pt-4 space-y-2">
+          {productSync && !syncView.head?.ready && syncView.migration?.freshInitialization && (syncView.migration.freshInitialization.available || syncView.migration.freshInitialization.phase === "checking") && <div className="border-t border-separator-border pt-4 space-y-2">
+            <p className="text-body-semibold text-text-primary">合成测试空间初始化</p>
+            <p className="text-body-regular text-text-secondary">仅对已获准的新建测试授权开放；会永久拒绝旧盲写，未知旧写不会进入新空间。</p>
+            {syncView.migration.freshInitialization.available && <Button variant="secondary" disabled={busy} onClick={() => void run("initialize")}>{syncView.migration.freshInitialization.phase === "checking" ? "继续空初始化" : "初始化全新测试空间"}</Button>}
+            {syncView.migration.freshInitialization.phase === "checking" && <Button variant="quiet" disabled={busy} onClick={() => void run("cancel-initialization")}>取消空初始化</Button>}
+          </div>}
+          {productSync && (!syncView.head?.ready || (syncView.head.migrationReady === false && !syncView.head.initializationReady)) && syncView.migration && <div className="border-t border-separator-border pt-4 space-y-2">
             <p className="text-body-semibold text-text-primary">安全迁移</p>
             <p className="text-body-regular text-text-secondary">{syncView.migration.available ? `空间 ${syncView.migration.space} 已获准迁移。当前阶段：${migrationPhaseLabel[syncView.migration.phase]}。` : "此空间尚无已核对的旧写截断与留存备份，继续使用手动备份与恢复。"}</p>
             <div className="flex flex-wrap gap-2">
@@ -178,6 +189,7 @@ export function CloudSyncModal({ open, onClose, onBeforeUpload, onRestored, engi
               {["freezing", "prepared"].includes(syncView.migration.phase) && <Button variant="quiet" disabled={busy} onClick={() => void run("abort")}>取消迁移</Button>}
             </div>
           </div>}
+          {syncView.head?.authoritySource === "fresh-test-initialization" && <p className="text-body-regular text-text-secondary">此空间来自已确认的合成测试空初始化，已永久拒绝旧盲写。</p>}
           {productSync && syncView.head?.ready && <div className="border-t border-separator-border pt-4 space-y-2">
             <p className="text-body-semibold text-text-primary">自动同步</p>
             <p className="text-body-regular text-text-secondary">{syncView.automatic ? "正式保存后同步全部班级学期；双端冲突会暂停。" : syncView.releaseEnabled && syncView.head.automaticAvailable ? "默认关闭。先立即同步并核对当前空间的整柜版本，再明确启用。" : "自动模式关闭：云空间迁移与两版兼容发布门禁尚未全部开放。"}</p>
