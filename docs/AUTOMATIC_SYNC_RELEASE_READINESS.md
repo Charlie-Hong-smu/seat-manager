@@ -50,7 +50,7 @@ prepare 后下载迁移封装文件，重开后重新校验 space、operationId�
 | 真实试点 | 真机合成验收完成，另行批准真实目标及备份/截断配置 | 重复 prepare / 下载 / 校验 / commit / 版本选择及逐设备明确启用 |
 | Commercial 权限空间 | 明确晋升同一已验收 Zhang SHA，旧盲写客户端退役后才 readiness=true | 未迁移其他空间保留旧手动合同；不替既有老师开启 |
 
-当前 Pages / Commercial 正式 build **没有传入** `VITE_SYNC_AUTO_RELEASE`，只重跑原工作流仍关闭。后续须在批准通道显式调整构建配置，保留另一通道默认关闭，并验证实际产物、精确 SHA 和 CI；合成开启构建不等于生产开放。本阶段没有修改工作流、仓库变量或线上安全设置。
+Pages 普通 push 及未勾选参数的手动运行显式以 `VITE_SYNC_AUTO_RELEASE=false` 构建正式 Zhang 产物。仅已批准的 `workflow_dispatch sync_auto_release=true` 以 true 重建正式 dist；两版原浏览器及隔离开启测试仍保留，随后检查生产包和体积。产物名为 `github-pages-auto-on/off-<attempt>`，上传与部署使用同一身份。v3 发布核验以预期模式、精确 SHA、同一成功 attempt、模式构建步骤及产物身份核对，关版不能证明开版；CLI 用 `APPROVED_SYNC_AUTO_RELEASE=true` 请求开版证据，默认 false。开启证据要求产物未过期；关闭产物过期但元数据身份仍完整时只允许原有全量验证回退路径，不复用测试。旧 v2/更早证据仅能用于关闭版原有路径。Commercial 工作流不变，默认关闭。此参数本身不打开服务端名单、不替老师 opt-in，未发布补丁不代表已上线，合成开启构建也不等于正式产物。
 
 逐空间门禁使用 `SYNC_AUTOMATIC_SPACES`，默认 `[]`，与全局 `SYNC_AUTOMATIC_ENABLED` 同时满足才开放。服务端以权威 state key 精确匹配完整空间 ID，缺失、格式错误、通配符或混入非字符串项均拒绝全部；状态/读取/保存及队列内启用统一校验，幂等回执不沿用旧自动资格。迁移清单仍只控制迁移准备，不能单独授予自动资格。本轮仅发布该门禁和空名单，迁移、自动模式及 Commercial readiness 继续关闭，截止清单保持空；没有签发测试码或迁移空间。后续开放仍须另行核实明确获准的目标、迁移证明、构建配置和真机验收，不能因门禁代码上线而开通。
 

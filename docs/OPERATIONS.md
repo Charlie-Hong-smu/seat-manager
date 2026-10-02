@@ -163,7 +163,7 @@ BoardUI 并行本地验证时，可用 `E2E_PORT=4193 pnpm exec playwright test 
 
 定向证据：Worker 的 `npm run check` 保留全部原断言并执行真实 workerd/SQLite 公共迁移测试，覆盖冻结、固定备份、来源见证、陈旧 KV、重启/重复提交/取消、旧 head 补证、近 5 MiB 中文分块和故障回滚、删除闭环，以及实际 `/sync/mode` Zhang-only 正向与混版负向保护。前端 `pnpm test syncProtocol.test.ts syncGeneration.test.tsx syncRuntime.test.ts syncRuntimeGeneration.test.tsx` 覆盖编辑/草稿/真实 React 旧 AI 回包和撤销代际、离线双改、换码、quota、回滚失败和错误分流；两版 `safe-sync.spec.ts` 保留手机 320/390px 与关闭门禁原断言。
 
-开启路径另用 `E2E_EDITION=zhang pnpm test:e2e:sync` 和 `E2E_EDITION=commercial pnpm test:e2e:sync`，构建目录 `.sync-e2e-dist/<edition>`、端口 4295/4296、结果 `.sync-e2e-results/<edition>`，仅此合成测试构建设置 `VITE_SYNC_AUTO_RELEASE=true`。Commercial 的测试运行时 readiness=true 只为验证共享实现，不能据此声称线上混版客户端已退役。正常构建的 `dist` 不受影响，Pages 只上传正常关闭开关的 dist。完整浏览器仍必须运行，不能被开启定向测试替代；本地并行工作区可设 `E2E_ISOLATED_BUILD=true` 和独立 `E2E_PORT`，输出 `.full-e2e-dist/<edition>`。动画逐帧断言应避免同一机器并行浏览器占用。
+开启路径另用 `E2E_EDITION=zhang pnpm test:e2e:sync` 和 `E2E_EDITION=commercial pnpm test:e2e:sync`，构建目录 `.sync-e2e-dist/<edition>`、端口 4295/4296、结果 `.sync-e2e-results/<edition>`，该隔离合成构建设置 `VITE_SYNC_AUTO_RELEASE=true`。Commercial 的测试运行时 readiness=true 只为验证共享实现，不能据此声称线上混版客户端已退役。Pages 测试后显式重建正式 dist：普通推送/手动默认为false，另行批准才以手动参数 `sync_auto_release=true` 构建开启版；Commercial流程不变。Pages上传与部署同用 `github-pages-auto-on/off-<attempt>`；v3核验默认只接纳关闭版，核验开启版需 `APPROVED_SYNC_AUTO_RELEASE=true`，同时检查模式、SHA、同一attempt和产物身份，不能复用关闭证据证明开启。完整浏览器仍必须运行，不能被开启定向测试替代；本地并行工作区可设 `E2E_ISOLATED_BUILD=true` 和独立 `E2E_PORT`，输出 `.full-e2e-dist/<edition>`。动画逐帧断言应避免同一机器并行浏览器占用。
 
 Pages 发布契约为 v2，复用证据还必须包含两版开启路径步骤成功；旧 v1 只允许走全量验证。Commercial 晋升的全量回退路径对支持 `test:e2e:sync` 的批准提交重跑两版开启测试，旧提交回滚保持原全量检查。没有同一精确 SHA 的成功发布证据不能声称部署完成。
 

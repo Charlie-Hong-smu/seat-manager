@@ -19,6 +19,12 @@ on:
       - ".github/workflows/promote-commercial.yml"
       - ".github/scripts/verify-zhang-release*.mjs"
   workflow_dispatch:
+    inputs:
+      sync_auto_release:
+        description: "生成自动同步入口开启的 Zhang 正式产物；须另有唯一空间许可及逐设备同意"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -64,7 +70,7 @@ jobs:
 
       # This marker is reusable only with every required check and Zhang deploy
       # successful in the same attempt. Bump the contract when gates change.
-      - name: Validate release verification contract v2
+      - name: Validate release verification contract v3
         run: node --test .github/scripts/verify-zhang-release.test.mjs
 
   zhang-e2e:
@@ -123,6 +129,27 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # Build the actual release after the isolated enabled-sync checks. A normal
+      # push stays closed; only an explicit manual dispatch selects the open build.
+      - name: Build Zhang release with automatic sync disabled
+        if: matrix.shard == 1 && !(github.event_name == 'workflow_dispatch' && inputs.sync_auto_release)
+        working-directory: frontend-react
+        env:
+          VITE_SYNC_AUTO_RELEASE: "false"
+        run: pnpm run build:zhang
+
+      - name: Build Zhang release with automatic sync enabled
+        if: matrix.shard == 1 && github.event_name == 'workflow_dispatch' && inputs.sync_auto_release
+        working-directory: frontend-react
+        env:
+          VITE_SYNC_AUTO_RELEASE: "true"
+        run: pnpm run build:zhang
+
+      - name: Check Zhang production bundle
+        if: matrix.shard == 1
+        working-directory: frontend-react
+        run: pnpm run check:production
+
       - name: Check Zhang bundle size
         if: matrix.shard == 1
         working-directory: frontend-react
@@ -132,6 +159,7 @@ jobs:
         if: matrix.shard == 1
         uses: actions/upload-pages-artifact@v4
         with:
+          name: github-pages-auto-${{ github.event_name == 'workflow_dispatch' && inputs.sync_auto_release && 'on' || 'off' }}-${{ github.run_attempt }}
           path: frontend-react/dist
 
   commercial-e2e:
@@ -195,3 +223,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-auto-${{ github.event_name == 'workflow_dispatch' && inputs.sync_auto_release && 'on' || 'off' }}-${{ github.run_attempt }}
