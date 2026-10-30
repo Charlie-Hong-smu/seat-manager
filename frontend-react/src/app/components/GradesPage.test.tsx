@@ -1,7 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GradesPage } from "./GradesPage";
 import type { GradeExam } from "../state/types";
+import * as gradeBands from "../state/gradeBands";
+import * as blendedColors from "../hooks/useBlendedColors";
 
 beforeEach(() => vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} }));
 afterEach(cleanup);
@@ -35,6 +37,32 @@ function gradeOf(name: string) {
 }
 
 describe("grade thresholds and distribution", () => {
+  it("animates histogram colours without recomputing student table grades on each frame", () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance", "setTimeout", "clearTimeout"] });
+    const bounds = vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 900, 300));
+    const grade = vi.spyOn(gradeBands, "getBandKey");
+    const blend = vi.spyOn(blendedColors, "useBlendedColors");
+    try {
+      renderPage();
+      act(() => { vi.advanceTimersByTime(400); });
+      fireEvent.click(within(screen.getByRole("group", { name: "分档方式" })).getByRole("button", { name: "按名次" }));
+      expect(grade).toHaveBeenCalled();
+      grade.mockClear();
+      blend.mockClear();
+      act(() => { vi.advanceTimersByTime(100); });
+      expect(blend).toHaveBeenCalled();
+      expect(blend.mock.results.some(result => result.value.some((fill: string) => fill.startsWith("color-mix")))).toBe(true);
+      act(() => { vi.advanceTimersByTime(300); });
+      expect(grade).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      grade.mockRestore();
+      blend.mockRestore();
+      bounds.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("grades a 150-point subject by score rate instead of treating every subject as 100 points", () => {
     renderPage();
     selectSubject("语文");

@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalHeader, ModalShell, NumberStepper, PanelSection, SegmentedControl, SelectMenu, ToolDrawer, ToolPopover, useAppDialog, useModalFocus } from "./ui";
+import { ActionMenu, ConfirmDialog, DrawerDock, IconButton, InlineStatus, ModalHeader, ModalShell, NumberStepper, PanelSection, RollingText, SegmentedControl, SelectMenu, ToolDrawer, ToolPopover, useAppDialog, useModalFocus } from "./ui";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -91,6 +91,23 @@ describe("shared prompt validation", () => {
 
 
 describe("BoardUI segmented compatibility", () => {
+  it("moves the selection thumb with cached geometry without forcing layout on selection", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} });
+    const left = vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (this: HTMLElement) { return this.textContent === "详细" ? 80 : 0; });
+    const width = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(80);
+    const options = [{ value: "quick", label: "快速" }, { value: "detail", label: "详细" }];
+    try {
+      const { container, rerender } = render(<SegmentedControl value="quick" options={options} onChange={() => {}} ariaLabel="登记视图" />);
+      await act(async () => {});
+      left.mockClear(); width.mockClear();
+      rerender(<SegmentedControl value="detail" options={options} onChange={() => {}} ariaLabel="登记视图" />);
+      await act(async () => {});
+      expect(container.querySelector<HTMLElement>('.app-segments > [aria-hidden="true"]')!.style.transform).toBe("translate(80px, 0px)");
+      expect(left).not.toHaveBeenCalled();
+      expect(width).not.toHaveBeenCalled();
+    } finally { left.mockRestore(); width.mockRestore(); }
+  });
+
   it("keeps one pressed value and existing callbacks when selecting another option", () => {
     const onChange = vi.fn();
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} });
@@ -105,6 +122,16 @@ describe("BoardUI segmented compatibility", () => {
     expect(screen.getByRole("button", { name: "详细" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "详细" })).toBeDisabled();
   });
+});
+
+it("keeps rolling numbers accessible and below three elements per digit", () => {
+  const { container, rerender } = render(<RollingText value="123.4" />);
+  expect(screen.getByLabelText("123.4")).toBeInTheDocument();
+  expect(container.querySelectorAll('.rolling-text *').length).toBeLessThanOrEqual(12);
+  const strip = container.querySelector('.rolling-digit__strip');
+  rerender(<RollingText value="987.6" />);
+  expect(screen.getByLabelText("987.6")).toBeInTheDocument();
+  expect(container.querySelector('.rolling-digit__strip')).toBe(strip);
 });
 
 

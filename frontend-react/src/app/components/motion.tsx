@@ -51,6 +51,77 @@ function snapshot(node: HTMLElement): HTMLElement {
   return copy;
 }
 
+/** Mirror only changed nodes during a surface flight. Re-cloning the whole card
+ * for each SVG frame also re-measures every animated descendant and drops frames. */
+function observeSnapshot(node: HTMLElement, copy: HTMLElement): MutationObserver {
+  const twins = new WeakMap<Node, Node>();
+  const svgIds = new Map<string, string>();
+  const prefix = `motion-snapshot-${++snapshotSequence}`;
+  const link = (source: Node, target: Node) => {
+    twins.set(source, target);
+    source.childNodes.forEach((child, index) => link(child, target.childNodes[index]));
+  };
+  link(node, copy);
+  node.querySelectorAll<SVGElement>("svg [id], svg[id]").forEach(source => {
+    svgIds.set(source.id, (twins.get(source) as Element).id);
+  });
+  const collectIds = (source: Node) => {
+    if (source instanceof SVGElement && source.id && !svgIds.has(source.id)) svgIds.set(source.id, `${prefix}-${svgIds.size}`);
+    source.childNodes.forEach(collectIds);
+  };
+  const attribute = (source: Element, target: Element, name: string) => {
+    const value = source.getAttribute(name);
+    if (value === null || name === "autofocus" || name === "name" || (name === "id" && !(source instanceof SVGElement))) {
+      target.removeAttribute(name);
+      return;
+    }
+    const rewritten = value.replace(/url\(["']?#([^"')]+)["']?\)/g, (match, id: string) => svgIds.has(id) ? `url(#${svgIds.get(id)})` : match);
+    const next = name === "id" ? svgIds.get(value) ?? value
+      : (name === "href" || name === "xlink:href") && svgIds.has(value.slice(1)) ? `#${svgIds.get(value.slice(1))}` : rewritten;
+    target.setAttribute(name, next);
+  };
+  const clone = (source: Node): Node => {
+    const target = source.cloneNode(false);
+    twins.set(source, target);
+    if (source instanceof Element && target instanceof Element) {
+      Array.from(source.attributes).forEach(attr => attribute(source, target, attr.name));
+      if (source instanceof HTMLInputElement && target instanceof HTMLInputElement) { target.value = source.value; target.checked = source.checked; }
+      if (source instanceof HTMLTextAreaElement && target instanceof HTMLTextAreaElement) target.value = source.value;
+    }
+    source.childNodes.forEach(child => target.appendChild(clone(child)));
+    return target;
+  };
+  const observer = new MutationObserver(records => {
+    const live = records.filter(record => node.contains(record.target));
+    live.forEach(record => {
+      record.addedNodes.forEach(collectIds);
+      if (record.attributeName === "id") collectIds(record.target);
+    });
+    const parents = [...new Set(live.filter(record => record.type === "childList").map(record => record.target))];
+    // Existing descendants can change in the same batch as their parent. Reuse
+    // stable twins while syncing each changed parent, including nested ones.
+    parents.forEach(parent => {
+      const target = twins.get(parent);
+      if (!target) return;
+      let cursor = target.firstChild;
+      parent.childNodes.forEach(child => {
+        const twin = twins.get(child) ?? clone(child);
+        if (twin !== cursor) target.insertBefore(twin, cursor);
+        cursor = twin.nextSibling;
+      });
+      while (cursor) { const next = cursor.nextSibling; target.removeChild(cursor); cursor = next; }
+    });
+    live.forEach(record => {
+      const target = twins.get(record.target);
+      // The flight owns the snapshot root's shell styles and inert attributes.
+      if (record.type === "attributes" && record.target !== node && record.target instanceof Element && target instanceof Element) attribute(record.target, target, record.attributeName!);
+      if (record.type === "characterData" && target) target.nodeValue = record.target.nodeValue;
+    });
+  });
+  observer.observe(node, { childList: true, subtree: true, attributes: true, characterData: true });
+  return observer;
+}
+
 type SwitchProps = {
   children: ReactNode;
   transitionKey: string | number;
@@ -195,12 +266,7 @@ export class MotionSwitch extends Component<SwitchProps> {
         frame.append(arriving, old.image);
         // Responsive charts finish measuring after commit. Keep their arriving pixels
         // current during the same flight instead of revealing an empty/stale chart at its end.
-        const observer = new MutationObserver(() => {
-          const current = snapshot(node);
-          arriving.replaceChildren(...Array.from(current.childNodes));
-        });
-        observer.observe(node, { childList: true, subtree: true, attributes: true, characterData: true });
-        this.observers.push(observer);
+        this.observers.push(observeSnapshot(node, arriving));
         overlay.append(frame);
         before.image.querySelectorAll<HTMLElement>("[data-motion-surface], [data-motion-surface-frame]").forEach(copy => { if ((copy.dataset.motionSurfaceFrame || copy.dataset.motionSurface) === old.key) copy.style.visibility = "hidden"; });
         // Position rides on transform (compositor) instead of left/top (layout),

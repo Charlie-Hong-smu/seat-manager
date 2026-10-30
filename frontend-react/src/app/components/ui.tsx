@@ -111,7 +111,7 @@ export function InlineStatus({ message, tone = "auto", className = "" }: {
   return <p role={resolvedTone === "error" ? "alert" : "status"} aria-live="polite" className={`rounded-[var(--app-radius-sm)] px-3 py-2 text-caption-1-semibold leading-5 ${toneClass} ${className}`}>{message}</p>;
 }
 
-const ROLLING_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const ROLLING_DIGITS = "0\n1\n2\n3\n4\n5\n6\n7\n8\n9";
 
 /** Odometer-style text: each digit rolls vertically to its new value; other characters swap in place. */
 export function RollingText({ value, className = "" }: { value: string; className?: string }) {
@@ -120,7 +120,7 @@ export function RollingText({ value, className = "" }: { value: string; classNam
     {chars.map((char, index) => /\d/.test(char) ? (
       <span key={index} aria-hidden="true" className="rolling-digit">
         <span className="rolling-digit__strip" style={{ transform: `translateY(-${char}em)` }}>
-          {ROLLING_DIGITS.map(digit => <span key={digit} className="rolling-digit__cell">{digit}</span>)}
+          {ROLLING_DIGITS}
         </span>
       </span>
     ) : (

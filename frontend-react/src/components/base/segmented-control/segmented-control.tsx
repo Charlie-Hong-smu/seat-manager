@@ -52,22 +52,34 @@ export function SegmentedControl({ className, children, variant = "solid", eleme
   useIsomorphicLayoutEffect(() => {
     const el = innerRef.current;
     if (!el) return;
-    const measure = () => {
+    const positions = new WeakMap<HTMLElement, Thumb>();
+    let observed = new Set<HTMLElement>();
+    const select = () => {
       const selected = el.querySelector<HTMLElement>("[data-selected]");
-      if (selected) {
-        setThumb({
-          left: selected.offsetLeft,
-          top: selected.offsetTop,
-          width: selected.offsetWidth,
-          height: selected.offsetHeight,
-        });
-      } else setThumb(null);
+      const next = selected ? positions.get(selected) ?? null : null;
+      setThumb(current => current?.left === next?.left && current?.top === next?.top && current?.width === next?.width && current?.height === next?.height ? current : next);
     };
-    measure();
-    // Re-measure when selection flips (data-selected toggles) or size changes.
-    const mo = new MutationObserver(measure);
-    mo.observe(el, { attributes: true, subtree: true, attributeFilter: ["data-selected"] });
+    const measure = () => {
+      const buttons = new Set(el.querySelectorAll<HTMLElement>("button"));
+      observed.forEach(button => { if (!buttons.has(button)) ro.unobserve(button); });
+      buttons.forEach(button => {
+        positions.set(button, {
+          left: button.offsetLeft,
+          top: button.offsetTop,
+          width: button.offsetWidth,
+          height: button.offsetHeight,
+        });
+        if (!observed.has(button)) ro.observe(button);
+      });
+      observed = buttons;
+      select();
+    };
     const ro = new ResizeObserver(measure);
+    measure();
+    // Selection uses cached geometry. Reading offsets immediately after a large
+    // workspace update forces layout before the thumb can respond to the click.
+    const mo = new MutationObserver(records => records.some(record => record.type === "childList") ? measure() : select());
+    mo.observe(el, { attributes: true, childList: true, subtree: true, attributeFilter: ["data-selected"] });
     ro.observe(el);
     return () => {
       mo.disconnect();

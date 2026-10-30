@@ -1,16 +1,5 @@
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { useReducedMotion } from "../hooks/useReducedMotion";
-import { useBlendedColors } from "../hooks/useBlendedColors";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  BarChart,
-  Bar,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-} from "recharts";
 import {
   Search,
   MoreHorizontal,
@@ -21,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { TrendDashboard } from "./TrendDashboard";
+import { GradeBarChart, type HistogramDatum } from "./GradeBarChart";
 import { GradeExportModal } from "./GradeExportModal";
 import { ActionMenu, ChartViewport, Checkbox, MotionSwitch, SelectMenu, Button, DialogPresence, FadeSwap, InlineStatus, MotionCollapse, NumberStepper, RollingText, SegmentedControl, ToolPopover } from "./ui";
 import { matchesStudentSearch, normalizeStudentSearch } from "../state/studentSearch";
@@ -228,25 +218,6 @@ function BandModeSwitch({ value, onChange }: { value: GradeBandMode; onChange: (
   return <SegmentedControl value={value} onChange={onChange} ariaLabel="分档方式" className="shrink-0" options={[{ value: "score", label: "按分数线" }, { value: "rank", label: "按名次" }]} />;
 }
 
-interface HistogramDatum {
-  label: string;
-  range: string;
-  count: number;
-  bandLabel: string;
-  fill: string;
-}
-
-function HistogramTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: HistogramDatum }> }) {
-  const datum = active ? payload?.[0]?.payload : undefined;
-  if (!datum) return null;
-  return (
-    <div className="rounded-[10px] border border-[var(--app-border)] bg-background-primary-default px-3 py-2 text-body-regular shadow-sm">
-      <div className="tabular-nums text-text-secondary">{datum.range}</div>
-      <div className="mt-0.5 text-text-primary"><span className="tabular-nums" style={{ fontWeight: 600 }}>{datum.count} 人</span> · {datum.bandLabel}</div>
-    </div>
-  );
-}
-
 function compareValues(a: string | number | null, b: string | number | null, asc: boolean): number {
   if (typeof a === "string" || typeof b === "string") {
     return asc ? String(a || "").localeCompare(String(b || ""), "zh-Hans-CN") : String(b || "").localeCompare(String(a || ""), "zh-Hans-CN");
@@ -295,7 +266,6 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
     ? trendSubjects
     : [trendSubject];
   const rows = selectedExam?.rows || EMPTY_ROWS;
-  const reducedMotion = useReducedMotion();
   const metricKey = selectedSubject === "total" || subjects.includes(selectedSubject) ? selectedSubject : "total";
   const studentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
   const studentByName = useMemo(() => {
@@ -347,11 +317,11 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const subjectFullScores = useMemo(() => getExamFullScores({ rows, subjects, fullScores: selectedExam?.fullScores }), [rows, selectedExam?.fullScores, subjects]);
   const totalFullScore = Math.max(1, subjects.reduce((sum, subject) => sum + (subjectFullScores[subject] ?? 100), 0));
   const metricFullScore = metricKey === "total" ? totalFullScore : subjectFullScores[metricKey] ?? 100;
-  const subjectRates = resolveThresholdRates(thresholds, "subject");
-  const totalRates = resolveThresholdRates(thresholds, "total");
-  const totalScoreLines = getScoreBandLines(totalRates, totalFullScore);
-  const subjectLinesBySubject = Object.fromEntries(subjects.map(subject => [subject, getScoreBandLines(subjectRates, subjectFullScores[subject] ?? 100)]));
-  const scoreLines = metricKey === "total" ? totalScoreLines : subjectLinesBySubject[metricKey] ?? getScoreBandLines(subjectRates, metricFullScore);
+  const subjectRates = useMemo(() => resolveThresholdRates(thresholds, "subject"), [thresholds]);
+  const totalRates = useMemo(() => resolveThresholdRates(thresholds, "total"), [thresholds]);
+  const totalScoreLines = useMemo(() => getScoreBandLines(totalRates, totalFullScore), [totalRates, totalFullScore]);
+  const subjectLinesBySubject = useMemo(() => Object.fromEntries(subjects.map(subject => [subject, getScoreBandLines(subjectRates, subjectFullScores[subject] ?? 100)])), [subjects, subjectRates, subjectFullScores]);
+  const scoreLines = useMemo(() => metricKey === "total" ? totalScoreLines : subjectLinesBySubject[metricKey] ?? getScoreBandLines(subjectRates, metricFullScore), [metricKey, totalScoreLines, subjectLinesBySubject, subjectRates, metricFullScore]);
 
   const filtered = useMemo(() => [...rowsWithMetrics]
     .filter(rowMatchesSearch)
@@ -367,38 +337,38 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
   const maxTotal = totals.length ? Math.max(...totals) : null;
   const minTotal = totals.length ? Math.min(...totals) : null;
   const avgTotal = totals.length ? Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 10) / 10 : null;
-  const metricValues = rowsWithMetrics
+  const metricValues = useMemo(() => rowsWithMetrics
     .map(row => getMetricValue(row, metricKey))
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value)), [rowsWithMetrics, metricKey]);
   const avgMetric = metricValues.length ? Math.round((metricValues.reduce((a, b) => a + b, 0) / metricValues.length) * 10) / 10 : null;
   const maxMetric = metricValues.length ? Math.max(...metricValues) : null;
   const minMetric = metricValues.length ? Math.min(...metricValues) : null;
   const passCount = metricValues.filter(value => value >= scoreLines.pass).length;
   const excellentCount = metricValues.filter(value => value >= scoreLines.excellent).length;
-  const subjectAvgData = subjects.map((subject, index) => {
+  const subjectAvgData = useMemo(() => subjects.map((subject, index) => {
     const values = rows
       .map(row => row.scores[subject]?.score)
       .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
     const avg = values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10 : 0;
     const full = subjectFullScores[subject] ?? 100;
     return { subject, avg, full, rate: Math.round((avg / full) * 1000) / 10, fill: SUBJECT_COLORS[index % SUBJECT_COLORS.length] };
-  });
+  }), [subjects, rows, subjectFullScores]);
   // 名次分层只改变分档方式；优秀率/及格率始终按得分率阈值统计。
-  const rankLines = getRankTierLines(metricValues);
+  const rankLines = useMemo(() => getRankTierLines(metricValues), [metricValues]);
   const bandLines = bandMode === "rank" && rankLines ? rankLines : scoreLines;
   const bandLabels = bandMode === "rank" ? RANK_BAND_LABELS : SCORE_BAND_LABELS;
   const bandCounts = countBands(rowsWithMetrics.map(row => getMetricValue(row, metricKey)), bandLines);
   const histogramBinWidth = pickHistogramBinWidth(metricFullScore);
   // 两种分档方式的分界线都参与切分，切换时柱形不变、只换颜色。
-  const histogramBins = buildScoreHistogram(metricValues, metricFullScore, bandLines, [scoreLines, rankLines].flatMap(lines => lines ? [lines.pass, lines.good, lines.excellent] : []));
-  const histogramFills = useBlendedColors(histogramBins.map(bin => GRADE_COLORS[bin.band]), `${selectedExam?.id}-${metricKey}-${histogramBins.map(bin => bin.from).join(",")}`, reducedMotion);
-  const distributionData: HistogramDatum[] = histogramBins.map((bin, index) => ({
+  const histogramBins = useMemo(() => buildScoreHistogram(metricValues, metricFullScore, bandLines, [scoreLines, rankLines].flatMap(lines => lines ? [lines.pass, lines.good, lines.excellent] : [])), [metricValues, metricFullScore, bandLines, scoreLines, rankLines]);
+  const histogramStructure = `${selectedExam?.id}-${metricKey}-${histogramBins.map(bin => bin.from).join(",")}`;
+  const distributionData: HistogramDatum[] = useMemo(() => histogramBins.map(bin => ({
     label: formatScoreValue(bin.from),
     range: `${formatScoreValue(bin.from)} ≤ 分数 ${bin.inclusiveEnd ? "≤" : "<"} ${formatScoreValue(bin.to)}`,
     count: bin.count,
     bandLabel: bandLabels[bin.band],
-    fill: histogramFills[index],
-  }));
+    fill: GRADE_COLORS[bin.band],
+  })), [histogramBins, bandLabels]);
   const distributionHint = bandMode === "rank"
     ? `按名次：前${RANK_TIER_PERCENTS.top}% / 前${RANK_TIER_PERCENTS.upper}% / 后${RANK_TIER_PERCENTS.bottom}%，同分同层`
     : `满分 ${formatScoreValue(metricFullScore)} · 每格 ${histogramBinWidth} 分`;
@@ -536,26 +506,13 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
               ))}
             </div>
 
-            <MotionSwitch sharedLayout preserveContent transitionKey={`${selectedExam.id}-${metricKey}`} className="grade-chart-transition">
+            <MotionSwitch sharedLayout preserveContent transitionKey={metricKey === "total" ? "total" : "subject"} className="grade-chart-transition">
             <div className="grade-chart-grid grid gap-4" data-split={metricKey === "total" ? "true" : "false"}>
               <div data-motion-surface="grade-main-chart" className="grade-main-chart flex min-w-0 flex-col rounded-2xl border border-separator-border bg-background-primary-default p-5 shadow-sm">
                 <h3 className="text-text-primary mb-1">{metricKey === "total" ? "各科平均得分率" : `${metricLabel}分数分布`}</h3>
                 <p className="mb-4 text-caption-1-regular text-text-tertiary">{metricKey === "total" ? "平均分 ÷ 该科满分，满分不同的科目也能直接比较" : <FadeSwap swapKey={bandMode}>{distributionHint}</FadeSwap>}</p>
                 <ChartViewport minWidth={metricKey === "total" ? subjectAvgData.length * 56 + 40 : 0} height={metricKey === "total" ? "fill" : 240}>{(width, height) =>
-                  <BarChart width={width} height={height} data={metricKey === "total" ? subjectAvgData : distributionData} barSize={metricKey === "total" ? 32 : undefined} barCategoryGap={metricKey === "total" ? "10%" : 2}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
-                    <XAxis dataKey={metricKey === "total" ? "subject" : "label"} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval={metricKey === "total" ? 0 : "preserveStartEnd"} minTickGap={8} />
-                    <YAxis domain={metricKey === "total" ? [0, 100] : undefined} unit={metricKey === "total" ? "%" : undefined} allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={metricKey === "total" ? 40 : 28} />
-                    {metricKey === "total"
-                      ? <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }} cursor={{ fill: "var(--app-surface-muted)" }} formatter={(value, _name, item) => [`${value}%（均分 ${item.payload.avg} / ${item.payload.full}）`, "平均得分率"]} />
-                      : <Tooltip content={<HistogramTooltip />} cursor={{ fill: "var(--app-surface-muted)" }} />}
-                    {/* 科目均值与分数分箱没有对应关系：切换时柱形原位升起，不让旧柱横向滑进新分箱。 */}
-                    <Bar isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out" key={metricKey === "total" ? "main-chart-subject-bars" : "main-chart-histogram-bars"} dataKey={metricKey === "total" ? "rate" : "count"} name={metricKey === "total" ? "平均得分率" : "人数"} radius={metricKey === "total" ? [5, 5, 0, 0] : [3, 3, 0, 0]}>
-                      {(metricKey === "total" ? subjectAvgData : distributionData).map((item, index) => (
-                        <Cell key={`main-cell-${index}`} fill={item.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
+                  <GradeBarChart width={width} height={height} data={metricKey === "total" ? subjectAvgData : distributionData} structureKey={metricKey === "total" ? "subject-averages" : histogramStructure} average={metricKey === "total"} />
                 }</ChartViewport>
                 {metricKey !== "total" && <BandSummary mode={bandMode} counts={bandCounts} lines={bandLines} labels={bandLabels} total={metricValues.length} />}
               </div>
@@ -564,15 +521,7 @@ export function GradesPage({ exams, students, onSelectStudent, onOpenStudentFoll
                 <h3 className="text-text-primary mb-1">总分分布</h3>
                 <p className="mb-4 text-caption-1-regular text-text-tertiary"><FadeSwap swapKey={bandMode}>{distributionHint}</FadeSwap></p>
                 <ChartViewport height={200}>{(width, height) =>
-                  <BarChart width={width} height={height} data={distributionData} barCategoryGap={2}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={8} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
-                    <Tooltip content={<HistogramTooltip />} cursor={{ fill: "var(--app-surface-muted)" }} />
-                    <Bar isAnimationActive={!reducedMotion} animationDuration={320} animationEasing="ease-out" dataKey="count" name="人数" radius={[3, 3, 0, 0]}>
-                      {distributionData.map((item, index) => <Cell key={`dist-cell-${index}`} fill={item.fill} />)}
-                    </Bar>
-                  </BarChart>
+                  <GradeBarChart width={width} height={height} data={distributionData} structureKey={histogramStructure} compact />
                 }</ChartViewport>
                 <BandSummary mode={bandMode} counts={bandCounts} lines={bandLines} labels={bandLabels} total={metricValues.length} />
               </div>}

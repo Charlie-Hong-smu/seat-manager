@@ -10,6 +10,7 @@ import {
 } from "recharts";
 
 import { formatScore } from "./studentModalSelectors";
+import { ChartAxisTick } from "./ChartAxisTick";
 
 // 学生详情的成绩趋势折线图。保持独立模块并由 StudentModal 懒加载，
 // recharts 只能留在异步 chunk，不得回到首屏入口（构建预算见 ARCHITECTURE.md）。
@@ -23,7 +24,7 @@ export default function StudentTrendChart({ data, metric }: {
       <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={36} />
+        <YAxis interval={0} tick={<ChartAxisTick vertical />} axisLine={false} tickLine={false} width={36} />
         <Tooltip
           labelFormatter={label => String(label || "")}
           formatter={(value) => [formatScore(typeof value === "number" ? value : null), metric === "total" ? "总分" : metric]}

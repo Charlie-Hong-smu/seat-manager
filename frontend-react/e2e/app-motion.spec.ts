@@ -322,11 +322,11 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       if (reducedMotion === 'no-preference') {
         expect(samples[0].width).toBeCloseTo(before, 0);
         expect(new Set(samples.filter(sample => sample.time < 370).map(sample => sample.barHeights)).size).toBeGreaterThan(2);
-        expect(samples.some(sample => sample.time < 120 && sample.moving && sample.incomingBars === barCount && sample.incomingOpacity > 0.05)).toBe(true);
+        expect(samples.some(sample => sample.time < 120 && sample.incomingBars === barCount && sample.incomingOpacity > 0.05)).toBe(true);
         if (Math.abs(final.width - before) > 2) {
           expect(samples.some(sample => sample.width > Math.min(before, final.width) + 2 && sample.width < Math.max(before, final.width) - 2)).toBe(true);
           for (let i = 1; i < samples.length; i++) expect((samples[i].width - samples[i - 1].width) * Math.sign(final.width - before)).toBeGreaterThanOrEqual(-1);
-        }
+        } else expect(samples.every(sample => !sample.moving)).toBe(true);
       } else expect(samples.every(sample => !sample.moving)).toBe(true);
       expect(samples.filter(sample => sample.time > 370).every(sample => sample.barCount === barCount && !sample.moving && Math.abs(sample.width - final.width) < 1 && Math.abs(sample.plotWidth - final.plotWidth) < 1)).toBe(true);
       await expect(chart.locator('.app-motion-snapshot, .app-motion-surface')).toHaveCount(0);

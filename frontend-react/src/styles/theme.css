@@ -2998,8 +2998,8 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 /* Odometer digits: a vertical 0-9 strip translates to the current digit. */
 .rolling-text { display: inline-flex; overflow: hidden; }
 .rolling-digit { display: inline-block; height: 1em; width: 1ch; overflow: hidden; }
-.rolling-digit__strip { display: flex; flex-direction: column; transition: transform 460ms var(--app-motion-ease); }
-.rolling-digit__cell, .rolling-char { display: block; height: 1em; line-height: 1em; }
+.rolling-digit__strip { display: block; white-space: pre; line-height: 1em; transition: transform 460ms var(--app-motion-ease); }
+.rolling-char { display: block; height: 1em; line-height: 1em; }
 @media (prefers-reduced-motion: reduce) { .rolling-digit__strip { transition: none; } }
 .app-modal-footer {
   border-top: 1px solid var(--app-border);

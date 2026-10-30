@@ -10,6 +10,7 @@ import {
 } from "recharts";
 
 import type { GradeExam } from "../state/types";
+import { ChartAxisTick } from "./ChartAxisTick";
 
 interface TrendDashboardProps {
   exams: GradeExam[];
@@ -65,7 +66,7 @@ export function TrendDashboard({ exams, subjects }: TrendDashboardProps) {
           <LineChart width={width} height={height} data={trendData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--app-chart-grid)" vertical={false} />
             <XAxis dataKey="exam" tick={{ fontSize: 13, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} />
-            <YAxis domain={[55, 95]} tick={{ fontSize: 12, fill: "var(--app-chart-axis)" }} axisLine={false} tickLine={false} width={28} />
+            <YAxis interval={0} domain={[55, 95]} tick={<ChartAxisTick vertical />} axisLine={false} tickLine={false} width={28} />
             <Tooltip
               contentStyle={{ borderRadius: 10, border: "1px solid var(--app-border)", fontSize: 13 }}
               formatter={(value: number, name: string) => [`${value} 分`, name]}

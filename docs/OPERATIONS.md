@@ -40,6 +40,8 @@ pnpm test:e2e:all
 
 开发预览截图可在 `frontend-react/` 运行 `CAPTURE_ORIGIN=http://127.0.0.1:5173 node e2e/mobile-visual-capture.mjs`，把端口替换为开发服务器实际输出；它只使用“进入本地预览”和独立浏览器的合成数据，默认输出 360/390/430px 与 1440px 截图到 `output/playwright/mobile-workflow/`。这是 Chromium 手机仿真；实体 Safari/Android 软键盘、系统文件选择/下载/打印与硬件安全区仍须真机验证。截图与构建产物不进入源码提交。
 
+成绩点击延迟诊断：保持开发服务器运行，在 `frontend-react/` 执行 `CAPTURE_ORIGIN=http://127.0.0.1:5173 CAPTURE_PHASE=after node e2e/grade-responsiveness.mjs`。它用独立浏览器、60 人六科合成数据和“进入本地预览”采样首次/连续科目切换的第一帧延迟、帧间隔、DOM 节点/变更数与 CPU 热点，报告写入 `output/playwright/grade-performance/<phase>.json`，不读取真实浏览器的教师数据。对照两次运行时使用相同浏览器/尺寸和机器负载，并避免与覆盖率或其他浏览器测试并行；数字用于同条件比较，不作为跨机器固定时限。
+
 Worker 使用 npm：
 
 ```bash

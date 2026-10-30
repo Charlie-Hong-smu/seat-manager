@@ -104,16 +104,42 @@ describe("shared continuous motion", () => {
     const live = container.querySelector<HTMLElement>(".app-motion-content > [data-motion-surface]")!;
     const arriving = container.querySelector<HTMLElement>(".app-motion-surface > .app-motion-snapshot")!;
     const localClip = arriving.querySelector("clipPath")!;
+    const stablePath = arriving.querySelector("path")!;
+    const cloneCard = vi.spyOn(live, "cloneNode");
     expect(localClip.id).not.toBe("chart-b");
     expect(arriving.querySelector("g")!.getAttribute("clip-path")).toBe(`url(#${localClip.id})`);
     await act(async () => { live.querySelector("path")!.setAttribute("d", "M0 0H80V60Z"); });
+    expect(arriving.querySelector("path")).toBe(stablePath);
     expect(arriving.querySelector("path")!.getAttribute("d")).toBe("M0 0H80V60Z");
+    expect(cloneCard).not.toHaveBeenCalled();
+    // Recharts replaces rectangle groups as their geometry changes. Only that
+    // branch should change; the axes/defs and their isolated IDs stay mounted.
+    await act(async () => {
+      const group = live.querySelector("g")!;
+      group.innerHTML = '<path id="new-bar" d="M0 0H70V50Z" />';
+      group.setAttribute("clip-path", "url(#chart-b)");
+    });
+    expect(arriving.querySelector("clipPath")).toBe(localClip);
+    expect(arriving.querySelector("g")!.getAttribute("clip-path")).toBe(`url(#${localClip.id})`);
+    expect(arriving.querySelector("path")!.id).not.toBe("new-bar");
+    expect(arriving.querySelector("path")!.getAttribute("d")).toBe("M0 0H70V50Z");
+    await act(async () => {
+      // Ancestor and descendant child lists can both change in one React commit.
+      const svg = live.querySelector("svg")!;
+      svg.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"));
+      live.querySelector("g")!.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "rect"));
+      live.querySelector("clipPath")!.id = "updated-clip";
+      live.querySelector("g")!.setAttribute("clip-path", "url(#updated-clip)");
+    });
+    expect(arriving.querySelector("g > rect")).not.toBeNull();
+    expect(arriving.querySelector("g")!.getAttribute("clip-path")).toBe(`url(#${localClip.id})`);
+    expect(cloneCard).not.toHaveBeenCalled();
     const ids = [...container.querySelectorAll("[id]")].map(node => node.id);
     expect(new Set(ids).size).toBe(ids.length);
     await act(async () => { flights.forEach(flight => flight.complete()); });
     expect(container.querySelector(".app-motion-surface")).toBeNull();
     await act(async () => { live.querySelector("path")!.setAttribute("d", "M0 0H90V60Z"); });
-    expect(arriving.querySelector("path")!.getAttribute("d")).toBe("M0 0H80V60Z");
+    expect(arriving.querySelector("path")!.getAttribute("d")).toBe("M0 0H70V50Z");
   });
 
   it("keeps partially departed rows visible until a rapid filter handoff finishes", async () => {
