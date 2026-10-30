@@ -48,6 +48,9 @@ test("custom roles support shared holders, persistent drafts, rename and confirm
   await drawer.getByRole("button", { name: "编辑图书管理员", exact: true }).click();
   await drawer.getByRole("textbox", { name: "职务名称", exact: true }).fill("图书与阅读委员");
   await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  // Like the initial assignment above, wait for the debounced workspace write
+  // before testing a fresh load from durable storage.
+  await expect.poll(async () => (await duties(page))?.roles.some((role: { name: string }) => role.name === "图书与阅读委员")).toBe(true);
   await page.reload();
   await openDuties(page);
   const row = drawer.locator("section").filter({ has: page.getByRole("heading", { name: "图书与阅读委员", exact: true }) });
