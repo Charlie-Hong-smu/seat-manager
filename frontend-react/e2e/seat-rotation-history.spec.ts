@@ -177,9 +177,11 @@ test("shuffle preview waiting dock edits only the candidate until adoption", asy
   await page.getByRole("button", { name: "排座", exact: true }).click();
   // The board stays operable beside the docked rules: lock a seat before generating.
   const board = page.locator("[data-seat-board-layer]");
-  await board.locator('button[aria-label="锁定 候选学生0 的座位"]').click({ force: true });
+  // The dock continuously resizes the board. Normal clicks wait for the target
+  // to settle instead of forcing an obsolete coordinate during that movement.
+  await board.locator('button[aria-label="锁定 候选学生0 的座位"]').click();
   await expect(board.locator('[data-student-id="s0"]')).toHaveAttribute("data-seat-locked", "true");
-  await board.locator('button[aria-label="解锁 候选学生0 的座位"]').click({ force: true });
+  await board.locator('button[aria-label="解锁 候选学生0 的座位"]').click();
   await expect(board.locator('[data-student-id="s0"]')).toHaveAttribute("data-seat-locked", "false");
   await page.getByRole("button", { name: "生成方案", exact: true }).click();
   async function dragSeatToWaiting(studentId: string) {
